@@ -4,3 +4,10 @@ __pycache__/
 .DS_Store
 .env
 *.log
+# Python caches
+__pycache__/
+*.pyc
+
+# Local backups / patches
+*.bak
+*.patch
