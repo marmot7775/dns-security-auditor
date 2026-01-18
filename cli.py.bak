@@ -1,0 +1,77 @@
+#!/usr/bin/env python3
+"""
+DNS Security Auditor - Command Line Interface
+Usage: python cli.py <domain> [--scope email|dns] [--output full|summary]
+"""
+
+import argparse
+import sys
+from dns_tools import audit_email_security, audit_dns_security, format_report
+
+
+def main():
+    parser = argparse.ArgumentParser(
+        description="DNS Security Auditor - Check email and DNS security configurations",
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+        epilog="""
+Examples:
+  python cli.py example.com                     # Email security audit, full report
+  python cli.py example.com --scope dns         # Full DNS security audit
+  python cli.py example.com --output summary    # Short summary output
+  python cli.py example.com --scope dns --output summary
+        """
+    )
+
+    parser.add_argument(
+        "domain",
+        help="Domain to audit (e.g., example.com)"
+    )
+
+    parser.add_argument(
+        "--scope", "-s",
+        choices=["email", "dns"],
+        default="email",
+        help="Audit scope: 'email' (DMARC/SPF/DKIM/MTA-STS/TLS-RPT) or 'dns' (full DNS security). Default: email"
+    )
+
+    parser.add_argument(
+        "--output", "-o",
+        choices=["full", "summary"],
+        default="full",
+        help="Output format: 'full' (detailed) or 'summary' (brief). Default: full"
+    )
+
+    parser.add_argument(
+        "--json", "-j",
+        action="store_true",
+        help="Output raw JSON instead of formatted report"
+    )
+
+    args = parser.parse_args()
+
+    # Clean domain input
+    domain = args.domain.strip().lower()
+    if domain.startswith("http://") or domain.startswith("https://"):
+        domain = domain.split("//")[1]
+    if domain.startswith("www."):
+        domain = domain[4:]
+    domain = domain.rstrip("/")
+
+    print(f"\n🔍 Auditing {domain}...\n")
+
+    # Run audit
+    if args.scope == "dns":
+        results = audit_dns_security(domain)
+    else:
+        results = audit_email_security(domain)
+
+    # Output
+    if args.json:
+        import json
+        print(json.dumps(results, indent=2, default=str))
+    else:
+        print(format_report(results, args.output))
+
+
+if __name__ == "__main__":
+    main()

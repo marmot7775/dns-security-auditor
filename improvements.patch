@@ -1,0 +1,54 @@
+...your app.py patch block...
+--- cli.py
++++ cli.py
+@@ -1,8 +1,8 @@
+ #!/usr/bin/env python3
+
+ import argparse
+ import sys
+-from dns_tools import audit_email_security, audit_dns_security, format_report
++from dns_tools import audit_email_security, audit_dns_security, format_report, normalize_domain
+
+ def main():
+     parser = argparse.ArgumentParser(description="DNS Security Auditor CLI")
+@@ -40,16 +40,8 @@
+     args = parser.parse_args()
+
+     # Clean domain input
+-    domain = args.domain.strip().lower()
+-    if domain.startswith("http://") or domain.startswith("https://"):
+-        domain = domain.split("//")[1]
+-    if domain.startswith("www."):
+-        domain = domain[4:]
+-    domain = domain.rstrip("/")
++    domain = normalize_domain(args.domain)
+
+     print(f"\n🔍 Auditing {domain}...\n")
+--- dns_tools.py
++++ dns_tools.py
+@@ -1,3 +1,35 @@
++def normalize_domain(value: str) -> str:
++    """Normalize user input into a bare domain name."""
++    if value is None:
++        return ""
++    domain = str(value).strip().lower()
++
++    if domain.startswith("http://"):
++        domain = domain[len("http://"):]
++    elif domain.startswith("https://"):
++        domain = domain[len("https://"):]
++
++    domain = domain.split("/", 1)[0]
++    domain = domain.split("?", 1)[0]
++    domain = domain.split("#", 1)[0]
++
++    if domain.startswith("www."):
++        domain = domain[4:]
++
++    if ":" in domain:
++        host, _, _port = domain.partition(":")
++        domain = host
++
++    domain = domain.rstrip(".")
++    return domain
++
