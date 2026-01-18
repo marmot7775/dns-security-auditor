@@ -6,7 +6,7 @@ Usage: python cli.py <domain> [--scope email|dns] [--output full|summary]
 
 import argparse
 import sys
-from dns_tools import audit_email_security, audit_dns_security, format_report, normalize_domain
+from dns_security_auditor.dns_tools import audit_email_security, audit_dns_security, format_report, normalize_domain
 
 
 def main():
