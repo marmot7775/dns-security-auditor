@@ -6,7 +6,7 @@ Run with: streamlit run app.py
 import streamlit as st
 import json
 from datetime import datetime
-from dns_tools import audit_email_security, audit_dns_security, format_report, normalize_domain
+from dns_security_auditor.dns_tools import audit_email_security, audit_dns_security, format_report, normalize_domain
 
 st.set_page_config(page_title="DNS Security Auditor", page_icon="🛡️", layout="wide")
 
