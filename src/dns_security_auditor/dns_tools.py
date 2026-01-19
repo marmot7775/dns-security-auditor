@@ -1631,22 +1631,51 @@ def check_mx(domain: str) -> Dict[str, Any]:
 # Main Audit Functions
 # ------------------------------------------------------------
 
-def audit_email_security(domain: str) -> Dict[str, Any]:
+def audit_email_security(domain: str, dkim_selectors: list[str] | None = None) -> Dict[str, Any]:
     """
     Run email security audit: DMARC, SPF, DKIM, MTA-STS, TLS-RPT, MX, DANE-related
     """
     domain = normalize_domain(domain)
+
     results = {
-        "audit_type": "email_security",
         "domain": domain,
+        "audit_type": "email_security",
+        "timestamp": datetime.now().isoformat(),
         "checks": {},
-        "summary": {
-            "ok": 0,
-            "warning": 0,
-            "error": 0,
-        },
+        "summary": {"ok": 0, "warning": 0, "error": 0},
         "priority_fixes": [],
     }
+
+    checks = [
+        ("dmarc", check_dmarc),
+        ("spf", check_spf),
+        ("dkim", lambda d: check_dkim(d, selectors=dkim_selectors if dkim_selectors else None)),
+        ("mx", check_mx),
+        ("mta_sts", check_mta_sts),
+        ("tls_rpt", check_tls_rpt),
+    ]
+
+    for check_name, check_func in checks:
+        try:
+            check_result = check_func(domain)
+        except Exception as e:
+            check_result = {
+                "check": check_name.upper(),
+                "status": "error",
+                "issues": [f"Check failed due to exception: {e}"],
+                "warnings": [],
+                "recommendations": [],
+            }
+
+        results["checks"][check_name] = check_result
+        status = check_result.get("status", "unknown")
+
+        if status in results["summary"]:
+            results["summary"][status] += 1
+
+    results["priority_fixes"] = generate_priority_fixes(results["checks"])
+    return results
+
 
     checks = [
         ("mx", check_mx),
