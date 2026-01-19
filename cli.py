@@ -11,13 +11,12 @@ import argparse
 import json
 import sys
 
-from dns_security_auditor.dns_tools import (
+from dns_auditor.dns_tools import (
     audit_email_security,
     audit_dns_security,
     format_report,
     normalize_domain,
 )
-
 
 def main():
     parser = argparse.ArgumentParser(
