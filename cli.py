@@ -3,6 +3,9 @@
 DNS Security Auditor - Command Line Interface
 Usage: PYTHONPATH=src python3 cli.py <domain> [--scope email|dns] [--output full|summary] [--selectors s1,s2]
 """
+import sys
+import os
+sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "src")))
 
 import argparse
 import json
@@ -72,7 +75,7 @@ Examples:
     # Parse DKIM selectors
     dkim_selectors = [s.strip() for s in (args.selectors or "").split(",") if s.strip()]
 
-    # Run audit
+    # Run the appropriate audit
     try:
         if args.scope == "dns":
             results = audit_dns_security(domain, dkim_selectors=dkim_selectors)
