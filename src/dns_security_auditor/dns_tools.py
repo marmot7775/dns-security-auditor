@@ -6,8 +6,29 @@ Checks: DMARC, SPF, DKIM, MTA-STS, TLS-RPT, DNSSEC, CAA, NS, Zone Transfer, Subd
 import os
 import re
 import socket
+from datetime import datetime
 from typing import Any, Dict, List, Optional, Set, Tuple
 
+import requests
+
+# DNS imports
+try:
+    import dns.resolver
+    import dns.exception
+    import dns.rdatatype
+    import dns.dnssec
+    import dns.name
+    import dns.query
+    import dns.zone
+    import dns.rcode
+    DNS_AVAILABLE = True
+except ImportError:
+    DNS_AVAILABLE = False
+
+
+# ------------------------------------------------------------
+# Domain Normalization
+# ------------------------------------------------------------
 
 def normalize_domain(value: str) -> str:
     """Normalize user input into a bare domain name."""
@@ -28,22 +49,6 @@ def normalize_domain(value: str) -> str:
         domain = host
     domain = domain.rstrip(".")
     return domain
-
-import requests
-
-# DNS imports
-try:
-    import dns.resolver
-    import dns.exception
-    import dns.rdatatype
-    import dns.dnssec
-    import dns.name
-    import dns.query
-    import dns.zone
-    import dns.rcode
-    DNS_AVAILABLE = True
-except ImportError:
-    DNS_AVAILABLE = False
 
 
 # ------------------------------------------------------------
@@ -145,7 +150,6 @@ def _validate_dmarc_syntax(record: str) -> List[str]:
     
     valid_policies = ["none", "quarantine", "reject"]
     valid_alignment = ["r", "s"]  # relaxed, strict
-    valid_fo = ["0", "1", "d", "s"]
     
     tags_found = {}
     
@@ -437,10 +441,8 @@ def _validate_spf_syntax(record: str) -> List[str]:
             continue
         
         # Strip qualifier if present
-        qualifier = ""
         mechanism_part = part
         if part[0] in valid_qualifiers:
-            qualifier = part[0]
             mechanism_part = part[1:]
         
         # Extract mechanism name
@@ -616,9 +618,6 @@ def _count_spf_lookups(domain: str, record: str, visited: Set[str]) -> Tuple[int
     lookups = 0
     includes = []
 
-    # Mechanisms that cause DNS lookups
-    lookup_mechanisms = ["include:", "a:", "mx:", "ptr:", "exists:", "redirect="]
-
     parts = record.lower().split()
     for part in parts:
         # include
@@ -638,15 +637,15 @@ def _count_spf_lookups(domain: str, record: str, visited: Set[str]) -> Tuple[int
                 includes.extend(sub_includes)
 
         # a mechanism (with or without domain)
-        elif part.startswith("a:") or part == "a":
+        elif part.startswith("a:") or part == "a" or part.lstrip("+-~?") == "a":
             lookups += 1
 
         # mx mechanism
-        elif part.startswith("mx:") or part == "mx":
+        elif part.startswith("mx:") or part == "mx" or part.lstrip("+-~?") == "mx":
             lookups += 1
 
         # ptr (deprecated but still counts)
-        elif part.startswith("ptr:") or part == "ptr":
+        elif part.startswith("ptr:") or part == "ptr" or part.lstrip("+-~?") == "ptr":
             lookups += 1
 
         # exists
@@ -687,7 +686,7 @@ def check_dkim(domain: str, selectors: Optional[List[str]] = None) -> Dict[str, 
     result = {
         "check": "DKIM",
         "domain": domain,
-        "selectors_checked": len(selectors),
+        "selectors_checked": list(selectors),  # Return the list, not just count
         "selectors_found": [],
         "records": {},
         "record": None,  # Will be built at end
@@ -940,7 +939,7 @@ def check_mta_sts(domain: str) -> Dict[str, Any]:
             f"Fix the SSL certificate for mta-sts.{domain}. "
             f"The certificate must be valid and trusted."
         )
-    except requests.exceptions.ConnectionError as e:
+    except requests.exceptions.ConnectionError:
         result["issues"].append(
             f"CONNECTION ERROR: Cannot reach mta-sts.{domain}. "
             f"The MTA-STS policy host must be publicly accessible."
@@ -1016,7 +1015,6 @@ def check_tls_rpt(domain: str) -> Dict[str, Any]:
     result["record"] = f"TXT at {txt_name}:\n  {tls_rpt_record}"
 
     # Parse rua destinations
-    import re
     rua_matches = re.findall(r'rua=([^;]+)', tls_rpt_record, re.IGNORECASE)
     if rua_matches:
         for rua in rua_matches:
@@ -1094,7 +1092,7 @@ def check_dnssec(domain: str) -> Dict[str, Any]:
 
         # Check for DNSKEY at the domain
         try:
-            dnskey_answer = resolver.resolve(domain, "DNSKEY")
+            resolver.resolve(domain, "DNSKEY")
             result["signed"] = True
             result["warnings"].append(
                 f"DNSKEY records found — domain is signed with DNSSEC."
@@ -1631,9 +1629,30 @@ def check_mx(domain: str) -> Dict[str, Any]:
 # Main Audit Functions
 # ------------------------------------------------------------
 
-def audit_email_security(domain: str, dkim_selectors: list[str] | None = None) -> Dict[str, Any]:
+def build_priority_fixes(checks: Dict[str, Any], limit: int = 10) -> List[str]:
+    """Build prioritized list of fixes from check results."""
+    priority: List[str] = []
+
+    # Errors first
+    for check_name, check in checks.items():
+        if check.get("status") == "error":
+            recs = check.get("recommendations", []) or []
+            if recs:
+                priority.append(f"[{check_name.upper()}] {recs[0]}")
+
+    # Warnings second
+    for check_name, check in checks.items():
+        if check.get("status") == "warning":
+            recs = check.get("recommendations", []) or []
+            if recs:
+                priority.append(f"[{check_name.upper()}] {recs[0]}")
+
+    return priority[:limit]
+
+
+def audit_email_security(domain: str, dkim_selectors: Optional[List[str]] = None) -> Dict[str, Any]:
     """
-    Run email security audit: DMARC, SPF, DKIM, MTA-STS, TLS-RPT, MX, DANE-related
+    Run email security audit: DMARC, SPF, DKIM, MTA-STS, TLS-RPT, MX
     """
     domain = normalize_domain(domain)
 
@@ -1649,7 +1668,7 @@ def audit_email_security(domain: str, dkim_selectors: list[str] | None = None) -
     checks = [
         ("dmarc", check_dmarc),
         ("spf", check_spf),
-        ("dkim", lambda d: check_dkim(d, selectors=dkim_selectors if dkim_selectors else None)),
+        ("dkim", lambda d: check_dkim(d, selectors=dkim_selectors)),
         ("mx", check_mx),
         ("mta_sts", check_mta_sts),
         ("tls_rpt", check_tls_rpt),
@@ -1673,55 +1692,22 @@ def audit_email_security(domain: str, dkim_selectors: list[str] | None = None) -
         if status in results["summary"]:
             results["summary"][status] += 1
 
-    results["priority_fixes"] = generate_priority_fixes(results["checks"])
+    results["priority_fixes"] = build_priority_fixes(results["checks"])
     return results
 
 
-    checks = [
-        ("mx", check_mx),
-        ("dmarc", check_dmarc),
-        ("spf", check_spf),
-        ("dkim", check_dkim),
-        ("mta_sts", check_mta_sts),
-        ("tls_rpt", check_tls_rpt),
-    ]
-
-    for name, check_func in checks:
-        try:
-            check_result = check_func(domain)
-            results["checks"][name] = check_result
-            results["summary"][check_result["status"]] += 1
-
-            # Add critical issues to priority fixes
-            if check_result["status"] == "error":
-                for rec in check_result.get("recommendations", [])[:1]:
-                    results["priority_fixes"].append(f"[{name.upper()}] {rec}")
-        except Exception as e:
-            results["checks"][name] = {
-                "check": name,
-                "status": "error",
-                "issues": [f"Check failed: {str(e)}"],
-                "recommendations": [],
-            }
-            results["summary"]["error"] += 1
-
-    return results
-
-
-def audit_dns_security(domain: str) -> Dict[str, Any]:
+def audit_dns_security(domain: str, dkim_selectors: Optional[List[str]] = None) -> Dict[str, Any]:
     """
     Run full DNS security audit: all email checks plus DNS-specific checks
     """
     domain = normalize_domain(domain)
+    
     results = {
         "audit_type": "full_dns_security",
         "domain": domain,
+        "timestamp": datetime.now().isoformat(),
         "checks": {},
-        "summary": {
-            "ok": 0,
-            "warning": 0,
-            "error": 0,
-        },
+        "summary": {"ok": 0, "warning": 0, "error": 0},
         "priority_fixes": [],
     }
 
@@ -1730,7 +1716,7 @@ def audit_dns_security(domain: str) -> Dict[str, Any]:
         ("mx", check_mx),
         ("dmarc", check_dmarc),
         ("spf", check_spf),
-        ("dkim", check_dkim),
+        ("dkim", lambda d: check_dkim(d, selectors=dkim_selectors)),
         ("mta_sts", check_mta_sts),
         ("tls_rpt", check_tls_rpt),
         # DNS Security
@@ -1745,27 +1731,20 @@ def audit_dns_security(domain: str) -> Dict[str, Any]:
         try:
             check_result = check_func(domain)
             results["checks"][name] = check_result
-            results["summary"][check_result["status"]] += 1
-
-            # Add critical issues to priority fixes
-            if check_result["status"] == "error":
-                for rec in check_result.get("recommendations", [])[:1]:
-                    results["priority_fixes"].append(f"[{name.upper()}] {rec}")
+            status = check_result.get("status", "unknown")
+            if status in results["summary"]:
+                results["summary"][status] += 1
         except Exception as e:
             results["checks"][name] = {
                 "check": name,
                 "status": "error",
                 "issues": [f"Check failed: {str(e)}"],
+                "warnings": [],
                 "recommendations": [],
             }
             results["summary"]["error"] += 1
 
-    # Add warnings to priority fixes (lower priority)
-    for name, check_result in results["checks"].items():
-        if check_result.get("status") == "warning":
-            for rec in check_result.get("recommendations", [])[:1]:
-                results["priority_fixes"].append(f"[{name.upper()}] {rec}")
-
+    results["priority_fixes"] = build_priority_fixes(results["checks"])
     return results
 
 
@@ -1776,7 +1755,7 @@ def format_report(results: Dict[str, Any], output_format: str = "full") -> str:
     """
     lines = []
     domain = results["domain"]
-    audit_type = results["audit_type"]
+    audit_type = results.get("audit_type", "audit")
 
     lines.append("=" * 70)
     lines.append(f"  DNS SECURITY AUDIT: {domain}")
@@ -1899,6 +1878,7 @@ def format_report(results: Dict[str, Any], output_format: str = "full") -> str:
                 lines.append(f"  {i}. {fix_lines[0]}")
                 for extra in fix_lines[1:]:
                     lines.append(f"     {extra}")
+
     lines.append("")
     return "\n".join(lines)
 
@@ -1914,13 +1894,13 @@ if __name__ == "__main__":
         print("Usage: python dns_tools.py <domain> [email|dns] [full|summary]")
         sys.exit(1)
 
-    domain = sys.argv[1]
+    target_domain = sys.argv[1]
     scope = sys.argv[2] if len(sys.argv) > 2 else "email"
     output = sys.argv[3] if len(sys.argv) > 3 else "full"
 
     if scope == "dns":
-        results = audit_dns_security(domain)
+        audit_results = audit_dns_security(target_domain)
     else:
-        results = audit_email_security(domain)
+        audit_results = audit_email_security(target_domain)
 
-    print(format_report(results, output))
+    print(format_report(audit_results, output))
