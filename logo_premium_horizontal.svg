@@ -1,0 +1,115 @@
+<!-- DNS Security Auditor - PREMIUM HORIZONTAL LOGO for Web Apps -->
+<svg width="500" height="100" viewBox="0 0 500 100" xmlns="http://www.w3.org/2000/svg">
+  <defs>
+    <linearGradient id="brandGradient" x1="0%" y1="0%" x2="100%" y2="0%">
+      <stop offset="0%" style="stop-color:#667eea;stop-opacity:1" />
+      <stop offset="50%" style="stop-color:#764ba2;stop-opacity:1" />
+      <stop offset="100%" style="stop-color:#667eea;stop-opacity:1" />
+    </linearGradient>
+    
+    <linearGradient id="textGradient" x1="0%" y1="0%" x2="100%" y2="0%">
+      <stop offset="0%" style="stop-color:#1f2937;stop-opacity:1" />
+      <stop offset="100%" style="stop-color:#4b5563;stop-opacity:1" />
+    </linearGradient>
+    
+    <filter id="logoGlow">
+      <feGaussianBlur stdDeviation="2" result="coloredBlur"/>
+      <feMerge>
+        <feMergeNode in="coloredBlur"/>
+        <feMergeNode in="SourceGraphic"/>
+      </feMerge>
+    </filter>
+    
+    <filter id="textShadow">
+      <feDropShadow dx="0" dy="1" stdDeviation="1" flood-opacity="0.1"/>
+    </filter>
+  </defs>
+  
+  <!-- Icon Container -->
+  <g transform="translate(50, 50)">
+    <!-- Shield Base -->
+    <path d="M0,-25 L18,-18 L18,5 Q18,18 0,28 Q-18,18 -18,5 L-18,-18 Z" 
+          fill="url(#brandGradient)" 
+          filter="url(#logoGlow)"/>
+    
+    <!-- Inner Glow -->
+    <path d="M0,-20 L15,-14 L15,5 Q15,15 0,23 Q-15,15 -15,5 L-15,-14 Z" 
+          fill="none" 
+          stroke="#ffffff" 
+          stroke-width="1" 
+          opacity="0.3"/>
+    
+    <!-- DNS Network Dots -->
+    <circle cx="-8" cy="-5" r="2.5" fill="#ffffff" opacity="0.9"/>
+    <circle cx="0" cy="-8" r="2.5" fill="#ffffff" opacity="0.9"/>
+    <circle cx="8" cy="-5" r="2.5" fill="#ffffff" opacity="0.9"/>
+    <line x1="-8" y1="-5" x2="0" y2="-8" stroke="#ffffff" stroke-width="1" opacity="0.5"/>
+    <line x1="0" y1="-8" x2="8" y2="-5" stroke="#ffffff" stroke-width="1" opacity="0.5"/>
+    <line x1="-8" y1="-5" x2="0" y2="2" stroke="#ffffff" stroke-width="1" opacity="0.5"/>
+    <line x1="8" y1="-5" x2="0" y2="2" stroke="#ffffff" stroke-width="1" opacity="0.5"/>
+    <circle cx="0" cy="2" r="2.5" fill="#ffffff" opacity="0.9"/>
+    
+    <!-- Checkmark -->
+    <path d="M-10,8 L-3,15 L10,-2" 
+          fill="none" 
+          stroke="#10b981" 
+          stroke-width="3.5" 
+          stroke-linecap="round" 
+          stroke-linejoin="round"/>
+    <path d="M-10,8 L-3,15 L10,-2" 
+          fill="none" 
+          stroke="#ffffff" 
+          stroke-width="1.5" 
+          stroke-linecap="round" 
+          stroke-linejoin="round"
+          opacity="0.4"/>
+  </g>
+  
+  <!-- Brand Text -->
+  <g filter="url(#textShadow)">
+    <!-- DNS -->
+    <text x="95" y="45" 
+          font-family="'SF Pro Display', 'Segoe UI', system-ui, sans-serif" 
+          font-size="36" 
+          font-weight="700" 
+          fill="url(#textGradient)"
+          letter-spacing="-0.5">DNS</text>
+    
+    <!-- Security -->
+    <text x="95" y="75" 
+          font-family="'SF Pro Display', 'Segoe UI', system-ui, sans-serif" 
+          font-size="28" 
+          font-weight="600" 
+          fill="#374151"
+          letter-spacing="0">Security</text>
+  </g>
+  
+  <!-- Auditor (lighter weight) -->
+  <text x="260" y="75" 
+        font-family="'SF Pro Display', 'Segoe UI', system-ui, sans-serif" 
+        font-size="28" 
+        font-weight="400" 
+        fill="#6b7280"
+        letter-spacing="0">Auditor</text>
+  
+  <!-- Tagline -->
+  <text x="95" y="92" 
+        font-family="'SF Pro Text', 'Segoe UI', system-ui, sans-serif" 
+        font-size="10" 
+        font-weight="500" 
+        fill="#9ca3af" 
+        letter-spacing="1.5">INTELLIGENT EMAIL AUTHENTICATION</text>
+  
+  <!-- Premium Badge (optional - can remove if too busy) -->
+  <g transform="translate(440, 35)">
+    <rect x="-25" y="-8" width="50" height="16" rx="8" 
+          fill="#10b981" opacity="0.1"/>
+    <text x="0" y="4" 
+          font-family="'SF Pro Text', system-ui, sans-serif" 
+          font-size="9" 
+          font-weight="600" 
+          fill="#059669" 
+          text-anchor="middle"
+          letter-spacing="0.5">PRO</text>
+  </g>
+</svg>
