@@ -1,56 +1,36 @@
-/* style.css - Custom Streamlit styles for DNS Security Auditor */
-
-body, .block-container {
-    max-width: 600px !important;
-    margin: auto;
-    padding-top: 2.5rem !important;
-    background: #fff;
+/* style.css */
+.stApp {
+    background-color: #f8fafc !important;
 }
 
-.stTextInput, .stRadio, .stButton {
-    width: 100% !important;
-    max-width: 600px !important;
-    margin: 0 auto !important;
+.block-container {
+    max-width: 850px !important;
+    background-color: #ffffff !important;
+    color: #0f172a !important;
+    border-radius: 16px;
+    box-shadow: 0 4px 20px rgba(0, 0, 0, 0.05);
+    padding: 2rem !important;
+    margin-top: 2rem;
 }
 
-.stButton > button {
-    width: 100% !important;
-    font-size: 1.15rem !important;
+/* High-contrast text for all markdown and labels */
+h1, h2, h3, p, span, label {
+    color: #0f172a !important;
+}
+
+/* Fix for long DNS strings in Brave/Chrome */
+code {
+    white-space: pre-wrap !important;
+    word-break: break-all !important;
+    background-color: #f1f5f9 !important;
+    color: #1e293b !important;
+    padding: 10px !important;
+    border-radius: 6px;
+}
+
+/* Expanders should be distinct */
+.streamlit-expanderHeader {
+    background-color: #f8fafc !important;
+    border: 1px solid #e2e8f0 !important;
     border-radius: 8px !important;
-    background: #3178c6 !important;
-    color: #fff !important;
 }
-
-.stButton > button:hover {
-    background: #285a8c !important;
-}
-
-h1, .stTitle {
-    text-align: center !important;
-    width: 100%;
-}
-
-label, .stRadio label {
-    font-weight: 500 !important;
-}
-
-.stRadio > div {
-    display: flex;
-    justify-content: center;
-    gap: 1.5rem;
-}
-
-input[type="text"] {
-    border-radius: 6px !important;
-    font-size: 1.1rem !important;
-}
-
-.stDownloadButton {
-    margin-top: 1rem !important;
-}
-
-.stMarkdown h2, .stMarkdown h3 {
-    text-align: left !important;
-    margin-top: 1.5rem !important;
-}
-
