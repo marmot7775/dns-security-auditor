@@ -15,6 +15,7 @@ Total: 100 points with letter grade (A-F)
 """
 
 from typing import Dict, List, Tuple
+import re
 
 class EmailSecurityScorer:
     """
@@ -213,8 +214,26 @@ class EmailSecurityScorer:
         
         return min(score, 20), details
     
+    def _analyze_key_from_record(self, record: str) -> Dict:
+        """Analyze DKIM key strength from record string"""
+        # Extract public key
+        key_match = re.search(r'p=([A-Za-z0-9+/=]+)', record)
+        if not key_match:
+            return {'bits': 0, 'strength': 'invalid'}
+        
+        key_data = key_match.group(1)
+        key_len = len(key_data)
+        
+        # Estimate key size from base64 length
+        if key_len < 200:
+            return {'bits': 1024, 'strength': 'weak'}
+        elif key_len < 500:
+            return {'bits': 2048, 'strength': 'strong'}
+        else:
+            return {'bits': 4096, 'strength': 'strong'}
+    
     def _score_dkim(self, dkim: Dict) -> Tuple[float, Dict]:
-        """Score DKIM configuration (25 points max)"""
+        """Score DKIM configuration (25 points max) - FIXED VERSION"""
         score = 0
         details = {}
         
@@ -234,16 +253,36 @@ class EmailSecurityScorer:
             score += 2
             details['redundancy'] = 'Single key (acceptable)'
         
-        # Key strength
-        strong_keys = sum(1 for s in found_selectors if '2048' in s.get('key_type', '') or '4096' in s.get('key_type', ''))
-        weak_keys = sum(1 for s in found_selectors if '1024' in s.get('key_type', ''))
+        # Key strength analysis - FIXED to actually analyze the records
+        strong_keys = 0
+        weak_keys = 0
         
+        for selector_info in found_selectors:
+            record = selector_info.get('record', '')
+            if record:
+                key_analysis = self._analyze_key_from_record(record)
+                if key_analysis['strength'] == 'strong':
+                    strong_keys += 1
+                elif key_analysis['strength'] == 'weak':
+                    weak_keys += 1
+        
+        # Award points for key strength
         if weak_keys == 0 and strong_keys > 0:
-            score += 10  # All strong
-            details['key_strength'] = 'All keys 2048-bit or stronger'
-        elif weak_keys > 0:
-            score += 3   # Some weak
-            details['key_strength'] = f'{weak_keys} weak 1024-bit key(s)'
+            # All keys are strong (2048-bit or higher)
+            score += 8
+            details['key_strength'] = f'All {strong_keys} key(s) are 2048-bit or stronger (excellent)'
+        elif weak_keys > 0 and strong_keys > 0:
+            # Mixed - some weak, some strong
+            score += 5
+            details['key_strength'] = f'{strong_keys} strong key(s), {weak_keys} weak 1024-bit key(s) (upgrade recommended)'
+        elif weak_keys > 0 and strong_keys == 0:
+            # All keys are weak (1024-bit)
+            score += 2
+            details['key_strength'] = f'All {weak_keys} key(s) are weak 1024-bit (UPGRADE REQUIRED)'
+        else:
+            # No valid keys detected
+            score += 0
+            details['key_strength'] = 'Unable to determine key strength'
         
         return min(score, 25), details
     
@@ -252,39 +291,43 @@ class EmailSecurityScorer:
         score = 0
         details = {}
         
-        if not dkim.get('found_selectors'):
+        found_selectors = dkim.get('found_selectors', [])
+        if not found_selectors:
             return 0, {'reason': 'No keys to evaluate'}
         
-        # Key rotation status
+        # Key age/rotation status
         overdue = key_age.get('overdue', 0)
         due_soon = key_age.get('due_soon', 0)
         current = key_age.get('current', 0)
         
         if overdue == 0:
             score += 8
-            if due_soon == 0:
-                details['rotation'] = 'All keys current'
-            else:
-                details['rotation'] = f'{due_soon} key(s) due soon'
+            details['rotation_status'] = 'No overdue keys'
+        elif overdue <= 2:
+            score += 4
+            details['rotation_status'] = f'{overdue} key(s) overdue for rotation'
         else:
-            score += 2
-            details['rotation'] = f'{overdue} key(s) OVERDUE'
+            score += 0
+            details['rotation_status'] = f'{overdue} keys OVERDUE (rotate immediately!)'
         
         # Testing mode check
-        testing_mode = any('t=y' in str(s) for s in dkim.get('found_selectors', []))
+        testing_mode = any('t=y' in str(s.get('record', '')) for s in found_selectors)
         if not testing_mode:
             score += 4
             details['testing_mode'] = 'Production keys'
         else:
             score += 0
-            details['testing_mode'] = 'Testing mode enabled'
+            details['testing_mode'] = 'Testing mode enabled (remove t=y)'
         
         # Algorithm check
-        modern_algorithms = sum(1 for s in dkim.get('found_selectors', []) 
-                              if 'sha256' in str(s).lower() or 'ed25519' in str(s).lower())
+        modern_algorithms = sum(1 for s in found_selectors 
+                              if 'sha256' in str(s.get('record', '')).lower() or 'ed25519' in str(s.get('record', '')).lower())
         if modern_algorithms > 0:
             score += 3
-            details['algorithms'] = 'Modern algorithms'
+            details['algorithms'] = 'Modern algorithms (SHA-256 or Ed25519)'
+        else:
+            score += 1
+            details['algorithms'] = 'Legacy algorithms'
         
         return min(score, 15), details
     
@@ -366,9 +409,9 @@ class EmailSecurityScorer:
             category_name = category.replace('_', ' ').title()
             
             if percentage >= 90:
-                strengths.append(f"✓ {category_name}: Excellent ({score}/{max_score})")
+                strengths.append(f"✓ {category_name}: Excellent ({score:.1f}/{max_score})")
             elif percentage < 50:
-                weaknesses.append(f"⚠️ {category_name}: Needs improvement ({score}/{max_score})")
+                weaknesses.append(f"⚠️ {category_name}: Needs improvement ({score:.1f}/{max_score})")
         
         return strengths, weaknesses
     
@@ -392,16 +435,27 @@ class EmailSecurityScorer:
             elif spf.get('lookup_count', 0) > 10:
                 recommendations.append("🟡 HIGH: Reduce SPF lookups to 10 or fewer")
         
-        # DKIM recommendations
-        if scores['dkim'] < 15:
-            recommendations.append("🔴 CRITICAL: Configure DKIM signing")
-        elif scores['dkim'] < 20:
-            recommendations.append("🟡 MEDIUM: Add backup DKIM selector for redundancy")
+        # DKIM recommendations - FIXED to be more accurate
+        dkim_score = scores['dkim']
+        if dkim_score == 0:
+            recommendations.append("🔴 CRITICAL: Configure DKIM signing immediately")
+        elif dkim_score < 15:
+            recommendations.append("🟡 HIGH: Upgrade weak 1024-bit DKIM keys to 2048-bit or stronger")
+        elif dkim_score < 20:
+            # Has keys but could be better
+            dkim_details = details.get('dkim', {})
+            if 'weak' in str(dkim_details.get('key_strength', '')).lower():
+                recommendations.append("🟡 MEDIUM: Upgrade 1024-bit DKIM keys to 2048-bit for better security")
+            else:
+                recommendations.append("🟢 LOW: Consider adding backup DKIM selector for redundancy")
         
         # Key security recommendations
         if scores['key_security'] < 10:
-            recommendations.append("🟡 HIGH: Rotate overdue DKIM keys")
-            recommendations.append("🟡 HIGH: Upgrade weak 1024-bit keys to 2048-bit or stronger")
+            key_details = details.get('key_security', {})
+            if 'overdue' in str(key_details.get('rotation_status', '')).lower():
+                recommendations.append("🟡 HIGH: Rotate overdue DKIM keys immediately")
+            if 'testing' in str(key_details.get('testing_mode', '')).lower():
+                recommendations.append("🟡 MEDIUM: Remove testing mode (t=y) from production DKIM keys")
         
         return recommendations[:5]  # Top 5
     
@@ -479,8 +533,8 @@ if __name__ == "__main__":
         },
         'dkim_results': {
             'found_selectors': [
-                {'selector': 'google', 'key_type': 'RSA 2048-bit'},
-                {'selector': 'selector1', 'key_type': 'RSA 2048-bit'}
+                {'selector': 'google', 'record': 'v=DKIM1; k=rsa; p=' + 'A'*344},
+                {'selector': 'selector1', 'record': 'v=DKIM1; k=rsa; p=' + 'A'*172}
             ]
         },
         'key_age_analysis': {
