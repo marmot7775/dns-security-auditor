@@ -558,7 +558,7 @@ if mode == "Single Domain Audit":
                 
             else:
                 st.warning("⚠️ No DKIM keys found")
-                st.markdown(f"Tested {results['dkim']['selectors_tested']} selectors")
+                st.markdown(f"Tested {results['dkim'].get('selectors_tested', 0)} selectors")
         
         with tab4:
             # DMARC Tab
