@@ -5,6 +5,9 @@
 streamlit>=1.28.0
 dnspython>=2.4.0
 pandas>=2.0.0
+fastapi>=0.104.0
+uvicorn[standard]>=0.24.0
+
 
 # Optional: Enhanced Features
 plotly>=5.17.0          # For interactive charts
