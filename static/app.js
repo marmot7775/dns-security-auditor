@@ -243,6 +243,11 @@ function renderResults(data) {
         vendorsSection.style.display = 'none';
     }
 
+    // Tree Walk Visualization
+    if (data.tree_walk) {
+      renderTreeWalk(data.tree_walk);
+    }
+
     // Share button
     document.getElementById('share-btn').onclick = () => {
         navigator.clipboard.writeText(window.location.href).then(() => {
@@ -384,4 +389,145 @@ function escapeHtml(text) {
     const div = document.createElement('div');
     div.textContent = text;
     return div.innerHTML;
+}
+
+
+// ============================================================
+// DMARC DNS Tree Walk Visualization
+// Per draft-ietf-dmarc-dmarcbis-41, Section 4.10
+// ============================================================
+
+function renderTreeWalk(tw) {
+  // Remove any previous tree walk section
+  const existing = document.getElementById('tree-walk-section');
+  if (existing) existing.remove();
+
+  if (!tw || !tw.steps || tw.steps.length === 0) return;
+
+  const section = document.createElement('div');
+  section.id = 'tree-walk-section';
+  section.className = 'tree-walk-section';
+
+  const policyFound = !!tw.policy_source;
+  const policyTag = tw.applied_tag || 'p';
+
+  // Header
+  section.innerHTML = `
+    <div class="tw-header">
+      <div class="tw-header-left">
+        <svg class="tw-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" width="22" height="22">
+          <polyline points="22 12 18 12 15 21 9 3 6 12 2 12"></polyline>
+        </svg>
+        <div>
+          <div class="tw-title">DMARC Policy Discovery</div>
+          <div class="tw-subtitle">DNS Tree Walk per <a href="https://datatracker.ietf.org/doc/draft-ietf-dmarc-dmarcbis/" target="_blank" rel="noopener">dmarcbis</a> Section 4.10</div>
+        </div>
+      </div>
+      <div class="tw-badge ${policyFound ? 'tw-badge-found' : 'tw-badge-none'}">
+        ${policyFound ? 'Policy Found' : 'No Policy'}
+      </div>
+    </div>
+    <div class="tw-explainer">
+      When a mail receiver gets an email from <strong>${escapeHtml(tw.domain)}</strong>, it needs to find the DMARC policy that applies.
+      It starts by querying the exact domain, then walks up the DNS hierarchy until it finds a published policy.
+    </div>
+    <div class="tw-tree" id="tw-tree"></div>
+    ${policyFound ? `
+    <div class="tw-result tw-result-found">
+      <div class="tw-result-header">
+        <div class="tw-result-dot"></div>
+        <span>Effective policy from <strong>${escapeHtml(tw.policy_source)}</strong></span>
+        <span class="tw-policy-pill tw-policy-${tw.effective_policy}">${tw.effective_policy}</span>
+      </div>
+      <div class="tw-result-details">
+        <div class="tw-result-row"><span class="tw-result-label">Applied tag:</span> <code>${policyTag}</code>${tw.is_subdomain ? ' (subdomain inherits from parent)' : ' (direct match)'}</div>
+        <div class="tw-result-row"><span class="tw-result-label">Record:</span> <code class="tw-record-code">${escapeHtml(tw.effective_record)}</code></div>
+        ${tw.psd_flag ? `<div class="tw-result-row"><span class="tw-result-label">PSD flag:</span> <code>${tw.psd_flag}</code></div>` : ''}
+      </div>
+    </div>
+    ` : `
+    <div class="tw-result tw-result-none">
+      <div class="tw-result-header">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="18" height="18">
+          <circle cx="12" cy="12" r="10"/><line x1="15" y1="9" x2="9" y2="15"/><line x1="9" y1="9" x2="15" y2="15"/>
+        </svg>
+        <span>No DMARC policy found at any level</span>
+      </div>
+      <div class="tw-result-details">
+        Anyone can send email pretending to be from this domain. Mail receivers have no guidance on how to handle unauthenticated messages.
+      </div>
+    </div>
+    `}
+  `;
+
+  // Insert before the "Detailed Results" label
+  const resultsLabel = document.querySelector('.results-label');
+  if (resultsLabel) {
+    resultsLabel.parentNode.insertBefore(section, resultsLabel);
+  } else {
+    document.getElementById('results-section').appendChild(section);
+  }
+
+  // Now animate the tree nodes
+  const treeContainer = document.getElementById('tw-tree');
+  animateTreeWalk(tw.steps, treeContainer, tw.policy_source);
+}
+
+function animateTreeWalk(steps, container, policySource) {
+  // Build all nodes first (hidden)
+  steps.forEach((step, i) => {
+    const node = document.createElement('div');
+    node.className = 'tw-node tw-node-hidden';
+    node.dataset.index = i;
+
+    const isMatch = step.found && step.domain === policySource;
+    const isLast = i === steps.length - 1;
+
+    node.innerHTML = `
+      <div class="tw-connector ${i === 0 ? 'tw-connector-first' : ''}">
+        <div class="tw-connector-line"></div>
+        <div class="tw-connector-dot ${step.found ? 'tw-dot-found' : 'tw-dot-empty'}">
+          ${step.found
+            ? '<svg viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="3" width="14" height="14"><polyline points="20 6 9 17 4 12"></polyline></svg>'
+            : '<svg viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="3" width="14" height="14"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>'
+          }
+        </div>
+      </div>
+      <div class="tw-node-body ${isMatch ? 'tw-node-match' : ''} ${step.found && !isMatch ? 'tw-node-found' : ''} ${!step.found ? 'tw-node-miss' : ''}">
+        <div class="tw-node-level">${escapeHtml(step.label)}</div>
+        <div class="tw-node-query">
+          <code>_dmarc.${escapeHtml(step.domain)}</code>
+          <span class="tw-node-status ${step.found ? 'tw-status-found' : 'tw-status-miss'}">
+            ${step.found ? 'Record found' : 'No record'}
+          </span>
+        </div>
+        ${step.found && step.record ? `
+          <div class="tw-node-record"><code>${escapeHtml(step.record.length > 80 ? step.record.substring(0, 80) + '...' : step.record)}</code></div>
+        ` : ''}
+      </div>
+    `;
+
+    container.appendChild(node);
+  });
+
+  // Animate nodes appearing one by one
+  const nodes = container.querySelectorAll('.tw-node');
+  nodes.forEach((node, i) => {
+    setTimeout(() => {
+      node.classList.remove('tw-node-hidden');
+      node.classList.add('tw-node-entering');
+
+      // After enter animation, add the "probing" pulse
+      setTimeout(() => {
+        node.classList.remove('tw-node-entering');
+        node.classList.add('tw-node-visible');
+
+        const dot = node.querySelector('.tw-connector-dot');
+        if (dot) {
+          dot.classList.add('tw-dot-pulse');
+          setTimeout(() => dot.classList.remove('tw-dot-pulse'), 600);
+        }
+      }, 400);
+    }, i * 500);
+  });
 }
