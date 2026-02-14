@@ -1,3 +1,4 @@
+from dkim_formatter import analyze_dkim_key_strength
 """
 Result Transformer
 ==================

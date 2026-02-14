@@ -250,6 +250,10 @@ def smart_dkim_check(domain: str, spf_record: Optional[str] = None) -> Dict:
         try:
             answers = dns.resolver.resolve(fqdn, 'TXT')
             dkim_record = str(answers[0]).replace('" "', '').strip('"')
+
+            # Validate this is actually a DKIM record, not a wildcard/SPF catch-all
+            if not ("p=" in dkim_record and not dkim_record.strip().startswith("v=spf1")):
+                continue
             
             # Analyze key type
             key_type = 'Unknown'
