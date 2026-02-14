@@ -599,7 +599,7 @@ main {
 }
 
 .result-card.expanded .result-body {
-    max-height: 800px;
+    max-height: 5000px;
 }
 
 .result-body-inner {
