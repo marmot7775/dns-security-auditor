@@ -17,9 +17,6 @@ import dns.exception
 
 from checks_extra import check_mta_sts, check_tls_rpt, check_bimi
 from mx_check import check_mx
-from spf_intelligence import smart_dkim_check, detect_vendors_from_spf
-from spf_recursive import count_spf_lookups
-from spf_recursive import count_spf_lookups
 from spf_recursive import count_spf_lookups
 from advanced_fingerprinting import AdvancedVendorFingerprinter
 from security_scoring import EmailSecurityScorer
