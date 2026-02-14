@@ -162,6 +162,36 @@ function renderResults(data) {
     document.getElementById('summary-warn').textContent = countByStatus(data.checks, 'warn');
     document.getElementById('summary-fail').textContent = countByStatus(data.checks, 'fail');
 
+    // Grade color-coding and score display
+    const gradeCard = document.querySelector('.grade-card');
+    const gradeEl = document.getElementById('summary-grade');
+    const grade = data.score?.grade || '--';
+    const gradeColors = {
+      'A': { bg: '#ecfdf5', border: '#10b981', text: '#065f46' },
+      'B': { bg: '#eff6ff', border: '#3b82f6', text: '#1e40af' },
+      'C': { bg: '#fffbeb', border: '#f59e0b', text: '#92400e' },
+      'D': { bg: '#fff7ed', border: '#f97316', text: '#9a3412' },
+      'F': { bg: '#fef2f2', border: '#ef4444', text: '#991b1b' }
+    };
+    const gc = gradeColors[grade];
+    if (gc && gradeCard) {
+      gradeCard.style.borderTopColor = gc.border;
+      gradeCard.style.background = gc.bg;
+      gradeEl.style.color = gc.text;
+    }
+    // Show score number below grade
+    const scoreNum = data.score?.score;
+    if (scoreNum !== undefined && gradeCard) {
+      let scoreEl = document.getElementById('summary-score');
+      if (!scoreEl) {
+        scoreEl = document.createElement('div');
+        scoreEl.id = 'summary-score';
+        scoreEl.style.cssText = 'font-size:0.82rem;color:var(--text-secondary);font-weight:500;margin-top:0.15rem;';
+        gradeEl.parentNode.insertBefore(scoreEl, gradeEl.nextSibling);
+      }
+      scoreEl.textContent = Math.round(scoreNum) + ' / 100';
+    }
+
     // Priority fixes
     const prioritySection = document.getElementById('priority-section');
     const priorityList = document.getElementById('priority-list');
