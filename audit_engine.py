@@ -23,6 +23,7 @@ from security_scoring import EmailSecurityScorer
 from dkim_formatter import analyze_dkim_key_strength
 from dkim_key_age import DKIMKeyAgeAnalyzer
 from dkim_tag_analyzer import DKIMTagAnalyzer
+from dmarc_tree_walk import dmarc_tree_walk
 
 from result_transformer import (
     transform_dmarc,
@@ -339,6 +340,13 @@ def run_full_audit(domain: str) -> Dict[str, Any]:
         errors.append(f"DMARC: {str(e)}")
         checks.append(_error_card("DMARC", e))
 
+    # --- DMARC Tree Walk (dmarcbis-41 Section 4.10) ---
+    tree_walk_result = None
+    try:
+        tree_walk_result = dmarc_tree_walk(domain)
+    except Exception as e:
+        errors.append(f"Tree Walk: {str(e)}")
+
     # --- 2. SPF ---
     spf_record = None
     try:
@@ -427,6 +435,7 @@ def run_full_audit(domain: str) -> Dict[str, Any]:
         "checks": checks,
         "priority_fixes": priority_fixes,
         "vendors": vendors,
+        "tree_walk": tree_walk_result,
         "errors": errors if errors else None,
     }
 
