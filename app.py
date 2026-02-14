@@ -17,6 +17,7 @@ from spf_intelligence import smart_dkim_check
 from comprehensive_selectors import COMPREHENSIVE_DKIM_SELECTORS, COMPREHENSIVE_SPF_VENDOR_MAP
 from dkim_formatter import format_dkim_summary
 from advanced_fingerprinting import AdvancedVendorFingerprinter
+from dmarc_tree_walk import dmarc_tree_walk
 from dkim_tag_analyzer import DKIMTagAnalyzer
 from dkim_key_age import DKIMKeyAgeAnalyzer
 from email_header_validator import EmailHeaderDKIMValidator
@@ -339,6 +340,13 @@ if mode == "Single Domain Audit":
             dmarc_parsed = parse_dmarc_policy(dmarc_record)
             audit_results['dmarc_parsed'] = dmarc_parsed
             
+            # 3.5 DMARC DNS Tree Walk (dmarcbis-41)
+            try:
+                tree_walk_data = dmarc_tree_walk(domain)
+                audit_results['tree_walk'] = tree_walk_data
+            except Exception:
+                audit_results['tree_walk'] = None
+
             # 4. Vendor Fingerprinting
             st.markdown("#### 4️⃣ Fingerprinting vendors...")
             fingerprinter = AdvancedVendorFingerprinter(domain, verbose=False)
@@ -622,6 +630,79 @@ if mode == "Single Domain Audit":
                 - Provides visibility into who's sending email using your domain
                 - Required by major email providers (Google, Yahoo, etc.)
                 """)
+        
+            # --- DMARC DNS Tree Walk Visualization ---
+            st.markdown("---")
+            st.markdown("#### 🌳 DMARC Policy Discovery (DNS Tree Walk)")
+            st.caption("Per [draft-ietf-dmarc-dmarcbis](https://datatracker.ietf.org/doc/draft-ietf-dmarc-dmarcbis/) Section 4.10")
+            
+            tw = results.get('tree_walk')
+            if tw and tw.get('steps'):
+                st.markdown(
+                    f"When a mail receiver gets email from **{tw['domain']}**, "
+                    f"it walks up the DNS hierarchy looking for a DMARC policy:"
+                )
+                
+                for i, step in enumerate(tw['steps']):
+                    if step['found']:
+                        icon = "✅"
+                        color = "#10b981"
+                        status_text = "Record found"
+                    else:
+                        icon = "❌"
+                        color = "#94a3b8"
+                        status_text = "No record"
+                    
+                    is_match = step['found'] and step['domain'] == tw.get('policy_source')
+                    
+                    # Build the node
+                    if is_match:
+                        st.markdown(
+                            f'<div style="border-left:3px solid #10b981; padding:0.75rem 1rem; margin:0.5rem 0; '
+                            f'background:linear-gradient(135deg,#ecfdf5,#d1fae5); border-radius:0 8px 8px 0;">'
+                            f'<div style="font-size:0.65rem;font-weight:700;text-transform:uppercase;letter-spacing:0.08em;color:#64748b;margin-bottom:0.2rem;">{step["label"]}</div>'
+                            f'<div style="display:flex;align-items:center;gap:0.5rem;">'
+                            f'{icon} <code>_dmarc.{step["domain"]}</code> '
+                            f'<span style="font-size:0.7rem;font-weight:600;background:#ecfdf5;color:#065f46;padding:0.15rem 0.5rem;border-radius:99px;">{status_text}</span>'
+                            f'</div>'
+                            f'{"<div style=\"margin-top:0.5rem;padding:0.4rem 0.6rem;background:rgba(16,185,129,0.08);border-radius:6px;\"><code style=\"font-size:0.75rem;color:#065f46;\">" + step["record"][:100] + "</code></div>" if step.get("record") else ""}'
+                            f'</div>',
+                            unsafe_allow_html=True
+                        )
+                    else:
+                        st.markdown(
+                            f'<div style="border-left:3px solid {color}; padding:0.75rem 1rem; margin:0.5rem 0; '
+                            f'background:#f8fafc; border-radius:0 8px 8px 0;">'
+                            f'<div style="font-size:0.65rem;font-weight:700;text-transform:uppercase;letter-spacing:0.08em;color:#64748b;margin-bottom:0.2rem;">{step["label"]}</div>'
+                            f'<div style="display:flex;align-items:center;gap:0.5rem;">'
+                            f'{icon} <code>_dmarc.{step["domain"]}</code> '
+                            f'<span style="font-size:0.7rem;font-weight:600;background:#f1f5f9;color:#64748b;padding:0.15rem 0.5rem;border-radius:99px;">{status_text}</span>'
+                            f'</div></div>',
+                            unsafe_allow_html=True
+                        )
+                
+                # Summary
+                if tw.get('policy_source'):
+                    policy = tw.get('effective_policy', 'none')
+                    policy_colors = {'none': ('#fef3c7', '#92400e'), 'quarantine': ('#fff7ed', '#9a3412'), 'reject': ('#ecfdf5', '#065f46')}
+                    bg, fg = policy_colors.get(policy, ('#f1f5f9', '#334155'))
+                    
+                    tag_desc = {'p': 'direct policy', 'sp': 'subdomain policy', 'np': 'non-existent subdomain policy'}
+                    tag_name = tag_desc.get(tw.get('applied_tag', 'p'), tw.get('applied_tag', 'p'))
+                    
+                    st.success(
+                        f"**Policy found at {tw['policy_source']}** — "
+                        f"Effective policy: **{policy}** (via *{tag_name}* tag)"
+                        f"{'  \n⚠️ This domain inherits its DMARC policy from a parent domain.' if tw.get('is_subdomain') else ''}"
+                    )
+                else:
+                    st.error(
+                        "**No DMARC policy found at any level.**  \n"
+                        "Anyone can send email pretending to be from this domain. "
+                        "Mail receivers have no guidance on how to handle unauthenticated messages."
+                    )
+            else:
+                st.info("Tree walk data not available for this domain.")
         
         with tab5:
             # Vendors Tab - FIXED: Use .get() for evidence
