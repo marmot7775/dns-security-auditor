@@ -1,0 +1,713 @@
+"""
+Hardened MTA-STS / TLS-RPT / BIMI Validators
+DNS Security Auditor
+"""
+
+import re
+from typing import Any, Dict, List, Optional, Tuple
+from urllib.parse import urlparse
+
+try:
+    import requests
+    REQUESTS_AVAILABLE = True
+except ImportError:
+    REQUESTS_AVAILABLE = False
+
+try:
+    import dns.resolver
+    import dns.exception
+    DNS_AVAILABLE = True
+except ImportError:
+    DNS_AVAILABLE = False
+
+
+def _get_resolver(timeout: float = 5.0):
+    resolver = dns.resolver.Resolver()
+    resolver.timeout = timeout
+    resolver.lifetime = timeout * 2
+    return resolver
+
+
+def _lookup_txt(name: str) -> List[str]:
+    if not DNS_AVAILABLE:
+        return []
+    try:
+        resolver = _get_resolver()
+        answers = resolver.resolve(name, "TXT")
+        records = []
+        for rdata in answers:
+            parts = []
+            for s in rdata.strings:
+                parts.append(s.decode("utf-8") if isinstance(s, bytes) else str(s))
+            records.append("".join(parts))
+        return records
+    except Exception:
+        return []
+
+
+def _lookup_records(name: str, rdtype: str) -> List[str]:
+    if not DNS_AVAILABLE:
+        return []
+    try:
+        resolver = _get_resolver()
+        answers = resolver.resolve(name, rdtype)
+        return [str(rdata).rstrip(".") for rdata in answers]
+    except Exception:
+        return []
+
+
+def _make_issue(severity: str, issue: str, plain_english: str,
+                impact: str = "", fix: str = "") -> Dict[str, str]:
+    return {
+        "severity": severity,
+        "issue": issue,
+        "plain_english": plain_english,
+        "impact": impact,
+        "fix": fix,
+    }
+
+
+# ============================================================
+# MTA-STS VALIDATOR (RFC 8461)
+# ============================================================
+
+def _validate_mta_sts_txt(record: str) -> Tuple[Dict[str, str], List[Dict]]:
+    issues = []
+    tags = {}
+    parts = [p.strip() for p in record.split(";") if p.strip()]
+
+    for part in parts:
+        if "=" not in part:
+            issues.append(_make_issue(
+                "warning", f"Malformed MTA-STS tag: '{part}'",
+                "MTA-STS tags must be in key=value format.",
+                "Tag will be ignored.",
+                f"Fix syntax: ensure '{part}' uses key=value format.",
+            ))
+            continue
+        key, _, value = part.partition("=")
+        key = key.strip().lower()
+        value = value.strip()
+        if key in tags:
+            issues.append(_make_issue(
+                "warning", f"Duplicate MTA-STS tag: '{key}'",
+                f"The tag '{key}' appears more than once.",
+                "Behavior is undefined for duplicate tags.",
+                f"Remove the duplicate '{key}' tag.",
+            ))
+            continue
+        tags[key] = value
+
+    if "v" not in tags:
+        issues.append(_make_issue(
+            "error", "Missing required 'v' tag in MTA-STS TXT record",
+            "The MTA-STS TXT record must contain 'v=STSv1'.",
+            "Record will not be recognized as MTA-STS.",
+            "Add 'v=STSv1' to the TXT record.",
+        ))
+    elif tags["v"].upper() != "STSV1":
+        issues.append(_make_issue(
+            "error", f"Invalid MTA-STS version: v={tags['v']}",
+            f"MTA-STS version must be 'STSv1'. Found '{tags['v']}'.",
+            "Record will not be processed.",
+            "Change to 'v=STSv1'.",
+        ))
+
+    if "id" not in tags:
+        issues.append(_make_issue(
+            "error", "Missing required 'id' tag in MTA-STS TXT record",
+            "The 'id' tag is required and must change whenever the policy is updated.",
+            "Senders will not know when the policy changes.",
+            "Add an 'id' value, e.g., id=20240101.",
+        ))
+    elif not tags["id"]:
+        issues.append(_make_issue(
+            "error", "Empty 'id' value in MTA-STS TXT record",
+            "The id must be a non-empty string.",
+            "Senders cannot track policy changes.",
+            "Set id to a unique value like a timestamp: id=20240101T120000",
+        ))
+
+    valid_tags = {"v", "id"}
+    for key in tags:
+        if key not in valid_tags:
+            issues.append(_make_issue(
+                "warning", f"Unknown MTA-STS TXT tag: '{key}'",
+                "Valid MTA-STS TXT tags are: v, id.",
+                "This tag will be ignored.",
+                f"Remove '{key}' from the record.",
+            ))
+
+    return tags, issues
+
+
+def _validate_mta_sts_policy(policy_text: str, domain: str) -> Tuple[Dict[str, Any], List[Dict]]:
+    issues = []
+    policy = {
+        "version": None, "mode": None,
+        "mx_patterns": [], "max_age": None, "raw": policy_text,
+    }
+    seen_keys = set()
+    lines = policy_text.strip().splitlines()
+
+    for line_num, line in enumerate(lines, 1):
+        line = line.strip()
+        if not line:
+            continue
+        if ":" not in line:
+            issues.append(_make_issue(
+                "warning", f"Malformed policy line {line_num}: '{line}'",
+                "Policy lines must be in 'key: value' format.",
+                "This line will be ignored.",
+                f"Fix line {line_num} to use 'key: value' format.",
+            ))
+            continue
+
+        key, _, value = line.partition(":")
+        key = key.strip().lower()
+        value = value.strip()
+
+        if key == "version":
+            policy["version"] = value
+            if value != "STSv1":
+                issues.append(_make_issue(
+                    "error", f"Invalid policy version: '{value}'",
+                    "Policy file version must be 'STSv1'.",
+                    "Policy will not be processed by senders.",
+                    "Change to 'version: STSv1'.",
+                ))
+        elif key == "mode":
+            policy["mode"] = value
+            valid_modes = {"enforce", "testing", "none"}
+            if value.lower() not in valid_modes:
+                issues.append(_make_issue(
+                    "error", f"Invalid MTA-STS mode: '{value}'",
+                    "Valid modes are: enforce, testing, none.",
+                    "Policy behavior is undefined.",
+                    "Set mode to 'enforce', 'testing', or 'none'.",
+                ))
+            elif value.lower() == "none":
+                issues.append(_make_issue(
+                    "info", "MTA-STS mode is 'none' (disabled)",
+                    "Mode 'none' tells senders the domain is not using MTA-STS.",
+                    "No TLS enforcement on inbound mail.",
+                    "Set mode to 'testing' to start monitoring, then 'enforce'.",
+                ))
+            elif value.lower() == "testing":
+                issues.append(_make_issue(
+                    "info", "MTA-STS mode is 'testing'",
+                    "Senders will attempt TLS but not reject on failure.",
+                    "TLS is preferred but not required.",
+                    "Move to mode=enforce once TLS works reliably.",
+                ))
+        elif key == "mx":
+            policy["mx_patterns"].append(value)
+        elif key == "max_age":
+            try:
+                max_age_val = int(value)
+                policy["max_age"] = max_age_val
+                if max_age_val < 86400:
+                    issues.append(_make_issue(
+                        "warning",
+                        f"max_age is very short: {max_age_val} seconds",
+                        "A very short max_age means frequent re-fetching.",
+                        "Brief window of protection.",
+                        "Set max_age to at least 86400 (1 day). Recommended: 604800 (1 week).",
+                    ))
+                elif max_age_val > 31557600:
+                    issues.append(_make_issue(
+                        "info",
+                        f"max_age is very long: {max_age_val} seconds",
+                        "Senders cache the policy for a long time.",
+                        "Policy changes take a long time to propagate.",
+                        "Consider max_age of 604800 (1 week) to 2592000 (30 days).",
+                    ))
+            except ValueError:
+                policy["max_age"] = -1
+                issues.append(_make_issue(
+                    "error", f"max_age is not a number: '{value}'",
+                    "max_age must be an integer (seconds).",
+                    "Policy may not be processed correctly.",
+                    "Set max_age to a number, e.g., max_age: 604800",
+                ))
+        else:
+            issues.append(_make_issue(
+                "warning", f"Unknown policy field: '{key}'",
+                "Valid fields are: version, mode, mx, max_age.",
+                "This field will be ignored.",
+                f"Remove '{key}' from the policy file.",
+            ))
+        seen_keys.add(key)
+
+    if policy["version"] is None:
+        issues.append(_make_issue("error", "Missing 'version' in policy file",
+            "The policy file must contain 'version: STSv1'.", "", "Add 'version: STSv1'."))
+    if policy["mode"] is None:
+        issues.append(_make_issue("error", "Missing 'mode' in policy file",
+            "The policy file must specify a mode.", "", "Add 'mode: enforce'."))
+    if not policy["mx_patterns"]:
+        issues.append(_make_issue("error", "No 'mx' entries in policy file",
+            "The policy file must list at least one MX hostname pattern.", "",
+            "Add mx lines, e.g., 'mx: mail.yourdomain.com'."))
+    if policy["max_age"] is None:
+        issues.append(_make_issue("error", "Missing 'max_age' in policy file",
+            "max_age is required.", "", "Add 'max_age: 604800'."))
+
+    if policy["mx_patterns"]:
+        actual_mx = _lookup_records(domain, "MX")
+        actual_mx_hosts = []
+        for mx_rec in actual_mx:
+            parts = mx_rec.split(None, 1)
+            if len(parts) == 2:
+                actual_mx_hosts.append(parts[1].rstrip(".").lower())
+        for pattern in policy["mx_patterns"]:
+            pattern_lower = pattern.lower().rstrip(".")
+            matched = False
+            for mx_host in actual_mx_hosts:
+                if pattern_lower.startswith("*."):
+                    suffix = pattern_lower[2:]
+                    if mx_host.endswith(suffix) or mx_host == suffix.lstrip("."):
+                        matched = True
+                        break
+                else:
+                    if mx_host == pattern_lower:
+                        matched = True
+                        break
+            if not matched and actual_mx_hosts:
+                issues.append(_make_issue(
+                    "warning",
+                    f"MTA-STS mx pattern '{pattern}' doesn't match any actual MX record",
+                    f"Actual MX records are: {', '.join(actual_mx_hosts)}.",
+                    "Potential mail delivery failure.",
+                    "Update the mx line to match your actual MX hostnames.",
+                ))
+
+    return policy, issues
+
+
+def check_mta_sts(domain: str) -> Dict[str, Any]:
+    result = {
+        "check": "MTA-STS", "domain": domain,
+        "txt_record": None, "txt_tags": {},
+        "policy_url": None, "policy": None,
+        "policy_mode": None, "policy_mx": [], "policy_max_age": None,
+        "status": "ok", "issues": [], "warnings": [], "recommendations": [],
+    }
+
+    if not DNS_AVAILABLE:
+        result["status"] = "error"
+        result["issues"].append(_make_issue("error", "DNS library not available",
+            "Cannot perform DNS lookups.", "", "pip install dnspython"))
+        return result
+
+    txt_name = f"_mta-sts.{domain}"
+    all_txt = _lookup_txt(txt_name)
+    sts_records = [r for r in all_txt if "sts" in r.lower()]
+
+    if not sts_records:
+        result["status"] = "warning"
+        result["issues"].append(_make_issue(
+            "warning", "No MTA-STS TXT record found",
+            f"No TXT record found at '_mta-sts.{domain}'. MTA-STS tells sending "
+            "mail servers that your domain requires TLS encryption for inbound email.",
+            "Email may be transmitted without encryption.",
+            f"Add a TXT record at '_mta-sts.{domain}' with value: v=STSv1; id=20240101",
+        ))
+        return result
+
+    if len(sts_records) > 1:
+        result["issues"].append(_make_issue(
+            "error", f"Multiple MTA-STS TXT records found ({len(sts_records)})",
+            "There should be exactly one MTA-STS TXT record.", "",
+            "Remove duplicate records.",
+        ))
+
+    sts_record = sts_records[0]
+    result["txt_record"] = sts_record
+    txt_tags, txt_issues = _validate_mta_sts_txt(sts_record)
+    result["txt_tags"] = txt_tags
+    result["issues"].extend(txt_issues)
+
+    policy_url = f"https://mta-sts.{domain}/.well-known/mta-sts.txt"
+    result["policy_url"] = policy_url
+
+    if REQUESTS_AVAILABLE:
+        try:
+            resp = requests.get(policy_url, timeout=10, allow_redirects=True)
+            if resp.status_code == 200:
+                content_type = resp.headers.get("Content-Type", "")
+                if "text/plain" not in content_type and content_type:
+                    result["issues"].append(_make_issue(
+                        "warning",
+                        f"Policy Content-Type is '{content_type}' (expected text/plain)",
+                        "RFC 8461 specifies text/plain.", "",
+                        "Serve the file as text/plain.",
+                    ))
+                policy_data, policy_issues = _validate_mta_sts_policy(resp.text, domain)
+                result["policy"] = policy_data
+                result["policy_mode"] = policy_data.get("mode")
+                result["policy_mx"] = policy_data.get("mx_patterns", [])
+                result["policy_max_age"] = policy_data.get("max_age")
+                result["issues"].extend(policy_issues)
+            elif resp.status_code == 404:
+                result["issues"].append(_make_issue(
+                    "error", "MTA-STS policy file not found (HTTP 404)",
+                    "DNS record exists but policy file is missing.",
+                    "MTA-STS will not function.",
+                    f"Create the policy file at {policy_url}",
+                ))
+            else:
+                result["issues"].append(_make_issue(
+                    "error", f"Policy file returned HTTP {resp.status_code}",
+                    "The policy file returned an error.",
+                    "MTA-STS will not function.",
+                    f"Ensure {policy_url} returns HTTP 200.",
+                ))
+        except requests.exceptions.SSLError:
+            result["issues"].append(_make_issue(
+                "error", "SSL/TLS error fetching MTA-STS policy",
+                f"HTTPS connection to mta-sts.{domain} failed.",
+                "MTA-STS will not function.",
+                f"Install a valid TLS certificate for mta-sts.{domain}.",
+            ))
+        except requests.exceptions.ConnectionError:
+            result["issues"].append(_make_issue(
+                "error", f"Cannot connect to mta-sts.{domain}",
+                f"The host mta-sts.{domain} is not reachable.",
+                "MTA-STS will not function.",
+                f"Set up a web server at mta-sts.{domain} with HTTPS.",
+            ))
+        except requests.exceptions.Timeout:
+            result["issues"].append(_make_issue(
+                "warning", "Timeout fetching MTA-STS policy",
+                "The policy file server took too long.", "",
+                "Ensure the web server responds quickly.",
+            ))
+        except Exception as e:
+            result["issues"].append(_make_issue(
+                "warning", f"Error fetching policy: {str(e)[:200]}",
+                "Could not retrieve the MTA-STS policy file.", "",
+                f"Verify {policy_url} is accessible.",
+            ))
+
+    severities = [i["severity"] for i in result["issues"]]
+    if "error" in severities:
+        result["status"] = "error"
+    elif "warning" in severities:
+        result["status"] = "warning"
+
+    for issue in result["issues"]:
+        fix = issue.get("fix")
+        if fix and fix not in result["recommendations"]:
+            result["recommendations"].append(fix)
+
+    return result
+
+
+# ============================================================
+# TLS-RPT VALIDATOR (RFC 8460)
+# ============================================================
+
+_TLSRPT_VALID_TAGS = {"v", "rua"}
+
+
+def _validate_tls_rpt_record(record: str) -> Tuple[Dict[str, str], List[Dict]]:
+    issues = []
+    tags = {}
+    parts = [p.strip() for p in record.split(";") if p.strip()]
+
+    for part in parts:
+        if "=" not in part:
+            issues.append(_make_issue("warning", f"Malformed TLS-RPT tag: '{part}'",
+                "Tags must be in key=value format.", "", f"Fix the syntax of '{part}'."))
+            continue
+        key, _, value = part.partition("=")
+        key = key.strip().lower()
+        value = value.strip()
+        if key in tags:
+            issues.append(_make_issue("warning", f"Duplicate TLS-RPT tag: '{key}'",
+                f"'{key}' appears more than once.", "", f"Remove the duplicate."))
+            continue
+        if key not in _TLSRPT_VALID_TAGS:
+            issues.append(_make_issue("warning", f"Unknown TLS-RPT tag: '{key}'",
+                "Valid tags are: v, rua.", "", f"Remove '{key}'."))
+        tags[key] = value
+
+    if "v" not in tags:
+        issues.append(_make_issue("error", "Missing required 'v' tag",
+            "TLS-RPT record must start with 'v=TLSRPTv1'.", "", "Add 'v=TLSRPTv1'."))
+    elif tags["v"].upper() != "TLSRPTV1":
+        issues.append(_make_issue("error", f"Invalid TLS-RPT version: v={tags['v']}",
+            "Version must be 'TLSRPTv1'.", "", "Change to 'v=TLSRPTv1'."))
+
+    if "rua" not in tags:
+        issues.append(_make_issue("error", "Missing required 'rua' tag",
+            "TLS-RPT must specify where to send reports.", "",
+            "Add rua=mailto:tls-reports@yourdomain.com"))
+    else:
+        uris = [u.strip() for u in tags["rua"].split(",")]
+        for uri in uris:
+            uri_lower = uri.lower()
+            if uri_lower.startswith("mailto:"):
+                email = uri[7:]
+                if "@" not in email:
+                    issues.append(_make_issue("error", f"Invalid email in rua: '{uri}'",
+                        "Must contain a valid email.", "", "Fix the email format."))
+            elif uri_lower.startswith("https:"):
+                parsed = urlparse(uri)
+                if not parsed.netloc:
+                    issues.append(_make_issue("error", f"Invalid HTTPS URI: '{uri}'",
+                        "Must be a valid URL.", "", "Fix the URL format."))
+            else:
+                issues.append(_make_issue("error", f"Invalid rua URI scheme: '{uri}'",
+                    "Must use mailto: or https:.", "",
+                    "Use mailto: or https:// format."))
+
+    return tags, issues
+
+
+def check_tls_rpt(domain: str) -> Dict[str, Any]:
+    result = {
+        "check": "TLS-RPT", "domain": domain,
+        "record": None, "records_found": 0, "tags": {},
+        "report_destinations": [],
+        "status": "ok", "issues": [], "warnings": [], "recommendations": [],
+    }
+
+    if not DNS_AVAILABLE:
+        result["status"] = "error"
+        result["issues"].append(_make_issue("error", "DNS library not available",
+            "Cannot perform DNS lookups.", "", "pip install dnspython"))
+        return result
+
+    txt_name = f"_smtp._tls.{domain}"
+    all_txt = _lookup_txt(txt_name)
+    rpt_records = [r for r in all_txt if "tlsrpt" in r.lower()]
+
+    if not rpt_records:
+        result["status"] = "warning"
+        result["issues"].append(_make_issue(
+            "warning", "No TLS-RPT record found",
+            f"No TXT record at '_smtp._tls.{domain}'. "
+            "TLS-RPT reports TLS connection failures.",
+            "No visibility into encryption issues.",
+            f"Add TXT at _smtp._tls.{domain}: v=TLSRPTv1; rua=mailto:tls-reports@{domain}",
+        ))
+        return result
+
+    result["records_found"] = len(rpt_records)
+    if len(rpt_records) > 1:
+        result["issues"].append(_make_issue("error",
+            f"Multiple TLS-RPT records ({len(rpt_records)})",
+            "Should be exactly one.", "", "Remove duplicates."))
+
+    record = rpt_records[0]
+    result["record"] = record
+    tags, tag_issues = _validate_tls_rpt_record(record)
+    result["tags"] = tags
+    result["issues"].extend(tag_issues)
+
+    if "rua" in tags:
+        result["report_destinations"] = [u.strip() for u in tags["rua"].split(",")]
+
+    # MTA-STS synergy check
+    mta_sts_txt = _lookup_txt(f"_mta-sts.{domain}")
+    has_mta_sts = any("sts" in r.lower() for r in mta_sts_txt)
+    if not has_mta_sts:
+        result["issues"].append(_make_issue(
+            "info", "TLS-RPT configured but MTA-STS is not",
+            "TLS-RPT works best alongside MTA-STS.",
+            "Limited value without MTA-STS or DANE.",
+            "Consider implementing MTA-STS alongside TLS-RPT.",
+        ))
+
+    severities = [i["severity"] for i in result["issues"]]
+    if "error" in severities:
+        result["status"] = "error"
+    elif "warning" in severities:
+        result["status"] = "warning"
+
+    for issue in result["issues"]:
+        fix = issue.get("fix")
+        if fix and fix not in result["recommendations"]:
+            result["recommendations"].append(fix)
+
+    return result
+
+
+# ============================================================
+# BIMI VALIDATOR
+# ============================================================
+
+def _validate_bimi_record(record: str) -> Tuple[Dict[str, str], List[Dict]]:
+    issues = []
+    tags = {}
+    parts = [p.strip() for p in record.split(";") if p.strip()]
+
+    for part in parts:
+        if "=" not in part:
+            issues.append(_make_issue("warning", f"Malformed BIMI tag: '{part}'",
+                "BIMI tags must be in key=value format.", "", f"Fix '{part}'."))
+            continue
+        key, _, value = part.partition("=")
+        key = key.strip().lower()
+        value = value.strip()
+        if key in tags:
+            issues.append(_make_issue("warning", f"Duplicate BIMI tag: '{key}'",
+                f"'{key}' appears more than once.", "", f"Remove duplicate."))
+            continue
+        tags[key] = value
+
+    valid_tags = {"v", "l", "a"}
+    for key in tags:
+        if key not in valid_tags:
+            issues.append(_make_issue("warning", f"Unknown BIMI tag: '{key}'",
+                "Valid BIMI tags are: v, l, a.", "", f"Remove '{key}'."))
+
+    if "v" not in tags:
+        issues.append(_make_issue("error", "Missing 'v' tag",
+            "BIMI record must have 'v=BIMI1'.", "", "Add 'v=BIMI1'."))
+    elif tags["v"].upper() != "BIMI1":
+        issues.append(_make_issue("error", f"Invalid version: v={tags['v']}",
+            "Must be 'BIMI1'.", "", "Change to 'v=BIMI1'."))
+
+    if "l" not in tags:
+        issues.append(_make_issue("warning", "Missing 'l' (logo) tag",
+            "The l= tag specifies your SVG logo URL.", "",
+            "Add l=https://yourdomain.com/logo.svg"))
+    elif not tags["l"]:
+        issues.append(_make_issue("info", "Empty 'l' (logo) tag",
+            "No logo at this selector.", "", ""))
+    else:
+        logo_url = tags["l"]
+        parsed = urlparse(logo_url)
+        if parsed.scheme.lower() != "https":
+            issues.append(_make_issue("error", "Logo URL is not HTTPS",
+                "Must use HTTPS.", "", "Change to HTTPS."))
+        if not logo_url.lower().endswith(".svg"):
+            issues.append(_make_issue("warning", "Logo URL does not end in .svg",
+                "BIMI logos must be SVG Tiny 1.2.", "", "Use SVG format."))
+
+    if "a" in tags and tags["a"]:
+        vmc_url = tags["a"]
+        parsed = urlparse(vmc_url)
+        if parsed.scheme.lower() != "https":
+            issues.append(_make_issue("error", "VMC URL is not HTTPS",
+                "Must use HTTPS.", "", "Change to HTTPS."))
+    elif "a" not in tags:
+        issues.append(_make_issue("info", "No VMC tag",
+            "Gmail requires a VMC for BIMI logos.", "",
+            "Obtain a VMC from DigiCert or Entrust."))
+
+    return tags, issues
+
+
+def check_bimi(domain: str) -> Dict[str, Any]:
+    result = {
+        "check": "BIMI", "domain": domain,
+        "record": None, "records_found": 0, "tags": {},
+        "logo_url": None, "vmc_url": None, "selector": "default",
+        "status": "ok", "issues": [], "warnings": [], "recommendations": [],
+    }
+
+    if not DNS_AVAILABLE:
+        result["status"] = "error"
+        result["issues"].append(_make_issue("error", "DNS library not available",
+            "Cannot perform DNS lookups.", "", "pip install dnspython"))
+        return result
+
+    bimi_name = f"default._bimi.{domain}"
+    all_txt = _lookup_txt(bimi_name)
+    bimi_records = [r for r in all_txt if "bimi1" in r.lower()]
+
+    if not bimi_records:
+        result["status"] = "info"
+        result["records_found"] = 0
+        result["issues"].append(_make_issue(
+            "info", "No BIMI record found",
+            f"No BIMI TXT record at 'default._bimi.{domain}'.",
+            "No brand logo in recipients' inboxes.",
+            f"Add TXT at 'default._bimi.{domain}': v=BIMI1; l=https://yourdomain.com/logo.svg;",
+        ))
+        return result
+
+    result["records_found"] = len(bimi_records)
+    if len(bimi_records) > 1:
+        result["issues"].append(_make_issue("error",
+            f"Multiple BIMI records ({len(bimi_records)})",
+            "Should be one per selector.", "", "Remove duplicates."))
+
+    record = bimi_records[0]
+    result["record"] = record
+    tags, tag_issues = _validate_bimi_record(record)
+    result["tags"] = tags
+    result["issues"].extend(tag_issues)
+    result["logo_url"] = tags.get("l") or None
+    result["vmc_url"] = tags.get("a") or None
+
+    # DMARC prerequisite check
+    dmarc_records = _lookup_txt(f"_dmarc.{domain}")
+    dmarc_found = False
+    dmarc_enforcing = False
+    for rec in dmarc_records:
+        if rec.strip().lower().startswith("v=dmarc1"):
+            dmarc_found = True
+            rec_lower = rec.lower()
+            if "p=quarantine" in rec_lower or "p=reject" in rec_lower:
+                dmarc_enforcing = True
+            break
+
+    if not dmarc_found:
+        result["issues"].append(_make_issue(
+            "error", "BIMI requires DMARC, but no DMARC record found",
+            "Email clients require DMARC enforcement before displaying BIMI logos.",
+            "BIMI logos will not be displayed.",
+            "Implement DMARC first, then set up BIMI.",
+        ))
+    elif not dmarc_enforcing:
+        result["issues"].append(_make_issue(
+            "warning", "DMARC not at enforcement (BIMI requires p=quarantine or p=reject)",
+            "Your DMARC policy is likely 'none' (monitoring only).",
+            "Most clients won't display BIMI logos.",
+            "Move DMARC to p=quarantine or p=reject.",
+        ))
+
+    # Logo accessibility check
+    if REQUESTS_AVAILABLE and result["logo_url"]:
+        try:
+            resp = requests.head(result["logo_url"], timeout=10, allow_redirects=True)
+            if resp.status_code != 200:
+                result["issues"].append(_make_issue(
+                    "warning", f"Logo URL returned HTTP {resp.status_code}",
+                    "Logo is not accessible.", "",
+                    "Ensure the logo URL returns HTTP 200.",
+                ))
+            else:
+                ct = resp.headers.get("Content-Type", "")
+                if "svg" not in ct.lower() and "xml" not in ct.lower():
+                    result["issues"].append(_make_issue(
+                        "warning", f"Logo Content-Type is '{ct}' (expected image/svg+xml)",
+                        "Should be served as image/svg+xml.", "",
+                        "Configure server to serve .svg as image/svg+xml.",
+                    ))
+        except Exception:
+            result["issues"].append(_make_issue(
+                "info", "Could not verify BIMI logo URL",
+                "Logo URL could not be reached.", "",
+                "Verify the logo URL is publicly accessible.",
+            ))
+
+    severities = [i["severity"] for i in result["issues"]]
+    if "error" in severities:
+        result["status"] = "error"
+    elif "warning" in severities:
+        result["status"] = "warning"
+    elif any(s == "info" for s in severities) and result["records_found"] > 0:
+        result["status"] = "ok"
+
+    for issue in result["issues"]:
+        fix = issue.get("fix")
+        if fix and fix not in result["recommendations"]:
+            result["recommendations"].append(fix)
+
+    return result

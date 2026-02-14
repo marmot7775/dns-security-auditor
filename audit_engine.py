@@ -18,6 +18,9 @@ import dns.exception
 from checks_extra import check_mta_sts, check_tls_rpt, check_bimi
 from mx_check import check_mx
 from spf_intelligence import smart_dkim_check, detect_vendors_from_spf
+from spf_recursive import count_spf_lookups
+from spf_recursive import count_spf_lookups
+from spf_recursive import count_spf_lookups
 from advanced_fingerprinting import AdvancedVendorFingerprinter
 from security_scoring import EmailSecurityScorer
 from dkim_formatter import analyze_dkim_key_strength
@@ -222,54 +225,34 @@ def _raw_check_spf(domain: str) -> Dict[str, Any]:
 
     # Parse mechanisms
     parts = record.split()
-    lookup_mechanisms = {"include", "a", "mx", "ptr", "exists", "redirect"}
-    lookup_count = 0
+    # Parse mechanisms for all_mechanism and basic counts
+    all_mech = None
     include_count = 0
     ip4_count = 0
     ip6_count = 0
-    all_mech = None
-
     for part in parts:
-        part_lower = part.lower()
-        if part_lower.startswith("v=spf1"):
-            continue
-
-        # Extract mechanism type
-        # Strip qualifier (+, -, ~, ?)
-        clean = part_lower.lstrip("+-~?")
-
-        if clean.startswith("include:"):
-            lookup_count += 1
+        part_lower = part.lower().lstrip("+-~?")
+        if part_lower.startswith("include:"):
             include_count += 1
-        elif clean.startswith(("a:", "a/")):
-            lookup_count += 1
-        elif clean == "a":
-            lookup_count += 1
-        elif clean.startswith(("mx:", "mx/")):
-            lookup_count += 1
-        elif clean == "mx":
-            lookup_count += 1
-        elif clean.startswith("ptr"):
-            lookup_count += 1
-        elif clean.startswith("exists:"):
-            lookup_count += 1
-        elif clean.startswith("redirect="):
-            lookup_count += 1
-        elif clean.startswith("ip4:"):
+        elif part_lower.startswith("ip4:"):
             ip4_count += 1
-        elif clean.startswith("ip6:"):
+        elif part_lower.startswith("ip6:"):
             ip6_count += 1
-        elif clean in ("-all", "~all", "?all", "+all", "all"):
-            all_mech = part_lower.lstrip("+-~?")
-            # Reconstruct with qualifier
-            qualifier = part_lower[0] if part_lower[0] in "+-~?" else "+"
+        elif part_lower.rstrip("+-~?") in ("all",) or part.lower().lstrip("+-~?") == "all":
+            qualifier = part.lower()[0] if part.lower()[0] in "+-~?" else "+"
             all_mech = qualifier + "all"
+
+    # RECURSIVE SPF lookup count
+    spf_recursive_result = count_spf_lookups(domain)
+    lookup_count = spf_recursive_result["total_lookups"]
 
     result["lookup_count"] = lookup_count
     result["include_count"] = include_count
     result["ip4_count"] = ip4_count
     result["ip6_count"] = ip6_count
     result["all_mechanism"] = all_mech
+    result["spf_chain"] = spf_recursive_result.get("chain", [])
+    result["spf_recursive"] = spf_recursive_result
 
     # Issues
     if lookup_count > 10:
