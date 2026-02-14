@@ -1,136 +1,43 @@
-# DNS Security Auditor - Web Application
+# DNS Security Audit
 
-FastAPI backend + vanilla HTML/CSS/JS frontend for dns-audit.com.
+**Built by [Neil Anuskiewicz](https://www.linkedin.com/in/neilanuskiewicz/)** · [GitHub](https://github.com/marmot7775)
 
-Replaces the Streamlit app with a professional, single-page security audit tool.
+---
 
-## Project Structure
+A comprehensive DNS security auditing tool that analyzes domain configurations for email authentication, security policies, and DNS best practices.
 
-```
-dns-security-auditor/
-    server.py               # FastAPI app - serves API + static files
-    audit_engine.py         # Orchestrates all checks, builds response
-    result_transformer.py   # Converts raw module output to frontend format
-    requirements.txt        # Python dependencies
-    Procfile                # Deployment (Render/Railway)
-    static/
-        index.html          # Frontend - single page
-        style.css           # Styles
-        app.js              # Frontend logic, API calls, rendering
-    # --- Your existing modules (unchanged) ---
-    checks_extra.py         # MTA-STS, TLS-RPT, BIMI
-    mx_check.py             # MX analysis
-    spf_intelligence.py     # SPF-based DKIM discovery
-    advanced_fingerprinting.py
-    security_scoring.py
-    dkim_formatter.py
-    dkim_key_age.py
-    dkim_tag_analyzer.py
-    comprehensive_selectors.py
-    config.py
-```
+**Live at [dns-audit.com](https://dns-audit.com)**
 
-## Setup
+## What It Does
 
-```bash
-# Clone your repo
-git clone https://github.com/marmot7775/dns-security-auditor.git
-cd dns-security-auditor
+Enter any domain and get a detailed security audit covering:
 
-# Copy the new files into the repo root
-# (server.py, audit_engine.py, result_transformer.py, Procfile)
-# Copy static/ directory into repo root
+- **DMARC** — Policy analysis with full DNS Tree Walk per the latest [dmarcbis](https://datatracker.ietf.org/doc/draft-ietf-dmarc-dmarcbis/) standard (Section 4.10), showing exactly how policy discovery traverses the DNS hierarchy
+- **SPF** — Record validation, mechanism analysis, and lookup count verification
+- **DKIM** — Selector discovery across major ESPs and common patterns, key analysis, and rotation age estimation
+- **MX** — Mail server identification, vendor fingerprinting, and configuration checks
+- **MTA-STS** — Policy file validation and mode analysis
+- **TLS-RPT** — TLS reporting record verification
+- **BIMI** — Brand indicator record detection and validation
+- **DNSSEC** — Signature validation status
 
-# Install dependencies
-pip install -r requirements.txt
+Each check produces a pass/warn/fail status with plain-English explanations, detailed findings, and actionable recommendations. Results are scored and graded A through F.
 
-# Run locally
-uvicorn server:app --host 0.0.0.0 --port 8000 --reload
-```
+## DMARC DNS Tree Walk
 
-Open http://localhost:8000 in your browser.
-
-## Integration Steps
-
-1. Copy these new files into your existing repo root:
-   - `server.py`
-   - `audit_engine.py`
-   - `result_transformer.py`
-   - `Procfile`
-   - `static/` directory (index.html, style.css, app.js)
-
-2. Update `requirements.txt` to include FastAPI and uvicorn (see the new one).
-
-3. Your existing modules stay exactly where they are. No changes needed to:
-   - checks_extra.py
-   - mx_check.py
-   - spf_intelligence.py
-   - advanced_fingerprinting.py
-   - security_scoring.py
-   - dkim_formatter.py
-   - dkim_key_age.py
-   - dkim_tag_analyzer.py
-   - comprehensive_selectors.py
-   - config.py
-
-4. The old `app.py` (Streamlit) and `dns_tools.py` are no longer needed.
-   You can keep them for reference or remove them.
+One of the more interesting features is the animated DMARC DNS Tree Walk visualization. Per dmarcbis Section 4.10, DMARC policy discovery doesn't just check the exact domain — it walks up the DNS tree, stripping labels from left to right, to find an organizational or public suffix domain policy. The tool visualizes each step of this process, showing which domains were queried, what was found, and which policy ultimately applies.
 
 ## API
 
+The tool exposes a simple REST API:
+
 ```
 GET /api/audit?domain=example.com
-GET /api/audit?domain=example.com&nocache=true
 GET /api/health
 ```
 
-Response shape:
+## Author
 
-```json
-{
-  "domain": "example.com",
-  "timestamp": "2026-02-13T22:45:00",
-  "elapsed_seconds": 4.2,
-  "score": { "total": 72, "grade": "B" },
-  "checks": [
-    {
-      "name": "DMARC",
-      "status": "pass|warn|fail",
-      "pill_label": "optional override",
-      "verdict": "one-line summary",
-      "record": "raw DNS record",
-      "explanation": "HTML plain-English explanation",
-      "details": [
-        { "type": "good|warning|error|info", "text": "..." }
-      ],
-      "fix": "HTML recommended action"
-    }
-  ],
-  "priority_fixes": ["Fix 1", "Fix 2"],
-  "vendors": [
-    { "name": "Google Workspace", "confidence": 95 }
-  ]
-}
-```
+**[Neil Anuskiewicz](https://www.linkedin.com/in/neilanuskiewicz/)** — DNS and email security specialist
 
-## Deployment
-
-### Render
-
-1. Connect your GitHub repo
-2. Build command: `pip install -r requirements.txt`
-3. Start command: `uvicorn server:app --host 0.0.0.0 --port $PORT`
-
-### Railway
-
-1. Connect your GitHub repo
-2. It auto-detects the Procfile
-
-### VPS
-
-```bash
-pip install -r requirements.txt
-uvicorn server:app --host 0.0.0.0 --port 8000
-```
-
-Use nginx as a reverse proxy for production. Add SSL via Let's Encrypt.
+[LinkedIn](https://www.linkedin.com/in/neilanuskiewicz/) · [GitHub](https://github.com/marmot7775)
