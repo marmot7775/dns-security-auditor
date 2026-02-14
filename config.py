@@ -10,11 +10,11 @@ DKIM_SELECTORS = [
     # Google Workspace / Gmail
     'google',
     'googlemail',
-    
+
     # Microsoft 365
     'selector1',
     'selector2',
-    
+
     # Major ESPs
     'default',
     'k1',
@@ -25,22 +25,17 @@ DKIM_SELECTORS = [
     'email',
     's1',
     's2',
-    
-    # Mailchimp
-    'k1._domainkey',
-    
+
     # SendGrid
     'em',
-    's1',
-    's2',
-    
+
     # Amazon SES
     'amazonses',
-    
+
     # Proofpoint
     'proofpoint',
     'pp',
-    
+
     # Custom/Other
     'big-email',
     'mandrill',
@@ -73,7 +68,7 @@ CHECK_DEFINITIONS = {
         'full_name': 'DomainKeys Identified Mail',
         'category': 'email',
         'severity': 'high',
-        'description': 'Cryptographic signatures prove emails haven\'t been tampered with',
+        'description': "Cryptographic signatures prove emails haven't been tampered with",
         'risk': 'Email tampering, failed authentication',
         'rfc': 'RFC 6376'
     },
@@ -179,28 +174,28 @@ GRADING = {
 EDUCATIONAL_CONTENT = {
     'DMARC': """
 **Why DMARC Matters:**
-DMARC tells email receivers (Gmail, Outlook, etc.) what to do when an email fails SPF or DKIM authentication. 
+DMARC tells email receivers (Gmail, Outlook, etc.) what to do when an email fails SPF or DKIM authentication.
 Without DMARC, attackers can easily spoof your domain to send phishing emails that appear to come from you.
 
-**Common Policies:**
-- `p=none` - Monitor only (good for initial deployment)
-- `p=quarantine` - Send suspicious email to spam
-- `p=reject` - Block unauthenticated email entirely (strongest protection)
+**Common Policies (per draft-ietf-dmarc-dmarcbis):**
+- `p=none` - Domain Owner expresses no preference on handling; used for monitoring
+- `p=quarantine` - Domain Owner considers mail failing DMARC to be suspicious; receivers typically send to spam
+- `p=reject` - Domain Owner considers DMARC failure a clear sign the domain use is not valid; receivers typically reject delivery
 
 **Implementation Steps:**
-1. Start with `p=none` to collect reports without blocking email
-2. Set up `rua` (aggregate reports) to monitor authentication
+1. Start with `p=none` to collect reports without affecting mail delivery
+2. Set up `rua` (aggregate reports) to monitor authentication results
 3. After validating all legitimate senders pass SPF/DKIM, move to `p=quarantine`
 4. Finally move to `p=reject` for maximum protection
 """,
-    
+
     'SPF': """
 **Why SPF Matters:**
-SPF prevents spammers from forging your domain in the "envelope from" address. It lists which IP addresses 
+SPF prevents spammers from forging your domain in the "envelope from" address. It lists which IP addresses
 and mail servers are authorized to send email on behalf of your domain.
 
 **The 10 Lookup Limit:**
-RFC 7208 limits SPF to 10 DNS lookups to prevent performance issues. Each `include:` mechanism triggers 
+RFC 7208 limits SPF to 10 DNS lookups to prevent performance issues. Each `include:` mechanism triggers
 a lookup. If you exceed 10 lookups, your SPF record may be ignored entirely.
 
 **Solutions for Exceeding Limits:**
@@ -209,10 +204,10 @@ a lookup. If you exceed 10 lookups, your SPF record may be ignored entirely.
 - Remove services you no longer use
 - Consider DKIM as your primary authentication method
 """,
-    
+
     'DKIM': """
 **Why DKIM Matters:**
-DKIM adds a cryptographic signature to your emails using public key cryptography. This proves the email 
+DKIM adds a cryptographic signature to your emails using public key cryptography. This proves the email
 content hasn't been modified in transit and verifies the sending domain.
 
 **How It Works:**
@@ -229,7 +224,7 @@ content hasn't been modified in transit and verifies the sending domain.
 
     'MTA-STS': """
 **Why MTA-STS Matters:**
-MTA-STS forces sending mail servers to use encrypted TLS connections when delivering email to you. 
+MTA-STS forces sending mail servers to use encrypted TLS connections when delivering email to you.
 This prevents downgrade attacks where attackers force unencrypted connections to intercept email.
 
 **Implementation:**
@@ -244,12 +239,12 @@ This prevents downgrade attacks where attackers force unencrypted connections to
 
     'DNSSEC': """
 **Why DNSSEC Matters:**
-DNSSEC cryptographically signs your DNS records, creating a chain of trust from the root DNS servers 
-down to your domain. This prevents DNS cache poisoning and other attacks that redirect users to 
+DNSSEC cryptographically signs your DNS records, creating a chain of trust from the root DNS servers
+down to your domain. This prevents DNS cache poisoning and other attacks that redirect users to
 malicious sites.
 
 **Implementation Complexity:**
-DNSSEC requires coordination between your domain registrar and DNS hosting provider. Both must 
+DNSSEC requires coordination between your domain registrar and DNS hosting provider. Both must
 support DNSSEC, and you need to properly configure DS records at your registrar.
 
 **Trade-offs:**
