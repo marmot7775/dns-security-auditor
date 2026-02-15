@@ -180,7 +180,7 @@ function renderResults(data) {
       gradeEl.style.color = gc.text;
     }
     // Show score number below grade
-    const scoreNum = data.score?.score;
+    const scoreNum = data.score?.total;
     if (scoreNum !== undefined && gradeCard) {
       let scoreEl = document.getElementById('summary-score');
       if (!scoreEl) {
