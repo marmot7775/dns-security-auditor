@@ -359,16 +359,7 @@ def run_full_audit(domain: str) -> Dict[str, Any]:
         errors.append(f"SPF: {str(e)}")
         checks.append(_error_card("SPF", e))
 
-    # --- 3. DKIM (uses SPF intelligence) ---
-    try:
-        raw_dkim = smart_dkim_check(domain, spf_record)
-        raw_results["dkim"] = raw_dkim
-        checks.append(transform_dkim(raw_dkim, domain))
-    except Exception as e:
-        errors.append(f"DKIM: {str(e)}")
-        checks.append(_error_card("DKIM", e))
-
-    # --- 4. MX Records ---
+    # --- 3. MX Records ---
     try:
         raw_mx = check_mx(domain)
         raw_results["mx"] = raw_mx
@@ -377,7 +368,7 @@ def run_full_audit(domain: str) -> Dict[str, Any]:
         errors.append(f"MX: {str(e)}")
         checks.append(_error_card("MX Records", e))
 
-    # --- 5. MTA-STS ---
+    # --- 4. MTA-STS ---
     try:
         raw_mta_sts = check_mta_sts(domain)
         raw_results["mta_sts"] = raw_mta_sts
@@ -386,7 +377,7 @@ def run_full_audit(domain: str) -> Dict[str, Any]:
         errors.append(f"MTA-STS: {str(e)}")
         checks.append(_error_card("MTA-STS", e))
 
-    # --- 6. TLS-RPT ---
+    # --- 5. TLS-RPT ---
     try:
         raw_tls_rpt = check_tls_rpt(domain)
         raw_results["tls_rpt"] = raw_tls_rpt
@@ -395,7 +386,7 @@ def run_full_audit(domain: str) -> Dict[str, Any]:
         errors.append(f"TLS-RPT: {str(e)}")
         checks.append(_error_card("TLS-RPT", e))
 
-    # --- 7. BIMI ---
+    # --- 6. BIMI ---
     try:
         raw_bimi = check_bimi(domain)
         raw_results["bimi"] = raw_bimi
@@ -404,7 +395,7 @@ def run_full_audit(domain: str) -> Dict[str, Any]:
         errors.append(f"BIMI: {str(e)}")
         checks.append(_error_card("BIMI", e))
 
-    # --- 8. DNSSEC ---
+    # --- 7. DNSSEC ---
     try:
         raw_dnssec = _raw_check_dnssec(domain)
         raw_results["dnssec"] = raw_dnssec
@@ -412,6 +403,15 @@ def run_full_audit(domain: str) -> Dict[str, Any]:
     except Exception as e:
         errors.append(f"DNSSEC: {str(e)}")
         checks.append(_error_card("DNSSEC", e))
+
+    # --- 8. DKIM (runs last - scans 1000+ selectors, other results load first) ---
+    try:
+        raw_dkim = smart_dkim_check(domain, spf_record)
+        raw_results["dkim"] = raw_dkim
+        checks.insert(2, transform_dkim(raw_dkim, domain))
+    except Exception as e:
+        errors.append(f"DKIM: {str(e)}")
+        checks.insert(2, _error_card("DKIM", e))
 
     # --- Security Score ---
     score_result = _calculate_score(raw_results, domain)
