@@ -15,7 +15,7 @@ SPF_VENDOR_MAP = {
     # Google
     '_spf.google.com': {
         'vendor': 'Google Workspace',
-        'dkim_selectors': ['google', 'googlemail'],
+        'dkim_selectors': ['google', '20230601', '20221208', '20210112', '20161025', '20120113', 'ga1', 'googlemail'],
         'category': 'email_provider'
     },
     
@@ -276,15 +276,15 @@ def smart_dkim_check(domain: str, spf_record: Optional[str] = None) -> Dict:
                     matched_vendor = vendor['vendor']
                     break
             
-           result['found_selectors'].append({
-    'selector': selector,
-    'fqdn': fqdn,
-    'record': dkim_record,
-    'record_display': dkim_record[:100] + '...' if len(dkim_record) > 100 else dkim_record,
-    'key_type': key_type,
-    'vendor': matched_vendor,
-    'discovery_priority': 'HIGH' if matched_vendor else 'LOW'
-})
+            result['found_selectors'].append({
+                'selector': selector,
+                'fqdn': fqdn,
+                'record': dkim_record,
+                'record_display': dkim_record[:100] + '...' if len(dkim_record) > 100 else dkim_record,
+                'key_type': key_type,
+                'vendor': matched_vendor,
+                'discovery_priority': 'HIGH' if matched_vendor else 'LOW',
+            })
             
         except (dns.resolver.NXDOMAIN, dns.resolver.NoAnswer):
             continue

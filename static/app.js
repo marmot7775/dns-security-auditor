@@ -261,7 +261,7 @@ function renderResults(data) {
 // -- Create a single result card --
 function createResultCard(check) {
     const card = document.createElement('div');
-    card.className = `result-card ${check.status === 'fail' || check.status === 'warn' ? 'expanded' : ''}`;
+    card.className = 'result-card expanded';
 
     const statusLabel = check.pill_label || {
         pass: 'Pass',

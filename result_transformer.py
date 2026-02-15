@@ -101,9 +101,11 @@ def transform_dmarc(raw: Dict) -> Dict:
     # Build explanation
     if not record:
         explanation = (
-            f"No DMARC record exists for this domain. DMARC tells receiving mail servers "
-            f"(Gmail, Outlook, Yahoo) what to do when an email fails authentication. "
-            f"Without it, attackers can send phishing emails that appear to come from your domain."
+            f"No DMARC record exists at <strong>_dmarc.{raw.get('domain', '')}</strong>. "
+            f"DMARC is the single most important email security record — it tells receiving mail servers "
+            f"(Gmail, Outlook, Yahoo) how to handle emails that fail SPF and DKIM authentication. "
+            f"Without it, anyone can send emails impersonating your domain with no consequences, "
+            f"and you have zero visibility into who is sending as your domain."
         )
     elif policy == "none":
         explanation = (
@@ -161,12 +163,23 @@ def transform_dmarc(raw: Dict) -> Dict:
             details.append(_issue_to_detail(issue))
 
     # Fix
-    fix = _first_fix(raw.get("issues", []))
-    if not fix and policy == "none":
+    domain_name = raw.get("domain", "")
+    if not record:
         fix = (
-            "Review your DMARC aggregate reports to confirm legitimate senders pass authentication. "
-            "Then upgrade to <strong>p=quarantine</strong>, and ultimately <strong>p=reject</strong>."
+            f"Add this TXT record at <strong>_dmarc.{domain_name}</strong>:<br>"
+            f"<code>v=DMARC1; p=none; rua=mailto:dmarc-reports@{domain_name}; fo=1</code><br><br>"
+            f"Start with <strong>p=none</strong> to collect aggregate reports without affecting delivery. "
+            f"Once you've confirmed all legitimate senders pass SPF/DKIM, move to "
+            f"<strong>p=quarantine</strong> then <strong>p=reject</strong>."
         )
+    elif policy == "none":
+        fix = (
+            "Review your DMARC aggregate reports to confirm all legitimate senders pass authentication. "
+            "Then upgrade to <strong>p=quarantine</strong>, and ultimately <strong>p=reject</strong> "
+            "for full spoofing protection."
+        )
+    else:
+        fix = _first_fix(raw.get("issues", []))
 
     return {
         "name": "DMARC",
@@ -195,19 +208,10 @@ def transform_spf(raw: Dict) -> Dict:
         pill_label = "Missing"
     else:
         all_mech = raw.get("all_mechanism", "")
-        lookups = raw.get("lookup_count", 0)
-        parts = []
-        if lookups:
-            parts.append(f"{lookups} lookup{'s' if lookups != 1 else ''}")
-        if all_mech:
-            label_map = {
-                "-all": "hard fail (-all)",
-                "~all": "soft fail (~all)",
-                "?all": "neutral (?all)",
-                "+all": "pass all (+all)",
-            }
-            parts.append(label_map.get(all_mech, all_mech))
-        verdict = ", ".join(parts) if parts else "SPF record found"
+        if all_mech == "+all":
+            verdict = "SPF misconfigured (+all)"
+        else:
+            verdict = "SPF record configured"
 
     # Explanation
     if not record:
@@ -328,23 +332,27 @@ def transform_dkim(raw: Dict, domain: str) -> Dict:
     if not found:
         return {
             "name": "DKIM",
-            "status": "fail",
-            "pill_label": "Not found",
-            "verdict": f"No DKIM keys found ({tested} selectors tested)",
+            "status": "warn",
+            "pill_label": "Not detected",
+            "verdict": f"No DKIM keys detected ({tested} selectors tested)",
             "record": None,
             "explanation": (
-                "No DKIM signing keys were discovered. DKIM adds a cryptographic signature "
-                "to outgoing emails that proves the message hasn't been tampered with and verifies "
-                "the sending domain. Without DKIM, your emails are more likely to land in spam."
-            ),
+                "No DKIM signing keys were detected among the {tested} common selectors tested. "
+                "This does not necessarily mean DKIM is not configured — your provider may use "
+                "custom or non-standard selectors that weren't in our test list. "
+                "DKIM adds a cryptographic signature to outgoing emails that proves the message "
+                "hasn't been tampered with and verifies the sending domain."
+            ).format(tested=tested),
             "details": [
-                {"type": "error", "text": f"Tested {tested} common DKIM selectors, none found"},
-                {"type": "info", "text": "DKIM keys must be published by your email provider"},
+                {"type": "warning", "text": f"Tested {tested} common selectors — no public keys found in DNS"},
+                {"type": "info", "text": "DKIM selectors are provider-specific and not publicly enumerable"},
+                {"type": "info", "text": "The DKIM public key is a TXT record in DNS at selector._domainkey.{domain}".format(domain=domain)},
             ],
             "fix": (
-                "Contact your email provider to enable DKIM signing. Each provider uses specific "
-                "selectors (e.g., Google uses 'google', Microsoft uses 'selector1'/'selector2')."
-            ),
+                "Verify DKIM signing is enabled and confirm the public key TXT record is published in DNS at "
+                "<strong>selector._domainkey.{domain}</strong>. "
+                "Your email provider can tell you which selector name to use."
+            ).format(domain=domain),
         }
 
     # Build details for each found key
@@ -385,12 +393,8 @@ def transform_dkim(raw: Dict, domain: str) -> Dict:
 
     details.append({"type": "info", "text": f"Tested {tested} selectors"})
 
-    # Verdict
-    vendor_list = ", ".join(sorted(vendor_names)) if vendor_names else None
-    verdict_parts = [f"{len(found)} key{'s' if len(found) != 1 else ''} found"]
-    if vendor_list:
-        verdict_parts.append(f"({vendor_list})")
-    verdict = " ".join(verdict_parts)
+    # Verdict — one piece of data only
+    verdict = f"{len(found)} key{'s' if len(found) != 1 else ''} found"
 
     # Status
     status = "pass"
@@ -398,9 +402,16 @@ def transform_dkim(raw: Dict, domain: str) -> Dict:
         status = "warn"
 
     # Explanation
-    explanation = f"Discovered <strong>{len(found)}</strong> active DKIM signing key{'s' if len(found) != 1 else ''}."
+    explanation = (
+        f"Found <strong>{len(found)}</strong> DKIM public key{'s' if len(found) != 1 else ''} "
+        f"published in DNS."
+    )
     if vendor_names:
         explanation += f" Vendors detected: {', '.join(sorted(vendor_names))}."
+    explanation += (
+        " Each key is a TXT record at <strong>selector._domainkey.{domain}</strong> that receiving "
+        "servers use to verify the cryptographic signature on incoming email."
+    ).format(domain=domain)
     if raw.get("discovery_method") == "spf_intelligent":
         explanation += " Used SPF-based intelligent discovery for faster, targeted results."
 
@@ -450,13 +461,11 @@ def transform_mx(raw: Dict) -> Dict:
             "fix": "Add at least one MX record pointing to your mail server.",
         }
 
-    # Verdict
-    provider_str = ", ".join(providers) if providers else ""
-    verdict_parts = []
-    if provider_str:
-        verdict_parts.append(provider_str)
-    verdict_parts.append(f"{count} host{'s' if count != 1 else ''}")
-    verdict = ", ".join(verdict_parts)
+    # Verdict — one piece of data only
+    if providers:
+        verdict = ", ".join(providers)
+    else:
+        verdict = f"{count} host{'s' if count != 1 else ''}"
 
     # Record display (all MX records)
     record = "\n".join(records)
@@ -518,9 +527,14 @@ def transform_mx(raw: Dict) -> Dict:
 # ============================================================
 
 def transform_mta_sts(raw: Dict, domain: str) -> Dict:
-    status = _map_status(raw.get("status", "warning"))
+    raw_status = raw.get("status", "warning")
+    status = _map_status(raw_status)
     txt_record = raw.get("txt_record")
     policy_mode = raw.get("policy_mode")
+
+    # MTA-STS in enforce mode with no errors should be pass
+    if policy_mode == "enforce" and raw_status != "error":
+        status = "pass"
 
     if not txt_record:
         return {
@@ -672,12 +686,12 @@ def transform_bimi(raw: Dict, domain: str) -> Dict:
 
     logo_url = raw.get("logo_url")
     vmc_url = raw.get("vmc_url")
-    verdict_parts = []
-    if logo_url:
-        verdict_parts.append("Logo configured")
     if vmc_url:
-        verdict_parts.append("VMC present")
-    verdict = ", ".join(verdict_parts) if verdict_parts else "Record found"
+        verdict = "VMC verified"
+    elif logo_url:
+        verdict = "Logo configured"
+    else:
+        verdict = "Record found"
 
     explanation = "BIMI record is published."
     if logo_url:
