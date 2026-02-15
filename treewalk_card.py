@@ -93,6 +93,11 @@ def render_landing_page() -> str:
       <a href="/treewalk?domain=mx.microsoft.com">mx.microsoft.com</a>
     </div>
   </div>
+  <footer style="text-align:center;padding:2rem 0 1rem;color:#888;font-size:0.85rem;">
+    <a href="/" style="color:#60a5fa;text-decoration:none;">dns-audit.com</a> &middot;
+    Built by <a href="https://www.linkedin.com/in/neilanuskiewicz/" target="_blank" rel="noopener" style="color:#60a5fa;text-decoration:none;">Neil Anuskiewicz</a> &middot;
+    Email &amp; DNS Security Consultant
+  </footer>
 </body>
 </html>"""
 
@@ -617,6 +622,11 @@ def render_tree_walk_page(tw_result: Dict[str, Any]) -> str:
 
   buildTree();
 </script>
+<footer style="text-align:center;padding:2rem 0 1rem;color:#888;font-size:0.85rem;">
+  <a href="/" style="color:#60a5fa;text-decoration:none;">dns-audit.com</a> &middot;
+  Built by <a href="https://www.linkedin.com/in/neilanuskiewicz/" target="_blank" rel="noopener" style="color:#60a5fa;text-decoration:none;">Neil Anuskiewicz</a> &middot;
+  Email &amp; DNS Security Consultant
+</footer>
 </body>
 </html>"""
 
