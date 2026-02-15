@@ -33,6 +33,17 @@
             <div class="audit-input-card">
                 <h1 class="audit-title">Domain Security Audit</h1>
                 <p class="audit-subtitle">Comprehensive analysis of your email authentication and DNS security configuration.</p>
+                <div class="checks-tags">
+                    <span class="check-tag">DMARC</span>
+                    <span class="check-tag">SPF</span>
+                    <span class="check-tag">DKIM</span>
+                    <span class="check-tag">BIMI</span>
+                    <span class="check-tag">MTA-STS</span>
+                    <span class="check-tag">TLS-RPT</span>
+                    <span class="check-tag">DNSSEC</span>
+                    <span class="check-tag">CAA</span>
+                    <span class="check-tag">Nameservers</span>
+                </div>
                 <form id="audit-form" class="audit-form">
                     <div class="input-row">
                         <div class="input-wrapper">
@@ -58,49 +69,6 @@
                         </button>
                     </div>
                 </form>
-            </div>
-        </section>
-
-        <!-- What We Check -->
-        <section class="checks-section">
-            <h2 class="checks-heading">What We Audit</h2>
-            <div class="checks-grid">
-                <div class="check-item">
-                    <div class="check-name">DMARC</div>
-                    <div class="check-desc">Domain-based email authentication policy and reporting</div>
-                </div>
-                <div class="check-item">
-                    <div class="check-name">SPF</div>
-                    <div class="check-desc">Sender policy framework and DNS lookup count</div>
-                </div>
-                <div class="check-item">
-                    <div class="check-name">DKIM</div>
-                    <div class="check-desc">DomainKeys signatures across common selectors</div>
-                </div>
-                <div class="check-item">
-                    <div class="check-name">BIMI</div>
-                    <div class="check-desc">Brand logo display and VMC certificate status</div>
-                </div>
-                <div class="check-item">
-                    <div class="check-name">MTA-STS</div>
-                    <div class="check-desc">Strict transport security for mail delivery</div>
-                </div>
-                <div class="check-item">
-                    <div class="check-name">TLS-RPT</div>
-                    <div class="check-desc">TLS failure reporting for encrypted mail transport</div>
-                </div>
-                <div class="check-item">
-                    <div class="check-name">DNSSEC</div>
-                    <div class="check-desc">DNS response integrity and signature validation</div>
-                </div>
-                <div class="check-item">
-                    <div class="check-name">Nameservers</div>
-                    <div class="check-desc">NS diversity, provider redundancy, and configuration</div>
-                </div>
-                <div class="check-item">
-                    <div class="check-name">CAA</div>
-                    <div class="check-desc">Certificate authority authorization controls</div>
-                </div>
             </div>
         </section>
 
