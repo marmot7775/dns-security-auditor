@@ -190,24 +190,25 @@ def generate_vendor_intelligence_report(spf_record: str) -> str:
     
     return report
 
-def smart_dkim_check(domain: str, spf_record: Optional[str] = None) -> Dict:
+def smart_dkim_check(domain: str, spf_record: Optional[str] = None, max_selectors: int = 200) -> Dict:
     """
     INTELLIGENT DKIM checking using SPF-based vendor detection.
-    
+
     This is the smart version that:
     1. Analyzes SPF to detect vendors
     2. Prioritizes relevant DKIM selectors
     3. Finds records faster with fewer DNS queries
     4. Returns vendor context with each found selector
-    
+
     Args:
         domain: Domain to check
         spf_record: SPF record (optional, will query if not provided)
-        
+        max_selectors: Max selectors to test (default 200, 0 = unlimited)
+
     Returns:
         Complete DKIM discovery results with vendor intelligence
     """
-    from config import DKIM_SELECTORS
+    from comprehensive_selectors import COMPREHENSIVE_DKIM_SELECTORS as DKIM_SELECTORS
     
     result = {
         'domain': domain,
@@ -242,6 +243,10 @@ def smart_dkim_check(domain: str, spf_record: Optional[str] = None) -> Dict:
         selectors_to_test = DKIM_SELECTORS
         result['discovery_method'] = 'blind_loop'
     
+    # Cap the selector list if max_selectors is set
+    if max_selectors > 0:
+        selectors_to_test = selectors_to_test[:max_selectors]
+
     # Test selectors in priority order
     for selector in selectors_to_test:
         result['tested_count'] += 1
@@ -311,7 +316,7 @@ if __name__ == "__main__":
         print(f"  • {v['vendor']}: {v['dkim_selectors']}")
     
     # Show prioritized selector order
-    from config import DKIM_SELECTORS
+    from comprehensive_selectors import COMPREHENSIVE_DKIM_SELECTORS as DKIM_SELECTORS
     prioritized = get_prioritized_selectors(sample_spf, DKIM_SELECTORS)
     print(f"\nPrioritized selector order (first 10):")
     for i, sel in enumerate(prioritized[:10], 1):
