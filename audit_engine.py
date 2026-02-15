@@ -24,6 +24,7 @@ from dkim_formatter import analyze_dkim_key_strength
 from dkim_key_age import DKIMKeyAgeAnalyzer
 from dkim_tag_analyzer import DKIMTagAnalyzer
 from dmarc_tree_walk import dmarc_tree_walk
+from spf_intelligence import smart_dkim_check
 
 from result_transformer import (
     transform_dmarc,
@@ -456,6 +457,7 @@ def _calculate_score(raw_results: Dict, domain: str) -> Dict:
             "rua": raw_dmarc.get("rua"),
             "ruf": raw_dmarc.get("ruf"),
             "sp": raw_dmarc.get("sp"),
+            "domain": domain,
         }
 
         # SPF results
@@ -564,23 +566,36 @@ def _get_vendors(raw_results: Dict, domain: str) -> List[Dict]:
 def _build_priority_fixes(checks: List[Dict], score_result: Dict) -> List[str]:
     """
     Build prioritized fix list from check results and scorer recommendations.
-    Maximum 5 items, ordered by severity.
+    Maximum 5 items, ordered by severity. Deduplicates by check name.
     """
     fixes = []
+    covered_checks = set()
 
-    # Scorer recommendations (already prioritized)
+    # Scorer recommendations (already prioritized and more actionable)
     scorer_recs = score_result.get("recommendations", [])
     for rec in scorer_recs:
         # Strip emoji prefixes for clean display
         clean = re.sub(r'^[^\w]*\s*(?:CRITICAL|HIGH|MEDIUM|LOW):\s*', '', rec)
         if clean and clean not in fixes:
             fixes.append(clean)
+            # Track which checks are covered to avoid duplicates
+            for keyword in ['DMARC', 'SPF', 'DKIM', 'MTA-STS', 'TLS-RPT', 'MX']:
+                if keyword.lower() in clean.lower():
+                    covered_checks.add(keyword)
 
-    # Check-level fixes (for checks the scorer might miss)
+    # Check-level fixes (only for checks the scorer didn't already cover)
     for check in checks:
         if check.get("status") == "fail" and check.get("fix"):
+            check_name = check.get("name", "")
+            if check_name in covered_checks:
+                continue
+            # Skip error cards (generic retry messages aren't actionable)
+            if check.get("pill_label") == "Error":
+                continue
             # Strip HTML for the priority list
             fix_text = re.sub(r'<[^>]+>', '', check["fix"])
+            # Collapse whitespace from removed HTML tags
+            fix_text = re.sub(r'\s+', ' ', fix_text).strip()
             if fix_text and fix_text not in fixes:
                 fixes.append(fix_text)
 

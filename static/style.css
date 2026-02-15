@@ -765,8 +765,8 @@ main {
 }
 
 .footer-brand {
-    font-size: 0.8rem;
-    color: var(--text-tertiary);
+    font-size: 0.82rem;
+    color: var(--text-secondary);
 }
 
 .footer-brand strong {
@@ -777,6 +777,18 @@ main {
 .footer-sep {
     margin: 0 0.4rem;
     opacity: 0.4;
+}
+
+.footer-linkedin {
+    color: var(--text-secondary);
+    display: inline-flex;
+    align-items: center;
+    vertical-align: middle;
+    transition: color 0.15s ease;
+}
+
+.footer-linkedin:hover {
+    color: #0a66c2;
 }
 
 /* ==========================================================================
