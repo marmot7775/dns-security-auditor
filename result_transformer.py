@@ -160,8 +160,32 @@ else:
             for issue in raw.get("issues", []):
                             details.append(_issue_to_detail(issue))
 
+<<<<<<< Updated upstream
         # Fix
         fix = _first_fix(raw.get("issues", []))
+=======
+    # Fix
+    # Lookup chain from recursive SPF analysis
+    spf_chain = raw.get("spf_chain", [])
+    if spf_chain and len(spf_chain) > 1:
+        chain_lines = []
+        for entry in spf_chain:
+            indent = "\u2003" * entry.get("depth", 0)
+            domain_name = entry.get("domain", "")
+            entry_lookups = entry.get("lookups", 0)
+            mechs = ", ".join(entry.get("lookup_mechanisms", []))
+            error = entry.get("error", "")
+            if error:
+                chain_lines.append(f"{indent}{domain_name}: {error}")
+            elif mechs:
+                chain_lines.append(f"{indent}{domain_name}: {entry_lookups} lookups ({mechs})")
+            else:
+                chain_lines.append(f"{indent}{domain_name}: {entry_lookups} lookups")
+        details.append({"type": "info", "text": "Lookup chain: " + " \u2192 ".join([e.get("domain","") for e in spf_chain if e.get("depth",0) == 0 or e.get("lookups",0) > 0])})
+        for line in chain_lines:
+            details.append({"type": "info", "text": line})
+    fix = _first_fix(raw.get("issues", []))
+>>>>>>> Stashed changes
     if not fix and policy == "none":
                 fix = (
                                 "Review your DMARC aggregate reports to confirm legitimate senders pass authentication. "
@@ -288,6 +312,25 @@ else:
         for issue in raw.get("issues", []):
                         details.append(_issue_to_detail(issue))
 
+    # Lookup chain from recursive SPF analysis
+    spf_chain = raw.get("spf_chain", [])
+    if spf_chain and len(spf_chain) > 1:
+        chain_lines = []
+        for entry in spf_chain:
+            indent = "\u2003" * entry.get("depth", 0)
+            domain_name = entry.get("domain", "")
+            entry_lookups = entry.get("lookups", 0)
+            mechs = ", ".join(entry.get("lookup_mechanisms", []))
+            error = entry.get("error", "")
+            if error:
+                chain_lines.append(f"{indent}{domain_name}: {error}")
+            elif mechs:
+                chain_lines.append(f"{indent}{domain_name}: {entry_lookups} lookups ({mechs})")
+            else:
+                chain_lines.append(f"{indent}{domain_name}: {entry_lookups} lookups")
+        details.append({"type": "info", "text": "Lookup chain: " + " \u2192 ".join([e.get("domain","") for e in spf_chain if e.get("depth",0) == 0 or e.get("lookups",0) > 0])})
+        for line in chain_lines:
+            details.append({"type": "info", "text": line})
     fix = _first_fix(raw.get("issues", []))
     if not fix and record:
                 all_mech = raw.get("all_mechanism", "")
@@ -500,6 +543,25 @@ elif count == 1:
         if "dangling" not in text.lower() and "single" not in text.lower():
                         details.append(_issue_to_detail(issue))
 
+    # Lookup chain from recursive SPF analysis
+    spf_chain = raw.get("spf_chain", [])
+    if spf_chain and len(spf_chain) > 1:
+        chain_lines = []
+        for entry in spf_chain:
+            indent = "\u2003" * entry.get("depth", 0)
+            domain_name = entry.get("domain", "")
+            entry_lookups = entry.get("lookups", 0)
+            mechs = ", ".join(entry.get("lookup_mechanisms", []))
+            error = entry.get("error", "")
+            if error:
+                chain_lines.append(f"{indent}{domain_name}: {error}")
+            elif mechs:
+                chain_lines.append(f"{indent}{domain_name}: {entry_lookups} lookups ({mechs})")
+            else:
+                chain_lines.append(f"{indent}{domain_name}: {entry_lookups} lookups")
+        details.append({"type": "info", "text": "Lookup chain: " + " \u2192 ".join([e.get("domain","") for e in spf_chain if e.get("depth",0) == 0 or e.get("lookups",0) > 0])})
+        for line in chain_lines:
+            details.append({"type": "info", "text": line})
     fix = _first_fix(raw.get("issues", []))
 
     return {
@@ -569,6 +631,25 @@ elif policy_mode == "none":
         explanation = "MTA-STS is configured but set to <strong>none</strong>, which disables it."
 
     details = [_issue_to_detail(i) for i in raw.get("issues", [])]
+    # Lookup chain from recursive SPF analysis
+    spf_chain = raw.get("spf_chain", [])
+    if spf_chain and len(spf_chain) > 1:
+        chain_lines = []
+        for entry in spf_chain:
+            indent = "\u2003" * entry.get("depth", 0)
+            domain_name = entry.get("domain", "")
+            entry_lookups = entry.get("lookups", 0)
+            mechs = ", ".join(entry.get("lookup_mechanisms", []))
+            error = entry.get("error", "")
+            if error:
+                chain_lines.append(f"{indent}{domain_name}: {error}")
+            elif mechs:
+                chain_lines.append(f"{indent}{domain_name}: {entry_lookups} lookups ({mechs})")
+            else:
+                chain_lines.append(f"{indent}{domain_name}: {entry_lookups} lookups")
+        details.append({"type": "info", "text": "Lookup chain: " + " \u2192 ".join([e.get("domain","") for e in spf_chain if e.get("depth",0) == 0 or e.get("lookups",0) > 0])})
+        for line in chain_lines:
+            details.append({"type": "info", "text": line})
     fix = _first_fix(raw.get("issues", []))
     if not fix and policy_mode == "testing":
                 fix = "Move to mode=enforce once TLS-RPT reports confirm reliable TLS delivery."
@@ -625,6 +706,25 @@ def transform_tls_rpt(raw: Dict, domain: str) -> Dict:
     if destinations:
                 details.insert(0, {"type": "good", "text": f"Report delivery configured ({len(destinations)} destination{'s' if len(destinations) != 1 else ''})"})
 
+    # Lookup chain from recursive SPF analysis
+    spf_chain = raw.get("spf_chain", [])
+    if spf_chain and len(spf_chain) > 1:
+        chain_lines = []
+        for entry in spf_chain:
+            indent = "\u2003" * entry.get("depth", 0)
+            domain_name = entry.get("domain", "")
+            entry_lookups = entry.get("lookups", 0)
+            mechs = ", ".join(entry.get("lookup_mechanisms", []))
+            error = entry.get("error", "")
+            if error:
+                chain_lines.append(f"{indent}{domain_name}: {error}")
+            elif mechs:
+                chain_lines.append(f"{indent}{domain_name}: {entry_lookups} lookups ({mechs})")
+            else:
+                chain_lines.append(f"{indent}{domain_name}: {entry_lookups} lookups")
+        details.append({"type": "info", "text": "Lookup chain: " + " \u2192 ".join([e.get("domain","") for e in spf_chain if e.get("depth",0) == 0 or e.get("lookups",0) > 0])})
+        for line in chain_lines:
+            details.append({"type": "info", "text": line})
     fix = _first_fix(raw.get("issues", []))
 
     return {
@@ -691,6 +791,25 @@ elif not vmc_url:
         )
 
     details = [_issue_to_detail(i) for i in raw.get("issues", [])]
+    # Lookup chain from recursive SPF analysis
+    spf_chain = raw.get("spf_chain", [])
+    if spf_chain and len(spf_chain) > 1:
+        chain_lines = []
+        for entry in spf_chain:
+            indent = "\u2003" * entry.get("depth", 0)
+            domain_name = entry.get("domain", "")
+            entry_lookups = entry.get("lookups", 0)
+            mechs = ", ".join(entry.get("lookup_mechanisms", []))
+            error = entry.get("error", "")
+            if error:
+                chain_lines.append(f"{indent}{domain_name}: {error}")
+            elif mechs:
+                chain_lines.append(f"{indent}{domain_name}: {entry_lookups} lookups ({mechs})")
+            else:
+                chain_lines.append(f"{indent}{domain_name}: {entry_lookups} lookups")
+        details.append({"type": "info", "text": "Lookup chain: " + " \u2192 ".join([e.get("domain","") for e in spf_chain if e.get("depth",0) == 0 or e.get("lookups",0) > 0])})
+        for line in chain_lines:
+            details.append({"type": "info", "text": line})
     fix = _first_fix(raw.get("issues", []))
 
     return {
