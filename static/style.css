@@ -5,36 +5,37 @@
 
 /* -- Design Tokens -- */
 :root {
-    /* Primary */
-    --primary: #0f4c81;
-    --primary-hover: #0d3f6b;
-    --primary-subtle: #e8f0f8;
-    --primary-border: #b8d0e8;
+    /* Primary - deep navy with richer contrast */
+    --primary: #0a3d6b;
+    --primary-hover: #082f52;
+    --primary-light: #1a5c94;
+    --primary-subtle: #e4eef7;
+    --primary-border: #b0c8e0;
 
     /* Neutrals - warm, not clinical */
-    --bg: #f7f7f5;
+    --bg: #f5f5f2;
     --surface: #ffffff;
-    --border: #e4e4df;
-    --border-light: #eeeeea;
-    --text-primary: #1a1a1a;
-    --text-secondary: #555555;
-    --text-tertiary: #888888;
+    --border: #ddddd8;
+    --border-light: #ebebea;
+    --text-primary: #171717;
+    --text-secondary: #4a4a4a;
+    --text-tertiary: #7a7a7a;
     --text-inverse: #ffffff;
 
     /* Status - industry standard, slightly muted for sophistication */
-    --pass: #1a7a4c;
-    --pass-bg: #eef7f1;
-    --pass-border: #c2e0cc;
-    --warn: #9a6700;
-    --warn-bg: #fdf7e9;
-    --warn-border: #eed9a0;
-    --fail: #c5222f;
-    --fail-bg: #fdf0f0;
-    --fail-border: #edc6c9;
+    --pass: #147a47;
+    --pass-bg: #edf7f0;
+    --pass-border: #b8dcc5;
+    --warn: #8a5d00;
+    --warn-bg: #fcf6e6;
+    --warn-border: #e6d090;
+    --fail: #b81e29;
+    --fail-bg: #fceeee;
+    --fail-border: #e4b8bb;
 
     /* Fix/recommendation block */
-    --fix-bg: #f0f5fa;
-    --fix-border: #0f4c81;
+    --fix-bg: #edf2f8;
+    --fix-border: #0a3d6b;
 
     /* Typography */
     --font-body: 'DM Sans', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
@@ -46,9 +47,9 @@
     --radius-lg: 10px;
 
     /* Shadows - subtle, layered */
-    --shadow-sm: 0 1px 2px rgba(0,0,0,0.04);
-    --shadow-md: 0 1px 3px rgba(0,0,0,0.05), 0 4px 12px rgba(0,0,0,0.04);
-    --shadow-lg: 0 2px 6px rgba(0,0,0,0.05), 0 8px 24px rgba(0,0,0,0.06);
+    --shadow-sm: 0 1px 2px rgba(0,0,0,0.05);
+    --shadow-md: 0 1px 3px rgba(0,0,0,0.06), 0 4px 14px rgba(0,0,0,0.05);
+    --shadow-lg: 0 2px 8px rgba(0,0,0,0.06), 0 10px 28px rgba(0,0,0,0.07);
 }
 
 /* -- Reset -- */
@@ -92,6 +93,7 @@ main {
     position: sticky;
     top: 0;
     z-index: 100;
+    box-shadow: 0 1px 3px rgba(0,0,0,0.03);
 }
 
 .header-inner {
@@ -111,15 +113,16 @@ main {
 }
 
 .logo-icon {
-    width: 30px;
-    height: 30px;
-    background: var(--primary);
-    border-radius: 7px;
+    width: 32px;
+    height: 32px;
+    background: linear-gradient(135deg, var(--primary-light) 0%, var(--primary) 100%);
+    border-radius: 8px;
     display: flex;
     align-items: center;
     justify-content: center;
     color: var(--text-inverse);
     flex-shrink: 0;
+    box-shadow: 0 1px 3px rgba(10, 61, 107, 0.2);
 }
 
 .logo-icon svg {
@@ -166,31 +169,43 @@ main {
    AUDIT INPUT
    ========================================================================== */
 .audit-input-section {
-    padding-top: 2.5rem;
-    padding-bottom: 1.5rem;
+    padding-top: 3.5rem;
+    padding-bottom: 2rem;
 }
 
 .audit-input-card {
     background: var(--surface);
-    border-radius: var(--radius-lg);
-    padding: 2rem 2rem 1.75rem;
-    box-shadow: var(--shadow-md);
+    border-radius: 12px;
+    padding: 2.5rem 2.5rem 2.25rem;
+    box-shadow: var(--shadow-lg);
     border: 1px solid var(--border-light);
+    position: relative;
+    overflow: hidden;
+}
+
+.audit-input-card::before {
+    content: '';
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    height: 3px;
+    background: linear-gradient(90deg, var(--primary) 0%, var(--primary-light) 50%, var(--primary) 100%);
 }
 
 .audit-title {
-    font-size: 1.5rem;
+    font-size: 1.65rem;
     font-weight: 700;
-    letter-spacing: -0.025em;
+    letter-spacing: -0.03em;
     color: var(--text-primary);
-    margin-bottom: 0.3rem;
+    margin-bottom: 0.4rem;
 }
 
 .audit-subtitle {
-    font-size: 0.9rem;
+    font-size: 0.92rem;
     color: var(--text-secondary);
-    margin-bottom: 1.5rem;
-    line-height: 1.5;
+    margin-bottom: 1.75rem;
+    line-height: 1.55;
 }
 
 .audit-form {
@@ -221,9 +236,9 @@ main {
 
 .domain-input {
     width: 100%;
-    padding: 0.8rem 0.85rem 0.8rem 2.6rem;
+    padding: 0.9rem 0.95rem 0.9rem 2.6rem;
     font-family: var(--font-body);
-    font-size: 0.95rem;
+    font-size: 1rem;
     font-weight: 500;
     color: var(--text-primary);
     background: var(--bg);
@@ -244,28 +259,31 @@ main {
 }
 
 .audit-btn {
-    padding: 0.8rem 1.5rem;
+    padding: 0.9rem 1.75rem;
     background: var(--primary);
     color: var(--text-inverse);
     border: none;
     border-radius: var(--radius);
     font-family: var(--font-body);
-    font-size: 0.9rem;
+    font-size: 0.92rem;
     font-weight: 600;
     cursor: pointer;
     white-space: nowrap;
-    transition: background 0.15s, transform 0.1s;
+    transition: background 0.15s, transform 0.1s, box-shadow 0.15s;
     display: flex;
     align-items: center;
     gap: 0.5rem;
+    box-shadow: 0 1px 3px rgba(10, 61, 107, 0.25);
 }
 
 .audit-btn:hover {
     background: var(--primary-hover);
+    box-shadow: 0 2px 6px rgba(10, 61, 107, 0.3);
 }
 
 .audit-btn:active {
     transform: scale(0.98);
+    box-shadow: 0 1px 2px rgba(10, 61, 107, 0.2);
 }
 
 .audit-btn:disabled {
@@ -288,6 +306,27 @@ main {
     display: flex;
     align-items: center;
     gap: 0.45rem;
+}
+
+/* ==========================================================================
+   CHECK TAGS (inside hero card)
+   ========================================================================== */
+.checks-tags {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.4rem;
+    margin-bottom: 1.5rem;
+}
+
+.check-tag {
+    font-size: 0.72rem;
+    font-weight: 600;
+    letter-spacing: 0.02em;
+    color: var(--primary);
+    background: var(--primary-subtle);
+    border: 1px solid var(--primary-border);
+    padding: 0.2rem 0.6rem;
+    border-radius: 100px;
 }
 
 /* ==========================================================================
@@ -393,11 +432,16 @@ main {
 .summary-card {
     background: var(--surface);
     border-radius: var(--radius-lg);
-    padding: 1.1rem 1.25rem;
+    padding: 1.15rem 1.25rem;
     box-shadow: var(--shadow-sm);
     border: 1px solid var(--border-light);
     border-top: 3px solid transparent;
     animation: fadeIn 0.4s ease backwards;
+    transition: box-shadow 0.2s;
+}
+
+.summary-card:hover {
+    box-shadow: var(--shadow-md);
 }
 
 .summary-card:nth-child(1) { animation-delay: 0.05s; }
@@ -529,7 +573,7 @@ main {
 }
 
 .result-header:hover {
-    background: #fafaf8;
+    background: #f8f8f6;
 }
 
 /* Status dot */
@@ -756,8 +800,9 @@ main {
    ========================================================================== */
 .site-footer {
     border-top: 1px solid var(--border);
-    padding: 1.5rem 0;
+    padding: 1.75rem 0;
     margin-top: auto;
+    background: var(--surface);
 }
 
 .footer-inner {
@@ -765,8 +810,8 @@ main {
 }
 
 .footer-brand {
-    font-size: 0.8rem;
-    color: var(--text-tertiary);
+    font-size: 0.82rem;
+    color: var(--text-secondary);
 }
 
 .footer-brand strong {
@@ -779,6 +824,18 @@ main {
     opacity: 0.4;
 }
 
+.footer-linkedin {
+    color: var(--text-secondary);
+    display: inline-flex;
+    align-items: center;
+    vertical-align: middle;
+    transition: color 0.15s ease;
+}
+
+.footer-linkedin:hover {
+    color: #0a66c2;
+}
+
 /* ==========================================================================
    RESPONSIVE
    ========================================================================== */
@@ -787,12 +844,16 @@ main {
         padding: 0 1rem;
     }
 
+    .audit-input-section {
+        padding-top: 2.5rem;
+    }
+
     .audit-input-card {
-        padding: 1.5rem 1.25rem;
+        padding: 1.75rem 1.25rem 1.5rem;
     }
 
     .audit-title {
-        font-size: 1.3rem;
+        font-size: 1.35rem;
     }
 
     .input-row {
@@ -821,6 +882,50 @@ main {
     .vendors-grid {
         grid-template-columns: 1fr;
     }
+
+    /* Footer stacks on mobile */
+    .footer-brand {
+        font-size: 0.78rem;
+        line-height: 1.8;
+    }
+
+    .footer-sep {
+        display: none;
+    }
+
+    .footer-brand strong,
+    .footer-brand a {
+        display: block;
+        text-align: center;
+    }
+
+    /* Tree walk mobile */
+    .tw-header {
+        flex-direction: column;
+        align-items: flex-start;
+        gap: 0.75rem;
+    }
+
+    .tw-tree {
+        padding: 1rem 1rem 1rem 1.25rem;
+    }
+
+    .tw-explainer {
+        padding: 0.85rem 1rem;
+    }
+
+    .tw-result {
+        margin: 0 1rem 1rem;
+    }
+
+    .tw-node-query {
+        flex-direction: column;
+        gap: 0.35rem;
+    }
+
+    .priority-section {
+        padding: 1rem 1.15rem;
+    }
 }
 
 @media (max-width: 400px) {
@@ -831,6 +936,10 @@ main {
 
     .summary-value {
         font-size: 1.4rem;
+    }
+
+    .checks-tags {
+        gap: 0.3rem;
     }
 }
 

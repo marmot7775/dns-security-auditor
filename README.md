@@ -12,7 +12,7 @@ A comprehensive DNS security auditing tool that analyzes domain configurations f
 
 Enter any domain and get a detailed security audit covering:
 
-- **DMARC** — Policy analysis with full DNS Tree Walk per the latest [dmarcbis](https://datatracker.ietf.org/doc/draft-ietf-dmarc-dmarcbis/) standard (Section 4.10), showing exactly how policy discovery traverses the DNS hierarchy
+- **DMARC** — Policy analysis with full DNS Tree Walk per the latest [DMARCbis](https://datatracker.ietf.org/doc/draft-ietf-dmarc-DMARCbis/) standard (Section 4.10), showing exactly how policy discovery traverses the DNS hierarchy
 - **SPF** — Record validation, mechanism analysis, and lookup count verification
 - **DKIM** — Selector discovery across major ESPs and common patterns, key analysis, and rotation age estimation
 - **MX** — Mail server identification, vendor fingerprinting, and configuration checks
@@ -25,7 +25,7 @@ Each check produces a pass/warn/fail status with plain-English explanations, det
 
 ## DMARC DNS Tree Walk
 
-One of the more interesting features is the animated DMARC DNS Tree Walk visualization. Per dmarcbis Section 4.10, DMARC policy discovery doesn't just check the exact domain — it walks up the DNS tree, stripping labels from left to right, to find an organizational or public suffix domain policy. The tool visualizes each step of this process, showing which domains were queried, what was found, and which policy ultimately applies.
+One of the more interesting features is the animated DMARC DNS Tree Walk visualization. Per DMARCbis Section 4.10, DMARC policy discovery doesn't just check the exact domain — it walks up the DNS tree, stripping labels from left to right, to find an organizational or public suffix domain policy. The tool visualizes each step of this process, showing which domains were queried, what was found, and which policy ultimately applies.
 
 ## API
 
@@ -38,6 +38,6 @@ GET /api/health
 
 ## Author
 
-**[Neil Anuskiewicz](https://www.linkedin.com/in/neilanuskiewicz/)** — DNS and email security specialist
+**[Neil Anuskiewicz](https://www.linkedin.com/in/neilanuskiewicz/)** — DNS, email security, and deliverability specialist
 
 [LinkedIn](https://www.linkedin.com/in/neilanuskiewicz/) · [GitHub](https://github.com/marmot7775)

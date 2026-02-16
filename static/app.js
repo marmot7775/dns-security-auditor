@@ -180,7 +180,7 @@ function renderResults(data) {
       gradeEl.style.color = gc.text;
     }
     // Show score number below grade
-    const scoreNum = data.score?.score;
+    const scoreNum = data.score?.total;
     if (scoreNum !== undefined && gradeCard) {
       let scoreEl = document.getElementById('summary-score');
       if (!scoreEl) {
@@ -261,7 +261,7 @@ function renderResults(data) {
 // -- Create a single result card --
 function createResultCard(check) {
     const card = document.createElement('div');
-    card.className = `result-card ${check.status === 'fail' || check.status === 'warn' ? 'expanded' : ''}`;
+    card.className = 'result-card expanded';
 
     const statusLabel = check.pill_label || {
         pass: 'Pass',

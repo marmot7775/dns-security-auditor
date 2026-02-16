@@ -7,9 +7,15 @@ Easy to maintain - add/remove items without touching core logic
 # DKIM Selectors - Common selectors used by major email providers
 # Add new selectors here as you discover them
 DKIM_SELECTORS = [
-    # Google Workspace / Gmail
+    # Google Workspace / Gmail (date-based selectors)
     'google',
     'googlemail',
+    '20230601',
+    '20221208',
+    '20210112',
+    '20161025',
+    '20120113',
+    'ga1',
 
     # Microsoft 365
     'selector1',
@@ -163,9 +169,9 @@ EMAIL_PROVIDERS = {
 
 # Grading thresholds
 GRADING = {
-    'A': {'min': 90, 'color': '#10b981', 'label': 'Excellent'},
-    'B': {'min': 75, 'color': '#3b82f6', 'label': 'Good'},
-    'C': {'min': 60, 'color': '#f59e0b', 'label': 'Fair'},
+    'A': {'min': 85, 'color': '#10b981', 'label': 'Excellent'},
+    'B': {'min': 70, 'color': '#3b82f6', 'label': 'Good'},
+    'C': {'min': 55, 'color': '#f59e0b', 'label': 'Fair'},
     'D': {'min': 40, 'color': '#f97316', 'label': 'Poor'},
     'F': {'min': 0, 'color': '#ef4444', 'label': 'Critical'},
 }

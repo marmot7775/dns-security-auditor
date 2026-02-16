@@ -2,6 +2,8 @@
 DNS Security Auditor - FastAPI Server
 ======================================
 GET  /api/audit?domain=example.com  -- run full audit
+GET  /api/treewalk?domain=...       -- tree walk JSON
+GET  /treewalk?domain=...           -- animated tree walk visualization
 GET  /                               -- serve frontend
 GET  /static/*                       -- serve static assets
 
@@ -9,6 +11,8 @@ Usage:
     uvicorn server:app --host 0.0.0.0 --port 8000
 """
 
+import html as html_lib
+import json
 import re
 import time
 from pathlib import Path
@@ -16,10 +20,12 @@ from typing import Optional
 
 from fastapi import FastAPI, Query, HTTPException
 from fastapi.staticfiles import StaticFiles
-from fastapi.responses import FileResponse, JSONResponse
+from fastapi.responses import FileResponse, HTMLResponse, JSONResponse
 from fastapi.middleware.cors import CORSMiddleware
 
 from audit_engine import run_full_audit
+from dmarc_tree_walk import dmarc_tree_walk
+from treewalk_card import render_landing_page, render_tree_walk_page
 
 
 # ============================================================
@@ -148,6 +154,31 @@ async def audit_domain(
 @app.get("/api/health")
 async def health():
     return {"status": "ok", "cache_size": len(_cache)}
+
+
+# ============================================================
+# Tree Walk Endpoints
+# ============================================================
+
+@app.get("/api/treewalk")
+async def treewalk_api(
+    domain: str = Query(..., description="Domain to tree walk"),
+):
+    """Perform a DMARCbis DNS tree walk and return structured results."""
+    domain = _validate_domain(domain)
+    return dmarc_tree_walk(domain)
+
+
+@app.get("/treewalk", response_class=HTMLResponse)
+async def treewalk_page(
+    domain: str = Query(None, description="Domain to visualize"),
+):
+    """Serve the interactive animated DMARCbis tree walk visualization."""
+    if not domain:
+        return HTMLResponse(content=render_landing_page())
+    domain = _validate_domain(domain)
+    tw_result = dmarc_tree_walk(domain)
+    return HTMLResponse(content=render_tree_walk_page(tw_result))
 
 
 # ============================================================
