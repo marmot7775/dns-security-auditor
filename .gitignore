@@ -1,4 +1,5 @@
 .venv/
+venv/
 __pycache__/
 *.pyc
 .DS_Store
@@ -11,3 +12,7 @@ __pycache__/
 # Local backups / patches
 *.bak
 *.patch
+*.zip
+
+# Old project copies
+dns-security-auditor/

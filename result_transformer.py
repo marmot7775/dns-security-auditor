@@ -64,30 +64,12 @@ def _issue_to_detail(issue: Dict) -> Dict[str, str]:
 
 
 def _first_fix(issues: List[Dict]) -> Optional[str]:
-    """Extract the highest-priority fix from issues list.
-
-    Returns the first fix from the most severe issue category:
-    errors first, then warnings, then info.
-    """
-    priority = {"error": 0, "critical": 0, "warning": 1, "warn": 1, "info": 2}
-    sorted_issues = sorted(
-        issues,
-        key=lambda i: priority.get(i.get("severity", "info").lower(), 2)
-    )
-    for issue in sorted_issues:
+    """Extract the first actionable fix from issues list."""
+    for issue in issues:
         fix = issue.get("fix")
         if fix:
             return fix
     return None
-
-
-def _sort_details(details: List[Dict]) -> List[Dict]:
-    """Sort detail items: errors first, then warnings, info, good last.
-
-    Users need to see what's broken before what's working.
-    """
-    priority = {"error": 0, "warning": 1, "info": 2, "good": 3}
-    return sorted(details, key=lambda d: priority.get(d.get("type", "info"), 2))
 
 
 # ============================================================
@@ -153,37 +135,29 @@ def transform_dmarc(raw: Dict) -> Dict:
         )
 
     # Details
-    # Rule: Transformer adds "good" items (things working correctly).
-    # Engine is the single source of truth for all problems.
     details = []
     if record:
-        # Positive status items the engine doesn't produce
         if policy == "reject":
             details.append({"type": "good", "text": "Policy p=reject provides maximum protection"})
         elif policy == "quarantine":
             details.append({"type": "good", "text": "Policy p=quarantine sends failures to spam"})
+        elif policy == "none":
+            details.append({"type": "warning", "text": "Policy p=none provides no enforcement"})
 
         if raw.get("rua"):
             details.append({"type": "good", "text": "Aggregate reporting (rua) is configured"})
+        else:
+            details.append({"type": "warning", "text": "No aggregate reporting (rua) configured"})
 
         if raw.get("ruf"):
             details.append({"type": "good", "text": "Forensic reporting (ruf) is configured"})
 
-        if raw.get("adkim") == "s":
-            details.append({"type": "good", "text": "Strict DKIM alignment (adkim=s)"})
-
-        if raw.get("aspf") == "s":
-            details.append({"type": "good", "text": "Strict SPF alignment (aspf=s)"})
-
         if raw.get("sp"):
             details.append({"type": "info", "text": f"Subdomain policy: sp={raw['sp']}"})
 
-        if raw.get("np"):
-            details.append({"type": "info", "text": f"Non-existent subdomain policy: np={raw['np']}"})
-
-        # All problems come from the engine
-        for issue in raw.get("issues", []):
-            details.append(_issue_to_detail(issue))
+        pct = raw.get("pct")
+        if pct is not None and pct < 100:
+            details.append({"type": "warning", "text": f"Only {pct}% of failing emails are enforced"})
     else:
         for issue in raw.get("issues", []):
             details.append(_issue_to_detail(issue))
@@ -214,7 +188,7 @@ def transform_dmarc(raw: Dict) -> Dict:
         "verdict": verdict,
         "record": record,
         "explanation": explanation,
-        "details": _sort_details(details),
+        "details": details,
         "fix": fix,
     }
 
@@ -281,19 +255,25 @@ def transform_spf(raw: Dict) -> Dict:
             )
 
     # Details
-    # Rule: Transformer adds "good" items (things working correctly).
-    # Engine is the single source of truth for all problems.
     details = []
     if record:
         lookups = raw.get("lookup_count", 0)
         if lookups <= 8:
             details.append({"type": "good", "text": f"{lookups} DNS lookups (well within the 10-lookup limit)"})
+        elif lookups <= 10:
+            details.append({"type": "warning", "text": f"{lookups} DNS lookups ({'at' if lookups == 10 else 'near'} the 10-lookup limit)"})
+        else:
+            details.append({"type": "error", "text": f"{lookups} DNS lookups (EXCEEDS the 10-lookup limit!)"})
 
         all_mech = raw.get("all_mechanism", "")
         if all_mech == "-all":
             details.append({"type": "good", "text": "Hard fail (-all) provides strong anti-spoofing protection"})
         elif all_mech == "~all":
             details.append({"type": "good", "text": "Soft fail (~all) marks unauthorized senders as suspicious"})
+        elif all_mech == "?all":
+            details.append({"type": "warning", "text": "Neutral (?all) provides no protection"})
+        elif all_mech == "+all":
+            details.append({"type": "error", "text": "+all authorizes ALL senders (misconfiguration!)"})
 
         includes = raw.get("include_count", 0)
         if includes:
@@ -308,10 +288,6 @@ def transform_spf(raw: Dict) -> Dict:
             if ip6_count:
                 parts.append(f"{ip6_count} IPv6")
             details.append({"type": "info", "text": f"Direct IP authorization: {', '.join(parts)}"})
-
-        # All problems come from the engine
-        for issue in raw.get("issues", []):
-            details.append(_issue_to_detail(issue))
     else:
         for issue in raw.get("issues", []):
             details.append(_issue_to_detail(issue))
@@ -340,7 +316,7 @@ def transform_spf(raw: Dict) -> Dict:
         "verdict": verdict,
         "record": record,
         "explanation": explanation,
-        "details": _sort_details(details),
+        "details": details,
         "fix": fix,
     }
 
@@ -417,10 +393,6 @@ def transform_dkim(raw: Dict, domain: str) -> Dict:
 
     details.append({"type": "info", "text": f"Tested {tested} selectors"})
 
-    # Engine-level issues (not per-key)
-    for issue in raw.get("issues", []):
-        details.append(_issue_to_detail(issue))
-
     # Verdict — one piece of data only
     verdict = f"{len(found)} key{'s' if len(found) != 1 else ''} found"
 
@@ -458,7 +430,7 @@ def transform_dkim(raw: Dict, domain: str) -> Dict:
         "verdict": verdict,
         "record": None,  # DKIM has multiple records, shown in details
         "explanation": explanation,
-        "details": _sort_details(details),
+        "details": details,
         "fix": fix,
     }
 
@@ -507,7 +479,6 @@ def transform_mx(raw: Dict) -> Dict:
         explanation += f" Provider: {', '.join(providers)}."
 
     # Details
-    # Per-host status items (transformer builds these from raw mx_details data)
     details = []
     for mx_detail in raw.get("mx_details", []):
         hostname = mx_detail.get("hostname", "")
@@ -517,6 +488,7 @@ def transform_mx(raw: Dict) -> Dict:
 
         provider_note = f" [{provider}]" if provider else ""
         if resolved:
+            # Check FCrDNS
             ptr_ok = all(p.get("fcrdns", False) for p in mx_detail.get("ptr_results", []) if p.get("ptr"))
             if ptr_ok:
                 details.append({"type": "good", "text": f"Priority {priority}: {hostname}{provider_note} (resolves, FCrDNS valid)"})
@@ -528,11 +500,14 @@ def transform_mx(raw: Dict) -> Dict:
     if count >= 2:
         details.append({"type": "good", "text": "Multiple MX hosts provide failover redundancy"})
     elif count == 1:
-        details.append({"type": "warning", "text": "Single MX host — no failover if it goes down"})
+        details.append({"type": "warning", "text": "Single MX host - no failover if it goes down"})
 
-    # All problems come from the engine
+    # Add any issues not already covered
     for issue in raw.get("issues", []):
-        details.append(_issue_to_detail(issue))
+        severity = issue.get("severity", "info")
+        text = issue.get("plain_english") or issue.get("issue", "")
+        if "dangling" not in text.lower() and "single" not in text.lower():
+            details.append(_issue_to_detail(issue))
 
     fix = _first_fix(raw.get("issues", []))
 
@@ -542,7 +517,7 @@ def transform_mx(raw: Dict) -> Dict:
         "verdict": verdict,
         "record": record,
         "explanation": explanation,
-        "details": _sort_details(details),
+        "details": details,
         "fix": fix,
     }
 
@@ -618,7 +593,7 @@ def transform_mta_sts(raw: Dict, domain: str) -> Dict:
         "verdict": verdict,
         "record": txt_record,
         "explanation": explanation,
-        "details": _sort_details(details),
+        "details": details,
         "fix": fix,
     }
 
@@ -672,7 +647,7 @@ def transform_tls_rpt(raw: Dict, domain: str) -> Dict:
         "verdict": verdict,
         "record": record,
         "explanation": explanation,
-        "details": _sort_details(details),
+        "details": details,
         "fix": fix,
     }
 
@@ -738,7 +713,7 @@ def transform_bimi(raw: Dict, domain: str) -> Dict:
         "verdict": verdict,
         "record": record,
         "explanation": explanation,
-        "details": _sort_details(details),
+        "details": details,
         "fix": fix,
     }
 
@@ -751,11 +726,6 @@ def transform_dnssec(raw: Dict) -> Dict:
     has_dnssec = raw.get("has_dnssec", False)
 
     if has_dnssec:
-        details = [
-            {"type": "good", "text": "DNSKEY records found (DNSSEC active)"},
-        ]
-        for issue in raw.get("issues", []):
-            details.append(_issue_to_detail(issue))
         return {
             "name": "DNSSEC",
             "status": "pass",
@@ -765,16 +735,12 @@ def transform_dnssec(raw: Dict) -> Dict:
                 "DNSSEC is enabled. Your DNS records are cryptographically signed, "
                 "preventing cache poisoning and DNS spoofing attacks."
             ),
-            "details": _sort_details(details),
-            "fix": _first_fix(raw.get("issues", [])),
+            "details": [
+                {"type": "good", "text": "DNSKEY records found (DNSSEC active)"},
+            ],
+            "fix": None,
         }
     else:
-        details = [
-            {"type": "warning", "text": "No DNSKEY records found"},
-            {"type": "info", "text": "DNSSEC requires support from both your registrar and DNS host"},
-        ]
-        for issue in raw.get("issues", []):
-            details.append(_issue_to_detail(issue))
         return {
             "name": "DNSSEC",
             "status": "warn",
@@ -786,7 +752,10 @@ def transform_dnssec(raw: Dict) -> Dict:
                 "cache poisoning attacks. While not required for email authentication, "
                 "it strengthens overall DNS security."
             ),
-            "details": _sort_details(details),
+            "details": [
+                {"type": "warning", "text": "No DNSKEY records found"},
+                {"type": "info", "text": "DNSSEC requires support from both your registrar and DNS host"},
+            ],
             "fix": (
                 "Enable DNSSEC through your domain registrar or DNS hosting provider. "
                 "Most major registrars support one-click DNSSEC activation."
