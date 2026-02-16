@@ -158,6 +158,10 @@ def transform_dmarc(raw: Dict) -> Dict:
         pct = raw.get("pct")
         if pct is not None and pct < 100:
             details.append({"type": "warning", "text": f"Only {pct}% of failing emails are enforced"})
+
+        # Append all issues from the audit engine (syntax_errors already merged into issues)
+        for issue in raw.get("issues", []):
+            details.append(_issue_to_detail(issue))
     else:
         for issue in raw.get("issues", []):
             details.append(_issue_to_detail(issue))
@@ -172,6 +176,9 @@ def transform_dmarc(raw: Dict) -> Dict:
             f"Once you've confirmed all legitimate senders pass SPF/DKIM, move to "
             f"<strong>p=quarantine</strong> then <strong>p=reject</strong>."
         )
+    elif raw.get("syntax_errors") or any(i.get("severity") == "error" for i in raw.get("issues", [])):
+        # Prioritize syntax/error fixes over generic policy advice
+        fix = _first_fix(raw.get("syntax_errors", [])) or _first_fix(raw.get("issues", []))
     elif policy == "none":
         fix = (
             "Review your DMARC aggregate reports to confirm all legitimate senders pass authentication. "
@@ -288,6 +295,10 @@ def transform_spf(raw: Dict) -> Dict:
             if ip6_count:
                 parts.append(f"{ip6_count} IPv6")
             details.append({"type": "info", "text": f"Direct IP authorization: {', '.join(parts)}"})
+
+        # Append all issues from the audit engine (syntax_errors already merged into issues)
+        for issue in raw.get("issues", []):
+            details.append(_issue_to_detail(issue))
     else:
         for issue in raw.get("issues", []):
             details.append(_issue_to_detail(issue))
@@ -393,12 +404,21 @@ def transform_dkim(raw: Dict, domain: str) -> Dict:
 
     details.append({"type": "info", "text": f"Tested {tested} selectors"})
 
+    # Append any issues from the audit engine
+    for issue in raw.get("issues", []):
+        details.append(_issue_to_detail(issue))
+
     # Verdict — one piece of data only
     verdict = f"{len(found)} key{'s' if len(found) != 1 else ''} found"
 
     # Status
     status = "pass"
     if weak_keys:
+        status = "warn"
+    # Downgrade status if audit engine found errors or warnings
+    if raw.get("syntax_errors") or any(i.get("severity") == "error" for i in raw.get("issues", [])):
+        status = "fail"
+    elif status == "pass" and any(i.get("severity") == "warning" for i in raw.get("issues", [])):
         status = "warn"
 
     # Explanation
@@ -417,12 +437,16 @@ def transform_dkim(raw: Dict, domain: str) -> Dict:
 
     # Fix
     fix = None
-    if weak_keys:
+    if raw.get("syntax_errors"):
+        fix = _first_fix(raw.get("syntax_errors", []))
+    elif weak_keys:
         selectors_str = ", ".join(weak_keys)
         fix = (
             f"Upgrade the following 1024-bit keys to 2048-bit or stronger: "
             f"<strong>{selectors_str}</strong>. Contact the corresponding provider to rotate these keys."
         )
+    elif raw.get("issues"):
+        fix = _first_fix(raw.get("issues", []))
 
     return {
         "name": "DKIM",
@@ -724,23 +748,20 @@ def transform_bimi(raw: Dict, domain: str) -> Dict:
 
 def transform_dnssec(raw: Dict) -> Dict:
     has_dnssec = raw.get("has_dnssec", False)
+    algorithms = raw.get("algorithms", [])
+    key_count = raw.get("key_count", 0)
+    has_ds = raw.get("has_ds", False)
+    issues = raw.get("issues", [])
+    status = _map_status(raw.get("status", "ok"))
 
-    if has_dnssec:
-        return {
-            "name": "DNSSEC",
-            "status": "pass",
-            "verdict": "DNSSEC enabled",
-            "record": None,
-            "explanation": (
-                "DNSSEC is enabled. Your DNS records are cryptographically signed, "
-                "preventing cache poisoning and DNS spoofing attacks."
-            ),
-            "details": [
-                {"type": "good", "text": "DNSKEY records found (DNSSEC active)"},
-            ],
-            "fix": None,
-        }
-    else:
+    if not has_dnssec:
+        details = [
+            {"type": "warning", "text": "No DNSKEY records found"},
+            {"type": "info", "text": "DNSSEC requires support from both your registrar and DNS host"},
+        ]
+        for issue in issues:
+            details.append(_issue_to_detail(issue))
+
         return {
             "name": "DNSSEC",
             "status": "warn",
@@ -750,14 +771,288 @@ def transform_dnssec(raw: Dict) -> Dict:
             "explanation": (
                 "DNSSEC cryptographically signs your DNS records to prevent spoofing and "
                 "cache poisoning attacks. While not required for email authentication, "
-                "it strengthens overall DNS security."
+                "it strengthens overall DNS security and is increasingly expected for "
+                "security-conscious organizations."
             ),
-            "details": [
-                {"type": "warning", "text": "No DNSKEY records found"},
-                {"type": "info", "text": "DNSSEC requires support from both your registrar and DNS host"},
-            ],
+            "details": details,
             "fix": (
                 "Enable DNSSEC through your domain registrar or DNS hosting provider. "
                 "Most major registrars support one-click DNSSEC activation."
             ),
         }
+
+    # Has DNSSEC
+    details = []
+    details.append({"type": "good", "text": f"DNSKEY records found ({key_count} key{'s' if key_count != 1 else ''})"})
+
+    if has_ds:
+        details.append({"type": "good", "text": "DS record present at parent (chain of trust anchored)"})
+    else:
+        details.append({"type": "warning", "text": "No DS record at parent zone (chain may not validate)"})
+
+    # Show algorithms
+    for algo in algorithms:
+        if algo.get("deprecated"):
+            details.append({"type": "error", "text": f"Algorithm {algo['number']}: {algo['name']}"})
+        elif algo.get("legacy"):
+            details.append({"type": "warning", "text": f"Algorithm {algo['number']}: {algo['name']}"})
+        else:
+            details.append({"type": "good", "text": f"Algorithm {algo['number']}: {algo['name']}"})
+
+    # Append issues from audit engine (skip algorithm issues already shown above)
+    for issue in issues:
+        text = (issue.get("issue") or "").lower()
+        if "algorithm" not in text:
+            details.append(_issue_to_detail(issue))
+
+    # Verdict
+    if algorithms:
+        algo_names = [a["name"].split(" (")[0] for a in algorithms]
+        verdict = f"DNSSEC enabled ({', '.join(algo_names)})"
+    else:
+        verdict = "DNSSEC enabled"
+
+    # Downgrade status if issues exist
+    if any(a.get("deprecated") for a in algorithms):
+        status = "fail"
+    elif not has_ds:
+        status = "warn"
+
+    fix = _first_fix(issues)
+    if not fix and not has_ds:
+        fix = "Add a DS record at your domain registrar to complete the DNSSEC chain of trust."
+
+    return {
+        "name": "DNSSEC",
+        "status": status,
+        "verdict": verdict,
+        "record": None,
+        "explanation": (
+            "DNSSEC is enabled. Your DNS records are cryptographically signed, "
+            "preventing cache poisoning and DNS spoofing attacks. Resolvers can "
+            "verify that DNS responses have not been tampered with."
+        ),
+        "details": details,
+        "fix": fix,
+    }
+
+
+# ============================================================
+# CAA
+# ============================================================
+
+def transform_caa(raw: Dict, domain: str) -> Dict:
+    record_count = raw.get("record_count", 0)
+    records = raw.get("records", [])
+    authorized_cas = raw.get("authorized_cas", [])
+    wildcard_cas = raw.get("wildcard_cas", [])
+    has_issue = raw.get("has_issue", False)
+    has_issuewild = raw.get("has_issuewild", False)
+    has_iodef = raw.get("has_iodef", False)
+    iodef_destinations = raw.get("iodef_destinations", [])
+    issues = raw.get("issues", [])
+    status = _map_status(raw.get("status", "warning"))
+
+    if record_count == 0:
+        details = []
+        for issue in issues:
+            details.append(_issue_to_detail(issue))
+        if not details:
+            details.append({"type": "warning", "text": "Any Certificate Authority can issue certificates for this domain"})
+
+        return {
+            "name": "CAA",
+            "status": "warn",
+            "pill_label": "Not configured",
+            "verdict": "No CAA records found",
+            "record": None,
+            "explanation": (
+                "CAA (Certification Authority Authorization) records specify which Certificate Authorities "
+                "are allowed to issue SSL/TLS certificates for your domain. Without CAA records, any CA "
+                "can issue certificates, increasing the risk of unauthorized or fraudulent certificate issuance."
+            ),
+            "details": details,
+            "fix": (
+                f'Add a CAA record: <strong>0 issue "letsencrypt.org"</strong> (replace with your CA). '
+                f'Add <strong>0 iodef "mailto:security@{domain}"</strong> to receive violation alerts.'
+            ),
+        }
+
+    # Has CAA records
+    record_display = "\n".join(r["raw"] for r in records)
+
+    # Build details
+    details = []
+
+    if authorized_cas:
+        for ca in authorized_cas:
+            details.append({"type": "good", "text": f"Authorized CA: {ca}"})
+    elif has_issue:
+        details.append({"type": "info", "text": "Certificate issuance restricted (issue \";\")"})
+
+    if wildcard_cas:
+        for ca in wildcard_cas:
+            details.append({"type": "good", "text": f"Wildcard CA: {ca}"})
+    elif has_issuewild:
+        details.append({"type": "info", "text": "Wildcard issuance blocked (issuewild \";\")"})
+
+    if has_iodef:
+        for dest in iodef_destinations:
+            details.append({"type": "good", "text": f"Violation reports: {dest}"})
+    
+    if has_issue and has_issuewild and has_iodef:
+        details.append({"type": "good", "text": "Complete CAA configuration (issue + issuewild + iodef)"})
+
+    # Append issues
+    for issue in issues:
+        details.append(_issue_to_detail(issue))
+
+    # Verdict
+    if authorized_cas:
+        if len(authorized_cas) == 1:
+            verdict = f"Restricted to {authorized_cas[0]}"
+        else:
+            verdict = f"{len(authorized_cas)} CAs authorized"
+    else:
+        verdict = "Certificate issuance restricted"
+
+    # Status logic
+    if any(i.get("severity") == "error" for i in issues):
+        status = "fail"
+    elif record_count > 0 and has_issue:
+        status = "pass"
+
+    fix = _first_fix(issues)
+
+    return {
+        "name": "CAA",
+        "status": status,
+        "verdict": verdict,
+        "record": record_display,
+        "explanation": (
+            "CAA records restrict which Certificate Authorities can issue SSL/TLS certificates "
+            "for your domain. This prevents unauthorized CAs from issuing certificates that "
+            "could be used in man-in-the-middle attacks."
+        ),
+        "details": details,
+        "fix": fix,
+    }
+
+
+# ============================================================
+# Nameservers
+# ============================================================
+
+def transform_nameservers(raw: Dict) -> Dict:
+    ns_count = raw.get("ns_count", 0)
+    nameservers = raw.get("nameservers", [])
+    providers = raw.get("providers", [])
+    networks = raw.get("networks", [])
+    issues = raw.get("issues", [])
+    status = _map_status(raw.get("status", "ok"))
+
+    if ns_count == 0:
+        details = []
+        for issue in issues:
+            details.append(_issue_to_detail(issue))
+
+        return {
+            "name": "Nameservers",
+            "status": "fail",
+            "pill_label": "Missing",
+            "verdict": "No nameservers found",
+            "record": None,
+            "explanation": (
+                "No nameserver records could be found for this domain. Nameservers are the "
+                "foundation of DNS -- without them, nothing works: no website, no email, nothing."
+            ),
+            "details": details,
+            "fix": "Configure NS records with your domain registrar.",
+        }
+
+    # Build record display
+    record_lines = []
+    for ns in nameservers:
+        ips = []
+        if ns.get("ipv4"):
+            ips.extend(ns["ipv4"])
+        if ns.get("ipv6"):
+            ips.extend(ns["ipv6"])
+        ip_str = f" ({', '.join(ips)})" if ips else ""
+        record_lines.append(f"{ns['hostname']}{ip_str}")
+    record = "\n".join(record_lines)
+
+    # Details
+    details = []
+
+    # NS count
+    if ns_count >= 3:
+        details.append({"type": "good", "text": f"{ns_count} nameservers configured (good redundancy)"})
+    elif ns_count == 2:
+        details.append({"type": "good", "text": "2 nameservers configured (minimum redundancy)"})
+    elif ns_count == 1:
+        details.append({"type": "error", "text": "Only 1 nameserver (single point of failure)"})
+
+    # Resolution status
+    resolving = [ns for ns in nameservers if ns.get("resolves")]
+    not_resolving = [ns for ns in nameservers if not ns.get("resolves")]
+    if not_resolving:
+        for ns in not_resolving:
+            details.append({"type": "error", "text": f"{ns['hostname']} does not resolve (lame delegation)"})
+    if resolving:
+        for ns in resolving:
+            ipv4_str = ", ".join(ns.get("ipv4", []))
+            ipv6_count = len(ns.get("ipv6", []))
+            ip_info = ipv4_str
+            if ipv6_count:
+                ip_info += f" + {ipv6_count} IPv6"
+            if ip_info:
+                details.append({"type": "good", "text": f"{ns['hostname']} resolves ({ip_info})"})
+            else:
+                details.append({"type": "good", "text": f"{ns['hostname']} resolves"})
+
+    # Network diversity
+    if len(networks) >= 2:
+        details.append({"type": "good", "text": f"Network diversity: {len(networks)} distinct /24 networks"})
+
+    # Providers
+    if providers:
+        if len(providers) >= 2:
+            details.append({"type": "good", "text": f"Multi-provider: {', '.join(providers)}"})
+        else:
+            details.append({"type": "info", "text": f"Provider: {providers[0]}"})
+
+    # IPv6
+    has_ipv6 = any(ns.get("ipv6") for ns in nameservers)
+    if has_ipv6:
+        details.append({"type": "good", "text": "IPv6 nameserver support (AAAA records present)"})
+
+    # Append issues (skip ones already covered by hardcoded details above)
+    covered_keywords = {"only one nameserver", "lame delegation", "does not resolve"}
+    for issue in issues:
+        text = (issue.get("issue") or "").lower()
+        if not any(kw in text for kw in covered_keywords):
+            details.append(_issue_to_detail(issue))
+
+    # Verdict
+    if providers:
+        verdict = ", ".join(providers)
+    else:
+        verdict = f"{ns_count} nameserver{'s' if ns_count != 1 else ''}"
+
+    # Fix
+    fix = _first_fix(issues)
+
+    return {
+        "name": "Nameservers",
+        "status": status,
+        "verdict": verdict,
+        "record": record,
+        "explanation": (
+            f"Found <strong>{ns_count}</strong> nameserver{'s' if ns_count != 1 else ''} for this domain. "
+            "Nameservers are the foundation of your DNS -- they answer every query for your domain. "
+            "Redundancy and network diversity are critical to prevent outages."
+        ),
+        "details": details,
+        "fix": fix,
+    }
