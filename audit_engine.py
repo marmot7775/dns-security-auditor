@@ -35,6 +35,8 @@ from result_transformer import (
     transform_tls_rpt,
     transform_bimi,
     transform_dnssec,
+    transform_caa,
+    transform_nameservers,
 )
 
 
@@ -974,14 +976,493 @@ def _raw_check_spf(domain: str) -> Dict[str, Any]:
 
 
 def _raw_check_dnssec(domain: str) -> Dict[str, Any]:
-    """Check if DNSSEC is enabled."""
-    result = {"has_dnssec": False}
+    """Check DNSSEC configuration including algorithms and chain validation hints.
+
+    Checks based on:
+      - RFC 4035 (DNSSEC Protocol Modifications)
+      - RFC 8624 (Algorithm Implementation Requirements)
+      - NIST SP 800-81-2 (Secure DNS Deployment Guide)
+    """
+    import struct
+
+    # Algorithm names per IANA registry
+    DNSSEC_ALGORITHMS = {
+        1: "RSA/MD5 (deprecated, insecure)",
+        3: "DSA/SHA-1 (deprecated)",
+        5: "RSA/SHA-1 (legacy, avoid for new deployments)",
+        6: "DSA-NSEC3-SHA1 (deprecated)",
+        7: "RSASHA1-NSEC3-SHA1 (legacy)",
+        8: "RSA/SHA-256 (recommended)",
+        10: "RSA/SHA-512 (strong)",
+        13: "ECDSA P-256/SHA-256 (recommended, modern)",
+        14: "ECDSA P-384/SHA-384 (strong)",
+        15: "Ed25519 (recommended, modern)",
+        16: "Ed448 (strong)",
+    }
+    DEPRECATED_ALGORITHMS = {1, 3, 5, 6}
+    LEGACY_ALGORITHMS = {7}
+
+    result = {
+        "has_dnssec": False,
+        "algorithms": [],
+        "key_count": 0,
+        "has_ds": False,
+        "ds_algorithms": [],
+        "issues": [],
+        "status": "ok",
+    }
+
+    def _add_issue(severity, issue, plain_english, fix):
+        result["issues"].append({
+            "severity": severity,
+            "issue": issue,
+            "plain_english": plain_english,
+            "fix": fix,
+        })
+
+    resolver = _get_resolver()
+
+    # Check DNSKEY records
     try:
-        resolver = _get_resolver()
-        resolver.resolve(domain, "DNSKEY")
+        dnskey_answers = resolver.resolve(domain, "DNSKEY")
         result["has_dnssec"] = True
+        result["key_count"] = len(dnskey_answers)
+
+        seen_algos = set()
+        for rdata in dnskey_answers:
+            algo_num = rdata.algorithm
+            seen_algos.add(algo_num)
+
+        for algo in sorted(seen_algos):
+            algo_name = DNSSEC_ALGORITHMS.get(algo, f"Unknown ({algo})")
+            result["algorithms"].append({
+                "number": algo,
+                "name": algo_name,
+                "deprecated": algo in DEPRECATED_ALGORITHMS,
+                "legacy": algo in LEGACY_ALGORITHMS,
+            })
+
+            if algo in DEPRECATED_ALGORITHMS:
+                _add_issue(
+                    "error",
+                    f"Deprecated DNSSEC algorithm: {algo_name}",
+                    f"Algorithm {algo} ({algo_name}) is deprecated and considered insecure. "
+                    "Attackers may be able to forge DNSSEC signatures using this algorithm.",
+                    "Migrate to algorithm 13 (ECDSA P-256) or 8 (RSA/SHA-256).",
+                )
+            elif algo in LEGACY_ALGORITHMS:
+                _add_issue(
+                    "warning",
+                    f"Legacy DNSSEC algorithm: {algo_name}",
+                    f"Algorithm {algo} is functional but not recommended for new deployments. "
+                    "Modern algorithms offer better security and smaller signatures.",
+                    "Consider migrating to algorithm 13 (ECDSA P-256) for better performance and security.",
+                )
+    except dns.resolver.NoAnswer:
+        result["has_dnssec"] = False
+    except dns.resolver.NXDOMAIN:
+        result["has_dnssec"] = False
+        _add_issue(
+            "error",
+            "Domain does not exist (NXDOMAIN)",
+            "The domain returned NXDOMAIN when querying for DNSKEY records.",
+            "Verify the domain name is correct and DNS is properly configured.",
+        )
     except Exception:
         result["has_dnssec"] = False
+
+    # Check DS records at the parent (proves the chain is anchored)
+    try:
+        ds_answers = resolver.resolve(domain, "DS")
+        result["has_ds"] = True
+        ds_algos = set()
+        for rdata in ds_answers:
+            ds_algos.add(rdata.algorithm)
+        result["ds_algorithms"] = sorted(ds_algos)
+    except Exception:
+        if result["has_dnssec"]:
+            _add_issue(
+                "warning",
+                "DNSKEY exists but no DS record found at parent",
+                "DNSSEC keys are published but may not be anchored in the parent zone. "
+                "Without a DS record at the parent, resolvers cannot validate the chain of trust.",
+                "Add a DS record at your domain registrar pointing to your DNSKEY.",
+            )
+
+    # Set final status
+    severities = [i["severity"] for i in result["issues"]]
+    if "error" in severities:
+        result["status"] = "error"
+    elif "warning" in severities:
+        result["status"] = "warning"
+
+    return result
+
+
+def _raw_check_caa(domain: str) -> Dict[str, Any]:
+    """Check CAA (Certification Authority Authorization) records.
+
+    Checks based on:
+      - RFC 8659 (DNS Certification Authority Authorization)
+      - CA/Browser Forum Ballot SC-54
+      - Let's Encrypt CAA documentation
+    """
+    result = {
+        "check": "CAA",
+        "domain": domain,
+        "records": [],
+        "record_count": 0,
+        "has_issue": False,
+        "has_issuewild": False,
+        "has_iodef": False,
+        "authorized_cas": [],
+        "wildcard_cas": [],
+        "iodef_destinations": [],
+        "issues": [],
+        "status": "ok",
+    }
+
+    def _add_issue(severity, issue, plain_english, fix):
+        result["issues"].append({
+            "severity": severity,
+            "issue": issue,
+            "plain_english": plain_english,
+            "fix": fix,
+        })
+
+    resolver = _get_resolver()
+
+    try:
+        answers = resolver.resolve(domain, "CAA")
+        raw_records = []
+        for rdata in answers:
+            flags = rdata.flags
+            tag = rdata.tag.decode("utf-8") if isinstance(rdata.tag, bytes) else str(rdata.tag)
+            value = rdata.value.decode("utf-8") if isinstance(rdata.value, bytes) else str(rdata.value)
+            raw_records.append({
+                "flags": flags,
+                "tag": tag,
+                "value": value,
+                "raw": f'{flags} {tag} "{value}"',
+            })
+
+            if tag == "issue":
+                result["has_issue"] = True
+                if value and value != ";":
+                    # Extract CA name (strip any parameters after ;)
+                    ca_name = value.split(";")[0].strip()
+                    if ca_name:
+                        result["authorized_cas"].append(ca_name)
+            elif tag == "issuewild":
+                result["has_issuewild"] = True
+                if value and value != ";":
+                    ca_name = value.split(";")[0].strip()
+                    if ca_name:
+                        result["wildcard_cas"].append(ca_name)
+            elif tag == "iodef":
+                result["has_iodef"] = True
+                result["iodef_destinations"].append(value)
+
+            # Check for unknown critical flags
+            if flags & 0x80:  # Issuer Critical flag
+                if tag not in ("issue", "issuewild", "iodef"):
+                    _add_issue(
+                        "warning",
+                        f"Unknown critical CAA tag: {tag}",
+                        f"The tag '{tag}' has the critical flag set but is not a standard CAA tag. "
+                        "CAs that do not understand this tag must refuse to issue certificates.",
+                        "Verify this tag is intentional. Standard tags are: issue, issuewild, iodef.",
+                    )
+
+        result["records"] = raw_records
+        result["record_count"] = len(raw_records)
+
+        # Validation checks
+        if result["has_issue"] and not result["authorized_cas"]:
+            # issue ";" means no CA is authorized -- intentional lockdown
+            _add_issue(
+                "info",
+                "CAA restricts all certificate issuance (issue \";\")",
+                "No Certificate Authority is authorized to issue certificates for this domain. "
+                "This is a deliberate security lockdown. New certificate requests will be refused.",
+                "If you need certificates issued, add a CAA issue record for your CA (e.g., letsencrypt.org).",
+            )
+
+        if result["has_issue"] and not result["has_issuewild"]:
+            _add_issue(
+                "info",
+                "No issuewild restriction",
+                "CAA controls regular certificate issuance but does not separately restrict "
+                "wildcard certificates. Wildcard issuance falls back to the issue tag. "
+                "Adding issuewild gives you explicit control over wildcard certificates.",
+                f'Add a CAA record: 0 issuewild "yourca.com" or 0 issuewild ";" to block wildcard issuance.',
+            )
+
+        if result["has_issue"] and not result["has_iodef"]:
+            _add_issue(
+                "info",
+                "No CAA violation reporting (iodef)",
+                "Without an iodef record, you will not be notified if a Certificate Authority "
+                "receives a certificate request that violates your CAA policy.",
+                f'Add a CAA record: 0 iodef "mailto:security@{domain}" to receive violation reports.',
+            )
+
+    except dns.resolver.NoAnswer:
+        # No CAA records -- check parent domain
+        pass
+    except dns.resolver.NXDOMAIN:
+        _add_issue(
+            "error",
+            "Domain does not exist (NXDOMAIN)",
+            "The domain returned NXDOMAIN when querying for CAA records.",
+            "Verify the domain name is correct.",
+        )
+    except Exception:
+        pass
+
+    # No CAA records found at all
+    if result["record_count"] == 0:
+        _add_issue(
+            "warning",
+            "No CAA records published",
+            "Without CAA records, any Certificate Authority in the world can issue "
+            "SSL/TLS certificates for your domain. CAA lets you restrict issuance to "
+            "only the CAs you actually use, reducing the risk of unauthorized certificates.",
+            f'Add a CAA record: 0 issue "letsencrypt.org" (replace with your CA). '
+            f'Add 0 iodef "mailto:security@{domain}" for violation alerts.',
+        )
+
+    # Set final status
+    severities = [i["severity"] for i in result["issues"]]
+    if "error" in severities:
+        result["status"] = "error"
+    elif "warning" in severities:
+        result["status"] = "warning"
+    elif result["record_count"] > 0 and result["has_issue"]:
+        result["status"] = "ok"
+
+    return result
+
+
+def _raw_check_nameservers(domain: str) -> Dict[str, Any]:
+    """Check nameserver configuration for redundancy and network diversity.
+
+    Checks based on:
+      - RFC 1034/1035 (DNS specification)
+      - RFC 2182 (Selection and Operation of Secondary DNS Servers)
+      - NIST SP 800-81-2 (Secure DNS Deployment Guide)
+    """
+    import ipaddress
+
+    result = {
+        "check": "Nameservers",
+        "domain": domain,
+        "nameservers": [],
+        "ns_count": 0,
+        "providers": [],
+        "networks": [],
+        "issues": [],
+        "status": "ok",
+    }
+
+    def _add_issue(severity, issue, plain_english, fix):
+        result["issues"].append({
+            "severity": severity,
+            "issue": issue,
+            "plain_english": plain_english,
+            "fix": fix,
+        })
+
+    resolver = _get_resolver()
+
+    # Look up NS records
+    try:
+        ns_answers = resolver.resolve(domain, "NS")
+    except dns.resolver.NoAnswer:
+        _add_issue(
+            "error",
+            "No NS records found",
+            "No nameserver records were returned for this domain. "
+            "This is a fundamental DNS configuration issue.",
+            "Configure NS records with your domain registrar.",
+        )
+        result["status"] = "error"
+        return result
+    except dns.resolver.NXDOMAIN:
+        _add_issue(
+            "error",
+            "Domain does not exist (NXDOMAIN)",
+            "The domain returned NXDOMAIN when querying for nameservers.",
+            "Verify the domain name is correct.",
+        )
+        result["status"] = "error"
+        return result
+    except Exception as e:
+        _add_issue(
+            "error",
+            f"NS lookup failed: {str(e)[:100]}",
+            "Could not retrieve nameserver records. This may be a temporary DNS issue.",
+            "Try again later. If persistent, check your DNS configuration.",
+        )
+        result["status"] = "error"
+        return result
+
+    ns_hostnames = []
+    for rdata in ns_answers:
+        ns_hostnames.append(str(rdata.target).rstrip("."))
+
+    result["ns_count"] = len(ns_hostnames)
+
+    # Resolve each NS to get IP addresses and check reachability
+    all_ips = []
+    networks_v4 = set()
+    ns_details = []
+
+    for ns_host in sorted(ns_hostnames):
+        ns_info = {
+            "hostname": ns_host,
+            "ipv4": [],
+            "ipv6": [],
+            "resolves": False,
+        }
+
+        # Resolve A records
+        try:
+            a_answers = resolver.resolve(ns_host, "A")
+            for rdata in a_answers:
+                ip_str = str(rdata)
+                ns_info["ipv4"].append(ip_str)
+                all_ips.append(ip_str)
+                ns_info["resolves"] = True
+                try:
+                    net = ipaddress.IPv4Network(f"{ip_str}/24", strict=False)
+                    networks_v4.add(str(net))
+                except Exception:
+                    pass
+        except Exception:
+            pass
+
+        # Resolve AAAA records
+        try:
+            aaaa_answers = resolver.resolve(ns_host, "AAAA")
+            for rdata in aaaa_answers:
+                ns_info["ipv6"].append(str(rdata))
+                ns_info["resolves"] = True
+        except Exception:
+            pass
+
+        ns_details.append(ns_info)
+
+    result["nameservers"] = ns_details
+    result["networks"] = list(networks_v4)
+
+    # Detect providers from NS hostnames
+    PROVIDER_PATTERNS = {
+        "awsdns": "Amazon Route 53",
+        "cloudflare": "Cloudflare",
+        "google": "Google Cloud DNS",
+        "azure-dns": "Azure DNS",
+        "digitalocean": "DigitalOcean",
+        "linode": "Linode/Akamai",
+        "ns.dnsimple": "DNSimple",
+        "nsone": "NS1 (IBM)",
+        "dynect": "Dyn/Oracle",
+        "ultradns": "UltraDNS/Neustar",
+        "domaincontrol": "GoDaddy",
+        "registrar-servers": "Namecheap",
+        "hetzner": "Hetzner",
+        "ovh": "OVH",
+        "vultr": "Vultr",
+    }
+
+    detected_providers = set()
+    for ns_info in ns_details:
+        host_lower = ns_info["hostname"].lower()
+        for pattern, provider in PROVIDER_PATTERNS.items():
+            if pattern in host_lower:
+                detected_providers.add(provider)
+                break
+
+    result["providers"] = sorted(detected_providers)
+
+    # Validation checks
+
+    # 1. Minimum nameserver count (RFC 1034 recommends at least 2)
+    if result["ns_count"] < 2:
+        _add_issue(
+            "error",
+            "Only one nameserver configured",
+            "A single nameserver is a single point of failure. If it goes down, "
+            "your entire domain becomes unreachable -- no website, no email, nothing. "
+            "RFC 1034 requires at least two nameservers.",
+            "Add at least one secondary nameserver, preferably on a different network.",
+        )
+    elif result["ns_count"] == 2:
+        _add_issue(
+            "info",
+            "Two nameservers configured (minimum redundancy)",
+            "Two nameservers meets the minimum requirement. Three or four provides "
+            "better redundancy for production domains.",
+            "Consider adding a third nameserver for improved resilience.",
+        )
+
+    # 2. Unresolvable nameservers (lame delegation)
+    lame_ns = [ns for ns in ns_details if not ns["resolves"]]
+    if lame_ns:
+        lame_names = ", ".join(ns["hostname"] for ns in lame_ns)
+        _add_issue(
+            "error",
+            f"Lame delegation: {len(lame_ns)} nameserver{'s' if len(lame_ns) != 1 else ''} do{'es' if len(lame_ns) == 1 else ''} not resolve",
+            f"The following nameserver{'s' if len(lame_ns) != 1 else ''} cannot be reached: {lame_names}. "
+            "A nameserver that doesn't resolve is useless for redundancy and can cause "
+            "intermittent DNS failures as clients randomly select it.",
+            "Remove the lame nameserver records or fix their DNS entries.",
+        )
+
+    # 3. Network diversity check
+    resolving_ns = [ns for ns in ns_details if ns["resolves"]]
+    if len(networks_v4) == 1 and len(resolving_ns) >= 2:
+        _add_issue(
+            "warning",
+            "All nameservers on the same /24 network",
+            "All nameservers resolve to IP addresses within the same network block. "
+            "A network outage, routing issue, or datacenter failure could take down "
+            "all nameservers simultaneously.",
+            "Use nameservers on different networks, ideally from different providers.",
+        )
+    elif len(networks_v4) >= 2:
+        pass  # Good diversity
+
+    # 4. Provider diversity
+    if len(detected_providers) == 1 and result["ns_count"] >= 2:
+        provider = list(detected_providers)[0]
+        _add_issue(
+            "info",
+            f"All nameservers with a single provider ({provider})",
+            f"All nameservers are hosted by {provider}. While this provider likely has "
+            "internal redundancy, using a secondary DNS provider eliminates the risk "
+            "of a provider-wide outage affecting your domain.",
+            "Consider adding a secondary DNS provider for maximum resilience.",
+        )
+
+    # 5. IPv6 support
+    has_ipv6 = any(ns["ipv6"] for ns in ns_details)
+    if not has_ipv6:
+        _add_issue(
+            "info",
+            "No IPv6-enabled nameservers (no AAAA records)",
+            "None of your nameservers have IPv6 addresses. While not critical today, "
+            "IPv6 adoption is growing and some networks may prefer IPv6 connectivity.",
+            "Ask your DNS provider about IPv6 support for nameservers.",
+        )
+
+    # Set final status
+    severities = [i["severity"] for i in result["issues"]]
+    if "error" in severities:
+        result["status"] = "error"
+    elif "warning" in severities:
+        result["status"] = "warning"
+
     return result
 
 
@@ -1073,7 +1554,25 @@ def run_full_audit(domain: str) -> Dict[str, Any]:
         errors.append(f"DNSSEC: {str(e)}")
         checks.append(_error_card("DNSSEC", e))
 
-    # --- 8. DKIM (runs last - scans 1000+ selectors, other results load first) ---
+    # --- 8. CAA ---
+    try:
+        raw_caa = _raw_check_caa(domain)
+        raw_results["caa"] = raw_caa
+        checks.append(transform_caa(raw_caa, domain))
+    except Exception as e:
+        errors.append(f"CAA: {str(e)}")
+        checks.append(_error_card("CAA", e))
+
+    # --- 9. Nameservers ---
+    try:
+        raw_ns = _raw_check_nameservers(domain)
+        raw_results["nameservers"] = raw_ns
+        checks.append(transform_nameservers(raw_ns))
+    except Exception as e:
+        errors.append(f"Nameservers: {str(e)}")
+        checks.append(_error_card("Nameservers", e))
+
+    # --- 10. DKIM (runs last - scans 1000+ selectors, other results load first) ---
     try:
         raw_dkim = smart_dkim_check(domain, spf_record)
         raw_results["dkim"] = raw_dkim
@@ -1248,7 +1747,7 @@ def _build_priority_fixes(checks: List[Dict], score_result: Dict) -> List[str]:
         if clean and clean not in fixes:
             fixes.append(clean)
             # Track which checks are covered to avoid duplicates
-            for keyword in ['DMARC', 'SPF', 'DKIM', 'MTA-STS', 'TLS-RPT', 'MX']:
+            for keyword in ['DMARC', 'SPF', 'DKIM', 'MTA-STS', 'TLS-RPT', 'MX', 'CAA', 'Nameservers', 'DNSSEC']:
                 if keyword.lower() in clean.lower():
                     covered_checks.add(keyword)
 
