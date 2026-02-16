@@ -337,15 +337,14 @@ else:
         lookups = raw.get("lookup_count", 0)
         if all_mech in ("?all", "+all") and lookups and lookups > 10:
                         fix = (
-                                            "Change the all mechanism to <strong>-all</strong> or <strong>~all</strong>. "
-                                            "Also reduce SPF lookups to 10 or fewer by flattening includes or removing unused services."
+                                            "SPF: Change the all mechanism to <strong>-all</strong> or <strong>~all</strong>. "
+                                            "Also reduce SPF lookups to 10 or fewer by removing unused services or consolidating providers."
                         )
 elif all_mech in ("?all", "+all"):
-            fix = "Change the all mechanism to <strong>-all</strong> (hard fail) or <strong>~all</strong> (soft fail)."
+            fix = "SPF: Change the all mechanism to <strong>-all</strong> (hard fail) or <strong>~all</strong> (soft fail)."
 elif lookups and lookups > 10:
             fix = (
-                                "Reduce SPF lookups to 10 or fewer. Options: flatten includes to direct IP addresses, "
-                                "remove unused services, or use an SPF flattening tool."
+                                "SPF: Reduce lookups to 10 or fewer by removing unused email services or consolidating to fewer providers."
             )
 
     return {

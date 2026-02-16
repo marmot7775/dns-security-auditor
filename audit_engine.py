@@ -24,6 +24,7 @@ from dkim_formatter import analyze_dkim_key_strength
 from dkim_key_age import DKIMKeyAgeAnalyzer
 from dkim_tag_analyzer import DKIMTagAnalyzer
 from dmarc_tree_walk import dmarc_tree_walk
+from spf_intelligence import smart_dkim_check
 
 from result_transformer import (
     transform_dmarc,
@@ -259,14 +260,14 @@ def _raw_check_spf(domain: str) -> Dict[str, Any]:
             "severity": "error",
             "issue": f"SPF exceeds 10-lookup limit ({lookup_count} lookups)",
             "plain_english": "RFC 7208 limits SPF to 10 DNS lookups. Exceeding this causes SPF to fail entirely.",
-            "fix": "Reduce lookups by flattening includes to IP addresses or removing unused services.",
+            "fix": "SPF: Remove unused email services or consolidate to fewer providers. Consider using subdomain delegation for different services.",
         })
     elif lookup_count == 10:
         result["issues"].append({
             "severity": "warning",
             "issue": "SPF is at the 10-lookup limit",
             "plain_english": "Adding any more includes will break SPF entirely.",
-            "fix": "Consider SPF flattening to free up lookup slots.",
+            "fix": "SPF: Remove unused services or consolidate email providers to free up lookup slots.",
         })
 
     if all_mech == "+all":
@@ -429,7 +430,7 @@ def run_full_audit(domain: str) -> Dict[str, Any]:
         "timestamp": start_time.isoformat(),
         "elapsed_seconds": round(elapsed, 2),
         "score": {
-            "total": score_result.get("total_score", 0),
+            "score": score_result.get("total_score", 0),
             "grade": score_result.get("grade", "?"),
         },
         "checks": checks,
