@@ -233,7 +233,7 @@ def transform_spf(raw: Dict) -> Dict:
 
         if all_mech == "-all":
             explanation = (
-                "SPF record ends with <strong>-all</strong> (fail). "
+                "SPF record ends with <strong>-all</strong> (hardfail). "
                 "Receivers are instructed to reject email from servers not listed in this record."
             )
         elif all_mech == "~all":
@@ -275,9 +275,9 @@ def transform_spf(raw: Dict) -> Dict:
 
         all_mech = raw.get("all_mechanism", "")
         if all_mech == "-all":
-            details.append({"type": "good", "text": "-all (fail) \u2014 unauthorized servers are rejected"})
+            details.append({"type": "good", "text": "-all (hardfail) \u2014 unauthorized servers are rejected"})
         elif all_mech == "~all":
-            details.append({"type": "warning", "text": "Soft fail (~all) only marks unauthorized senders as suspicious \u2014 consider upgrading to -all (hard fail) for stronger protection"})
+            details.append({"type": "good", "text": "~all (softfail) \u2014 unauthorized senders are flagged but mail is still delivered"})
         elif all_mech == "?all":
             details.append({"type": "warning", "text": "Neutral (?all) provides no protection"})
         elif all_mech == "+all":
@@ -310,11 +310,11 @@ def transform_spf(raw: Dict) -> Dict:
         lookups = raw.get("lookup_count", 0)
         if all_mech in ("?all", "+all") and lookups and lookups > 10:
             fix = (
-                "Change the all mechanism to <strong>-all</strong> (fail) or <strong>~all</strong> (softfail). "
+                "Change the all mechanism to <strong>-all</strong> (hardfail) or <strong>~all</strong> (softfail). "
                 "Also reduce SPF lookups to 10 or fewer by flattening includes or removing unused services."
             )
         elif all_mech in ("?all", "+all"):
-            fix = "Change the all mechanism to <strong>-all</strong> (fail) or <strong>~all</strong> (softfail)."
+            fix = "Change the all mechanism to <strong>-all</strong> (hardfail) or <strong>~all</strong> (softfail)."
         elif lookups and lookups > 10:
             fix = (
                 "Reduce SPF lookups to 10 or fewer. Options: flatten includes to direct IP addresses, "
