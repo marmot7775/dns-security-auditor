@@ -47,7 +47,10 @@ async function runAudit(domain) {
     hideResults();
 
     try {
-        const resp = await fetch(`${API_BASE}/audit?domain=${encodeURIComponent(domain)}`);
+        const selectorVal = document.getElementById('selector-input')?.value?.trim() || '';
+        let auditUrl = `${API_BASE}/audit?domain=${encodeURIComponent(domain)}`;
+        if (selectorVal) auditUrl += `&selector=${encodeURIComponent(selectorVal)}`;
+        const resp = await fetch(auditUrl);
 
         if (!resp.ok) {
             const err = await resp.json().catch(() => ({}));
