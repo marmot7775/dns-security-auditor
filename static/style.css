@@ -223,6 +223,10 @@ main {
     position: relative;
 }
 
+.selector-wrapper {
+    flex: 0.6;
+}
+
 .input-icon {
     position: absolute;
     left: 0.85rem;
