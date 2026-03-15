@@ -13,6 +13,7 @@ from datetime import datetime
 from typing import Any, Dict, List, Optional
 
 import dns.resolver
+import dns.flags
 import dns.exception
 
 from checks_extra import check_mta_sts, check_tls_rpt, check_bimi
@@ -48,6 +49,30 @@ def _get_resolver(timeout: float = 5.0):
     resolver = dns.resolver.Resolver()
     resolver.timeout = timeout
     resolver.lifetime = timeout * 2
+    return resolver
+
+
+def _get_dnssec_resolver(timeout: float = 8.0):
+    """
+    Return a resolver configured for DNSSEC queries.
+
+    Key differences from _get_resolver():
+      - Sets the DO (DNSSEC OK) EDNS flag so the recursive resolver
+        returns DNSKEY/RRSIG/DS records and sets the AD bit when
+        validation succeeds.
+      - Uses DNSSEC-validating public resolvers (Cloudflare primary,
+        Google fallback) instead of the system default, which may be
+        a stub resolver that strips DNSSEC data.
+      - Larger EDNS buffer (4096) to handle DNSKEY responses which
+        are often >512 bytes.
+    """
+    resolver = dns.resolver.Resolver()
+    resolver.timeout = timeout
+    resolver.lifetime = timeout * 2
+    # Use DNSSEC-validating public resolvers
+    resolver.nameservers = ["1.1.1.1", "1.0.0.1", "8.8.8.8", "9.9.9.9"]
+    # Set DO flag — without this, resolvers may not return DNSKEY/RRSIG
+    resolver.use_edns(0, dns.flags.DO, 4096)
     return resolver
 
 
@@ -983,8 +1008,6 @@ def _raw_check_dnssec(domain: str) -> Dict[str, Any]:
       - RFC 8624 (Algorithm Implementation Requirements)
       - NIST SP 800-81-2 (Secure DNS Deployment Guide)
     """
-    import struct
-
     # Algorithm names per IANA registry
     DNSSEC_ALGORITHMS = {
         1: "RSA/MD5 (deprecated, insecure)",
@@ -1020,13 +1043,17 @@ def _raw_check_dnssec(domain: str) -> Dict[str, Any]:
             "fix": fix,
         })
 
-    resolver = _get_resolver()
+    resolver = _get_dnssec_resolver()
 
     # Check DNSKEY records
     try:
         dnskey_answers = resolver.resolve(domain, "DNSKEY")
         result["has_dnssec"] = True
         result["key_count"] = len(dnskey_answers)
+
+        # Check if the recursive resolver validated the chain (AD flag)
+        ad_flag = bool(dnskey_answers.response.flags & dns.flags.AD)
+        result["validated"] = ad_flag
 
         seen_algos = set()
         for rdata in dnskey_answers:
@@ -1068,8 +1095,25 @@ def _raw_check_dnssec(domain: str) -> Dict[str, Any]:
             "The domain returned NXDOMAIN when querying for DNSKEY records.",
             "Verify the domain name is correct and DNS is properly configured.",
         )
-    except Exception:
+    except dns.resolver.LifetimeTimeout:
+        # Timeout is NOT evidence of no DNSSEC — could be large DNSKEY response
         result["has_dnssec"] = False
+        _add_issue(
+            "warning",
+            "DNSSEC check timed out",
+            "The DNSKEY query timed out. This does not necessarily mean DNSSEC is "
+            "unconfigured — large DNSKEY responses can exceed typical timeouts.",
+            "Try checking with 'delv' or 'dig +dnssec' for a definitive answer.",
+        )
+    except Exception as e:
+        result["has_dnssec"] = False
+        _add_issue(
+            "warning",
+            f"DNSSEC check error: {type(e).__name__}",
+            f"Could not determine DNSSEC status due to a resolver error. "
+            "This may be a transient issue, not proof that DNSSEC is absent.",
+            "Retry or verify manually with 'delv' or 'dig +dnssec DNSKEY <domain>'.",
+        )
 
     # Check DS records at the parent (proves the chain is anchored)
     try:
@@ -1079,7 +1123,8 @@ def _raw_check_dnssec(domain: str) -> Dict[str, Any]:
         for rdata in ds_answers:
             ds_algos.add(rdata.algorithm)
         result["ds_algorithms"] = sorted(ds_algos)
-    except Exception:
+    except dns.resolver.NoAnswer:
+        # Definitive: parent zone has no DS record for this domain
         if result["has_dnssec"]:
             _add_issue(
                 "warning",
@@ -1087,6 +1132,18 @@ def _raw_check_dnssec(domain: str) -> Dict[str, Any]:
                 "DNSSEC keys are published but may not be anchored in the parent zone. "
                 "Without a DS record at the parent, resolvers cannot validate the chain of trust.",
                 "Add a DS record at your domain registrar pointing to your DNSKEY.",
+            )
+    except dns.resolver.NXDOMAIN:
+        pass  # Domain doesn't exist at parent level — already flagged by DNSKEY check
+    except Exception as e:
+        # Timeout/network error — don't claim DS is missing, we don't know
+        if result["has_dnssec"]:
+            _add_issue(
+                "info",
+                f"Could not verify DS record: {type(e).__name__}",
+                "Unable to check if a DS record exists at the parent zone due to a resolver error. "
+                "DNSSEC keys were found but chain anchoring could not be confirmed.",
+                "Verify manually with 'dig DS <domain>' or check your registrar's DNSSEC settings.",
             )
 
     # Set final status
@@ -1470,7 +1527,7 @@ def _raw_check_nameservers(domain: str) -> Dict[str, Any]:
 # Main Audit Orchestrator
 # ============================================================
 
-def run_full_audit(domain: str) -> Dict[str, Any]:
+def run_full_audit(domain: str, dkim_selector: Optional[str] = None) -> Dict[str, Any]:
     """
     Run all security checks and return the complete audit result
     in the format expected by the frontend.
@@ -1572,9 +1629,35 @@ def run_full_audit(domain: str) -> Dict[str, Any]:
         errors.append(f"Nameservers: {str(e)}")
         checks.append(_error_card("Nameservers", e))
 
-    # --- 10. DKIM (runs last - scans 1000+ selectors, other results load first) ---
+    # --- 10. DKIM (direct lookup of user-provided selector) ---
     try:
-        raw_dkim = smart_dkim_check(domain, spf_record)
+        if dkim_selector and dkim_selector.strip():
+            sel = dkim_selector.strip()
+            fqdn = f"{sel}._domainkey.{domain}"
+            raw_dkim = {
+                "domain": domain,
+                "found_selectors": [],
+                "selector_queried": sel,
+            }
+            try:
+                import dns.resolver as _dkim_resolver
+                answers = _dkim_resolver.resolve(fqdn, "TXT")
+                txt = "".join(
+                    s.decode() if isinstance(s, bytes) else s
+                    for rdata in answers for s in rdata.strings
+                )
+                if "p=" in txt:
+                    key_analysis = analyze_dkim_key_strength(txt)
+                    raw_dkim["found_selectors"].append({
+                        "selector": sel,
+                        "record": txt,
+                        "key_size": key_analysis.get("key_bits"),
+                    })
+            except Exception:
+                pass  # selector not found — found_selectors stays empty
+        else:
+            # No selector provided — fall back to auto-discovery
+            raw_dkim = smart_dkim_check(domain, spf_record)
         raw_results["dkim"] = raw_dkim
         checks.insert(2, transform_dkim(raw_dkim, domain))
     except Exception as e:
