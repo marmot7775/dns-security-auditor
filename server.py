@@ -113,6 +113,7 @@ def _validate_domain(domain: str) -> str:
 @app.get("/api/audit")
 async def audit_domain(
     domain: str = Query(..., description="Domain to audit (e.g., example.com)"),
+    selector: Optional[str] = Query(None, description="DKIM selector (e.g., google, s1)"),
     nocache: bool = Query(False, description="Bypass cache"),
 ):
     """
@@ -134,7 +135,7 @@ async def audit_domain(
 
     # Run audit
     try:
-        result = run_full_audit(domain)
+        result = run_full_audit(domain, dkim_selector=selector)
     except Exception as e:
         raise HTTPException(
             status_code=500,
