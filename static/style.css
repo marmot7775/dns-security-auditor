@@ -186,10 +186,10 @@ main {
     color: var(--primary);
 }
 
-.header-nav {
+.header-right {
     display: flex;
     align-items: center;
-    gap: 1.25rem;
+    gap: 1.5rem;
 }
 
 .site-tagline {
@@ -198,6 +198,14 @@ main {
     color: var(--text-tertiary);
     letter-spacing: 0.01em;
     white-space: nowrap;
+}
+
+.header-nav {
+    display: flex;
+    align-items: center;
+    gap: 0.25rem;
+    border-left: 1px solid var(--border);
+    padding-left: 1.25rem;
 }
 
 .header-link {
@@ -1668,7 +1676,8 @@ main {
     }
 
     .header-nav {
-        gap: 0;
+        border-left: none;
+        padding-left: 0;
     }
 
     .audit-input-section {
