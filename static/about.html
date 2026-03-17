@@ -162,7 +162,7 @@
             <div class="about-card">
 
                 <h1>About &amp; Methodology</h1>
-                <p>dns-audit.com is a free tool that checks your domain's email authentication and DNS security setup. Enter a domain, get a letter grade, and find out exactly what needs fixing. No account required, no data stored.</p>
+                <p>dns-audit.com is a free tool that checks your domain's email authentication and DNS security configuration. Enter a domain, get a letter grade, and see exactly where you stand. No account required, no data stored.</p>
 
                 <h2>What We Check</h2>
 
@@ -199,7 +199,7 @@
                 <p>The score reflects how well your domain is actually protected right now. It is not a theoretical risk assessment. If your records are correctly configured and enforced, you score well. If they are missing or misconfigured, the score tells you where to focus.</p>
 
                 <h2>Standards We Follow</h2>
-                <p>All checks are based on current RFCs and best practices. The DMARC analysis also implements the tree walk algorithm from the upcoming DMARCbis specification (Section 4.10), which describes how receivers discover the DMARC policy for a given domain by walking up the organizational domain hierarchy. You can see this visualized in the audit results.</p>
+                <p>All checks are based on current RFCs and best practices. The DMARC analysis implements the DMARCbis specification, including the tree walk algorithm (Section 4.10) for policy discovery, the new np= and t= tags, the psd= flag, and deprecation warnings for tags removed in DMARCbis (pct=, ri=, rf=). You can see the tree walk visualized in the audit results.</p>
 
                 <h2>Who Built This</h2>
                 <p>I'm <a href="https://www.linkedin.com/in/neilanuskiewicz/" target="_blank" rel="noopener">Neil Anuskiewicz</a>, an email security and deliverability consultant. I built dns-audit.com because I kept running the same checks by hand for clients and figured the whole process should be one click.</p>
