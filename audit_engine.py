@@ -1834,7 +1834,15 @@ def _raw_check_ct(domain: str, raw_results: Dict[str, Any]) -> Dict[str, Any]:
         )
         resp.raise_for_status()
         if len(resp.content) > 10 * 1024 * 1024:  # 10 MB hard limit
-            certs = []
+            result["status"] = "unavailable"
+            result["unavailable_reason"] = "response_too_large"
+            _add_issue(
+                "warning",
+                "crt.sh response too large to process",
+                "The Certificate Transparency log query returned too much data to process. "
+                "This domain likely has a very large number of certificates.",
+            )
+            return result
         elif not resp.text or not resp.text.strip():
             certs = []
         else:

@@ -37,8 +37,6 @@ COLORS = {
     "surface":    (255, 255, 255),
     "record_bg":  (26, 30, 36),      # #1a1e24
     "record_txt": (223, 227, 235),   # #dfe3eb
-    "fix_bg":     (240, 247, 244),   # #f0f7f4
-    "fix_border": (5, 150, 105),     # #059669
     "primary":    (10, 61, 107),     # #0a3d6b
     "primary_lt": (26, 92, 148),     # #1a5c94
 }
@@ -299,12 +297,6 @@ class AuditPDFReport(FPDF):
             h += max(1, math.ceil(len(text) / chars_per_line)) * 5 + 4
         details = check.get("details", [])
         h += len(details) * 5.5
-        if check.get("fix"):
-            text = _strip_html(check["fix"])
-            chars_per_line = 80
-            h += max(1, math.ceil(len(text) / chars_per_line)) * 5 + 12
-        if check.get("fix_records"):
-            h += 8 + len(check["fix_records"]) * 22
         return h
 
     def _render_check_card(self, check: Dict):
@@ -381,14 +373,6 @@ class AuditPDFReport(FPDF):
         for detail in check.get("details", []):
             self._render_detail_item(detail, x, w)
 
-        # Fix records
-        if check.get("fix_records"):
-            self._render_fix_records(check["fix_records"], x, w)
-
-        # Fix recommendation
-        if check.get("fix"):
-            self._render_fix_block(check["fix"], x, w)
-
         self.ln(3)
 
         # Bottom border
@@ -445,104 +429,6 @@ class AuditPDFReport(FPDF):
         self.set_font(self._font_body, "", 8)
         self.set_text_color(*color)
         self.multi_cell(w - 10, 4.5, text, new_x="LMARGIN", new_y="NEXT")
-
-    def _render_fix_records(self, fix_records: List[Dict], x: float, w: float):
-        """Render copy-paste-ready DNS fix records."""
-        self.ln(3)
-
-        # Section label
-        self.set_font(self._font_body, "B", 7)
-        self.set_text_color(*COLORS["pass"])
-        self.set_x(x)
-        self.cell(0, 5, "DNS RECORDS TO ADD", new_x="LMARGIN", new_y="NEXT")
-        self.ln(1)
-
-        for rec in fix_records:
-            rec_type = rec.get("type", "")
-            host = rec.get("host", "")
-            value = rec.get("value", "")
-            comment = rec.get("comment", "")
-
-            # Check if we need a page break
-            if self.get_y() + 20 > 275:
-                self.add_page()
-
-            y = self.get_y()
-
-            # Dark background block
-            block_h = 16
-            if comment:
-                block_h += 5
-            self.set_fill_color(*COLORS["record_bg"])
-            self.rect(x, y, w, block_h, "F")
-
-            # Type badge
-            self.set_font(self._font_mono, "", 6.5)
-            self.set_text_color(74, 222, 128)
-            self.set_xy(x + 4, y + 2)
-            self.cell(12, 4, rec_type)
-
-            # Host
-            self.set_text_color(133, 183, 235)  # blue
-            self.set_xy(x + 18, y + 2)
-            self.cell(w - 22, 4, host)
-
-            # Value
-            self.set_font(self._font_mono, "", 7)
-            self.set_text_color(*COLORS["record_txt"])
-            self.set_xy(x + 4, y + 8)
-            self.multi_cell(w - 8, 4, value, new_x="LMARGIN", new_y="NEXT")
-
-            # Comment
-            if comment:
-                self.set_font(self._font_body, "", 6.5)
-                self.set_text_color(139, 146, 160)
-                self.set_x(x + 4)
-                self.multi_cell(w - 8, 3.5, comment, new_x="LMARGIN", new_y="NEXT")
-
-            self.set_y(y + block_h + 3)
-
-    def _render_fix_block(self, fix: str, x: float, w: float):
-        """Render a fix recommendation block."""
-        self.ln(2)
-        text = _strip_html(fix)
-        content_w = w - 10
-
-        # Measure actual height needed
-        self.set_font(self._font_body, "", 8)
-        text_w = self.get_string_width(text)
-        text_lines = max(1, math.ceil(text_w / content_w))
-        # Account for newlines in text
-        text_lines += text.count("\n")
-        block_h = text_lines * 4.5 + 12
-
-        # Check page break
-        if self.get_y() + block_h > 275:
-            self.add_page()
-
-        y = self.get_y()
-
-        # Light green background
-        self.set_fill_color(*COLORS["fix_bg"])
-        self.rect(x, y, w, block_h, "F")
-
-        # Left accent
-        self.set_fill_color(*COLORS["fix_border"])
-        self.rect(x, y, 2.5, block_h, "F")
-
-        # Label
-        self.set_font(self._font_body, "B", 6.5)
-        self.set_text_color(*COLORS["primary"])
-        self.set_xy(x + 6, y + 2)
-        self.cell(0, 4, "RECOMMENDED ACTION")
-
-        # Text
-        self.set_font(self._font_body, "", 8)
-        self.set_text_color(*COLORS["text"])
-        self.set_xy(x + 6, y + 8)
-        self.multi_cell(content_w, 4.5, text, new_x="LMARGIN", new_y="NEXT")
-
-        self.set_y(y + block_h + 2)
 
     # ============================================================
     # Build
