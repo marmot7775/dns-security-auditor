@@ -2,15 +2,11 @@
 # Python 3.8+
 
 # Core Dependencies
-streamlit>=1.28.0
 dnspython>=2.4.0
-pandas>=2.0.0
 fastapi>=0.104.0
 uvicorn[standard]>=0.24.0
 
-
 # Optional: Enhanced Features
-plotly>=5.17.0          # For interactive charts
 python-dateutil>=2.8.2  # For date parsing
 requests>=2.31.0        # For HTTP requests (if needed)
 
