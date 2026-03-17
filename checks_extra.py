@@ -3,7 +3,9 @@ Hardened MTA-STS / TLS-RPT / BIMI Validators
 DNS Security Auditor
 """
 
+import ipaddress
 import re
+import socket
 from typing import Any, Dict, List, Optional, Tuple
 from urllib.parse import urlparse
 
@@ -12,6 +14,22 @@ try:
     REQUESTS_AVAILABLE = True
 except ImportError:
     REQUESTS_AVAILABLE = False
+
+
+def _is_safe_url(url: str) -> bool:
+    """Check that a URL does not resolve to a private/loopback/link-local IP."""
+    try:
+        host = urlparse(url).hostname
+        if not host:
+            return False
+        addrs = socket.getaddrinfo(host, None, socket.AF_UNSPEC, socket.SOCK_STREAM)
+        for _, _, _, _, sockaddr in addrs:
+            ip = ipaddress.ip_address(sockaddr[0])
+            if ip.is_private or ip.is_loopback or ip.is_link_local or ip.is_reserved:
+                return False
+        return True
+    except Exception:
+        return False
 
 try:
     import dns.resolver
@@ -337,7 +355,15 @@ def check_mta_sts(domain: str) -> Dict[str, Any]:
 
     if REQUESTS_AVAILABLE:
         try:
-            resp = requests.get(policy_url, timeout=10, allow_redirects=True)
+            if not _is_safe_url(policy_url):
+                result["issues"].append(_make_issue(
+                    "warning", "MTA-STS host resolves to a private/reserved IP",
+                    f"mta-sts.{domain} resolves to a non-public address.",
+                    "Cannot verify MTA-STS policy.",
+                    f"Ensure mta-sts.{domain} points to a public IP address.",
+                ))
+                return result
+            resp = requests.get(policy_url, timeout=10, allow_redirects=False)
             if resp.status_code == 200:
                 content_type = resp.headers.get("Content-Type", "")
                 if "text/plain" not in content_type and content_type:
@@ -679,21 +705,28 @@ def check_bimi(domain: str) -> Dict[str, Any]:
     # Logo accessibility check
     if REQUESTS_AVAILABLE and result["logo_url"]:
         try:
-            resp = requests.head(result["logo_url"], timeout=10, allow_redirects=True)
-            if resp.status_code != 200:
+            if not _is_safe_url(result["logo_url"]):
                 result["issues"].append(_make_issue(
-                    "warning", f"Logo URL returned HTTP {resp.status_code}",
-                    "Logo is not accessible.", "",
-                    "Ensure the logo URL returns HTTP 200.",
+                    "warning", "BIMI logo URL resolves to a private/reserved IP",
+                    "The logo URL points to a non-public address.", "",
+                    "Ensure the logo URL points to a public server.",
                 ))
             else:
-                ct = resp.headers.get("Content-Type", "")
-                if "svg" not in ct.lower() and "xml" not in ct.lower():
+                resp = requests.head(result["logo_url"], timeout=10, allow_redirects=False)
+                if resp.status_code != 200:
                     result["issues"].append(_make_issue(
-                        "warning", f"Logo Content-Type is '{ct}' (expected image/svg+xml)",
-                        "Should be served as image/svg+xml.", "",
-                        "Configure server to serve .svg as image/svg+xml.",
+                        "warning", f"Logo URL returned HTTP {resp.status_code}",
+                        "Logo is not accessible.", "",
+                        "Ensure the logo URL returns HTTP 200.",
                     ))
+                else:
+                    ct = resp.headers.get("Content-Type", "")
+                    if "svg" not in ct.lower() and "xml" not in ct.lower():
+                        result["issues"].append(_make_issue(
+                            "warning", f"Logo Content-Type is '{ct}' (expected image/svg+xml)",
+                            "Should be served as image/svg+xml.", "",
+                            "Configure server to serve .svg as image/svg+xml.",
+                        ))
         except Exception:
             result["issues"].append(_make_issue(
                 "info", "Could not verify BIMI logo URL",

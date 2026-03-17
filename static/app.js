@@ -141,7 +141,7 @@ function showLoading() {
     if (bar) bar.style.width = '0%';
 
     let step = 0;
-    window._loadingInterval = setInterval(() => {
+    _loadingInterval = setInterval(() => {
         if (step < LOADING_STEPS.length) {
             if (bar) bar.style.width = LOADING_STEPS[step].pct + '%';
             if (status) status.textContent = LOADING_STEPS[step].msg;
@@ -150,11 +150,13 @@ function showLoading() {
     }, 350);
 }
 
+let _loadingInterval = null;
+
 function hideLoading() {
     loadingSection.style.display = 'none';
     auditBtn.disabled = false;
     auditBtn.classList.remove('is-loading');
-    if (window._loadingInterval) clearInterval(window._loadingInterval);
+    if (_loadingInterval) { clearInterval(_loadingInterval); _loadingInterval = null; }
 }
 
 function hideResults() {
@@ -169,7 +171,10 @@ function showError(message) {
         <div class="error-message">${escapeHtml(message)}</div>
         <button class="error-retry" id="retry-btn">Try Again</button>
     `;
-    document.getElementById('retry-btn').addEventListener('click', () => location.reload());
+    document.getElementById('retry-btn').addEventListener('click', () => {
+        const domain = normalizeDomain(domainInput.value.trim());
+        if (domain) { runAudit(domain); } else { location.reload(); }
+    });
 }
 
 // ============================================================
@@ -332,13 +337,7 @@ function renderResults(data) {
 
     // Share button
     document.getElementById('share-btn').onclick = () => {
-        if (!navigator.clipboard) return;
-        navigator.clipboard.writeText(window.location.href).then(() => {
-            const span = document.getElementById('share-btn')?.querySelector('span');
-            if (!span) return;
-            span.textContent = 'Copied!';
-            setTimeout(() => span.textContent = 'Share', 2000);
-        }).catch(() => {});
+        _copyToClipboard(window.location.href, document.getElementById('share-btn')?.querySelector('span'), 'Share');
     };
 }
 
@@ -351,6 +350,7 @@ function createResultCard(check, index) {
     // Auto-collapse: pass = collapsed, fail/warn = expanded
     const isExpanded = check.status !== 'pass';
     card.className = `result-card${isExpanded ? ' expanded' : ''}`;
+    card.dataset.status = check.status;
     card.style.animationDelay = `${0.05 + index * 0.04}s`;
 
     const statusLabel = check.pill_label || {
@@ -380,7 +380,6 @@ function createResultCard(check, index) {
     card.querySelectorAll('.copy-btn').forEach(btn => {
         btn.addEventListener('click', (e) => {
             e.stopPropagation();
-            if (!navigator.clipboard) return;
             let record = '';
             const fixBlock = btn.closest('.fix-record-block');
             if (fixBlock) {
@@ -390,11 +389,7 @@ function createResultCard(check, index) {
                 record = block?.querySelector('.record-text')?.textContent
                     || block?.textContent?.replace('Copy', '').trim() || '';
             }
-            navigator.clipboard.writeText(record).then(() => {
-                btn.textContent = 'Copied';
-                btn.classList.add('copied');
-                setTimeout(() => { btn.textContent = 'Copy'; btn.classList.remove('copied'); }, 2000);
-            }).catch(() => {});
+            _copyToClipboard(record, btn, 'Copy');
         });
     });
 
@@ -725,13 +720,30 @@ document.getElementById('pdf-btn').addEventListener('click', () => {
 // Helpers
 // ============================================================
 
-function formatTimestamp(iso) {
-    const d = new Date(iso);
-    return d.toLocaleDateString('en-US', {
-        year: 'numeric', month: 'short', day: 'numeric'
-    }) + ' at ' + d.toLocaleTimeString('en-US', {
-        hour: 'numeric', minute: '2-digit'
-    });
+function _copyToClipboard(text, feedbackEl, origLabel) {
+    if (navigator.clipboard) {
+        navigator.clipboard.writeText(text).then(() => {
+            if (feedbackEl) { feedbackEl.textContent = 'Copied!'; setTimeout(() => feedbackEl.textContent = origLabel, 2000); }
+        }).catch(() => _copyFallback(text, feedbackEl, origLabel));
+    } else {
+        _copyFallback(text, feedbackEl, origLabel);
+    }
+}
+
+function _copyFallback(text, feedbackEl, origLabel) {
+    const ta = document.createElement('textarea');
+    ta.value = text;
+    ta.style.position = 'fixed';
+    ta.style.opacity = '0';
+    document.body.appendChild(ta);
+    ta.select();
+    try {
+        document.execCommand('copy');
+        if (feedbackEl) { feedbackEl.textContent = 'Copied!'; setTimeout(() => feedbackEl.textContent = origLabel, 2000); }
+    } catch {
+        if (feedbackEl) { feedbackEl.textContent = 'Failed'; setTimeout(() => feedbackEl.textContent = origLabel, 2000); }
+    }
+    document.body.removeChild(ta);
 }
 
 function escapeHtml(text) {

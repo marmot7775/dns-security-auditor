@@ -14,11 +14,13 @@ Usage:
 
 import logging
 import re
+import threading
 import time
 from collections import defaultdict
 from datetime import datetime
 from pathlib import Path
 from typing import Optional
+from urllib.parse import quote
 
 from fastapi import FastAPI, Query, HTTPException, Request
 from fastapi.staticfiles import StaticFiles
@@ -66,7 +68,7 @@ app.add_middleware(
         "http://127.0.0.1:8000",
     ],
     allow_methods=["GET"],
-    allow_headers=["*"],
+    allow_headers=["Content-Type", "Accept"],
 )
 
 
@@ -108,8 +110,12 @@ app.add_middleware(SecurityHeadersMiddleware)
 # ============================================================
 
 _rate_limits: dict = defaultdict(list)
+_rate_lock = threading.Lock()
 RATE_LIMIT_MAX = 10       # max requests
 RATE_LIMIT_WINDOW = 60    # per 60 seconds
+
+# DKIM selector validation (DNS label characters only)
+SELECTOR_PATTERN = re.compile(r'^[A-Za-z0-9._-]{1,63}$')
 
 
 def _get_client_ip(request: Request) -> str:
@@ -128,20 +134,21 @@ def _get_client_ip(request: Request) -> str:
 def _check_rate_limit(client_ip: str) -> bool:
     """Return True if the request is allowed, False if rate-limited."""
     now = time.time()
-    # Prune old timestamps
-    _rate_limits[client_ip] = [
-        ts for ts in _rate_limits[client_ip]
-        if now - ts < RATE_LIMIT_WINDOW
-    ]
-    if len(_rate_limits[client_ip]) >= RATE_LIMIT_MAX:
-        return False
-    _rate_limits[client_ip].append(now)
-    # Prevent unbounded memory growth: prune stale IPs periodically
-    if len(_rate_limits) > 10000:
-        cutoff = now - RATE_LIMIT_WINDOW
-        stale = [ip for ip, ts in _rate_limits.items() if not ts or ts[-1] < cutoff]
-        for ip in stale:
-            del _rate_limits[ip]
+    with _rate_lock:
+        # Prune old timestamps
+        _rate_limits[client_ip] = [
+            ts for ts in _rate_limits[client_ip]
+            if now - ts < RATE_LIMIT_WINDOW
+        ]
+        if len(_rate_limits[client_ip]) >= RATE_LIMIT_MAX:
+            return False
+        _rate_limits[client_ip].append(now)
+        # Prevent unbounded memory growth: prune stale IPs periodically
+        if len(_rate_limits) > 10000:
+            cutoff = now - RATE_LIMIT_WINDOW
+            stale = [ip for ip, ts in _rate_limits.items() if not ts or ts[-1] < cutoff]
+            for ip in stale:
+                del _rate_limits[ip]
     return True
 
 
@@ -150,27 +157,30 @@ def _check_rate_limit(client_ip: str) -> bool:
 # ============================================================
 
 _cache: dict = {}
+_cache_lock = threading.Lock()
 CACHE_TTL = 300  # 5 minutes
 CACHE_MAX_SIZE = 500
 
 
 def _get_cached(domain: str) -> Optional[dict]:
-    entry = _cache.get(domain)
-    if entry and (time.time() - entry["ts"]) < CACHE_TTL:
-        return entry["data"]
-    # Expired — clean up
-    if entry:
-        del _cache[domain]
+    with _cache_lock:
+        entry = _cache.get(domain)
+        if entry and (time.time() - entry["ts"]) < CACHE_TTL:
+            return entry["data"]
+        # Expired — clean up
+        if entry:
+            del _cache[domain]
     return None
 
 
 def _set_cached(domain: str, data: dict):
-    _cache[domain] = {"data": data, "ts": time.time()}
-    # Evict oldest entries if cache grows too large
-    if len(_cache) > CACHE_MAX_SIZE:
-        oldest = sorted(_cache.items(), key=lambda x: x[1]["ts"])[:100]
-        for key, _ in oldest:
-            _cache.pop(key, None)
+    with _cache_lock:
+        _cache[domain] = {"data": data, "ts": time.time()}
+        # Evict oldest entries if cache grows too large
+        if len(_cache) > CACHE_MAX_SIZE:
+            oldest = sorted(_cache.items(), key=lambda x: x[1]["ts"])[:100]
+            for key, _ in oldest:
+                _cache.pop(key, None)
 
 
 # ============================================================
@@ -240,6 +250,8 @@ async def audit_domain(
         )
 
     domain = _validate_domain(domain)
+    if selector and not SELECTOR_PATTERN.match(selector.strip()):
+        raise HTTPException(status_code=400, detail="Invalid DKIM selector")
     log.info("Audit requested: %s (scope=%s, ip=%s)", domain, scope or "complete", client_ip)
 
     # Check cache
@@ -263,7 +275,7 @@ async def audit_domain(
             "checks": [],
             "priority_fixes": [],
             "vendors": [],
-            "error": f"Audit could not complete: {str(e)[:200]}",
+            "error": "Audit could not complete. Please try again or check that the domain exists.",
         }
 
     elapsed = round(time.time() - start, 2)
@@ -331,7 +343,7 @@ async def audit_pdf(
         content=bytes(pdf_bytes),
         media_type="application/pdf",
         headers={
-            "Content-Disposition": f'attachment; filename="{filename}"',
+            "Content-Disposition": f"attachment; filename*=UTF-8''{quote(filename)}",
             "Cache-Control": "no-store",
         },
     )
