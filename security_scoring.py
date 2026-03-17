@@ -129,7 +129,7 @@ class EmailSecurityScorer:
         details['has_record'] = True
 
         # Policy level
-        policy = dmarc.get('policy', '').lower()
+        policy = (dmarc.get('policy') or '').lower()
         if policy == 'reject':
             score += 12  # Best
             details['policy'] = 'reject (excellent)'
@@ -180,7 +180,7 @@ class EmailSecurityScorer:
         details['has_record'] = True
 
         # All mechanism (policy)
-        all_mechanism = spf.get('all', '').lower()
+        all_mechanism = (spf.get('all') or '').lower()
         if all_mechanism in ['-all', '~all']:
             score += 10  # Strict
             details['all_mechanism'] = f'{all_mechanism} (good)'

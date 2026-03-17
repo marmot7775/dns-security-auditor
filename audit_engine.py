@@ -1854,6 +1854,8 @@ def _calculate_score(raw_results: Dict, domain: str) -> Dict:
         return scorer.calculate_score(audit_input)
 
     except Exception as e:
+        import traceback, logging
+        logging.error("Scoring failed: %s\n%s", e, traceback.format_exc())
         return {"total_score": 0, "grade": "?", "error": str(e)}
 
 
