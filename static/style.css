@@ -656,46 +656,48 @@ main {
     padding-top: 1rem;
 }
 
-/* Record block (DNS records) */
+/* Record block (DNS records) — dark monospace terminal */
 .record-block {
     font-family: var(--font-mono);
-    font-size: 0.8rem;
-    line-height: 1.65;
-    background: #f4f4f0;
-    border: 1px solid var(--border);
+    font-size: 0.78rem;
+    line-height: 1.7;
+    background: #1a1d23;
+    border: 1px solid #2d3039;
     border-radius: var(--radius);
-    padding: 0.7rem 0.9rem;
+    padding: 0.85rem 1rem;
     padding-right: 3.5rem;
     margin: 0.6rem 0;
     word-break: break-all;
     position: relative;
-    color: var(--text-primary);
+    color: #e0e4ea;
+    box-shadow: inset 0 1px 3px rgba(0,0,0,0.2);
 }
 
 .copy-btn {
     position: absolute;
-    top: 0.45rem;
-    right: 0.45rem;
-    background: var(--surface);
-    border: 1px solid var(--border);
+    top: 0.5rem;
+    right: 0.5rem;
+    background: #2d3039;
+    border: 1px solid #3d4049;
     border-radius: 4px;
-    padding: 0.2rem 0.5rem;
+    padding: 0.2rem 0.55rem;
     font-family: var(--font-body);
     font-size: 0.65rem;
     font-weight: 500;
-    color: var(--text-tertiary);
+    color: #8b92a0;
     cursor: pointer;
     transition: all 0.15s;
 }
 
 .copy-btn:hover {
-    color: var(--text-primary);
-    border-color: var(--text-tertiary);
+    color: #e0e4ea;
+    border-color: #5b6170;
+    background: #363a44;
 }
 
 .copy-btn.copied {
-    color: var(--pass);
-    border-color: var(--pass-border);
+    color: #4ade80;
+    border-color: #4ade80;
 }
 
 /* Explanation text */
@@ -1325,3 +1327,77 @@ main {
   color: #991b1b;
   font-size: 0.82rem;
 }
+
+/* ==========================================================================
+   SCOPE SELECTOR
+   ========================================================================== */
+.scope-selector {
+    margin-bottom: 1.5rem;
+}
+
+.scope-label {
+    font-size: 0.68rem;
+    font-weight: 600;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: var(--text-tertiary);
+    margin-bottom: 0.5rem;
+}
+
+.scope-options {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.4rem;
+}
+
+.scope-btn {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.35rem;
+    padding: 0.4rem 0.75rem;
+    background: var(--bg);
+    border: 1.5px solid var(--border);
+    border-radius: 100px;
+    font-family: var(--font-body);
+    font-size: 0.78rem;
+    font-weight: 500;
+    color: var(--text-secondary);
+    cursor: pointer;
+    transition: all 0.15s ease;
+    white-space: nowrap;
+}
+
+.scope-btn:hover {
+    border-color: var(--primary-border);
+    color: var(--primary);
+    background: var(--primary-subtle);
+}
+
+.scope-btn.active {
+    background: var(--primary);
+    border-color: var(--primary);
+    color: var(--text-inverse);
+}
+
+.scope-btn.active svg {
+    stroke: var(--text-inverse);
+}
+
+.scope-btn svg {
+    flex-shrink: 0;
+}
+
+@media (max-width: 640px) {
+    .scope-options {
+        gap: 0.35rem;
+    }
+    .scope-btn {
+        font-size: 0.72rem;
+        padding: 0.35rem 0.6rem;
+    }
+    .scope-btn span {
+        /* On small screens, keep labels */
+    }
+}
+
+
