@@ -12,30 +12,30 @@
     --primary-subtle: #e8f0f8;
     --primary-border: #b0c8e0;
 
-    /* Neutrals - warm, inviting, not clinical */
-    --bg: #f7f7f4;
+    /* Neutrals - cool, clean, professional */
+    --bg: #f4f6f8;
     --surface: #ffffff;
-    --border: #ddddd9;
-    --border-light: #ededec;
+    --border: #dce1e6;
+    --border-light: #e8ecf0;
     --text-primary: #1a1a1a;
     --text-secondary: #4d4d4d;
     --text-tertiary: #7d7d7d;
     --text-inverse: #ffffff;
 
-    /* Status - muted, professional, never alarming */
-    --pass: #1a7d4b;
-    --pass-bg: #f0f8f2;
-    --pass-border: #c2e2cd;
-    --warn: #8a6d14;
-    --warn-bg: #fdf8ec;
-    --warn-border: #e8d89e;
-    --fail: #a63a42;
-    --fail-bg: #fdf2f2;
-    --fail-border: #e4c4c7;
+    /* Status - calm, expert, never alarming */
+    --pass: #1a8a6a;
+    --pass-bg: #edf8f4;
+    --pass-border: #b8e0d2;
+    --warn: #7d6c28;
+    --warn-bg: #f9f7ec;
+    --warn-border: #ddd6a0;
+    --fail: #4e6a82;
+    --fail-bg: #eef2f6;
+    --fail-border: #b8c8d8;
 
     /* Fix/recommendation block */
-    --fix-bg: #eef3f9;
-    --fix-border: #0a3d6b;
+    --fix-bg: #edf4f0;
+    --fix-border: #1a8a6a;
 
     /* Typography */
     --font-body: 'DM Sans', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
@@ -80,7 +80,7 @@ body {
 
 /* Brand-colored selection */
 ::selection {
-    background: rgba(10, 61, 107, 0.12);
+    background: rgba(26, 138, 106, 0.14);
     color: var(--text-primary);
 }
 
