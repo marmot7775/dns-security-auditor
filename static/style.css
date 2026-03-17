@@ -396,6 +396,7 @@ main {
 .results-section {
     display: none;
     animation: fadeIn 0.45s var(--ease-out);
+    scroll-margin-top: 4.5rem; /* clear the sticky header when scrolled into view */
 }
 
 @keyframes fadeIn {
