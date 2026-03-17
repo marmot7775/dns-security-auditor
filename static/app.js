@@ -52,6 +52,8 @@ document.addEventListener('DOMContentLoaded', () => {
     if (domain) {
         domainInput.value = domain;
         runAudit(domain);
+    } else {
+        domainInput.focus();
     }
 });
 
