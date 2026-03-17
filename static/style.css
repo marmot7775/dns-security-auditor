@@ -338,10 +338,13 @@ main {
 }
 
 .btn-loading {
-    display: flex;
+    display: none;
     align-items: center;
     gap: 0.45rem;
 }
+
+.audit-btn.is-loading .btn-text { display: none; }
+.audit-btn.is-loading .btn-loading { display: flex; }
 
 /* ==========================================================================
    CHECK TAGS (inside hero card)
@@ -368,6 +371,7 @@ main {
    LOADING STATE
    ========================================================================== */
 .loading-section {
+    display: none;
     padding-top: 1.25rem;
 }
 
@@ -406,6 +410,7 @@ main {
    RESULTS
    ========================================================================== */
 .results-section {
+    display: none;
     animation: fadeIn 0.45s var(--ease-out);
 }
 
@@ -515,12 +520,14 @@ main {
 }
 
 .grade-value { color: var(--primary); }
+.score-subtext { font-size: 0.82rem; color: var(--text-secondary); font-weight: 500; margin-top: 0.15rem; }
 .pass-value { color: var(--pass); }
 .warn-value { color: var(--warn); }
 .fail-value { color: var(--fail); }
 
 /* Priority fixes */
 .priority-section {
+    display: none;
     background: var(--fail-bg);
     border: 1px solid var(--fail-border);
     border-radius: var(--radius-lg);
@@ -788,6 +795,31 @@ main {
     border-color: rgba(74, 222, 128, 0.4);
 }
 
+/* Error state */
+.error-title {
+    color: var(--fail);
+    font-weight: 600;
+    margin-bottom: 0.35rem;
+}
+
+.error-message {
+    color: var(--text-secondary);
+    font-size: 0.88rem;
+}
+
+.error-retry {
+    margin-top: 0.75rem;
+    padding: 0.5rem 1rem;
+    background: var(--primary);
+    color: white;
+    border: none;
+    border-radius: var(--radius);
+    cursor: pointer;
+    font-family: var(--font-body);
+    font-size: 0.85rem;
+    font-weight: 600;
+}
+
 /* Explanation text */
 .explanation {
     font-size: 0.88rem;
@@ -854,6 +886,7 @@ main {
    VENDORS
    ========================================================================== */
 .vendors-section {
+    display: none;
     margin-top: 1.75rem;
 }
 
