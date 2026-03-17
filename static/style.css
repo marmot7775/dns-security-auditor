@@ -1022,9 +1022,7 @@ main {
 
 /* 1. Steps: slide up + fade, staggered per step */
 .tw-animated .tw-step {
-    opacity: 0;
-    transform: translateY(10px);
-    animation: twStepIn 0.35s var(--ease-out) forwards;
+    animation: twStepIn 0.35s var(--ease-out) backwards;
 }
 
 /* Stagger delays — set via inline style in JS for flexibility,
@@ -1070,8 +1068,8 @@ main {
 
 /* 3. Policy source dot: pulse ring when its step lands */
 .tw-animated .tw-policy-source .tw-dot {
-    animation: twStepIn 0.35s var(--ease-out) forwards,
-               twPulse 0.6s var(--ease-out) forwards;
+    animation: twStepIn 0.35s var(--ease-out) backwards,
+               twPulse 0.6s var(--ease-out) backwards;
     /* Pulse starts after the step has appeared — delay set via
        the same nth-child as the step, so it inherits timing */
 }
@@ -1085,8 +1083,7 @@ main {
 /* 4. Metadata section: fades in after all steps have landed */
 .tw-animated .tw-meta,
 .tw-animated .tw-summary {
-    opacity: 0;
-    animation: twMetaIn 0.4s var(--ease-out) forwards;
+    animation: twMetaIn 0.4s var(--ease-out) backwards;
     /* Default delay — overridden by JS with exact timing based
        on step count, but this works for ≤3 steps */
     animation-delay: 0.65s;
@@ -1094,8 +1091,7 @@ main {
 
 /* Intro text also fades in, but earlier */
 .tw-animated .tw-intro {
-    opacity: 0;
-    animation: twMetaIn 0.35s var(--ease-out) forwards;
+    animation: twMetaIn 0.35s var(--ease-out) backwards;
     animation-delay: 0.02s;
 }
 
@@ -1108,8 +1104,7 @@ main {
 .tw-animated.tree-walk-simple .tw-simple-body,
 .tw-animated.tree-walk-simple .tw-simple-policy,
 .tw-animated.tree-walk-simple .tw-footnote {
-    opacity: 0;
-    animation: twMetaIn 0.45s var(--ease-out) forwards;
+    animation: twMetaIn 0.45s var(--ease-out) backwards;
 }
 .tw-animated.tree-walk-simple .tw-simple-body  { animation-delay: 0.08s; }
 .tw-animated.tree-walk-simple .tw-simple-policy { animation-delay: 0.22s; }
