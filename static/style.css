@@ -1518,6 +1518,16 @@ main {
     opacity: 0.35;
 }
 
+.footer-link {
+    color: var(--text-secondary);
+    text-decoration: none;
+    transition: color var(--duration) var(--ease);
+}
+
+.footer-link:hover {
+    color: var(--primary-light);
+}
+
 .footer-linkedin {
     color: var(--text-secondary);
     display: inline-flex;

@@ -394,6 +394,16 @@ async def sitemap_xml():
         "    <changefreq>weekly</changefreq>\n"
         "    <priority>1.0</priority>\n"
         "  </url>\n"
+        "  <url>\n"
+        "    <loc>https://dns-audit.com/about</loc>\n"
+        "    <changefreq>monthly</changefreq>\n"
+        "    <priority>0.7</priority>\n"
+        "  </url>\n"
+        "  <url>\n"
+        "    <loc>https://dns-audit.com/privacy</loc>\n"
+        "    <changefreq>monthly</changefreq>\n"
+        "    <priority>0.3</priority>\n"
+        "  </url>\n"
         "</urlset>\n"
     )
     return Response(content=xml, media_type="application/xml")
@@ -411,6 +421,14 @@ if STATIC_DIR.exists():
     @app.get("/")
     async def index():
         return FileResponse(str(STATIC_DIR / "index.html"))
+
+    @app.get("/about", tags=["Pages"])
+    async def about():
+        return FileResponse(str(STATIC_DIR / "about.html"))
+
+    @app.get("/privacy", tags=["Pages"])
+    async def privacy():
+        return FileResponse(str(STATIC_DIR / "privacy.html"))
 else:
     @app.get("/")
     async def index():
