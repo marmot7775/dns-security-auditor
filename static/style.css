@@ -1010,7 +1010,12 @@ main {
     height: calc(0.85rem + 0.15rem + 5px);  /* step gap + half of next dot */
     left: calc(50% - 1px);
     width: 2px;
-    background: var(--pass-border);
+    background: var(--border);
+}
+
+/* Line leading into the policy-source step turns green */
+.tw-step.tw-line-to-found:not(.tw-last) .tw-connector::after {
+    background: var(--pass);
 }
 
 /* ── Tree Walk Animations ──────────────────────────────────────
