@@ -184,7 +184,7 @@ class EmailSecurityScorer:
             details['policy'] = 'none (monitoring only)'
 
         # Percentage
-        pct = dmarc.get('pct', 100)
+        pct = dmarc.get('pct') or 100
         if pct == 100:
             score += 6
             details['percentage'] = '100% (full enforcement)'
@@ -259,15 +259,19 @@ class EmailSecurityScorer:
     
     def _analyze_key_from_record(self, record: str) -> Dict:
         """Analyze DKIM key strength from record string"""
+        # Check for Ed25519 key type first
+        if 'k=ed25519' in record.lower():
+            return {'bits': 256, 'strength': 'strong', 'type': 'ed25519'}
+
         # Extract public key
         key_match = re.search(r'p=([A-Za-z0-9+/=]+)', record)
         if not key_match:
             return {'bits': 0, 'strength': 'invalid'}
-        
+
         key_data = key_match.group(1)
         key_len = len(key_data)
-        
-        # Estimate key size from base64 length
+
+        # Estimate RSA key size from base64 length
         if key_len < 200:
             return {'bits': 1024, 'strength': 'weak'}
         elif key_len < 500:

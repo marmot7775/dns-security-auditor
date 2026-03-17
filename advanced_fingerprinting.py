@@ -67,7 +67,7 @@ class AdvancedVendorFingerprinter:
         try:
             answers = dns.resolver.resolve(self.domain, 'TXT')
             for rdata in answers:
-                txt = str(rdata).strip('"')
+                txt = b"".join(rdata.strings).decode("utf-8", errors="replace")
                 if txt.startswith('v=spf1'):
                     # Extract includes
                     includes = re.findall(r'include:([^\s]+)', txt)
@@ -93,7 +93,7 @@ class AdvancedVendorFingerprinter:
                             'evidence': f'{len(mechanisms)} SPF mechanisms',
                             'confidence': 0.70
                         })
-        except:
+        except Exception:
             if self.verbose:
                 print("  ✗ No SPF record found")
     
@@ -116,7 +116,7 @@ class AdvancedVendorFingerprinter:
                     })
                     if self.verbose:
                         print(f"  ✓ {vendor} (from {mx_host})")
-        except:
+        except Exception:
             if self.verbose:
                 print("  ✗ No MX records found")
     
@@ -128,7 +128,7 @@ class AdvancedVendorFingerprinter:
         try:
             answers = dns.resolver.resolve(f'_dmarc.{self.domain}', 'TXT')
             for rdata in answers:
-                record = str(rdata).strip('"')
+                record = b"".join(rdata.strings).decode("utf-8", errors="replace")
                 
                 # Policy analysis
                 policy_match = re.search(r'p=([^;]+)', record)
@@ -156,7 +156,7 @@ class AdvancedVendorFingerprinter:
                         })
                         if self.verbose:
                             print(f"  ✓ {vendor} (DMARC reports)")
-        except:
+        except Exception:
             if self.verbose:
                 print("  ✗ No DMARC record found")
     
@@ -168,7 +168,7 @@ class AdvancedVendorFingerprinter:
         try:
             answers = dns.resolver.resolve(f'_smtp._tls.{self.domain}', 'TXT')
             for rdata in answers:
-                record = str(rdata).strip('"')
+                record = b"".join(rdata.strings).decode("utf-8", errors="replace")
                 rua_match = re.search(r'rua=mailto:([^;,\s]+)', record)
                 if rua_match:
                     rua_email = rua_match.group(1)
@@ -182,7 +182,7 @@ class AdvancedVendorFingerprinter:
                         })
                         if self.verbose:
                             print(f"  ✓ {vendor} (TLS-RPT)")
-        except:
+        except Exception:
             if self.verbose:
                 print("  ✗ No TLS-RPT record")
     
@@ -201,7 +201,7 @@ class AdvancedVendorFingerprinter:
             })
             if self.verbose:
                 print("  ✓ MTA-STS configured")
-        except:
+        except Exception:
             if self.verbose:
                 print("  ✗ No MTA-STS policy")
     
@@ -213,7 +213,7 @@ class AdvancedVendorFingerprinter:
         try:
             answers = dns.resolver.resolve(f'default._bimi.{self.domain}', 'TXT')
             for rdata in answers:
-                record = str(rdata).strip('"')
+                record = b"".join(rdata.strings).decode("utf-8", errors="replace")
                 if 'v=BIMI1' in record:
                     self.signals.append({
                         'technique': 'BIMI',
@@ -223,7 +223,7 @@ class AdvancedVendorFingerprinter:
                     })
                     if self.verbose:
                         print("  ✓ BIMI configured")
-        except:
+        except Exception:
             if self.verbose:
                 print("  ✗ No BIMI record")
     
@@ -253,7 +253,7 @@ class AdvancedVendorFingerprinter:
             
             if self.verbose:
                 print(f"  ℹ️  DNS TTL: {ttl} seconds")
-        except:
+        except Exception:
             pass
     
     def _fingerprint_subdomains(self):
@@ -279,7 +279,7 @@ class AdvancedVendorFingerprinter:
                 if self.verbose:
                     print(f"  ✓ {subdomain}.{self.domain}")
                 break
-            except:
+            except Exception:
                 continue
     
     def _match_spf_vendor(self, include: str) -> Optional[str]:

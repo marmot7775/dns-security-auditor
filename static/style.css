@@ -26,10 +26,10 @@
     --pass: #1a8a6a;
     --pass-bg: #edf8f4;
     --pass-border: #b8e0d2;
-    --warn: #7d6c28;
+    --warn: #6b5b1e;
     --warn-bg: #f9f7ec;
     --warn-border: #ddd6a0;
-    --fail: #4e6a82;
+    --fail: #3d5568;
     --fail-bg: #eef2f6;
     --fail-border: #b8c8d8;
 
@@ -194,31 +194,6 @@ main {
     white-space: nowrap;
 }
 
-/* Navigation */
-.site-nav {
-    display: flex;
-    gap: 1.25rem;
-}
-
-.nav-link {
-    font-size: 0.85rem;
-    font-weight: 500;
-    color: var(--text-tertiary);
-    text-decoration: none;
-    padding: 0.25rem 0;
-    border-bottom: 2px solid transparent;
-    transition: color var(--duration) var(--ease), border-color var(--duration) var(--ease);
-}
-
-.nav-link:hover,
-.nav-link.active {
-    color: var(--text-primary);
-}
-
-.nav-link.active {
-    border-bottom-color: var(--primary);
-}
-
 /* ==========================================================================
    AUDIT INPUT
    ========================================================================== */
@@ -375,27 +350,6 @@ main {
 
 .audit-btn.is-loading .btn-text { display: none; }
 .audit-btn.is-loading .btn-loading { display: flex; }
-
-/* ==========================================================================
-   CHECK TAGS (inside hero card)
-   ========================================================================== */
-.checks-tags {
-    display: flex;
-    flex-wrap: wrap;
-    gap: 0.4rem;
-    margin-bottom: 1.5rem;
-}
-
-.check-tag {
-    font-size: 0.72rem;
-    font-weight: 600;
-    letter-spacing: 0.02em;
-    color: var(--primary);
-    background: var(--primary-subtle);
-    border: 1px solid var(--primary-border);
-    padding: 0.2rem 0.6rem;
-    border-radius: 100px;
-}
 
 /* ==========================================================================
    LOADING STATE
@@ -695,7 +649,10 @@ main {
     box-shadow: var(--shadow-md);
 }
 
-/* Status-aware left accent */
+/* Status-aware left accent (data-attribute for broad compat, :has() as progressive enhancement) */
+.result-card[data-status="pass"] { border-left-color: var(--pass-border); }
+.result-card[data-status="warn"] { border-left-color: var(--warn); }
+.result-card[data-status="fail"] { border-left-color: var(--fail); }
 .result-card:has(.status-dot.pass) { border-left-color: var(--pass-border); }
 .result-card:has(.status-dot.warn) { border-left-color: var(--warn); }
 .result-card:has(.status-dot.fail) { border-left-color: var(--fail); }

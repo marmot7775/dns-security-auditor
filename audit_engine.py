@@ -1833,7 +1833,9 @@ def _raw_check_ct(domain: str, raw_results: Dict[str, Any]) -> Dict[str, Any]:
             headers={"User-Agent": "dns-audit.com/1.0"},
         )
         resp.raise_for_status()
-        if not resp.text or not resp.text.strip():
+        if len(resp.content) > 10 * 1024 * 1024:  # 10 MB hard limit
+            certs = []
+        elif not resp.text or not resp.text.strip():
             certs = []
         else:
             certs = resp.json()
@@ -2265,11 +2267,13 @@ def _raw_check_blacklist(domain: str, raw_results: Dict[str, Any]) -> Dict[str, 
 # Main Audit Orchestrator
 # ============================================================
 
+_shared_executor = ThreadPoolExecutor(max_workers=8)
+
+
 def _run_with_timeout(func, *args, timeout=CHECK_TIMEOUT):
     """Run a check function with a timeout. Raises TimeoutError on expiry."""
-    with ThreadPoolExecutor(max_workers=1) as executor:
-        future = executor.submit(func, *args)
-        return future.result(timeout=timeout)
+    future = _shared_executor.submit(func, *args)
+    return future.result(timeout=timeout)
 
 
 def run_full_audit(domain: str, dkim_selector: Optional[str] = None) -> Dict[str, Any]:
@@ -2479,11 +2483,20 @@ def run_full_audit(domain: str, dkim_selector: Optional[str] = None) -> Dict[str
         errors.append(f"Blacklist: {str(e)}")
         checks.append(_error_card("Blacklist", e))
 
-    # --- Security Score ---
-    score_result = _calculate_score(raw_results, domain, tree_walk=tree_walk_result)
+    # --- Vendor Fingerprinting (run once, shared with scorer) ---
+    fp_vendors = []
+    try:
+        fp = AdvancedVendorFingerprinter(domain)
+        fp_result = fp.fingerprint_all()
+        fp_vendors = fp_result.get("vendors", [])
+    except Exception:
+        pass
 
-    # --- Vendor Fingerprinting ---
-    vendors = _get_vendors(raw_results, domain)
+    # --- Security Score ---
+    score_result = _calculate_score(raw_results, domain, tree_walk=tree_walk_result, fp_vendors=fp_vendors)
+
+    # --- Vendor list for frontend ---
+    vendors = _format_vendors(fp_vendors)
 
     # --- Priority Fixes ---
     raw_mx = raw_results.get("mx", {})
@@ -2513,7 +2526,7 @@ def run_full_audit(domain: str, dkim_selector: Optional[str] = None) -> Dict[str
 # Score Calculation
 # ============================================================
 
-def _calculate_score(raw_results: Dict, domain: str, tree_walk: Optional[Dict] = None) -> Dict:
+def _calculate_score(raw_results: Dict, domain: str, tree_walk: Optional[Dict] = None, fp_vendors: Optional[List] = None) -> Dict:
     """Build the audit_results dict that EmailSecurityScorer expects."""
     try:
         # DMARC results — include inherited policy info
@@ -2525,7 +2538,7 @@ def _calculate_score(raw_results: Dict, domain: str, tree_walk: Optional[Dict] =
         dmarc_for_scorer = {
             "record": raw_dmarc.get("record"),
             "policy": raw_dmarc.get("policy", ""),
-            "pct": raw_dmarc.get("pct", 100),
+            "pct": raw_dmarc.get("pct") or 100,
             "rua": raw_dmarc.get("rua"),
             "ruf": raw_dmarc.get("ruf"),
             "sp": raw_dmarc.get("sp"),
@@ -2571,17 +2584,11 @@ def _calculate_score(raw_results: Dict, domain: str, tree_walk: Optional[Dict] =
         except Exception:
             pass
 
-        # Vendor fingerprint
-        vendor_for_scorer = {"vendors": []}
-        try:
-            fp = AdvancedVendorFingerprinter(domain)
-            fp_result = fp.fingerprint_all()
-            vendor_for_scorer["vendors"] = [
-                {"vendor": v["vendor"], "confidence": v["confidence"]}
-                for v in fp_result.get("vendors", [])
-            ]
-        except Exception:
-            pass
+        # Vendor fingerprint (pre-computed, passed in)
+        vendor_for_scorer = {"vendors": [
+            {"vendor": v["vendor"], "confidence": v["confidence"]}
+            for v in (fp_vendors or [])
+        ]}
 
         # MTA-STS / TLS-RPT / BIMI configured flags
         mta_sts_configured = bool(raw_results.get("mta_sts", {}).get("txt_record"))
@@ -2616,21 +2623,16 @@ def _calculate_score(raw_results: Dict, domain: str, tree_walk: Optional[Dict] =
 # Vendor Detection
 # ============================================================
 
-def _get_vendors(raw_results: Dict, domain: str) -> List[Dict]:
-    """Get vendor list from fingerprinting, formatted for frontend."""
+def _format_vendors(fp_vendors: List) -> List[Dict]:
+    """Format pre-computed vendor fingerprint results for frontend."""
     vendors = []
-    try:
-        fp = AdvancedVendorFingerprinter(domain)
-        fp_result = fp.fingerprint_all()
-        for v in fp_result.get("vendors", []):
-            confidence = v.get("confidence", 0)
-            if confidence >= 0.5:  # Only show meaningful detections
-                vendors.append({
-                    "name": v["vendor"],
-                    "confidence": int(confidence * 100),
-                })
-    except Exception:
-        pass
+    for v in fp_vendors:
+        confidence = v.get("confidence", 0)
+        if confidence >= 0.5:  # Only show meaningful detections
+            vendors.append({
+                "name": v["vendor"],
+                "confidence": int(confidence * 100),
+            })
 
     # Deduplicate by name, keep highest confidence
     seen = {}
