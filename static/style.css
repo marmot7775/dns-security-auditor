@@ -136,23 +136,45 @@ main {
     opacity: 0.85;
 }
 
-.logo-icon {
-    width: 32px;
-    height: 32px;
-    background: linear-gradient(135deg, var(--primary-light) 0%, var(--primary) 100%);
-    border-radius: 8px;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    color: var(--text-inverse);
+.logo-terminal {
+    width: 120px;
+    background: #1a1b1e;
+    border-radius: 7px;
+    overflow: hidden;
     flex-shrink: 0;
-    box-shadow: 0 1px 3px rgba(10, 61, 107, 0.18);
+    box-shadow: 0 2px 8px rgba(0,0,0,0.18);
+    line-height: 1;
 }
 
-.logo-icon svg {
-    width: 16px;
-    height: 16px;
+.logo-titlebar {
+    background: #2a2a2e;
+    padding: 4px 6px;
+    display: flex;
+    gap: 4px;
 }
+
+.logo-dot {
+    width: 7px;
+    height: 7px;
+    border-radius: 50%;
+}
+
+.logo-dot-red { background: #ff5f57; }
+.logo-dot-yellow { background: #febc2e; }
+.logo-dot-green { background: #28c840; }
+
+.logo-cmd {
+    padding: 5px 7px 6px;
+    font-family: var(--font-mono);
+    font-size: 11px;
+    font-weight: 600;
+    letter-spacing: 0.02em;
+    white-space: nowrap;
+}
+
+.logo-prompt { color: #5DCAA5; }
+.logo-bin { color: #97C459; }
+.logo-flag { color: #85B7EB; }
 
 .logo-text {
     font-weight: 700;

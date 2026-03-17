@@ -49,6 +49,8 @@ from result_transformer import (
     transform_dane,
     transform_caa,
     transform_nameservers,
+    transform_ct,
+    transform_blacklist,
 )
 
 
@@ -1784,6 +1786,482 @@ def _raw_check_dane(domain: str, raw_results: Dict[str, Any]) -> Dict[str, Any]:
 
 
 # ============================================================
+# Certificate Transparency (crt.sh)
+# ============================================================
+
+def _raw_check_ct(domain: str, raw_results: Dict[str, Any]) -> Dict[str, Any]:
+    """Query crt.sh for Certificate Transparency logs and analyze findings.
+
+    Surfaces:
+      - CAA enforcement mismatches (certs from unauthorized CAs)
+      - Wildcard certificate inventory
+      - Expiring/expired certificates
+      - Subdomain discovery via SAN fields
+      - Certificate sprawl (too many CAs)
+    """
+    import requests
+    from datetime import timezone
+
+    result = {
+        "check": "Certificate Transparency",
+        "domain": domain,
+        "total_certs": 0,
+        "active_certs": 0,
+        "issuers": [],
+        "wildcards": [],
+        "expiring_soon": [],
+        "expired_recent": [],
+        "subdomains_found": [],
+        "caa_mismatches": [],
+        "issues": [],
+        "status": "info",
+    }
+
+    def _add_issue(severity, issue, plain_english, fix=None):
+        result["issues"].append({
+            "severity": severity,
+            "issue": issue,
+            "plain_english": plain_english,
+            "fix": fix,
+        })
+
+    # Query crt.sh
+    try:
+        resp = requests.get(
+            f"https://crt.sh/?q=%.{domain}&output=json",
+            timeout=10,
+            headers={"User-Agent": "dns-audit.com/1.0"},
+        )
+        resp.raise_for_status()
+        if not resp.text or not resp.text.strip():
+            certs = []
+        else:
+            certs = resp.json()
+    except requests.exceptions.Timeout:
+        _add_issue("warning", "crt.sh timed out", "Certificate Transparency log query timed out.")
+        result["status"] = "warning"
+        return result
+    except Exception as e:
+        _add_issue("warning", f"crt.sh query failed: {type(e).__name__}", "Could not query Certificate Transparency logs.")
+        result["status"] = "warning"
+        return result
+
+    if not certs:
+        result["status"] = "info"
+        return result
+
+    # Deduplicate by serial number (crt.sh returns pre-cert + leaf dupes)
+    seen_serials = set()
+    unique_certs = []
+    for cert in certs:
+        serial = cert.get("serial_number")
+        if serial and serial in seen_serials:
+            continue
+        if serial:
+            seen_serials.add(serial)
+        unique_certs.append(cert)
+
+    # Limit to most recent 200 certs for analysis
+    unique_certs.sort(key=lambda c: c.get("not_before", ""), reverse=True)
+    unique_certs = unique_certs[:200]
+
+    now = datetime.now(timezone.utc)
+    result["total_certs"] = len(unique_certs)
+
+    # Analyze certs
+    issuer_counts = {}
+    active_count = 0
+    wildcards = []
+    expiring_soon = []
+    expired_recent = []
+    subdomains = set()
+
+    for cert in unique_certs:
+        issuer_name = cert.get("issuer_name", "Unknown")
+        # Extract the CN or O from the issuer DN
+        issuer_short = issuer_name
+        for part in issuer_name.split(","):
+            part = part.strip()
+            if part.startswith("CN="):
+                issuer_short = part[3:]
+                break
+            elif part.startswith("O="):
+                issuer_short = part[2:]
+
+        issuer_counts[issuer_short] = issuer_counts.get(issuer_short, 0) + 1
+
+        # Parse dates
+        not_after_str = cert.get("not_after")
+        not_before_str = cert.get("not_before")
+        not_after = None
+        if not_after_str:
+            try:
+                not_after = datetime.fromisoformat(not_after_str.replace("T", " ").split(".")[0]).replace(tzinfo=timezone.utc)
+            except (ValueError, AttributeError):
+                pass
+
+        is_active = not_after and not_after > now
+        if is_active:
+            active_count += 1
+
+        # Wildcard detection
+        common_name = cert.get("common_name", "")
+        if common_name.startswith("*."):
+            wildcards.append({
+                "common_name": common_name,
+                "issuer": issuer_short,
+                "not_after": not_after_str or "",
+            })
+
+        # Expiring soon (within 30 days) — only active certs
+        if is_active and not_after:
+            days_left = (not_after - now).days
+            if days_left <= 30:
+                expiring_soon.append({
+                    "common_name": common_name,
+                    "not_after": not_after_str or "",
+                    "days_left": days_left,
+                })
+
+        # Recently expired (within 90 days)
+        if not_after and not is_active:
+            days_expired = (now - not_after).days
+            if days_expired <= 90:
+                expired_recent.append({
+                    "common_name": common_name,
+                    "not_after": not_after_str or "",
+                })
+
+        # Subdomain discovery from SAN (name_value field)
+        name_value = cert.get("name_value", "")
+        for name in name_value.split("\n"):
+            name = name.strip().lower()
+            if name and name != domain and name.endswith("." + domain):
+                # Strip wildcard prefix
+                if name.startswith("*."):
+                    name = name[2:]
+                if name != domain:
+                    subdomains.add(name)
+
+    result["active_certs"] = active_count
+
+    # Sort issuers by count
+    result["issuers"] = sorted(
+        [{"name": k, "count": v} for k, v in issuer_counts.items()],
+        key=lambda x: x["count"],
+        reverse=True,
+    )
+
+    # Deduplicate wildcards by common_name
+    seen_wc = set()
+    unique_wc = []
+    for wc in wildcards:
+        if wc["common_name"] not in seen_wc:
+            seen_wc.add(wc["common_name"])
+            unique_wc.append(wc)
+    result["wildcards"] = unique_wc[:10]
+
+    result["expiring_soon"] = expiring_soon[:10]
+    result["expired_recent"] = expired_recent[:10]
+    result["subdomains_found"] = sorted(subdomains)[:50]
+
+    # CAA mismatch analysis
+    raw_caa = raw_results.get("caa", {})
+    authorized_cas = raw_caa.get("authorized_cas", [])
+    if authorized_cas:
+        # Normalize CA names for comparison
+        caa_normalized = set()
+        for ca in authorized_cas:
+            caa_normalized.add(ca.lower().strip().strip('"'))
+
+        # Check if any cert issuers don't match CAA
+        for issuer_info in result["issuers"]:
+            issuer_lower = issuer_info["name"].lower()
+            # Check if any CAA entry is a substring of the issuer (or vice versa)
+            matched = False
+            for caa_ca in caa_normalized:
+                if caa_ca in issuer_lower or issuer_lower in caa_ca:
+                    matched = True
+                    break
+                # Common mappings
+                if caa_ca == "letsencrypt.org" and "let's encrypt" in issuer_lower:
+                    matched = True
+                    break
+                if caa_ca == "digicert.com" and "digicert" in issuer_lower:
+                    matched = True
+                    break
+                if caa_ca == "sectigo.com" and ("sectigo" in issuer_lower or "comodo" in issuer_lower):
+                    matched = True
+                    break
+                if caa_ca == "pki.goog" and "google" in issuer_lower:
+                    matched = True
+                    break
+                if caa_ca == "amazon.com" and "amazon" in issuer_lower:
+                    matched = True
+                    break
+                if caa_ca == "comodoca.com" and ("comodo" in issuer_lower or "sectigo" in issuer_lower):
+                    matched = True
+                    break
+            if not matched:
+                result["caa_mismatches"].append({
+                    "cert_issuer": issuer_info["name"],
+                    "caa_allows": authorized_cas,
+                })
+
+    # Set status based on findings
+    if result["caa_mismatches"]:
+        result["status"] = "warning"
+        for mm in result["caa_mismatches"]:
+            _add_issue(
+                "warning",
+                f"Certificate from {mm['cert_issuer']} not in CAA",
+                f"CT logs show certificates issued by {mm['cert_issuer']}, but CAA only allows: {', '.join(mm['caa_allows'])}. "
+                "These may be older certs issued before CAA was configured.",
+                f"Verify these certificates are expected. Update CAA to include this issuer or revoke unauthorized certs.",
+            )
+    if expiring_soon:
+        result["status"] = "warning"
+        _add_issue(
+            "warning",
+            f"{len(expiring_soon)} certificate(s) expiring within 30 days",
+            f"{len(expiring_soon)} active certificate(s) will expire soon. Ensure auto-renewal is working.",
+        )
+
+    if result["status"] == "info" and active_count > 0:
+        result["status"] = "ok"
+
+    return result
+
+
+# ============================================================
+# Blacklist (DNSBL) Check
+# ============================================================
+
+def _raw_check_blacklist(domain: str, raw_results: Dict[str, Any]) -> Dict[str, Any]:
+    """Check if domain and MX IPs appear on major DNS-based blocklists.
+
+    Uses the standard DNSBL lookup protocol:
+      - Reverse IP octets, query against blocklist domain
+      - A record returned = listed, NXDOMAIN = clean
+
+    Checks both IP-based lists (against MX IPs) and domain-based lists.
+    """
+    import ipaddress
+    import socket
+
+    # Blocklists: (name, hostname, type, tier, delisting_url)
+    IP_LISTS = [
+        ("Spamhaus ZEN", "zen.spamhaus.org", 1, "https://check.spamhaus.org/"),
+        ("Barracuda BRBL", "b.barracudacentral.org", 1, "https://www.barracudacentral.org/lookups"),
+        ("SpamCop", "bl.spamcop.net", 2, "https://www.spamcop.net/bl.shtml"),
+        ("SORBS", "dnsbl.sorbs.net", 2, None),
+        ("UCEProtect L1", "dnsbl-1.uceprotect.net", 2, None),
+    ]
+    DOMAIN_LISTS = [
+        ("Spamhaus DBL", "dbl.spamhaus.org", 1, "https://check.spamhaus.org/"),
+    ]
+
+    # Spamhaus return code meanings
+    SPAMHAUS_CODES = {
+        "127.0.0.2": "SBL - Spamhaus Block List (spam sources)",
+        "127.0.0.3": "SBL CSS - Spamhaus CSS (spam operations)",
+        "127.0.0.4": "XBL - Exploits Block List (compromised hosts)",
+        "127.0.0.5": "XBL - Exploits Block List (compromised hosts)",
+        "127.0.0.6": "XBL - Exploits Block List (compromised hosts)",
+        "127.0.0.7": "XBL - Exploits Block List (compromised hosts)",
+        "127.0.0.9": "SBL DROP - Spamhaus DROP (hijacked space)",
+        "127.0.0.10": "PBL - Policy Block List (dynamic/residential IP)",
+        "127.0.0.11": "PBL - Policy Block List (ISP maintained)",
+    }
+    SPAMHAUS_DBL_CODES = {
+        "127.0.1.2": "Spam domain",
+        "127.0.1.4": "Phishing domain",
+        "127.0.1.5": "Malware domain",
+        "127.0.1.6": "Botnet C&C domain",
+    }
+
+    result = {
+        "check": "Blacklist",
+        "domain": domain,
+        "ips_checked": [],
+        "domain_checked": domain,
+        "total_listings": 0,
+        "ip_results": [],
+        "domain_results": [],
+        "issues": [],
+        "status": "ok",
+    }
+
+    def _add_issue(severity, issue, plain_english, fix=None):
+        result["issues"].append({
+            "severity": severity,
+            "issue": issue,
+            "plain_english": plain_english,
+            "fix": fix,
+        })
+
+    def _dnsbl_lookup(query_name: str, timeout: float = 3.0) -> Optional[str]:
+        """Query a DNSBL. Returns the A record response or None if clean."""
+        try:
+            resolver = _get_resolver(timeout=timeout)
+            answers = resolver.resolve(query_name, "A")
+            for rdata in answers:
+                return str(rdata)
+        except (dns.resolver.NXDOMAIN, dns.resolver.NoAnswer, dns.resolver.NoNameservers):
+            return None
+        except Exception:
+            return None
+
+    def _check_ip_against_list(ip: str, list_name: str, list_host: str) -> Dict:
+        """Check a single IP against a single DNSBL."""
+        # Reverse IP octets
+        parts = ip.split(".")
+        if len(parts) != 4:
+            return {"list": list_name, "listed": False, "return_code": None, "meaning": None, "error": "Not IPv4"}
+        reversed_ip = ".".join(reversed(parts))
+        query = f"{reversed_ip}.{list_host}"
+
+        return_code = _dnsbl_lookup(query)
+        listed = return_code is not None
+
+        meaning = None
+        if listed:
+            if "spamhaus" in list_host:
+                meaning = SPAMHAUS_CODES.get(return_code)
+            if not meaning:
+                meaning = f"Listed (response: {return_code})"
+
+        return {"list": list_name, "listed": listed, "return_code": return_code, "meaning": meaning}
+
+    # Get MX IPs from raw results
+    raw_mx = raw_results.get("mx", {})
+    mx_details = raw_mx.get("mx_details", [])
+
+    # Build IP-to-host mapping
+    ip_host_map = {}  # ip -> mx_host
+    all_ips = []
+    for mx_detail in mx_details:
+        hostname = mx_detail.get("hostname", "")
+        for ip in mx_detail.get("ips", []):
+            # Skip IPv6 (most DNSBLs don't support it) and private IPs
+            try:
+                addr = ipaddress.ip_address(ip)
+                if addr.version == 6:
+                    continue
+                if addr.is_private or addr.is_loopback or addr.is_reserved:
+                    continue
+            except ValueError:
+                continue
+            if ip not in ip_host_map:
+                ip_host_map[ip] = hostname
+                all_ips.append(ip)
+
+    result["ips_checked"] = all_ips
+
+    # Check IPs against all lists using ThreadPoolExecutor for parallelism
+    if all_ips:
+        ip_results_map = {}  # ip -> list of results
+        for ip in all_ips:
+            ip_results_map[ip] = []
+
+        with ThreadPoolExecutor(max_workers=10) as executor:
+            futures = {}
+            for ip in all_ips:
+                for list_name, list_host, tier, delist_url in IP_LISTS:
+                    future = executor.submit(_check_ip_against_list, ip, list_name, list_host)
+                    futures[future] = (ip, list_name, tier, delist_url)
+
+            for future in futures:
+                ip, list_name, tier, delist_url = futures[future]
+                try:
+                    check_result = future.result(timeout=5)
+                    ip_results_map[ip].append(check_result)
+                except Exception:
+                    ip_results_map[ip].append({
+                        "list": list_name, "listed": False, "return_code": None,
+                        "meaning": None, "error": "Lookup failed",
+                    })
+
+        # Build structured IP results
+        for ip in all_ips:
+            result["ip_results"].append({
+                "ip": ip,
+                "mx_host": ip_host_map.get(ip, ""),
+                "listings": ip_results_map[ip],
+            })
+
+    # Check domain against domain-based lists
+    for list_name, list_host, tier, delist_url in DOMAIN_LISTS:
+        query = f"{domain}.{list_host}"
+        return_code = _dnsbl_lookup(query)
+        listed = return_code is not None
+
+        meaning = None
+        if listed:
+            if "spamhaus" in list_host:
+                meaning = SPAMHAUS_DBL_CODES.get(return_code)
+            if not meaning:
+                meaning = f"Listed (response: {return_code})"
+
+        result["domain_results"].append({
+            "list": list_name, "listed": listed,
+            "return_code": return_code, "meaning": meaning,
+        })
+
+    # Count total listings
+    total_listings = 0
+    tier1_listings = []
+    tier2_listings = []
+
+    for ip_result in result["ip_results"]:
+        for listing in ip_result["listings"]:
+            if listing.get("listed"):
+                total_listings += 1
+                # Determine tier
+                for list_name, _, tier, delist_url in IP_LISTS:
+                    if list_name == listing["list"]:
+                        if tier == 1:
+                            tier1_listings.append(f"{ip_result['ip']} on {listing['list']}")
+                        else:
+                            tier2_listings.append(f"{ip_result['ip']} on {listing['list']}")
+                        break
+
+    for dr in result["domain_results"]:
+        if dr.get("listed"):
+            total_listings += 1
+            for list_name, _, tier, delist_url in DOMAIN_LISTS:
+                if list_name == dr["list"]:
+                    if tier == 1:
+                        tier1_listings.append(f"{domain} on {dr['list']}")
+                    else:
+                        tier2_listings.append(f"{domain} on {dr['list']}")
+                    break
+
+    result["total_listings"] = total_listings
+
+    # Set status and issues
+    if tier1_listings:
+        result["status"] = "error"
+        for listing in tier1_listings:
+            _add_issue(
+                "error",
+                f"Listed: {listing}",
+                f"{listing}. This is a major blocklist that can cause significant email deliverability issues.",
+            )
+    if tier2_listings:
+        if result["status"] == "ok":
+            result["status"] = "warning"
+        for listing in tier2_listings:
+            _add_issue(
+                "warning",
+                f"Listed: {listing}",
+                f"{listing}. This is a secondary blocklist with less impact on deliverability.",
+            )
+
+    return result
+
+
+# ============================================================
 # Main Audit Orchestrator
 # ============================================================
 
@@ -1807,24 +2285,25 @@ def run_full_audit(domain: str, dkim_selector: Optional[str] = None) -> Dict[str
     raw_results = {}
     errors = []
 
+    # --- DMARC Tree Walk (dmarcbis-41 Section 4.10) ---
+    # Run before DMARC card so inherited policy can inform the card
+    tree_walk_result = None
+    try:
+        tree_walk_result = _run_with_timeout(dmarc_tree_walk, domain)
+    except Exception as e:
+        errors.append(f"Tree Walk: {str(e)}")
+
     # --- 1. DMARC ---
     try:
         raw_dmarc = _run_with_timeout(_raw_check_dmarc, domain)
         raw_results["dmarc"] = raw_dmarc
-        checks.append(transform_dmarc(raw_dmarc))
+        checks.append(transform_dmarc(raw_dmarc, tree_walk=tree_walk_result))
     except FuturesTimeoutError:
         errors.append("DMARC: timed out")
         checks.append(_timeout_card("DMARC"))
     except Exception as e:
         errors.append(f"DMARC: {str(e)}")
         checks.append(_error_card("DMARC", e))
-
-    # --- DMARC Tree Walk (dmarcbis-41 Section 4.10) ---
-    tree_walk_result = None
-    try:
-        tree_walk_result = _run_with_timeout(dmarc_tree_walk, domain)
-    except Exception as e:
-        errors.append(f"Tree Walk: {str(e)}")
 
     # --- 2. SPF ---
     spf_record = None
@@ -1975,6 +2454,30 @@ def run_full_audit(domain: str, dkim_selector: Optional[str] = None) -> Dict[str
     except Exception as e:
         errors.append(f"DKIM: {str(e)}")
         checks.insert(2, _error_card("DKIM", e))
+
+    # --- 12. Certificate Transparency ---
+    try:
+        raw_ct = _run_with_timeout(_raw_check_ct, domain, raw_results, timeout=15)
+        raw_results["ct"] = raw_ct
+        checks.append(transform_ct(raw_ct, domain))
+    except FuturesTimeoutError:
+        errors.append("Certificate Transparency: timed out")
+        checks.append(_timeout_card("Certificate Transparency"))
+    except Exception as e:
+        errors.append(f"Certificate Transparency: {str(e)}")
+        checks.append(_error_card("Certificate Transparency", e))
+
+    # --- 13. Blacklist ---
+    try:
+        raw_blacklist = _run_with_timeout(_raw_check_blacklist, domain, raw_results, timeout=15)
+        raw_results["blacklist"] = raw_blacklist
+        checks.append(transform_blacklist(raw_blacklist, domain))
+    except FuturesTimeoutError:
+        errors.append("Blacklist: timed out")
+        checks.append(_timeout_card("Blacklist"))
+    except Exception as e:
+        errors.append(f"Blacklist: {str(e)}")
+        checks.append(_error_card("Blacklist", e))
 
     # --- Security Score ---
     score_result = _calculate_score(raw_results, domain)
