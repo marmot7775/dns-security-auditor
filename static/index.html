@@ -17,7 +17,7 @@
     <link rel="canonical" href="https://dns-audit.com">
     <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><rect rx='20' width='100' height='100' fill='%230a3d6b'/><text x='50' y='68' font-size='55' text-anchor='middle' fill='white' font-family='sans-serif' font-weight='bold'>A</text></svg>">
     <link href="https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,400;0,9..40,500;0,9..40,600;0,9..40,700;1,9..40,400&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
-    <link rel="stylesheet" href="/static/style.css?v=tw1">
+    <link rel="stylesheet" href="/static/style.css?v=fix2">
 </head>
 <body>
 
@@ -87,7 +87,7 @@
                             <svg class="input-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
                                 <rect x="3" y="11" width="18" height="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/>
                             </svg>
-                            <input type="text" id="selector-input" class="domain-input" placeholder="DKIM selector (optional)" autocomplete="off" spellcheck="false" title="Find in your email headers: DKIM-Signature: ... s=selector" />
+                            <input type="text" id="selector-input" class="domain-input" placeholder="DKIM selector — optional, we auto-detect" autocomplete="off" spellcheck="false" title="Find in your email headers: DKIM-Signature: ... s=selector" />
                         </div>
                         <button type="submit" id="audit-btn" class="audit-btn">
                             <span class="btn-text">Run Audit</span>
@@ -198,7 +198,7 @@
         </div>
     </footer>
 
-    <script src="/static/app.js?v=tw1"></script>
+    <script src="/static/app.js?v=fix2"></script>
 </body>
 </html>
 

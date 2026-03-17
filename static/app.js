@@ -309,11 +309,13 @@ function renderResults(data) {
 
     // Share button
     document.getElementById('share-btn').onclick = () => {
+        if (!navigator.clipboard) return;
         navigator.clipboard.writeText(window.location.href).then(() => {
-            const btn = document.getElementById('share-btn');
-            btn.querySelector('span').textContent = 'Copied!';
-            setTimeout(() => btn.querySelector('span').textContent = 'Share', 2000);
-        });
+            const span = document.getElementById('share-btn')?.querySelector('span');
+            if (!span) return;
+            span.textContent = 'Copied!';
+            setTimeout(() => span.textContent = 'Share', 2000);
+        }).catch(() => {});
     };
 }
 
@@ -355,13 +357,15 @@ function createResultCard(check, index) {
     card.querySelectorAll('.copy-btn').forEach(btn => {
         btn.addEventListener('click', (e) => {
             e.stopPropagation();
-            const record = btn.closest('.record-block').querySelector('.record-text')?.textContent
-                || btn.closest('.record-block').textContent.replace('Copy', '').trim();
+            if (!navigator.clipboard) return;
+            const block = btn.closest('.record-block');
+            const record = block?.querySelector('.record-text')?.textContent
+                || block?.textContent?.replace('Copy', '').trim() || '';
             navigator.clipboard.writeText(record).then(() => {
                 btn.textContent = 'Copied';
                 btn.classList.add('copied');
                 setTimeout(() => { btn.textContent = 'Copy'; btn.classList.remove('copied'); }, 2000);
-            });
+            }).catch(() => {});
         });
     });
 
