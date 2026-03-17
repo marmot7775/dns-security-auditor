@@ -279,6 +279,10 @@ function renderResults(data) {
     resultsList.innerHTML = '';
 
     checks.forEach((check, i) => {
+        // Attach tree walk data to the DMARC check
+        if ((check.name || '').toUpperCase().includes('DMARC') && data.tree_walk) {
+            check._tree_walk = data.tree_walk;
+        }
         const card = createResultCard(check, i);
         resultsList.appendChild(card);
     });
@@ -408,6 +412,11 @@ function renderCheckBody(check) {
         });
     }
 
+    // Tree walk visualization (DMARC only)
+    if (check._tree_walk) {
+        html += renderTreeWalk(check._tree_walk);
+    }
+
     // Fix recommendation
     if (check.fix) {
         html += `
@@ -422,6 +431,56 @@ function renderCheckBody(check) {
         html = '<div class="explanation">No issues detected.</div>';
     }
 
+    return html;
+}
+
+// ============================================================
+// Tree Walk Visualization
+// ============================================================
+
+function renderTreeWalk(tw) {
+    if (!tw || !tw.steps || tw.steps.length === 0) return '';
+
+    let html = '<div class="tree-walk">';
+    html += '<div class="tree-walk-header">DNS Tree Walk</div>';
+    html += '<div class="tree-walk-steps">';
+
+    tw.steps.forEach((step, i) => {
+        const isLast = i === tw.steps.length - 1;
+        const statusClass = step.found ? 'tw-found' : 'tw-notfound';
+        const connector = isLast ? 'tw-last' : '';
+
+        html += `<div class="tw-step ${statusClass} ${connector}">`;
+        html += `<div class="tw-connector"><div class="tw-dot"></div></div>`;
+        html += `<div class="tw-content">`;
+        html += `<div class="tw-domain">${escapeHtml(step.domain)}</div>`;
+        html += `<div class="tw-label">${escapeHtml(step.label)}`;
+        if (step.stop_reason) html += ` &middot; stopped (${escapeHtml(step.stop_reason)})`;
+        html += `</div>`;
+        if (step.found && step.record) {
+            html += `<div class="tw-record">${escapeHtml(step.record)}</div>`;
+        } else {
+            html += `<div class="tw-norecord">No DMARC record</div>`;
+        }
+        html += `</div></div>`;
+    });
+
+    html += '</div>';
+
+    // Summary line
+    if (tw.policy_source) {
+        const tag = tw.applied_tag || 'p';
+        const inherited = tw.is_subdomain ? ' (inherited)' : '';
+        html += `<div class="tw-summary">`;
+        html += `Effective policy: <strong>${escapeHtml(tw.effective_policy)}</strong>`;
+        html += ` from <strong>${escapeHtml(tw.policy_source)}</strong>`;
+        html += ` via <code>${escapeHtml(tag)}</code> tag${inherited}`;
+        html += `</div>`;
+    } else {
+        html += `<div class="tw-summary tw-no-policy">No DMARC policy found in hierarchy</div>`;
+    }
+
+    html += '</div>';
     return html;
 }
 
