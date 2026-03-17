@@ -957,6 +957,7 @@ main {
 }
 
 .tw-connector {
+    position: relative;
     display: flex;
     flex-direction: column;
     align-items: center;
@@ -991,13 +992,16 @@ main {
     box-shadow: 0 0 0 3px var(--pass-bg);
 }
 
-/* Vertical line connecting dots */
+/* Vertical line connecting dots — positioned absolutely so it
+   extends through the step's padding into the next step's dot */
 .tw-step:not(.tw-last) .tw-connector::after {
     content: '';
-    flex: 1;
+    position: absolute;
+    top: calc(0.15rem + 10px + 3px);  /* padding-top + dot height + small gap */
+    bottom: calc(-0.85rem + 0.15rem + 5px);  /* into next step's padding, stop at its dot center */
+    left: calc(50% - 1px);  /* center the 2px line */
     width: 2px;
     background: var(--border-light);
-    margin-top: 4px;
 }
 
 /* ── Tree Walk Animations ──────────────────────────────────────
@@ -1105,7 +1109,6 @@ main {
 /* Respect reduced motion preference */
 @media (prefers-reduced-motion: reduce) {
     .tw-animated .tw-step,
-    .tw-animated .tw-step:not(.tw-last) .tw-connector::after,
     .tw-animated .tw-policy-source .tw-dot,
     .tw-animated .tw-meta,
     .tw-animated .tw-summary,
@@ -1116,6 +1119,9 @@ main {
         animation: none;
         opacity: 1;
         transform: none;
+    }
+    .tw-animated .tw-step:not(.tw-last) .tw-connector::after {
+        animation: none;
     }
 }
 
