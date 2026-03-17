@@ -92,7 +92,7 @@ def transform_dmarc(raw: Dict, tree_walk: Optional[Dict] = None) -> Dict:
     inherited_policy = tree_walk.get("effective_policy") if inherited else None
     inherited_source = tree_walk.get("policy_source") if inherited else None
 
-    # Build verdict
+    # Build verdict and override status based on policy
     if inherited:
         verdict = f"Inherited: {inherited_policy} (from {inherited_source})"
         if inherited_policy == "reject":
@@ -104,16 +104,23 @@ def transform_dmarc(raw: Dict, tree_walk: Optional[Dict] = None) -> Dict:
         pill_label = "Inherited"
     elif not record:
         verdict = "No DMARC record found"
+        status = "fail"
         pill_label = "Missing"
     elif policy == "reject":
         verdict = "Policy: reject (strongest)"
+        # p=reject is always a pass regardless of what the audit engine returned
+        # (the engine may flag "warning" for missing rua, but the policy itself is correct)
+        status = "pass"
     elif policy == "quarantine":
         pct = raw.get("pct", 100)
         verdict = "Policy: quarantine"
         if pct and pct < 100:
             verdict += f" ({pct}%)"
+        # p=quarantine is enforcing; treat as pass even if rua is absent
+        status = "pass"
     elif policy == "none":
         verdict = "Policy: none (monitoring only)"
+        status = "warn"
     else:
         verdict = f"Policy: {policy}" if policy else "Invalid record"
 
@@ -1635,8 +1642,41 @@ def transform_ct(raw: Dict, domain: str) -> Dict:
     subdomains = raw.get("subdomains_found", [])
     caa_mismatches = raw.get("caa_mismatches", [])
     issues = raw.get("issues", [])
+    raw_status = raw.get("status", "info")
+    unavailable_reason = raw.get("unavailable_reason")
 
-    # No certs found
+    # Query failed or data was unavailable -- distinguish from a genuine empty result
+    if raw_status in ("warning", "unavailable") and total == 0:
+        if unavailable_reason == "response_too_large":
+            verdict = "CT log query unavailable (too many certificates)"
+            explanation = (
+                "The Certificate Transparency log query returned more data than could be processed. "
+                "This domain has a very large number of certificates on record. "
+                "Use crt.sh directly to browse certificates for this domain."
+            )
+            detail_text = "CT log response too large to analyze automatically"
+        else:
+            verdict = "CT log query unavailable"
+            explanation = (
+                "The Certificate Transparency log could not be queried at this time. "
+                "This may be a temporary issue with the crt.sh service."
+            )
+            detail_text = issues[0]["plain_english"] if issues else "CT log query failed"
+        return {
+            "name": "Certificate Transparency",
+            "status": "warn",
+            "pill_label": "Unavailable",
+            "verdict": verdict,
+            "record": None,
+            "explanation": explanation,
+            "details": [
+                {"type": "warning", "text": detail_text},
+            ],
+            "fix": None,
+            "fix_records": None,
+        }
+
+    # No certs found (genuine empty result, not an error)
     if total == 0:
         return {
             "name": "Certificate Transparency",
