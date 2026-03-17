@@ -1,22 +1,52 @@
 /* ==========================================================================
    DNS Security Auditor - Frontend Application
+   v2.0 — Scoped audits, severity sorting, auto-collapse
    ========================================================================== */
 
 const API_BASE = '/api';
 
+// -- Scope definitions: which checks to show per scope --
+const SCOPE_CHECKS = {
+    complete:      null, // null = show all
+    email_full:    ['DMARC', 'SPF', 'DKIM', 'MX Records', 'MX', 'MTA-STS', 'TLS-RPT', 'BIMI'],
+    dmarc:         ['DMARC'],
+    transport:     ['MTA-STS', 'TLS-RPT', 'MX Records', 'MX'],
+    dns_infra:     ['DNSSEC', 'CAA', 'Nameservers'],
+    security_scan: ['DMARC', 'SPF', 'DKIM', 'DNSSEC'],
+};
+
+// Severity sort order (lower = higher priority = displayed first)
+const SEVERITY_ORDER = { fail: 0, warn: 1, pass: 2 };
+
+let currentScope = 'complete';
+
 // -- DOM References --
-const auditForm = document.getElementById('audit-form');
-const domainInput = document.getElementById('domain-input');
-const auditBtn = document.getElementById('audit-btn');
+const auditForm      = document.getElementById('audit-form');
+const domainInput    = document.getElementById('domain-input');
+const auditBtn       = document.getElementById('audit-btn');
 const loadingSection = document.getElementById('loading-section');
-const loadingBar = document.getElementById('loading-bar');
-const loadingStatus = document.getElementById('loading-status');
 const resultsSection = document.getElementById('results-section');
+
+// -- Scope selector --
+document.querySelectorAll('.scope-btn').forEach(btn => {
+    btn.addEventListener('click', () => {
+        document.querySelectorAll('.scope-btn').forEach(b => b.classList.remove('active'));
+        btn.classList.add('active');
+        currentScope = btn.dataset.scope;
+    });
+});
 
 // -- Check URL for domain parameter on load --
 document.addEventListener('DOMContentLoaded', () => {
     const params = new URLSearchParams(window.location.search);
     const domain = params.get('d');
+    const scope  = params.get('scope');
+    if (scope && SCOPE_CHECKS[scope]) {
+        currentScope = scope;
+        document.querySelectorAll('.scope-btn').forEach(b => {
+            b.classList.toggle('active', b.dataset.scope === scope);
+        });
+    }
     if (domain) {
         domainInput.value = domain;
         runAudit(domain);
@@ -66,39 +96,27 @@ async function runAudit(domain) {
     }
 }
 
-// -- Error display --
-function showError(message) {
-    // Reuse loading section for error display
-    loadingSection.style.display = 'block';
-    const card = loadingSection.querySelector('.loading-card');
-    card.innerHTML = `
-        <div style="color: var(--fail); font-weight: 600; margin-bottom: 0.35rem;">Audit Failed</div>
-        <div style="color: var(--text-secondary); font-size: 0.88rem;">${escapeHtml(message)}</div>
-        <button onclick="location.reload()" style="
-            margin-top: 0.75rem; padding: 0.5rem 1rem; background: var(--primary);
-            color: white; border: none; border-radius: var(--radius); cursor: pointer;
-            font-family: var(--font-body); font-size: 0.85rem; font-weight: 600;
-        ">Try Again</button>
-    `;
-}
+// ============================================================
+// Loading / Error
+// ============================================================
 
-// -- Loading states --
 const LOADING_STEPS = [
-    { pct: 10, msg: 'Resolving DNS records...' },
-    { pct: 20, msg: 'Checking DMARC policy...' },
-    { pct: 30, msg: 'Analyzing SPF configuration...' },
-    { pct: 45, msg: 'Discovering DKIM selectors...' },
-    { pct: 55, msg: 'Checking MX records...' },
-    { pct: 65, msg: 'Validating MTA-STS...' },
-    { pct: 72, msg: 'Checking TLS-RPT...' },
-    { pct: 78, msg: 'Looking for BIMI record...' },
-    { pct: 85, msg: 'Fingerprinting email services...' },
-    { pct: 92, msg: 'Calculating security score...' },
+    { pct: 8,  msg: 'Resolving DNS records...' },
+    { pct: 18, msg: 'Checking DMARC policy...' },
+    { pct: 28, msg: 'Analyzing SPF configuration...' },
+    { pct: 40, msg: 'Discovering DKIM selectors...' },
+    { pct: 50, msg: 'Checking MX records...' },
+    { pct: 60, msg: 'Validating MTA-STS...' },
+    { pct: 68, msg: 'Checking TLS-RPT...' },
+    { pct: 74, msg: 'Looking for BIMI record...' },
+    { pct: 80, msg: 'Verifying DNSSEC chain...' },
+    { pct: 86, msg: 'Checking CAA records...' },
+    { pct: 92, msg: 'Fingerprinting email services...' },
+    { pct: 97, msg: 'Calculating security score...' },
 ];
 
 function showLoading() {
     loadingSection.style.display = 'block';
-    // Reset loading card content (in case error was displayed before)
     const card = loadingSection.querySelector('.loading-card');
     card.innerHTML = `
         <div class="loading-bar-track">
@@ -111,7 +129,7 @@ function showLoading() {
     auditBtn.querySelector('.btn-text').style.display = 'none';
     auditBtn.querySelector('.btn-loading').style.display = 'flex';
 
-    const bar = document.getElementById('loading-bar');
+    const bar    = document.getElementById('loading-bar');
     const status = document.getElementById('loading-status');
     if (bar) bar.style.width = '0%';
 
@@ -122,7 +140,7 @@ function showLoading() {
             if (status) status.textContent = LOADING_STEPS[step].msg;
             step++;
         }
-    }, 400);
+    }, 350);
 }
 
 function hideLoading() {
@@ -137,7 +155,24 @@ function hideResults() {
     resultsSection.style.display = 'none';
 }
 
-// -- Render results --
+function showError(message) {
+    loadingSection.style.display = 'block';
+    const card = loadingSection.querySelector('.loading-card');
+    card.innerHTML = `
+        <div style="color: var(--fail); font-weight: 600; margin-bottom: 0.35rem;">Audit Failed</div>
+        <div style="color: var(--text-secondary); font-size: 0.88rem;">${escapeHtml(message)}</div>
+        <button onclick="location.reload()" style="
+            margin-top: 0.75rem; padding: 0.5rem 1rem; background: var(--primary);
+            color: white; border: none; border-radius: var(--radius); cursor: pointer;
+            font-family: var(--font-body); font-size: 0.85rem; font-weight: 600;
+        ">Try Again</button>
+    `;
+}
+
+// ============================================================
+// Render results
+// ============================================================
+
 function renderResults(data) {
     // Finish loading animation
     const bar = document.getElementById('loading-bar');
@@ -152,6 +187,7 @@ function renderResults(data) {
         // Update URL for sharing
         const url = new URL(window.location);
         url.searchParams.set('d', data.domain);
+        url.searchParams.set('scope', currentScope);
         window.history.replaceState({}, '', url);
     }, 300);
 
@@ -159,45 +195,66 @@ function renderResults(data) {
     document.getElementById('result-domain').textContent = data.domain;
     document.getElementById('result-timestamp').textContent = formatTimestamp(data.timestamp || new Date().toISOString());
 
-    // Summary
-    document.getElementById('summary-grade').textContent = data.score?.grade || '--';
-    document.getElementById('summary-pass').textContent = countByStatus(data.checks, 'pass');
-    document.getElementById('summary-warn').textContent = countByStatus(data.checks, 'warn');
-    document.getElementById('summary-fail').textContent = countByStatus(data.checks, 'fail');
+    // -- Filter checks by scope --
+    let checks = data.checks || [];
+    const scopeFilter = SCOPE_CHECKS[currentScope];
+    if (scopeFilter) {
+        checks = checks.filter(c => {
+            const name = (c.name || '').toUpperCase();
+            return scopeFilter.some(s => name.includes(s.toUpperCase()));
+        });
+    }
 
-    // Grade color-coding and score display
+    // -- Sort by severity: fail → warn → pass --
+    checks.sort((a, b) => {
+        const sa = SEVERITY_ORDER[a.status] ?? 3;
+        const sb = SEVERITY_ORDER[b.status] ?? 3;
+        return sa - sb;
+    });
+
+    // Summary counts (scoped)
+    const passCount = checks.filter(c => c.status === 'pass').length;
+    const warnCount = checks.filter(c => c.status === 'warn').length;
+    const failCount = checks.filter(c => c.status === 'fail').length;
+
+    document.getElementById('summary-grade').textContent = data.score?.grade || '--';
+    document.getElementById('summary-pass').textContent = passCount;
+    document.getElementById('summary-warn').textContent = warnCount;
+    document.getElementById('summary-fail').textContent = failCount;
+
+    // Grade color-coding
     const gradeCard = document.querySelector('.grade-card');
-    const gradeEl = document.getElementById('summary-grade');
+    const gradeEl   = document.getElementById('summary-grade');
     const grade = data.score?.grade || '--';
     const gradeColors = {
-      'A': { bg: '#ecfdf5', border: '#10b981', text: '#065f46' },
-      'B': { bg: '#eff6ff', border: '#3b82f6', text: '#1e40af' },
-      'C': { bg: '#fffbeb', border: '#f59e0b', text: '#92400e' },
-      'D': { bg: '#fff7ed', border: '#f97316', text: '#9a3412' },
-      'F': { bg: '#fef2f2', border: '#ef4444', text: '#991b1b' }
+        'A': { bg: '#ecfdf5', border: '#10b981', text: '#065f46' },
+        'B': { bg: '#eff6ff', border: '#3b82f6', text: '#1e40af' },
+        'C': { bg: '#fffbeb', border: '#f59e0b', text: '#92400e' },
+        'D': { bg: '#fff7ed', border: '#f97316', text: '#9a3412' },
+        'F': { bg: '#fef2f2', border: '#ef4444', text: '#991b1b' },
     };
     const gc = gradeColors[grade];
     if (gc && gradeCard) {
-      gradeCard.style.borderTopColor = gc.border;
-      gradeCard.style.background = gc.bg;
-      gradeEl.style.color = gc.text;
+        gradeCard.style.borderTopColor = gc.border;
+        gradeCard.style.background = gc.bg;
+        gradeEl.style.color = gc.text;
     }
-    // Show score number below grade
+    // Score number
     const scoreNum = data.score?.total;
     if (scoreNum !== undefined && gradeCard) {
-      let scoreEl = document.getElementById('summary-score');
-      if (!scoreEl) {
-        scoreEl = document.createElement('div');
-        scoreEl.id = 'summary-score';
-        scoreEl.style.cssText = 'font-size:0.82rem;color:var(--text-secondary);font-weight:500;margin-top:0.15rem;';
-        gradeEl.parentNode.insertBefore(scoreEl, gradeEl.nextSibling);
-      }
-      scoreEl.textContent = Math.round(scoreNum) + ' / 100';
+        let scoreEl = document.getElementById('summary-score');
+        if (!scoreEl) {
+            scoreEl = document.createElement('div');
+            scoreEl.id = 'summary-score';
+            scoreEl.style.cssText = 'font-size:0.82rem;color:var(--text-secondary);font-weight:500;margin-top:0.15rem;';
+            gradeEl.parentNode.insertBefore(scoreEl, gradeEl.nextSibling);
+        }
+        scoreEl.textContent = Math.round(scoreNum) + ' / 100';
     }
 
-    // Priority fixes
+    // -- Priority fixes (always at top, before detailed results) --
     const prioritySection = document.getElementById('priority-section');
-    const priorityList = document.getElementById('priority-list');
+    const priorityList    = document.getElementById('priority-list');
     priorityList.innerHTML = '';
 
     const fixes = data.priority_fixes || [];
@@ -216,19 +273,18 @@ function renderResults(data) {
         prioritySection.style.display = 'none';
     }
 
-    // Result cards
+    // -- Result cards (sorted, auto-collapse pass) --
     const resultsList = document.getElementById('results-list');
     resultsList.innerHTML = '';
 
-    if (data.checks) {
-        data.checks.forEach(check => {
-            resultsList.appendChild(createResultCard(check));
-        });
-    }
+    checks.forEach((check, i) => {
+        const card = createResultCard(check, i);
+        resultsList.appendChild(card);
+    });
 
     // Vendors
     const vendorsSection = document.getElementById('vendors-section');
-    const vendorsGrid = document.getElementById('vendors-grid');
+    const vendorsGrid    = document.getElementById('vendors-grid');
     vendorsGrid.innerHTML = '';
 
     if (data.vendors && data.vendors.length > 0) {
@@ -246,9 +302,9 @@ function renderResults(data) {
         vendorsSection.style.display = 'none';
     }
 
-    // Tree Walk Visualization
-    if (data.tree_walk) {
-      renderTreeWalk(data.tree_walk);
+    // Tree Walk Visualization (only for scopes that include DMARC)
+    if (data.tree_walk && (!scopeFilter || scopeFilter.some(s => s.toUpperCase() === 'DMARC'))) {
+        renderTreeWalk(data.tree_walk);
     }
 
     // Share button
@@ -261,15 +317,19 @@ function renderResults(data) {
     };
 }
 
-// -- Create a single result card --
-function createResultCard(check) {
+// ============================================================
+// Result card — auto-collapse passing, expand fail/warn
+// ============================================================
+
+function createResultCard(check, index) {
     const card = document.createElement('div');
-    card.className = 'result-card expanded';
+    // Auto-collapse: pass = collapsed, fail/warn = expanded
+    const isExpanded = check.status !== 'pass';
+    card.className = `result-card${isExpanded ? ' expanded' : ''}`;
+    card.style.animationDelay = `${0.05 + index * 0.04}s`;
 
     const statusLabel = check.pill_label || {
-        pass: 'Pass',
-        warn: 'Warning',
-        fail: 'Issue'
+        pass: 'Pass', warn: 'Warning', fail: 'Issue'
     }[check.status] || 'Unknown';
 
     card.innerHTML = `
@@ -300,10 +360,7 @@ function createResultCard(check) {
             navigator.clipboard.writeText(record).then(() => {
                 btn.textContent = 'Copied';
                 btn.classList.add('copied');
-                setTimeout(() => {
-                    btn.textContent = 'Copy';
-                    btn.classList.remove('copied');
-                }, 2000);
+                setTimeout(() => { btn.textContent = 'Copy'; btn.classList.remove('copied'); }, 2000);
             });
         });
     });
@@ -314,7 +371,7 @@ function createResultCard(check) {
 function renderCheckBody(check) {
     let html = '';
 
-    // Record
+    // Record (dark-themed monospace block)
     if (check.record) {
         html += `
             <div class="record-block">
@@ -324,26 +381,26 @@ function renderCheckBody(check) {
         `;
     }
 
-    // Explanation (HTML allowed here -- it comes from our own transformer, not user input)
+    // Explanation
     if (check.explanation) {
         html += `<div class="explanation">${check.explanation}</div>`;
     }
 
-    // Detail items
+    // Detail items — sorted by severity within each card
     if (check.details && check.details.length > 0) {
-        check.details.forEach(d => {
-            const typeClass = {
-                error: 'fail-item',
-                warning: 'warn-item',
-                info: 'info-item',
-                good: 'pass-item'
-            }[d.type] || 'info-item';
+        const detailOrder = { error: 0, warning: 1, info: 2, good: 3 };
+        const sorted = [...check.details].sort((a, b) =>
+            (detailOrder[a.type] ?? 4) - (detailOrder[b.type] ?? 4)
+        );
 
+        sorted.forEach(d => {
+            const typeClass = {
+                error: 'fail-item', warning: 'warn-item',
+                info: 'info-item', good: 'pass-item'
+            }[d.type] || 'info-item';
             const icon = {
-                error: '&#10005;',
-                warning: '&#9888;',
-                info: '&#8250;',
-                good: '&#10003;'
+                error: '&#10005;', warning: '&#9888;',
+                info: '&#8250;', good: '&#10003;'
             }[d.type] || '&#8250;';
 
             html += `
@@ -372,11 +429,9 @@ function renderCheckBody(check) {
     return html;
 }
 
-// -- Helpers --
-function countByStatus(checks, status) {
-    if (!checks) return 0;
-    return checks.filter(c => c.status === status).length;
-}
+// ============================================================
+// Helpers
+// ============================================================
 
 function formatTimestamp(iso) {
     const d = new Date(iso);
@@ -394,143 +449,131 @@ function escapeHtml(text) {
     return div.innerHTML;
 }
 
-
-// ============================================================
 // DMARC DNS Tree Walk Visualization
-// Per draft-ietf-dmarc-dmarcbis-41, Section 4.10
 // ============================================================
 
 function renderTreeWalk(tw) {
-  // Remove any previous tree walk section
-  const existing = document.getElementById('tree-walk-section');
-  if (existing) existing.remove();
+    const existing = document.getElementById('tree-walk-section');
+    if (existing) existing.remove();
 
-  if (!tw || !tw.steps || tw.steps.length === 0) return;
+    if (!tw || !tw.steps || tw.steps.length === 0) return;
 
-  const section = document.createElement('div');
-  section.id = 'tree-walk-section';
-  section.className = 'tree-walk-section';
+    const section = document.createElement('div');
+    section.id = 'tree-walk-section';
+    section.className = 'tree-walk-section';
 
-  const policyFound = !!tw.policy_source;
-  const policyTag = tw.applied_tag || 'p';
+    const policyFound = !!tw.policy_source;
+    const policyTag = tw.applied_tag || 'p';
 
-  // Header
-  section.innerHTML = `
-    <div class="tw-header">
-      <div class="tw-header-left">
-        <svg class="tw-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" width="22" height="22">
-          <polyline points="22 12 18 12 15 21 9 3 6 12 2 12"></polyline>
-        </svg>
-        <div>
-          <div class="tw-title">DMARC Policy Discovery</div>
-          <div class="tw-subtitle">DNS Tree Walk per <a href="https://datatracker.ietf.org/doc/draft-ietf-dmarc-dmarcbis/" target="_blank" rel="noopener">dmarcbis</a> Section 4.10</div>
+    section.innerHTML = `
+        <div class="tw-header">
+            <div class="tw-header-left">
+                <svg class="tw-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" width="22" height="22">
+                    <polyline points="22 12 18 12 15 21 9 3 6 12 2 12"></polyline>
+                </svg>
+                <div>
+                    <div class="tw-title">DMARC Policy Discovery</div>
+                    <div class="tw-subtitle">DNS Tree Walk per <a href="https://datatracker.ietf.org/doc/draft-ietf-dmarc-dmarcbis/" target="_blank" rel="noopener">dmarcbis</a> Section 4.10</div>
+                </div>
+            </div>
+            <div class="tw-badge ${policyFound ? 'tw-badge-found' : 'tw-badge-none'}">
+                ${policyFound ? 'Policy Found' : 'No Policy'}
+            </div>
         </div>
-      </div>
-      <div class="tw-badge ${policyFound ? 'tw-badge-found' : 'tw-badge-none'}">
-        ${policyFound ? 'Policy Found' : 'No Policy'}
-      </div>
-    </div>
-    <div class="tw-explainer">
-      When a mail receiver gets an email from <strong>${escapeHtml(tw.domain)}</strong>, it needs to find the DMARC policy that applies.
-      It starts by querying the exact domain, then walks up the DNS hierarchy until it finds a published policy.
-    </div>
-    <div class="tw-tree" id="tw-tree"></div>
-    ${policyFound ? `
-    <div class="tw-result tw-result-found">
-      <div class="tw-result-header">
-        <div class="tw-result-dot"></div>
-        <span>Effective policy from <strong>${escapeHtml(tw.policy_source)}</strong></span>
-        <span class="tw-policy-pill tw-policy-${tw.effective_policy}">${tw.effective_policy}</span>
-      </div>
-      <div class="tw-result-details">
-        <div class="tw-result-row"><span class="tw-result-label">Applied tag:</span> <code>${policyTag}</code>${tw.is_subdomain ? ' (subdomain inherits from parent)' : ' (direct match)'}</div>
-        <div class="tw-result-row"><span class="tw-result-label">Record:</span> <code class="tw-record-code">${escapeHtml(tw.effective_record)}</code></div>
-        ${tw.psd_flag ? `<div class="tw-result-row"><span class="tw-result-label">PSD flag:</span> <code>${tw.psd_flag}</code></div>` : ''}
-      </div>
-    </div>
-    ` : `
-    <div class="tw-result tw-result-none">
-      <div class="tw-result-header">
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="18" height="18">
-          <circle cx="12" cy="12" r="10"/><line x1="15" y1="9" x2="9" y2="15"/><line x1="9" y1="9" x2="15" y2="15"/>
-        </svg>
-        <span>No DMARC policy found at any level</span>
-      </div>
-      <div class="tw-result-details">
-        Anyone can send email pretending to be from this domain. Mail receivers have no guidance on how to handle unauthenticated messages.
-      </div>
-    </div>
-    `}
-  `;
+        <div class="tw-explainer">
+            When a mail receiver gets an email from <strong>${escapeHtml(tw.domain)}</strong>, it needs to find the DMARC policy that applies.
+            It starts by querying the exact domain, then walks up the DNS hierarchy until it finds a published policy.
+        </div>
+        <div class="tw-tree" id="tw-tree"></div>
+        ${policyFound ? `
+        <div class="tw-result tw-result-found">
+            <div class="tw-result-header">
+                <div class="tw-result-dot"></div>
+                <span>Effective policy from <strong>${escapeHtml(tw.policy_source)}</strong></span>
+                <span class="tw-policy-pill tw-policy-${tw.effective_policy}">${tw.effective_policy}</span>
+            </div>
+            <div class="tw-result-details">
+                <div class="tw-result-row"><span class="tw-result-label">Applied tag:</span> <code>${policyTag}</code>${tw.is_subdomain ? ' (subdomain inherits from parent)' : ' (direct match)'}</div>
+                <div class="tw-result-row"><span class="tw-result-label">Record:</span> <code class="tw-record-code">${escapeHtml(tw.effective_record)}</code></div>
+                ${tw.psd_flag ? `<div class="tw-result-row"><span class="tw-result-label">PSD flag:</span> <code>${tw.psd_flag}</code></div>` : ''}
+            </div>
+        </div>
+        ` : `
+        <div class="tw-result tw-result-none">
+            <div class="tw-result-header">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="18" height="18">
+                    <circle cx="12" cy="12" r="10"/><line x1="15" y1="9" x2="9" y2="15"/><line x1="9" y1="9" x2="15" y2="15"/>
+                </svg>
+                <span>No DMARC policy found at any level</span>
+            </div>
+            <div class="tw-result-details">
+                Anyone can send email pretending to be from this domain. Mail receivers have no guidance on how to handle unauthenticated messages.
+            </div>
+        </div>
+        `}
+    `;
 
-  // Insert before the "Detailed Results" label
-  const resultsLabel = document.querySelector('.results-label');
-  if (resultsLabel) {
-    resultsLabel.parentNode.insertBefore(section, resultsLabel);
-  } else {
-    document.getElementById('results-section').appendChild(section);
-  }
+    const resultsLabel = document.querySelector('.results-label');
+    if (resultsLabel) {
+        resultsLabel.parentNode.insertBefore(section, resultsLabel);
+    } else {
+        document.getElementById('results-section').appendChild(section);
+    }
 
-  // Now animate the tree nodes
-  const treeContainer = document.getElementById('tw-tree');
-  animateTreeWalk(tw.steps, treeContainer, tw.policy_source);
+    const treeContainer = document.getElementById('tw-tree');
+    animateTreeWalk(tw.steps, treeContainer, tw.policy_source);
 }
 
 function animateTreeWalk(steps, container, policySource) {
-  // Build all nodes first (hidden)
-  steps.forEach((step, i) => {
-    const node = document.createElement('div');
-    node.className = 'tw-node tw-node-hidden';
-    node.dataset.index = i;
+    steps.forEach((step, i) => {
+        const node = document.createElement('div');
+        node.className = 'tw-node tw-node-hidden';
+        node.dataset.index = i;
 
-    const isMatch = step.found && step.domain === policySource;
-    const isLast = i === steps.length - 1;
+        const isMatch = step.found && step.domain === policySource;
 
-    node.innerHTML = `
-      <div class="tw-connector ${i === 0 ? 'tw-connector-first' : ''}">
-        <div class="tw-connector-line"></div>
-        <div class="tw-connector-dot ${step.found ? 'tw-dot-found' : 'tw-dot-empty'}">
-          ${step.found
-            ? '<svg viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="3" width="14" height="14"><polyline points="20 6 9 17 4 12"></polyline></svg>'
-            : '<svg viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="3" width="14" height="14"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>'
-          }
-        </div>
-      </div>
-      <div class="tw-node-body ${isMatch ? 'tw-node-match' : ''} ${step.found && !isMatch ? 'tw-node-found' : ''} ${!step.found ? 'tw-node-miss' : ''}">
-        <div class="tw-node-level">${escapeHtml(step.label)}</div>
-        <div class="tw-node-query">
-          <code>_dmarc.${escapeHtml(step.domain)}</code>
-          <span class="tw-node-status ${step.found ? 'tw-status-found' : 'tw-status-miss'}">
-            ${step.found ? 'Record found' : 'No record'}
-          </span>
-        </div>
-        ${step.found && step.record ? `
-          <div class="tw-node-record"><code>${escapeHtml(step.record.length > 80 ? step.record.substring(0, 80) + '...' : step.record)}</code></div>
-        ` : ''}
-      </div>
-    `;
+        node.innerHTML = `
+            <div class="tw-connector ${i === 0 ? 'tw-connector-first' : ''}">
+                <div class="tw-connector-line"></div>
+                <div class="tw-connector-dot ${step.found ? 'tw-dot-found' : 'tw-dot-empty'}">
+                    ${step.found
+                        ? '<svg viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="3" width="14" height="14"><polyline points="20 6 9 17 4 12"></polyline></svg>'
+                        : '<svg viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="3" width="14" height="14"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>'
+                    }
+                </div>
+            </div>
+            <div class="tw-node-body ${isMatch ? 'tw-node-match' : ''} ${step.found && !isMatch ? 'tw-node-found' : ''} ${!step.found ? 'tw-node-miss' : ''}">
+                <div class="tw-node-level">${escapeHtml(step.label)}</div>
+                <div class="tw-node-query">
+                    <code>_dmarc.${escapeHtml(step.domain)}</code>
+                    <span class="tw-node-status ${step.found ? 'tw-status-found' : 'tw-status-miss'}">
+                        ${step.found ? 'Record found' : 'No record'}
+                    </span>
+                </div>
+                ${step.found && step.record ? `
+                    <div class="tw-node-record"><code>${escapeHtml(step.record.length > 80 ? step.record.substring(0, 80) + '...' : step.record)}</code></div>
+                ` : ''}
+            </div>
+        `;
 
-    container.appendChild(node);
-  });
+        container.appendChild(node);
+    });
 
-  // Animate nodes appearing one by one
-  const nodes = container.querySelectorAll('.tw-node');
-  nodes.forEach((node, i) => {
-    setTimeout(() => {
-      node.classList.remove('tw-node-hidden');
-      node.classList.add('tw-node-entering');
-
-      // After enter animation, add the "probing" pulse
-      setTimeout(() => {
-        node.classList.remove('tw-node-entering');
-        node.classList.add('tw-node-visible');
-
-        const dot = node.querySelector('.tw-connector-dot');
-        if (dot) {
-          dot.classList.add('tw-dot-pulse');
-          setTimeout(() => dot.classList.remove('tw-dot-pulse'), 600);
-        }
-      }, 400);
-    }, i * 500);
-  });
+    const nodes = container.querySelectorAll('.tw-node');
+    nodes.forEach((node, i) => {
+        setTimeout(() => {
+            node.classList.remove('tw-node-hidden');
+            node.classList.add('tw-node-entering');
+            setTimeout(() => {
+                node.classList.remove('tw-node-entering');
+                node.classList.add('tw-node-visible');
+                const dot = node.querySelector('.tw-connector-dot');
+                if (dot) {
+                    dot.classList.add('tw-dot-pulse');
+                    setTimeout(() => dot.classList.remove('tw-dot-pulse'), 600);
+                }
+            }, 400);
+        }, i * 500);
+    });
 }
+
