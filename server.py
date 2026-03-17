@@ -114,6 +114,7 @@ def _validate_domain(domain: str) -> str:
 async def audit_domain(
     domain: str = Query(..., description="Domain to audit (e.g., example.com)"),
     selector: Optional[str] = Query(None, description="DKIM selector (e.g., google, s1)"),
+    scope: Optional[str] = Query(None, description="Audit scope: complete, email_full, dmarc, transport, dns_infra, security_scan"),
     nocache: bool = Query(False, description="Bypass cache"),
 ):
     """
