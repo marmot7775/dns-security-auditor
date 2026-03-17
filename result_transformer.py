@@ -121,6 +121,11 @@ def transform_dmarc(raw: Dict, tree_walk: Optional[Dict] = None) -> Dict:
     if inherited:
         applied_tag = tree_walk.get("applied_tag", "p")
         tag_label = {"sp": "subdomain policy (sp=)", "np": "non-existent subdomain policy (np=)", "p": "domain policy (p=)"}.get(applied_tag, f"{applied_tag}=")
+        _adoption_note = (
+            " However, policy inheritance via tree walk is a DMARCbis feature. "
+            "Receivers still using RFC 7489 may not honor it. For the strongest protection, "
+            "publish a dedicated DMARC record for this subdomain."
+        )
         if inherited_policy == "reject":
             explanation = (
                 f"This subdomain does not have its own DMARC record at "
@@ -128,6 +133,7 @@ def transform_dmarc(raw: Dict, tree_walk: Optional[Dict] = None) -> Dict:
                 f"<strong>p=reject</strong> from <strong>{inherited_source}</strong> "
                 f"via the {tag_label} tag. "
                 f"This is the gold standard. Emails that fail authentication are blocked entirely."
+                + _adoption_note
             )
         elif inherited_policy == "quarantine":
             explanation = (
@@ -136,6 +142,7 @@ def transform_dmarc(raw: Dict, tree_walk: Optional[Dict] = None) -> Dict:
                 f"<strong>p=quarantine</strong> from <strong>{inherited_source}</strong> "
                 f"via the {tag_label} tag. "
                 f"Emails that fail authentication are routed to the recipient's spam folder."
+                + _adoption_note
             )
         elif inherited_policy == "none":
             explanation = (
@@ -144,11 +151,13 @@ def transform_dmarc(raw: Dict, tree_walk: Optional[Dict] = None) -> Dict:
                 f"<strong>p=none</strong> from <strong>{inherited_source}</strong> "
                 f"via the {tag_label} tag. "
                 f"This is monitoring only. Failed emails are still delivered normally."
+                + _adoption_note
             )
         else:
             explanation = (
                 f"This subdomain inherits DMARC policy <strong>{inherited_policy}</strong> "
                 f"from <strong>{inherited_source}</strong>."
+                + _adoption_note
             )
     elif not record:
         explanation = (

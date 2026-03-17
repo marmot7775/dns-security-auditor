@@ -198,8 +198,14 @@
                 <p>Your domain gets a weighted score out of 100, which maps to a letter grade from A through F. DMARC and SPF carry the most weight because they are the foundation of email authentication. Everything else layers on top.</p>
                 <p>The score reflects how well your domain is actually protected right now. It is not a theoretical risk assessment. If your records are correctly configured and enforced, you score well. If they are missing or misconfigured, the score tells you where to focus.</p>
 
-                <h2>Standards We Follow</h2>
-                <p>All checks are based on current RFCs and best practices. The DMARC analysis implements the DMARCbis specification, including the tree walk algorithm (Section 4.10) for policy discovery, the new np= and t= tags, the psd= flag, and deprecation warnings for tags removed in DMARCbis (pct=, ri=, rf=). You can see the tree walk visualized in the audit results.</p>
+                <h2>Standards</h2>
+                <p>All checks are based on current RFCs and best practices.</p>
+
+                <p>DMARC analysis supports both the original <a href="https://www.rfc-editor.org/rfc/rfc7489" target="_blank" rel="noopener">RFC 7489</a> (2015, Informational) and the forthcoming <a href="https://datatracker.ietf.org/doc/draft-ietf-dmarc-dmarcbis/" target="_blank" rel="noopener">DMARCbis specification</a> (draft-ietf-dmarc-dmarcbis, currently in the RFC Editor Queue as a Proposed Standard). DMARCbis will officially replace RFC 7489 once published.</p>
+
+                <p>DMARCbis features supported by this tool include the tree walk algorithm (Section 4.10) for policy discovery across the domain hierarchy, the <code>np=</code> tag for non-existent subdomain policy, the <code>t=</code> tag for test mode rollout, the <code>psd=</code> flag for public suffix domains, and deprecation warnings for tags removed in DMARCbis (<code>pct=</code>, <code>ri=</code>, <code>rf=</code>). You can see the tree walk visualized in the audit results.</p>
+
+                <p><strong>A note on adoption:</strong> The new DMARCbis tags (<code>np=</code>, <code>t=</code>, <code>psd=</code>) are backward-compatible. Receivers that have not yet implemented DMARCbis will simply ignore them. However, the tree walk for policy inheritance is a receiver-side behavior. Not all receivers may have adopted it yet, so a subdomain that inherits a policy via the tree walk may not be fully protected at every receiver today.</p>
 
                 <h2>Who Built This</h2>
                 <p>I'm <a href="https://www.linkedin.com/in/neilanuskiewicz/" target="_blank" rel="noopener">Neil Anuskiewicz</a>, an email security and deliverability consultant. I built dns-audit.com because I kept running the same checks by hand for clients and figured the whole process should be one click.</p>
