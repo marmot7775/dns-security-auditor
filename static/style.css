@@ -211,7 +211,7 @@ main {
 .header-link {
     font-size: 0.82rem;
     font-weight: 600;
-    color: var(--text-secondary);
+    color: var(--primary-light);
     text-decoration: none;
     padding: 0.3rem 0.7rem;
     border-radius: 6px;
@@ -1555,13 +1555,15 @@ main {
 }
 
 .footer-link {
-    color: var(--text-secondary);
+    color: var(--primary-light);
     text-decoration: none;
+    font-weight: 500;
     transition: color var(--duration) var(--ease);
 }
 
 .footer-link:hover {
-    color: var(--primary-light);
+    color: var(--primary);
+    text-decoration: underline;
 }
 
 .footer-linkedin {

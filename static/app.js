@@ -479,7 +479,7 @@ function renderTreeWalkSimple(tw) {
     return `
         <div class="tree-walk tree-walk-simple tw-animated">
             <div class="tw-header-row">
-                <div class="tree-walk-header">DMARC Policy Discovery</div>
+                <div class="tree-walk-header">DMARC Policy Discovery (Tree Walk)</div>
                 <a class="tw-spec-badge" href="https://datatracker.ietf.org/doc/draft-ietf-dmarc-dmarcbis/"
                    target="_blank" rel="noopener">dmarcbis</a>
             </div>
@@ -509,7 +509,7 @@ function renderTreeWalkFull(tw) {
     let html = `
         <div class="tree-walk tw-animated">
             <div class="tw-header-row">
-                <div class="tree-walk-header">DMARC Policy Discovery</div>
+                <div class="tree-walk-header">DMARC Policy Discovery (Tree Walk)</div>
                 <a class="tw-spec-badge" href="${specUrl}" target="_blank" rel="noopener">dmarcbis</a>
             </div>`;
 
