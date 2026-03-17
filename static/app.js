@@ -318,6 +318,32 @@ function renderResults(data) {
     const resultsList = document.getElementById('results-list');
     resultsList.innerHTML = '';
 
+    // -- Defensive DNS callout (inserted before the results list) --
+    const existingDefensive = document.getElementById('defensive-dns-card');
+    if (existingDefensive) existingDefensive.remove();
+
+    if (data.defensive_dns) {
+        const signals = data.defensive_signals || [];
+        const signalLabels = {
+            'null_mx': 'Null MX (no inbound email)',
+            'null_spf': 'Null SPF (no outbound email)',
+            'dmarc_reject': 'DMARC reject (block spoofing)',
+        };
+        const signalHtml = signals.map(s =>
+            `<span class="defensive-signal">${escapeHtml(signalLabels[s] || s)}</span>`
+        ).join('');
+
+        const defensiveCard = document.createElement('div');
+        defensiveCard.id = 'defensive-dns-card';
+        defensiveCard.className = 'defensive-dns-card';
+        defensiveCard.innerHTML = `
+            <div class="defensive-header">Defensive DNS Detected</div>
+            <div class="defensive-body">This domain is configured to not send or receive email. The DNS records explicitly reject all email activity, which is a security best practice for non-mail domains.</div>
+            <div class="defensive-signals">${signalHtml}</div>
+        `;
+        resultsList.parentNode.insertBefore(defensiveCard, resultsList);
+    }
+
     checks.forEach((check, i) => {
         // Attach tree walk data to the DMARC check
         if ((check.name || '').toUpperCase().includes('DMARC') && data.tree_walk) {
