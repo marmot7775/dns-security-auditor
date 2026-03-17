@@ -447,24 +447,7 @@ function renderCheckBody(check) {
         html += renderTreeWalk(check._tree_walk);
     }
 
-    // Fix records — copy-paste-ready DNS records
-    if (check.fix_records && check.fix_records.length > 0) {
-        html += '<div class="fix-records">';
-        html += '<div class="fix-records-label">DNS Records to Add</div>';
-        check.fix_records.forEach(rec => {
-            html += `
-                <div class="fix-record-block">
-                    <div class="fix-record-header">
-                        <span class="fix-record-type">${escapeHtml(rec.type)}</span>
-                        <span class="fix-record-host">${escapeHtml(rec.host)}</span>
-                        <button class="copy-btn fix-record-copy">Copy</button>
-                    </div>
-                    <div class="fix-record-value">${escapeHtml(rec.value)}</div>
-                    ${rec.comment ? `<div class="fix-record-comment">${escapeHtml(rec.comment)}</div>` : ''}
-                </div>`;
-        });
-        html += '</div>';
-    }
+    // Fix records removed — too presumptuous without knowing the user's infrastructure
 
     // Fix recommendation
     if (check.fix) {
