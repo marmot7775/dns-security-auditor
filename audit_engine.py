@@ -2513,6 +2513,36 @@ def run_full_audit(domain: str, dkim_selector: Optional[str] = None) -> Dict[str
     has_mx = bool(raw_mx.get("records")) or bool(raw_mx.get("mx_details"))
     priority_fixes = _build_priority_fixes(checks, score_result, has_mx=has_mx)
 
+    # --- Detect Defensive DNS pattern ---
+    # A domain intentionally configured to not send or receive email publishes:
+    #   - Null MX (MX 0 . or no MX records at all)
+    #   - Null SPF (v=spf1 -all)
+    #   - DMARC p=reject
+    # Two or more of these signals together indicate deliberate defensive posture.
+    defensive_signals = []
+    _raw_mx = raw_results.get("mx", {})
+    _raw_spf = raw_results.get("spf", {})
+    _raw_dmarc = raw_results.get("dmarc", {})
+
+    _mx_records = _raw_mx.get("records", []) or []
+    _has_null_mx = any("0 ." in r for r in _mx_records) if _mx_records else False
+    _has_no_mx = not _mx_records
+
+    _spf_record = (_raw_spf.get("record") or "").strip().lower()
+    _has_null_spf = _spf_record in ("v=spf1 -all", "v=spf1 ~all")
+
+    _dmarc_policy = (_raw_dmarc.get("policy") or "").lower()
+    _has_dmarc_reject = _dmarc_policy == "reject"
+
+    if _has_null_mx or _has_no_mx:
+        defensive_signals.append("null_mx")
+    if _has_null_spf:
+        defensive_signals.append("null_spf")
+    if _has_dmarc_reject:
+        defensive_signals.append("dmarc_reject")
+
+    is_defensive = len(defensive_signals) >= 2
+
     # --- Assemble final response ---
     elapsed = (datetime.now() - start_time).total_seconds()
 
@@ -2528,6 +2558,8 @@ def run_full_audit(domain: str, dkim_selector: Optional[str] = None) -> Dict[str
         "priority_fixes": priority_fixes,
         "vendors": vendors,
         "tree_walk": tree_walk_result,
+        "defensive_dns": is_defensive,
+        "defensive_signals": defensive_signals,
         "errors": errors if errors else None,
     }
 

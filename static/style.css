@@ -1878,3 +1878,44 @@ main {
         font-size: 0.68rem;
     }
 }
+
+/* ============================================================
+   Defensive DNS callout card
+   ============================================================ */
+
+.defensive-dns-card {
+    background: var(--pass-bg);
+    border: 1px solid var(--pass-border);
+    border-radius: var(--radius);
+    padding: 1.15rem 1.35rem;
+    margin-bottom: 1.25rem;
+}
+
+.defensive-header {
+    font-size: 0.88rem;
+    font-weight: 700;
+    color: var(--pass);
+    margin-bottom: 0.4rem;
+}
+
+.defensive-body {
+    font-size: 0.84rem;
+    color: var(--text-secondary);
+    line-height: 1.6;
+    margin-bottom: 0.65rem;
+}
+
+.defensive-signals {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.4rem;
+}
+
+.defensive-signal {
+    font-size: 0.72rem;
+    font-weight: 600;
+    color: var(--pass);
+    background: rgba(26, 138, 106, 0.08);
+    padding: 0.25rem 0.6rem;
+    border-radius: 4px;
+}
