@@ -186,6 +186,14 @@ main {
     color: var(--primary);
 }
 
+.site-tagline {
+    font-size: 0.82rem;
+    font-weight: 500;
+    color: var(--text-tertiary);
+    letter-spacing: 0.01em;
+    white-space: nowrap;
+}
+
 /* Navigation */
 .site-nav {
     display: flex;
