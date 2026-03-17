@@ -1,0 +1,15 @@
+[Unit]
+Description=DNS Security Auditor - FastAPI Server
+After=network.target
+
+[Service]
+Type=simple
+User=marmot7
+WorkingDirectory=/home/marmot7/dns-security-auditor
+Environment="PATH=/home/marmot7/.venv/bin"
+ExecStart=/home/marmot7/.venv/bin/uvicorn server:app --host 0.0.0.0 --port 8000 --workers 2
+Restart=always
+RestartSec=3
+
+[Install]
+WantedBy=multi-user.target

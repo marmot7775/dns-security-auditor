@@ -404,6 +404,11 @@ main {
     margin-top: 0.15rem;
 }
 
+.banner-actions {
+    display: flex;
+    gap: 0.5rem;
+}
+
 .share-btn {
     display: flex;
     align-items: center;
@@ -527,6 +532,40 @@ main {
     font-size: 0.7rem;
     font-weight: 700;
     margin-top: 1px;
+}
+
+/* Results toolbar */
+.results-toolbar {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-bottom: 0.75rem;
+    margin-top: 0.5rem;
+}
+
+.results-toolbar .results-label {
+    margin: 0;
+}
+
+.toggle-all-btn {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.35rem;
+    padding: 0.35rem 0.7rem;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    font-family: var(--font-body);
+    font-size: 0.72rem;
+    font-weight: 500;
+    color: var(--text-secondary);
+    cursor: pointer;
+    transition: border-color 0.15s, color 0.15s;
+}
+
+.toggle-all-btn:hover {
+    border-color: var(--text-tertiary);
+    color: var(--text-primary);
 }
 
 /* Results list */
