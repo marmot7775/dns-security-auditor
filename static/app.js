@@ -348,7 +348,9 @@ function renderResults(data) {
 function createResultCard(check, index) {
     const card = document.createElement('div');
     // Auto-collapse: pass = collapsed, fail/warn = expanded
-    const isExpanded = check.status !== 'pass';
+    // DMARC is always expanded (important check + tree walk visualization)
+    const isDmarc = (check.name || '').toUpperCase() === 'DMARC';
+    const isExpanded = isDmarc || check.status !== 'pass';
     card.className = `result-card${isExpanded ? ' expanded' : ''}`;
     card.dataset.status = check.status;
     card.style.animationDelay = `${0.05 + index * 0.04}s`;
@@ -759,7 +761,8 @@ function escapeHtml(text) {
  */
 function sanitizeHtml(html) {
     if (!html) return '';
-    const ALLOWED_TAGS = ['strong', 'em', 'code', 'br', 'b', 'i'];
+    const ALLOWED_TAGS = ['strong', 'em', 'code', 'br', 'b', 'i', 'a'];
+    const ALLOWED_LINK_ATTRS = ['href', 'target', 'rel'];
     const tmp = document.createElement('div');
     tmp.innerHTML = html;
 
@@ -773,9 +776,12 @@ function sanitizeHtml(html) {
                     const text = document.createTextNode(child.textContent);
                     node.replaceChild(text, child);
                 } else {
-                    // Strip all attributes from allowed tags
-                    while (child.attributes.length > 0) {
-                        child.removeAttribute(child.attributes[0].name);
+                    // Strip all attributes; for <a> keep only the safe link attrs
+                    const attrsToRemove = Array.from(child.attributes)
+                        .map(a => a.name)
+                        .filter(name => tag !== 'a' || !ALLOWED_LINK_ATTRS.includes(name));
+                    for (const name of attrsToRemove) {
+                        child.removeAttribute(name);
                     }
                     clean(child);
                 }

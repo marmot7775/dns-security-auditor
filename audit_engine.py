@@ -752,7 +752,7 @@ def _raw_check_spf(domain: str) -> Dict[str, Any]:
             "error",
             "No SPF record found",
             "No SPF record tells receivers which servers can send your email.",
-            f"Add TXT record at {domain}: v=spf1 include:YOUR_PROVIDER -all",
+            f"Publish an SPF record at {domain} listing your authorized sending servers.",
         )
         return result
 
@@ -2309,21 +2309,7 @@ def run_full_audit(domain: str, dkim_selector: Optional[str] = None) -> Dict[str
         errors.append(f"DMARC: {str(e)}")
         checks.append(_error_card("DMARC", e))
 
-    # --- 2. SPF ---
-    spf_record = None
-    try:
-        raw_spf = _run_with_timeout(_raw_check_spf, domain)
-        raw_results["spf"] = raw_spf
-        spf_record = raw_spf.get("record")
-        checks.append(transform_spf(raw_spf))
-    except FuturesTimeoutError:
-        errors.append("SPF: timed out")
-        checks.append(_timeout_card("SPF"))
-    except Exception as e:
-        errors.append(f"SPF: {str(e)}")
-        checks.append(_error_card("SPF", e))
-
-    # --- 3. MX Records ---
+    # --- 2. MX Records (run before SPF so we know if domain sends mail) ---
     try:
         raw_mx = _run_with_timeout(check_mx, domain)
         raw_results["mx"] = raw_mx
@@ -2335,11 +2321,27 @@ def run_full_audit(domain: str, dkim_selector: Optional[str] = None) -> Dict[str
         errors.append(f"MX: {str(e)}")
         checks.append(_error_card("MX Records", e))
 
+    has_mx = bool(raw_results.get("mx", {}).get("records")) or bool(raw_results.get("mx", {}).get("mx_details"))
+
+    # --- 3. SPF ---
+    spf_record = None
+    try:
+        raw_spf = _run_with_timeout(_raw_check_spf, domain)
+        raw_results["spf"] = raw_spf
+        spf_record = raw_spf.get("record")
+        checks.append(transform_spf(raw_spf, has_mx=has_mx))
+    except FuturesTimeoutError:
+        errors.append("SPF: timed out")
+        checks.append(_timeout_card("SPF"))
+    except Exception as e:
+        errors.append(f"SPF: {str(e)}")
+        checks.append(_error_card("SPF", e))
+
     # --- 4. MTA-STS ---
     try:
         raw_mta_sts = _run_with_timeout(check_mta_sts, domain)
         raw_results["mta_sts"] = raw_mta_sts
-        checks.append(transform_mta_sts(raw_mta_sts, domain))
+        checks.append(transform_mta_sts(raw_mta_sts, domain, has_mx=has_mx))
     except FuturesTimeoutError:
         errors.append("MTA-STS: timed out")
         checks.append(_timeout_card("MTA-STS"))
@@ -2351,7 +2353,7 @@ def run_full_audit(domain: str, dkim_selector: Optional[str] = None) -> Dict[str
     try:
         raw_tls_rpt = _run_with_timeout(check_tls_rpt, domain)
         raw_results["tls_rpt"] = raw_tls_rpt
-        checks.append(transform_tls_rpt(raw_tls_rpt, domain))
+        checks.append(transform_tls_rpt(raw_tls_rpt, domain, has_mx=has_mx))
     except FuturesTimeoutError:
         errors.append("TLS-RPT: timed out")
         checks.append(_timeout_card("TLS-RPT"))
@@ -2363,7 +2365,7 @@ def run_full_audit(domain: str, dkim_selector: Optional[str] = None) -> Dict[str
     try:
         raw_bimi = _run_with_timeout(check_bimi, domain)
         raw_results["bimi"] = raw_bimi
-        checks.append(transform_bimi(raw_bimi, domain))
+        checks.append(transform_bimi(raw_bimi, domain, has_mx=has_mx))
     except FuturesTimeoutError:
         errors.append("BIMI: timed out")
         checks.append(_timeout_card("BIMI"))
@@ -2399,7 +2401,7 @@ def run_full_audit(domain: str, dkim_selector: Optional[str] = None) -> Dict[str
     try:
         raw_ns = _run_with_timeout(_raw_check_nameservers, domain)
         raw_results["nameservers"] = raw_ns
-        checks.append(transform_nameservers(raw_ns))
+        checks.append(transform_nameservers(raw_ns, domain))
     except FuturesTimeoutError:
         errors.append("Nameservers: timed out")
         checks.append(_timeout_card("Nameservers"))
@@ -2451,7 +2453,7 @@ def run_full_audit(domain: str, dkim_selector: Optional[str] = None) -> Dict[str
             # No selector provided — fall back to auto-discovery
             raw_dkim = _run_with_timeout(smart_dkim_check, domain, spf_record)
         raw_results["dkim"] = raw_dkim
-        checks.insert(2, transform_dkim(raw_dkim, domain))
+        checks.insert(2, transform_dkim(raw_dkim, domain, has_mx=has_mx))
     except FuturesTimeoutError:
         errors.append("DKIM: timed out")
         checks.insert(2, _timeout_card("DKIM"))

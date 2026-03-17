@@ -320,13 +320,32 @@ def transform_dmarc(raw: Dict, tree_walk: Optional[Dict] = None) -> Dict:
 # SPF
 # ============================================================
 
-def transform_spf(raw: Dict) -> Dict:
+def _is_null_spf(record: str) -> bool:
+    """Detect a null SPF record: v=spf1 -all or v=spf1 ~all with no senders.
+    This is an intentional signal meaning 'this domain does not send email.'"""
+    if not record:
+        return False
+    parts = record.strip().lower().split()
+    # v=spf1 followed by only an all mechanism, nothing else
+    if len(parts) == 2 and parts[0] == "v=spf1" and parts[1] in ("-all", "~all"):
+        return True
+    return False
+
+
+def transform_spf(raw: Dict, has_mx: bool = True) -> Dict:
     status = _map_status(raw.get("status", "error"))
     record = raw.get("record")
     pill_label = None
+    null_spf = _is_null_spf(record)
 
     # Verdict
-    if not record:
+    if null_spf:
+        verdict = "Null SPF (domain does not send email)"
+        pill_label = "No mail"
+    elif not record and not has_mx:
+        verdict = "No SPF record (no mail)"
+        pill_label = "No mail"
+    elif not record:
         verdict = "No SPF record found"
         pill_label = "Missing"
     else:
@@ -342,7 +361,21 @@ def transform_spf(raw: Dict) -> Dict:
             verdict = "SPF record configured"
 
     # Explanation
-    if not record:
+    if null_spf:
+        all_mech = raw.get("all_mechanism") or ""
+        explanation = (
+            f"This domain publishes a null SPF record (<strong>v=spf1 {all_mech}</strong>), "
+            f"which explicitly declares that no servers are authorized to send email for this domain. "
+            f"This is correct configuration for domains that do not send email."
+        )
+    elif not record and not has_mx:
+        explanation = (
+            "No SPF record found, but this domain also has no MX records, "
+            "which means it does not send or receive email. "
+            "For best practice, consider publishing a null SPF record "
+            "(<strong>v=spf1 -all</strong>) to explicitly signal that this domain does not send email."
+        )
+    elif not record:
         explanation = (
             "No SPF record found. SPF lists which mail servers are authorized to send email "
             "for your domain. Without it, receiving servers have no way to verify if a message "
@@ -390,7 +423,16 @@ def transform_spf(raw: Dict) -> Dict:
 
     # Details
     details = []
-    if record:
+    if null_spf:
+        all_mech = raw.get("all_mechanism") or ""
+        details.append({"type": "good", "text": f"Null SPF record (v=spf1 {all_mech})"})
+        details.append({"type": "good", "text": "Explicitly declares this domain does not send email"})
+        status = "pass"
+    elif not record and not has_mx:
+        details.append({"type": "info", "text": "No SPF record and no MX records"})
+        details.append({"type": "info", "text": "This domain does not appear to send or receive email"})
+        status = "warn"
+    elif record:
         lookups = raw.get("lookup_count", 0)
         if lookups <= 8:
             details.append({"type": "good", "text": f"{lookups} DNS lookups (well within the 10-lookup limit)"})
@@ -430,27 +472,48 @@ def transform_spf(raw: Dict) -> Dict:
         for issue in raw.get("issues", []):
             details.append(_issue_to_detail(issue))
 
-    fix = _first_fix(raw.get("issues", []))
-    if not fix and record:
-        all_mech = raw.get("all_mechanism") or ""
-        lookups = raw.get("lookup_count", 0)
-        if all_mech in ("?all", "+all") and lookups and lookups > 10:
-            fix = (
-                "Change the all mechanism to <strong>-all</strong> (hardfail) or <strong>~all</strong> (softfail). "
-                "Also reduce SPF lookups to 10 or fewer by flattening includes or removing unused services."
-            )
-        elif all_mech in ("?all", "+all"):
-            fix = "Change the all mechanism to <strong>-all</strong> (hardfail) or <strong>~all</strong> (softfail)."
-        elif lookups and lookups > 10:
-            fix = (
-                "Reduce SPF lookups to 10 or fewer. Options: flatten includes to direct IP addresses, "
-                "remove unused services, or use an SPF flattening tool."
-            )
+    # Fix
+    fix = None
+    if null_spf:
+        # Null SPF is correct, no fix needed
+        pass
+    elif not record and not has_mx:
+        fix = (
+            "Publish a null SPF record (<strong>v=spf1 -all</strong>) to explicitly signal "
+            "that this domain does not send email. This is a best practice that helps prevent spoofing."
+        )
+    else:
+        fix = _first_fix(raw.get("issues", []))
+        if not fix and record:
+            all_mech = raw.get("all_mechanism") or ""
+            lookups = raw.get("lookup_count", 0)
+            if all_mech in ("?all", "+all") and lookups and lookups > 10:
+                fix = (
+                    "Change the all mechanism to <strong>-all</strong> (hardfail) or <strong>~all</strong> (softfail). "
+                    "Also reduce SPF lookups to 10 or fewer by flattening includes or removing unused services."
+                )
+            elif all_mech in ("?all", "+all"):
+                fix = "Change the all mechanism to <strong>-all</strong> (hardfail) or <strong>~all</strong> (softfail)."
+            elif lookups and lookups > 10:
+                fix = (
+                    "Reduce SPF lookups to 10 or fewer. Options: flatten includes to direct IP addresses, "
+                    "remove unused services, or use an SPF flattening tool."
+                )
 
     # Fix records
     fix_records = []
     domain_name = raw.get("domain", "")
-    if not record:
+    if null_spf:
+        # Already correct, no fix records
+        pass
+    elif not record and not has_mx:
+        fix_records.append({
+            "type": "TXT",
+            "host": domain_name,
+            "value": "v=spf1 -all",
+            "comment": "Null SPF record. Declares this domain does not send email",
+        })
+    elif not record:
         fix_records.append({
             "type": "TXT",
             "host": domain_name,
@@ -494,11 +557,32 @@ def transform_spf(raw: Dict) -> Dict:
 # DKIM
 # ============================================================
 
-def transform_dkim(raw: Dict, domain: str) -> Dict:
+def transform_dkim(raw: Dict, domain: str, has_mx: bool = True) -> Dict:
     found = raw.get("found_selectors", [])
     tested = raw.get("tested_count", 0)
 
     if not found:
+        # No DKIM keys found. If the domain has no MX records it doesn't send email,
+        # so the absence of DKIM keys is expected and not actionable.
+        if not has_mx:
+            return {
+                "name": "DKIM",
+                "status": "pass",
+                "pill_label": "N/A",
+                "verdict": "No mail domain",
+                "record": None,
+                "explanation": (
+                    "This domain has no MX records, so it does not send or receive email. "
+                    "DKIM signing is not applicable."
+                ),
+                "details": [
+                    {"type": "info", "text": "No MX records - domain does not handle email"},
+                    {"type": "info", "text": "DKIM is only relevant for domains that send email"},
+                ],
+                "fix": None,
+                "fix_records": None,
+            }
+
         return {
             "name": "DKIM",
             "status": "warn",
@@ -632,17 +716,21 @@ def transform_mx(raw: Dict) -> Dict:
     if not records:
         return {
             "name": "MX Records",
-            "status": "fail",
-            "pill_label": "Missing",
+            "status": "warn",
+            "pill_label": "None",
             "verdict": "No MX records found",
             "record": None,
             "explanation": (
-                "No MX records exist for this domain. MX records tell other mail servers "
-                "where to deliver email addressed to your domain. Without them, email delivery "
-                "falls back to the domain's A record, which is unreliable."
+                "No MX records exist for this domain. If this domain is not intended to "
+                "receive email, this is expected and no action is needed. If the domain "
+                "should receive email, MX records tell other mail servers where to deliver "
+                "messages addressed to it."
             ),
             "details": [_issue_to_detail(i) for i in raw.get("issues", [])],
-            "fix": "Add at least one MX record pointing to your mail server.",
+            "fix": (
+                "If this domain should receive email, add an MX record pointing to your "
+                "mail server. If it is not meant to receive email, no action is required."
+            ),
             "fix_records": None,  # MX records depend on the user's mail infrastructure
         }
 
@@ -715,7 +803,7 @@ def transform_mx(raw: Dict) -> Dict:
 # MTA-STS
 # ============================================================
 
-def transform_mta_sts(raw: Dict, domain: str) -> Dict:
+def transform_mta_sts(raw: Dict, domain: str, has_mx: bool = True) -> Dict:
     raw_status = raw.get("status", "warning")
     status = _map_status(raw_status)
     txt_record = raw.get("txt_record")
@@ -726,6 +814,27 @@ def transform_mta_sts(raw: Dict, domain: str) -> Dict:
         status = "pass"
 
     if not txt_record:
+        # MTA-STS protects inbound delivery, so it is only relevant for domains with MX records.
+        if not has_mx:
+            return {
+                "name": "MTA-STS",
+                "status": "pass",
+                "pill_label": "N/A",
+                "verdict": "No mail domain",
+                "record": None,
+                "explanation": (
+                    "MTA-STS protects inbound email delivery by requiring TLS encryption. "
+                    "This domain has no MX records, so it does not receive email and "
+                    "MTA-STS is not applicable."
+                ),
+                "details": [
+                    {"type": "info", "text": "No MX records - domain does not receive email"},
+                    {"type": "info", "text": "MTA-STS is only relevant for domains with MX records"},
+                ],
+                "fix": None,
+                "fix_records": None,
+            }
+
         sts_id = datetime.now(timezone.utc).strftime('%Y%m%d')
         return {
             "name": "MTA-STS",
@@ -799,11 +908,33 @@ def transform_mta_sts(raw: Dict, domain: str) -> Dict:
 # TLS-RPT
 # ============================================================
 
-def transform_tls_rpt(raw: Dict, domain: str) -> Dict:
+def transform_tls_rpt(raw: Dict, domain: str, has_mx: bool = True) -> Dict:
     status = _map_status(raw.get("status", "warning"))
     record = raw.get("record")
 
     if not record:
+        # TLS-RPT reports on inbound TLS delivery issues, so it only makes sense for
+        # domains that receive email (i.e. have MX records).
+        if not has_mx:
+            return {
+                "name": "TLS-RPT",
+                "status": "pass",
+                "pill_label": "N/A",
+                "verdict": "No mail domain",
+                "record": None,
+                "explanation": (
+                    "TLS-RPT reports on TLS encryption failures during inbound email delivery. "
+                    "This domain has no MX records, so it does not receive email and "
+                    "TLS-RPT is not applicable."
+                ),
+                "details": [
+                    {"type": "info", "text": "No MX records - domain does not receive email"},
+                    {"type": "info", "text": "TLS-RPT is only relevant for domains with MX records"},
+                ],
+                "fix": None,
+                "fix_records": None,
+            }
+
         return {
             "name": "TLS-RPT",
             "status": "fail",
@@ -860,12 +991,33 @@ def transform_tls_rpt(raw: Dict, domain: str) -> Dict:
 # BIMI
 # ============================================================
 
-def transform_bimi(raw: Dict, domain: str) -> Dict:
+def transform_bimi(raw: Dict, domain: str, has_mx: bool = True) -> Dict:
     status = _map_status(raw.get("status", "info"))
     record = raw.get("record")
     records_found = raw.get("records_found", 0)
 
     if not record and records_found == 0:
+        # BIMI is an email branding feature, so it only applies to domains that send email.
+        if not has_mx:
+            return {
+                "name": "BIMI",
+                "status": "pass",
+                "pill_label": "N/A",
+                "verdict": "No mail domain",
+                "record": None,
+                "explanation": (
+                    "BIMI displays a brand logo next to emails in supporting mail clients. "
+                    "This domain has no MX records, so it does not handle email and "
+                    "BIMI is not applicable."
+                ),
+                "details": [
+                    {"type": "info", "text": "No MX records - domain does not handle email"},
+                    {"type": "info", "text": "BIMI is only relevant for domains that send email"},
+                ],
+                "fix": None,
+                "fix_records": None,
+            }
+
         # BIMI is optional, so "not found" is a soft warning, not a failure
         return {
             "name": "BIMI",
@@ -874,12 +1026,15 @@ def transform_bimi(raw: Dict, domain: str) -> Dict:
             "verdict": "No BIMI record found",
             "record": None,
             "explanation": (
-                "BIMI (Brand Indicators for Message Identification) displays your brand logo "
-                "next to emails in supporting clients like Gmail and Apple Mail. "
+                "BIMI (Brand Indicators for Message Identification) is not a security protocol. "
+                "It is a brand trust and recognition feature that displays your logo next to "
+                "emails in supporting clients like Gmail and Apple Mail, helping recipients "
+                "identify legitimate messages from your organization at a glance. "
                 "It requires DMARC enforcement (p=quarantine or p=reject) as a prerequisite."
             ),
             "details": [
-                {"type": "info", "text": "BIMI requires DMARC policy of quarantine or reject"},
+                {"type": "info", "text": "BIMI is about brand trust and recognition, not security"},
+                {"type": "info", "text": "Requires DMARC policy of quarantine or reject"},
                 {"type": "info", "text": "Gmail requires a Verified Mark Certificate (VMC) from DigiCert or Entrust"},
             ],
             "fix": (
@@ -903,7 +1058,7 @@ def transform_bimi(raw: Dict, domain: str) -> Dict:
     else:
         verdict = "Record found"
 
-    explanation = "BIMI record is published."
+    explanation = "BIMI record is published. BIMI is a brand trust and recognition feature, not a security protocol."
     if logo_url:
         explanation += " Your brand logo URL is configured."
     if vmc_url:
@@ -1310,7 +1465,15 @@ def transform_dane(raw: Dict, domain: str) -> Dict:
 # Nameservers
 # ============================================================
 
-def transform_nameservers(raw: Dict) -> Dict:
+def _is_subdomain(domain: str) -> bool:
+    """Return True if the domain appears to be a subdomain (3 or more labels)."""
+    if not domain:
+        return False
+    labels = domain.rstrip(".").split(".")
+    return len(labels) >= 3
+
+
+def transform_nameservers(raw: Dict, domain: str = "") -> Dict:
     ns_count = raw.get("ns_count", 0)
     nameservers = raw.get("nameservers", [])
     providers = raw.get("providers", [])
@@ -1319,6 +1482,25 @@ def transform_nameservers(raw: Dict) -> Dict:
     status = _map_status(raw.get("status", "ok"))
 
     if ns_count == 0:
+        if _is_subdomain(domain):
+            return {
+                "name": "Nameservers",
+                "status": "pass",
+                "pill_label": "Inherited",
+                "verdict": "Nameservers inherited from parent zone",
+                "record": None,
+                "explanation": (
+                    "This is a subdomain, so it uses the nameservers from its parent zone. "
+                    "This is normal. Subdomains do not need their own NS delegation unless "
+                    "they are a separate DNS zone."
+                ),
+                "details": [
+                    {"type": "info", "text": "Subdomain - NS records are at the parent zone level"},
+                ],
+                "fix": None,
+                "fix_records": None,
+            }
+
         details = []
         for issue in issues:
             details.append(_issue_to_detail(issue))
@@ -1700,7 +1882,7 @@ def transform_blacklist(raw: Dict, domain: str) -> Dict:
             url = DELIST_URLS.get(name)
             if url and url not in seen_urls:
                 seen_urls.add(url)
-                delist_parts.append(f"<strong>{name}</strong>: {url}")
+                delist_parts.append(f"<strong>{name}</strong>: <a href=\"{url}\" target=\"_blank\" rel=\"noopener\">{url}</a>")
         if delist_parts:
             fix = "Request delisting from each blocklist:<br>" + "<br>".join(delist_parts)
             fix += "<br><br>Investigate the root cause (compromised account, open relay, or spam complaint spike) before requesting removal."
