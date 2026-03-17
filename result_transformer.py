@@ -954,6 +954,154 @@ def transform_caa(raw: Dict, domain: str) -> Dict:
 
 
 # ============================================================
+# DANE
+# ============================================================
+
+def transform_dane(raw: Dict, domain: str) -> Dict:
+    has_tlsa = raw.get("has_tlsa", False)
+    dnssec_ok = raw.get("dnssec_validated", False)
+    mx_checked = raw.get("mx_hosts_checked", 0)
+    mx_with_tlsa = raw.get("mx_hosts_with_tlsa", 0)
+    tlsa_records = raw.get("tlsa_records", [])
+    issues = raw.get("issues", [])
+
+    # No MX hosts to check
+    if mx_checked == 0:
+        return {
+            "name": "DANE",
+            "status": "pass",
+            "pill_label": "N/A",
+            "verdict": "No MX hosts to check",
+            "record": None,
+            "explanation": (
+                "DANE (DNS-Based Authentication of Named Entities) publishes TLSA records "
+                "to let sending servers verify mail server TLS certificates via DNS. "
+                "This domain has no MX records, so there are no mail servers to protect with DANE."
+            ),
+            "details": [{"type": "info", "text": "No MX hosts — DANE check not applicable"}],
+            "fix": None,
+        }
+
+    # Has TLSA but no DNSSEC
+    if has_tlsa and not dnssec_ok:
+        details = []
+        for hr in tlsa_records:
+            if hr.get("found"):
+                for rec in hr.get("records", []):
+                    details.append({
+                        "type": "info",
+                        "text": f"{hr['mx_host']}: {rec['usage_name']}, {rec['selector_name']}, {rec['matching_type_name']}"
+                    })
+        details.append({
+            "type": "error",
+            "text": "TLSA records found but DNSSEC is not enabled — DANE is ineffective"
+        })
+        for issue in issues:
+            if "dnssec" not in (issue.get("issue") or "").lower():
+                details.append(_issue_to_detail(issue))
+
+        return {
+            "name": "DANE",
+            "status": "warn",
+            "verdict": f"TLSA found but DNSSEC missing",
+            "record": None,
+            "explanation": (
+                "DANE TLSA records are published for your MX hosts, but DNSSEC is not enabled. "
+                "Without DNSSEC, an attacker can spoof or strip TLSA records, completely defeating DANE. "
+                "RFC 7672-compliant senders will ignore these TLSA records until DNSSEC is active."
+            ),
+            "details": details,
+            "fix": "Enable DNSSEC for your domain before relying on DANE. Once DNSSEC is active, your existing TLSA records will become effective.",
+        }
+
+    # Has TLSA + DNSSEC
+    if has_tlsa and dnssec_ok:
+        details = []
+        for hr in tlsa_records:
+            if hr.get("found"):
+                for rec in hr.get("records", []):
+                    details.append({
+                        "type": "good",
+                        "text": f"{hr['mx_host']}: {rec['usage_name']}, {rec['selector_name']}, {rec['matching_type_name']}"
+                    })
+            elif hr.get("error"):
+                details.append({"type": "warning", "text": f"{hr['mx_host']}: {hr['error']}"})
+
+        if mx_with_tlsa == mx_checked:
+            details.append({"type": "good", "text": f"All {mx_checked} MX host{'s' if mx_checked != 1 else ''} have TLSA records"})
+        else:
+            missing = [h["mx_host"] for h in tlsa_records if not h["found"] and not h.get("error")]
+            if missing:
+                details.append({"type": "warning", "text": f"Missing DANE on: {', '.join(missing)}"})
+
+        details.append({"type": "good", "text": "DNSSEC is enabled — DANE chain of trust is valid"})
+
+        for issue in issues:
+            details.append(_issue_to_detail(issue))
+
+        status = "pass"
+        if any(i.get("severity") == "warning" for i in issues) or mx_with_tlsa < mx_checked:
+            status = "warn"
+
+        verdict = f"DANE-protected ({mx_with_tlsa}/{mx_checked} MX hosts)"
+        fix = _first_fix(issues)
+        if not fix and mx_with_tlsa < mx_checked:
+            missing = [h["mx_host"] for h in tlsa_records if not h["found"]]
+            fix = f"Add TLSA records for: {', '.join(missing)}"
+
+        return {
+            "name": "DANE",
+            "status": status,
+            "verdict": verdict,
+            "record": None,
+            "explanation": (
+                "DANE is configured and secured with DNSSEC. Sending mail servers that support "
+                "DANE can verify your mail server's TLS certificate through DNS, preventing "
+                "man-in-the-middle attacks even if a Certificate Authority is compromised."
+            ),
+            "details": details,
+            "fix": fix,
+        }
+
+    # No TLSA, has MX
+    details = [
+        {"type": "warning", "text": f"Checked {mx_checked} MX host{'s' if mx_checked != 1 else ''} — no TLSA records found"},
+    ]
+    if dnssec_ok:
+        details.append({"type": "good", "text": "DNSSEC is enabled — ready for DANE deployment"})
+    else:
+        details.append({"type": "info", "text": "DNSSEC is also required for DANE to work"})
+
+    for issue in issues:
+        details.append(_issue_to_detail(issue))
+
+    # Build example TLSA record using first MX host
+    example_host = tlsa_records[0]["mx_host"] if tlsa_records else "mail.example.com"
+    fix = (
+        f"Publish a TLSA record for each MX host. Example for {example_host}:<br>"
+        f"<strong>_25._tcp.{example_host}</strong> IN TLSA <strong>3 1 1 &lt;SHA-256 hash of server certificate SPKI&gt;</strong><br><br>"
+        f"Usage 3 (DANE-EE), selector 1 (SPKI), matching type 1 (SHA-256) is the recommended configuration per RFC 7672."
+    )
+    if not dnssec_ok:
+        fix += " <strong>Note:</strong> Enable DNSSEC first — DANE requires it."
+
+    return {
+        "name": "DANE",
+        "status": "warn",
+        "pill_label": "Not configured",
+        "verdict": "No DANE TLSA records",
+        "record": None,
+        "explanation": (
+            "DANE (DNS-Based Authentication of Named Entities) uses TLSA records to let sending "
+            "mail servers verify your mail server's TLS certificate through DNS. This provides "
+            "stronger security than relying on Certificate Authorities alone, and complements MTA-STS."
+        ),
+        "details": details,
+        "fix": fix,
+    }
+
+
+# ============================================================
 # Nameservers
 # ============================================================
 
