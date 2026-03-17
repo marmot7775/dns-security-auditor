@@ -112,6 +112,19 @@ RATE_LIMIT_MAX = 10       # max requests
 RATE_LIMIT_WINDOW = 60    # per 60 seconds
 
 
+def _get_client_ip(request: Request) -> str:
+    """Get real client IP behind Cloudflare/reverse proxy."""
+    # Cloudflare sets CF-Connecting-IP to the real visitor IP
+    cf_ip = request.headers.get("CF-Connecting-IP")
+    if cf_ip:
+        return cf_ip.strip()
+    # Standard proxy header (first IP in chain is the client)
+    xff = request.headers.get("X-Forwarded-For")
+    if xff:
+        return xff.split(",")[0].strip()
+    return request.client.host if request.client else "unknown"
+
+
 def _check_rate_limit(client_ip: str) -> bool:
     """Return True if the request is allowed, False if rate-limited."""
     now = time.time()
@@ -178,7 +191,7 @@ def _validate_domain(domain: str) -> str:
     d = domain.strip().lower()
     if "@" in d:
         d = d.split("@")[-1]
-    d = d.replace("http://", "").replace("https://", "").replace("www.", "")
+    d = d.removeprefix("http://").removeprefix("https://").removeprefix("www.")
     d = d.split("/")[0].split("?")[0].rstrip(".")
 
     if not d:
@@ -218,7 +231,7 @@ async def audit_domain(
     - Detected email vendors
     """
     # Rate limiting
-    client_ip = request.client.host if request.client else "unknown"
+    client_ip = _get_client_ip(request)
     if not _check_rate_limit(client_ip):
         return JSONResponse(
             status_code=429,
@@ -278,7 +291,7 @@ async def audit_pdf(
     Reuses cached audit data when available; otherwise runs a fresh audit.
     """
     # Rate limiting (shared with /api/audit)
-    client_ip = request.client.host if request.client else "unknown"
+    client_ip = _get_client_ip(request)
     if not _check_rate_limit(client_ip):
         return JSONResponse(
             status_code=429,
