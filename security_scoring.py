@@ -177,7 +177,7 @@ class EmailSecurityScorer:
             score += 12  # Best
             details['policy'] = 'reject (excellent)'
         elif policy == 'quarantine':
-            score += 8   # Good
+            score += 11  # Nearly as strong as reject
             details['policy'] = 'quarantine (good)'
         elif policy == 'none':
             score += 3   # Monitoring only
