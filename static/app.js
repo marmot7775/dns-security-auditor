@@ -38,6 +38,18 @@ document.querySelectorAll('.scope-btn').forEach(btn => {
     });
 });
 
+// -- DKIM selector toggle --
+document.getElementById('selector-toggle').addEventListener('click', (e) => {
+    e.preventDefault();
+    const field = document.getElementById('selector-field');
+    const toggle = document.getElementById('selector-toggle');
+    field.classList.toggle('visible');
+    toggle.classList.toggle('active');
+    if (field.classList.contains('visible')) {
+        document.getElementById('selector-input').focus();
+    }
+});
+
 // -- Check URL for domain parameter on load --
 document.addEventListener('DOMContentLoaded', () => {
     const params = new URLSearchParams(window.location.search);

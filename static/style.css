@@ -292,6 +292,42 @@ main {
     flex: 0.6;
 }
 
+.selector-toggle-row {
+    margin-top: 0.6rem;
+    text-align: left;
+}
+
+.selector-toggle {
+    font-size: 0.78rem;
+    color: var(--text-tertiary);
+    text-decoration: none;
+    cursor: pointer;
+    transition: color var(--duration) var(--ease);
+}
+
+.selector-toggle:hover {
+    color: var(--primary-light);
+}
+
+.selector-toggle.active {
+    color: var(--primary-light);
+}
+
+.selector-field {
+    display: none;
+    margin-top: 0.5rem;
+}
+
+.selector-field.visible {
+    display: block;
+}
+
+.selector-input {
+    max-width: 280px;
+    font-size: 0.85rem;
+    padding-left: 0.85rem;
+}
+
 .input-icon {
     position: absolute;
     left: 0.9rem;

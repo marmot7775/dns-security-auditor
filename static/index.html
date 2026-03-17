@@ -19,7 +19,7 @@
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,400;0,9..40,500;0,9..40,600;0,9..40,700;1,9..40,400&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
-    <link rel="stylesheet" href="/static/style.css?v=4053fd5">
+    <link rel="stylesheet" href="/static/style.css?v=a49f743">
     <script type="application/ld+json">
     {
         "@context": "https://schema.org",
@@ -112,12 +112,6 @@
                             </svg>
                             <input type="text" id="domain-input" class="domain-input" placeholder="example.com" autocomplete="off" spellcheck="false" autofocus required aria-label="Domain name to audit" />
                         </div>
-                        <div class="input-wrapper selector-wrapper">
-                            <svg class="input-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                                <rect x="3" y="11" width="18" height="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/>
-                            </svg>
-                            <input type="text" id="selector-input" class="domain-input" placeholder="DKIM selector (optional)" autocomplete="off" spellcheck="false" title="The s= value from a DKIM-Signature email header. Leave blank to auto-detect from common selectors." aria-label="DKIM selector (optional)" />
-                        </div>
                         <button type="submit" id="audit-btn" class="audit-btn">
                             <span class="btn-text">Run Audit</span>
                             <span class="btn-loading">
@@ -125,6 +119,12 @@
                                 Auditing...
                             </span>
                         </button>
+                    </div>
+                    <div class="selector-toggle-row">
+                        <a href="#" class="selector-toggle" id="selector-toggle">Have a DKIM selector?</a>
+                        <div class="selector-field" id="selector-field">
+                            <input type="text" id="selector-input" class="domain-input selector-input" placeholder="e.g. google, s1, selector1" autocomplete="off" spellcheck="false" title="The s= value from a DKIM-Signature email header" aria-label="DKIM selector" />
+                        </div>
                     </div>
                 </form>
             </div>
@@ -233,7 +233,7 @@
         </div>
     </footer>
 
-    <script src="/static/app.js?v=4053fd5"></script>
+    <script src="/static/app.js?v=a49f743"></script>
 </body>
 </html>
 
