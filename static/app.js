@@ -127,8 +127,7 @@ function showLoading() {
     `;
     resultsSection.style.display = 'none';
     auditBtn.disabled = true;
-    auditBtn.querySelector('.btn-text').style.display = 'none';
-    auditBtn.querySelector('.btn-loading').style.display = 'flex';
+    auditBtn.classList.add('is-loading');
 
     const bar    = document.getElementById('loading-bar');
     const status = document.getElementById('loading-status');
@@ -147,8 +146,7 @@ function showLoading() {
 function hideLoading() {
     loadingSection.style.display = 'none';
     auditBtn.disabled = false;
-    auditBtn.querySelector('.btn-text').style.display = 'inline';
-    auditBtn.querySelector('.btn-loading').style.display = 'none';
+    auditBtn.classList.remove('is-loading');
     if (window._loadingInterval) clearInterval(window._loadingInterval);
 }
 
@@ -160,14 +158,11 @@ function showError(message) {
     loadingSection.style.display = 'block';
     const card = loadingSection.querySelector('.loading-card');
     card.innerHTML = `
-        <div style="color: var(--fail); font-weight: 600; margin-bottom: 0.35rem;">Audit Failed</div>
-        <div style="color: var(--text-secondary); font-size: 0.88rem;">${escapeHtml(message)}</div>
-        <button onclick="location.reload()" style="
-            margin-top: 0.75rem; padding: 0.5rem 1rem; background: var(--primary);
-            color: white; border: none; border-radius: var(--radius); cursor: pointer;
-            font-family: var(--font-body); font-size: 0.85rem; font-weight: 600;
-        ">Try Again</button>
+        <div class="error-title">Audit Failed</div>
+        <div class="error-message">${escapeHtml(message)}</div>
+        <button class="error-retry" id="retry-btn">Try Again</button>
     `;
+    document.getElementById('retry-btn').addEventListener('click', () => location.reload());
 }
 
 // ============================================================
@@ -249,7 +244,7 @@ function renderResults(data) {
         if (!scoreEl) {
             scoreEl = document.createElement('div');
             scoreEl.id = 'summary-score';
-            scoreEl.style.cssText = 'font-size:0.82rem;color:var(--text-secondary);font-weight:500;margin-top:0.15rem;';
+            scoreEl.className = 'score-subtext';
             gradeEl.parentNode.insertBefore(scoreEl, gradeEl.nextSibling);
         }
         scoreEl.textContent = Math.round(scoreNum) + ' / 100';
