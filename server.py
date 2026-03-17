@@ -2,6 +2,8 @@
 DNS Security Auditor - FastAPI Server
 ======================================
 GET  /api/audit?domain=example.com  -- run full audit
+GET  /api/health                     -- health check
+GET  /docs                           -- interactive API docs
 GET  /                               -- serve frontend
 GET  /static/*                       -- serve static assets
 
@@ -9,6 +11,7 @@ Usage:
     uvicorn server:app --host 0.0.0.0 --port 8000
 """
 
+import logging
 import re
 import time
 from collections import defaultdict
@@ -19,8 +22,21 @@ from fastapi import FastAPI, Query, HTTPException, Request
 from fastapi.staticfiles import StaticFiles
 from fastapi.responses import FileResponse, JSONResponse
 from fastapi.middleware.cors import CORSMiddleware
+from starlette.middleware.base import BaseHTTPMiddleware
 
 from audit_engine import run_full_audit
+
+
+# ============================================================
+# Logging
+# ============================================================
+
+logging.basicConfig(
+    level=logging.INFO,
+    format="%(asctime)s  %(levelname)-8s  %(message)s",
+    datefmt="%Y-%m-%d %H:%M:%S",
+)
+log = logging.getLogger("dns-auditor")
 
 
 # ============================================================
@@ -29,8 +45,13 @@ from audit_engine import run_full_audit
 
 app = FastAPI(
     title="DNS Security Auditor",
-    description="Comprehensive DNS and email security auditing",
-    version="1.0.0",
+    description=(
+        "Comprehensive DNS and email security auditing API. "
+        "Checks DMARC, SPF, DKIM, MX, MTA-STS, TLS-RPT, BIMI, DNSSEC, CAA, and Nameservers."
+    ),
+    version="2.0.0",
+    docs_url="/docs",
+    redoc_url="/redoc",
 )
 
 app.add_middleware(
@@ -44,6 +65,25 @@ app.add_middleware(
     allow_methods=["GET"],
     allow_headers=["*"],
 )
+
+
+# ============================================================
+# Security headers middleware
+# ============================================================
+
+class SecurityHeadersMiddleware(BaseHTTPMiddleware):
+    async def dispatch(self, request: Request, call_next):
+        response = await call_next(request)
+        response.headers["X-Content-Type-Options"] = "nosniff"
+        response.headers["X-Frame-Options"] = "DENY"
+        response.headers["X-XSS-Protection"] = "1; mode=block"
+        response.headers["Referrer-Policy"] = "strict-origin-when-cross-origin"
+        response.headers["Permissions-Policy"] = "camera=(), microphone=(), geolocation=()"
+        if request.url.path.startswith("/api/"):
+            response.headers["Cache-Control"] = "no-store"
+        return response
+
+app.add_middleware(SecurityHeadersMiddleware)
 
 
 # ============================================================
@@ -143,7 +183,7 @@ def _validate_domain(domain: str) -> str:
 # API Endpoint
 # ============================================================
 
-@app.get("/api/audit")
+@app.get("/api/audit", tags=["Audit"])
 async def audit_domain(
     request: Request,
     domain: str = Query(..., description="Domain to audit (e.g., example.com)"),
@@ -163,27 +203,35 @@ async def audit_domain(
     # Rate limiting
     client_ip = request.client.host if request.client else "unknown"
     if not _check_rate_limit(client_ip):
-        raise HTTPException(
+        return JSONResponse(
             status_code=429,
-            detail="Rate limit exceeded. Please wait a minute before trying again.",
+            content={"detail": "Rate limit exceeded. Please wait a minute before trying again."},
+            headers={"Retry-After": str(RATE_LIMIT_WINDOW)},
         )
 
     domain = _validate_domain(domain)
+    log.info("Audit requested: %s (scope=%s, ip=%s)", domain, scope or "complete", client_ip)
 
     # Check cache
     if not nocache:
         cached = _get_cached(domain)
         if cached:
+            log.info("Cache hit: %s", domain)
             return JSONResponse(content=cached)
 
     # Run audit
+    start = time.time()
     try:
         result = run_full_audit(domain, dkim_selector=selector)
     except Exception as e:
+        log.error("Audit failed for %s: %s", domain, str(e)[:200])
         raise HTTPException(
             status_code=500,
             detail=f"Audit failed: {str(e)[:200]}",
         )
+
+    elapsed = round(time.time() - start, 2)
+    log.info("Audit complete: %s — %.2fs, grade=%s", domain, elapsed, result.get("score", {}).get("grade", "?"))
 
     # Cache result
     _set_cached(domain, result)
@@ -195,9 +243,18 @@ async def audit_domain(
 # Health check
 # ============================================================
 
-@app.get("/api/health")
+@app.get("/api/health", tags=["System"])
 async def health():
-    return {"status": "ok", "cache_size": len(_cache)}
+    """Health check endpoint for monitoring."""
+    return {
+        "status": "ok",
+        "version": "2.0.0",
+        "cache_size": len(_cache),
+        "checks": [
+            "DMARC", "SPF", "DKIM", "MX", "MTA-STS",
+            "TLS-RPT", "BIMI", "DNSSEC", "CAA", "Nameservers",
+        ],
+    }
 
 
 # ============================================================

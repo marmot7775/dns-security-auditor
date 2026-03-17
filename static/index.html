@@ -4,7 +4,18 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>DNS Security Auditor | dns-audit.com</title>
-    <meta name="description" content="Professional DNS and email security auditing. Check your domain's DMARC, SPF, DKIM, MTA-STS, BIMI, and more.">
+    <meta name="description" content="Free DNS and email security auditing. Check your domain's DMARC, SPF, DKIM, MTA-STS, TLS-RPT, BIMI, DNSSEC, CAA, and more. Get a security grade and actionable fixes.">
+    <meta name="keywords" content="DNS audit, DMARC check, SPF validator, DKIM checker, email security, MTA-STS, BIMI, DNSSEC, domain security">
+    <meta name="author" content="Neil Anuskiewicz">
+    <meta property="og:title" content="DNS Security Auditor | dns-audit.com">
+    <meta property="og:description" content="Free comprehensive DNS and email security audit. DMARC, SPF, DKIM, DNSSEC, and 10+ checks with actionable fixes.">
+    <meta property="og:type" content="website">
+    <meta property="og:url" content="https://dns-audit.com">
+    <meta name="twitter:card" content="summary">
+    <meta name="twitter:title" content="DNS Security Auditor">
+    <meta name="twitter:description" content="Free DNS and email security audit with security grade and actionable fixes.">
+    <link rel="canonical" href="https://dns-audit.com">
+    <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><rect rx='20' width='100' height='100' fill='%230a3d6b'/><text x='50' y='68' font-size='55' text-anchor='middle' fill='white' font-family='sans-serif' font-weight='bold'>A</text></svg>">
     <link href="https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,400;0,9..40,500;0,9..40,600;0,9..40,700;1,9..40,400&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="/static/style.css">
 </head>
@@ -107,13 +118,21 @@
                     <div class="domain-name" id="result-domain"></div>
                     <div class="audit-timestamp" id="result-timestamp"></div>
                 </div>
-                <button class="share-btn" id="share-btn" title="Copy shareable link">
-                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" width="16" height="16">
-                        <path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/>
-                        <path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/>
-                    </svg>
-                    <span>Share</span>
-                </button>
+                <div class="banner-actions">
+                    <button class="share-btn" id="export-btn" title="Download audit as JSON">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" width="16" height="16">
+                            <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/>
+                        </svg>
+                        <span>Export</span>
+                    </button>
+                    <button class="share-btn" id="share-btn" title="Copy shareable link">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" width="16" height="16">
+                            <path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/>
+                            <path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/>
+                        </svg>
+                        <span>Share</span>
+                    </button>
+                </div>
             </div>
             <div class="summary-grid" id="summary-grid">
                 <div class="summary-card grade-card">
@@ -143,7 +162,15 @@
                 </div>
                 <div class="priority-list" id="priority-list"></div>
             </div>
-            <div class="results-label">Detailed Results</div>
+            <div class="results-toolbar">
+                <div class="results-label">Detailed Results</div>
+                <button class="toggle-all-btn" id="toggle-all-btn" title="Expand or collapse all results">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" width="14" height="14">
+                        <polyline points="15 3 21 3 21 9"/><polyline points="9 21 3 21 3 15"/><line x1="21" y1="3" x2="14" y2="10"/><line x1="3" y1="21" x2="10" y2="14"/>
+                    </svg>
+                    <span>Expand All</span>
+                </button>
+            </div>
             <div class="results-list" id="results-list"></div>
             <div class="vendors-section" id="vendors-section" style="display:none;">
                 <div class="results-label">Detected Email Services</div>
@@ -173,4 +200,5 @@
 
     <script src="/static/app.js"></script>
 </body>
-    </html>
+</html>
+

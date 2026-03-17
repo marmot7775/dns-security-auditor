@@ -19,6 +19,7 @@ const SCOPE_CHECKS = {
 const SEVERITY_ORDER = { fail: 0, warn: 1, pass: 2 };
 
 let currentScope = 'complete';
+let lastAuditData = null;
 
 // -- DOM References --
 const auditForm      = document.getElementById('audit-form');
@@ -174,6 +175,8 @@ function showError(message) {
 // ============================================================
 
 function renderResults(data) {
+    lastAuditData = data;
+
     // Finish loading animation
     const bar = document.getElementById('loading-bar');
     const status = document.getElementById('loading-status');
@@ -423,6 +426,40 @@ function renderCheckBody(check) {
 
     return html;
 }
+
+// ============================================================
+// Export JSON
+// ============================================================
+
+document.getElementById('export-btn').addEventListener('click', () => {
+    if (!lastAuditData) return;
+    const blob = new Blob([JSON.stringify(lastAuditData, null, 2)], { type: 'application/json' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `dns-audit-${lastAuditData.domain || 'report'}.json`;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+});
+
+// ============================================================
+// Expand All / Collapse All
+// ============================================================
+
+(() => {
+    const toggleBtn = document.getElementById('toggle-all-btn');
+    let allExpanded = false;
+
+    toggleBtn.addEventListener('click', () => {
+        allExpanded = !allExpanded;
+        document.querySelectorAll('.result-card').forEach(card => {
+            card.classList.toggle('expanded', allExpanded);
+        });
+        toggleBtn.querySelector('span').textContent = allExpanded ? 'Collapse All' : 'Expand All';
+    });
+})();
 
 // ============================================================
 // Helpers
