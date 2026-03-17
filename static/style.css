@@ -12,26 +12,26 @@
     --primary-subtle: #e8f0f8;
     --primary-border: #b0c8e0;
 
-    /* Neutrals - warm, not clinical */
-    --bg: #f6f6f3;
+    /* Neutrals - warm, inviting, not clinical */
+    --bg: #f7f7f4;
     --surface: #ffffff;
-    --border: #dededa;
-    --border-light: #ececeb;
+    --border: #ddddd9;
+    --border-light: #ededec;
     --text-primary: #1a1a1a;
     --text-secondary: #4d4d4d;
     --text-tertiary: #7d7d7d;
     --text-inverse: #ffffff;
 
-    /* Status - muted for sophistication, not alarming */
-    --pass: #147a47;
-    --pass-bg: #eef8f1;
-    --pass-border: #bce0c9;
-    --warn: #8a6000;
-    --warn-bg: #fdf7e8;
-    --warn-border: #e8d494;
-    --fail: #b32030;
-    --fail-bg: #fdf0f0;
-    --fail-border: #e4bcbf;
+    /* Status - muted, professional, never alarming */
+    --pass: #1a7d4b;
+    --pass-bg: #f0f8f2;
+    --pass-border: #c2e2cd;
+    --warn: #8a6d14;
+    --warn-bg: #fdf8ec;
+    --warn-border: #e8d89e;
+    --fail: #a63a42;
+    --fail-bg: #fdf2f2;
+    --fail-border: #e4c4c7;
 
     /* Fix/recommendation block */
     --fix-bg: #eef3f9;
@@ -43,19 +43,19 @@
 
     /* Layout */
     --max-width: 780px;
-    --radius: 8px;
-    --radius-lg: 10px;
+    --radius: 10px;
+    --radius-lg: 12px;
 
-    /* Shadows - layered, warm */
-    --shadow-sm: 0 1px 2px rgba(0,0,0,0.04), 0 1px 4px rgba(0,0,0,0.03);
-    --shadow-md: 0 1px 3px rgba(0,0,0,0.05), 0 4px 16px rgba(0,0,0,0.04);
-    --shadow-lg: 0 2px 8px rgba(0,0,0,0.05), 0 12px 32px rgba(0,0,0,0.06);
+    /* Shadows - soft, diffuse, warm */
+    --shadow-sm: 0 1px 3px rgba(0,0,0,0.03), 0 1px 6px rgba(0,0,0,0.02);
+    --shadow-md: 0 2px 4px rgba(0,0,0,0.03), 0 6px 20px rgba(0,0,0,0.035);
+    --shadow-lg: 0 2px 10px rgba(0,0,0,0.04), 0 14px 36px rgba(0,0,0,0.05);
 
-    /* Motion - deliberate, never frantic */
+    /* Motion - deliberate, unhurried */
     --ease: cubic-bezier(0.25, 0.1, 0.25, 1);
     --ease-out: cubic-bezier(0.16, 1, 0.3, 1);
-    --duration: 0.2s;
-    --duration-slow: 0.35s;
+    --duration: 0.22s;
+    --duration-slow: 0.4s;
 }
 
 /* -- Reset -- */
@@ -199,8 +199,8 @@ main {
 
 .audit-input-card {
     background: var(--surface);
-    border-radius: 12px;
-    padding: 2.75rem 2.75rem 2.5rem;
+    border-radius: 14px;
+    padding: 2.85rem 2.85rem 2.6rem;
     box-shadow: var(--shadow-lg);
     border: 1px solid var(--border-light);
     position: relative;
