@@ -260,6 +260,7 @@ def _validate_mta_sts_policy(policy_text: str, domain: str) -> Tuple[Dict[str, A
             parts = mx_rec.split(None, 1)
             if len(parts) == 2:
                 actual_mx_hosts.append(parts[1].rstrip(".").lower())
+        unmatched_patterns = []
         for pattern in policy["mx_patterns"]:
             pattern_lower = pattern.lower().rstrip(".")
             matched = False
@@ -273,14 +274,17 @@ def _validate_mta_sts_policy(policy_text: str, domain: str) -> Tuple[Dict[str, A
                     if mx_host == pattern_lower:
                         matched = True
                         break
-            if not matched and actual_mx_hosts:
-                issues.append(_make_issue(
-                    "warning",
-                    f"MTA-STS mx pattern '{pattern}' doesn't match any actual MX record",
-                    f"Actual MX records are: {', '.join(actual_mx_hosts)}.",
-                    "Potential mail delivery failure.",
-                    "Update the mx line to match your actual MX hostnames.",
-                ))
+            if not matched:
+                unmatched_patterns.append(pattern)
+        if unmatched_patterns and actual_mx_hosts:
+            patterns_str = ", ".join(f"'{p}'" for p in unmatched_patterns)
+            issues.append(_make_issue(
+                "warning",
+                f"MTA-STS mx pattern{'s' if len(unmatched_patterns) > 1 else ''} {patterns_str} {'do' if len(unmatched_patterns) > 1 else 'does'}n't match actual MX records",
+                f"Actual MX records are: {', '.join(actual_mx_hosts)}.",
+                "Potential mail delivery failure.",
+                "Update the mx lines to match your actual MX hostnames.",
+            ))
 
     return policy, issues
 

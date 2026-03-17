@@ -214,9 +214,14 @@ def transform_spf(raw: Dict) -> Dict:
         verdict = "No SPF record found"
         pill_label = "Missing"
     else:
-        all_mech = raw.get("all_mechanism", "")
+        all_mech = raw.get("all_mechanism") or ""
+        lookups = raw.get("lookup_count", 0)
         if all_mech == "+all":
             verdict = "SPF misconfigured (+all)"
+        elif lookups > 10:
+            verdict = f"SPF over lookup limit ({lookups}/10)"
+        elif not all_mech:
+            verdict = "SPF record configured (no all mechanism)"
         else:
             verdict = "SPF record configured"
 
@@ -228,7 +233,7 @@ def transform_spf(raw: Dict) -> Dict:
             "actually came from your mail infrastructure."
         )
     else:
-        all_mech = raw.get("all_mechanism", "")
+        all_mech = raw.get("all_mechanism") or ""
         lookups = raw.get("lookup_count", 0)
 
         if all_mech == "-all":
@@ -252,6 +257,11 @@ def transform_spf(raw: Dict) -> Dict:
                 "<strong>WARNING:</strong> SPF record uses <strong>+all</strong>, which authorizes "
                 "the entire internet to send email as your domain. This is almost certainly a misconfiguration."
             )
+        elif not all_mech:
+            explanation = (
+                "SPF record uses a <strong>redirect</strong> modifier instead of an explicit "
+                "<strong>all</strong> mechanism. The SPF evaluation is delegated to another domain's record."
+            )
         else:
             explanation = "SPF record found."
 
@@ -273,7 +283,7 @@ def transform_spf(raw: Dict) -> Dict:
         else:
             details.append({"type": "error", "text": f"{lookups} DNS lookups (EXCEEDS the 10-lookup limit!)"})
 
-        all_mech = raw.get("all_mechanism", "")
+        all_mech = raw.get("all_mechanism") or ""
         if all_mech == "-all":
             details.append({"type": "good", "text": "-all (hardfail) \u2014 unauthorized servers are rejected"})
         elif all_mech == "~all":
@@ -306,7 +316,7 @@ def transform_spf(raw: Dict) -> Dict:
 
     fix = _first_fix(raw.get("issues", []))
     if not fix and record:
-        all_mech = raw.get("all_mechanism", "")
+        all_mech = raw.get("all_mechanism") or ""
         lookups = raw.get("lookup_count", 0)
         if all_mech in ("?all", "+all") and lookups and lookups > 10:
             fix = (
@@ -486,11 +496,14 @@ def transform_mx(raw: Dict) -> Dict:
             "fix": "Add at least one MX record pointing to your mail server.",
         }
 
-    # Verdict — one piece of data only
-    if providers:
-        verdict = ", ".join(providers)
+    # Verdict — meaningful at a glance
+    provider_str = ", ".join(providers) if providers else ""
+    if count == 1:
+        verdict = f"Single MX host{' — ' + provider_str if provider_str else ''}"
+    elif provider_str:
+        verdict = provider_str
     else:
-        verdict = f"{count} host{'s' if count != 1 else ''}"
+        verdict = f"{count} hosts"
 
     # Record display (all MX records)
     record = "\n".join(records)

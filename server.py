@@ -92,6 +92,9 @@ class SecurityHeadersMiddleware(BaseHTTPMiddleware):
         response.headers["Content-Security-Policy"] = self.CSP
         if request.url.path.startswith("/api/"):
             response.headers["Cache-Control"] = "no-store"
+        elif request.url.path in ("/", "/index.html"):
+            # Don't let Cloudflare cache the HTML — cache-bust params need to reach the browser
+            response.headers["Cache-Control"] = "no-cache, must-revalidate"
         return response
 
 app.add_middleware(SecurityHeadersMiddleware)
