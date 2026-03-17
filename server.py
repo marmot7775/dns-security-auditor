@@ -15,6 +15,7 @@ import logging
 import re
 import time
 from collections import defaultdict
+from datetime import datetime
 from pathlib import Path
 from typing import Optional
 
@@ -238,11 +239,17 @@ async def audit_domain(
     try:
         result = run_full_audit(domain, dkim_selector=selector)
     except Exception as e:
-        log.error("Audit failed for %s: %s", domain, str(e)[:200])
-        raise HTTPException(
-            status_code=500,
-            detail=f"Audit failed: {str(e)[:200]}",
-        )
+        log.error("Audit failed for %s: %s", domain, str(e)[:200], exc_info=True)
+        # Return a minimal error result instead of a 500 so the frontend can show something
+        result = {
+            "domain": domain,
+            "timestamp": datetime.now().isoformat(),
+            "score": {"total": 0, "grade": "?"},
+            "checks": [],
+            "priority_fixes": [],
+            "vendors": [],
+            "error": f"Audit could not complete: {str(e)[:200]}",
+        }
 
     elapsed = round(time.time() - start, 2)
     log.info("Audit complete: %s — %.2fs, grade=%s", domain, elapsed, result.get("score", {}).get("grade", "?"))

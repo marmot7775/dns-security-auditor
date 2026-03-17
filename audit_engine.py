@@ -7,10 +7,17 @@ Assembles results for the security scorer and transforms everything
 into the frontend's expected format.
 """
 
+import logging
 import re
 import traceback
+from concurrent.futures import ThreadPoolExecutor, TimeoutError as FuturesTimeoutError
 from datetime import datetime
 from typing import Any, Dict, List, Optional
+
+log = logging.getLogger(__name__)
+
+# Per-check timeout in seconds (prevents hung DNS queries from blocking the audit)
+CHECK_TIMEOUT = 15
 
 import dns.resolver
 import dns.flags
@@ -1603,12 +1610,20 @@ def _raw_check_nameservers(domain: str) -> Dict[str, Any]:
 # Main Audit Orchestrator
 # ============================================================
 
+def _run_with_timeout(func, *args, timeout=CHECK_TIMEOUT):
+    """Run a check function with a timeout. Raises TimeoutError on expiry."""
+    with ThreadPoolExecutor(max_workers=1) as executor:
+        future = executor.submit(func, *args)
+        return future.result(timeout=timeout)
+
+
 def run_full_audit(domain: str, dkim_selector: Optional[str] = None) -> Dict[str, Any]:
     """
     Run all security checks and return the complete audit result
     in the format expected by the frontend.
 
     Each check runs in a try/except so one failure doesn't kill the audit.
+    Per-check timeouts prevent hung DNS queries from blocking the entire audit.
     """
     start_time = datetime.now()
     checks = []
@@ -1617,9 +1632,12 @@ def run_full_audit(domain: str, dkim_selector: Optional[str] = None) -> Dict[str
 
     # --- 1. DMARC ---
     try:
-        raw_dmarc = _raw_check_dmarc(domain)
+        raw_dmarc = _run_with_timeout(_raw_check_dmarc, domain)
         raw_results["dmarc"] = raw_dmarc
         checks.append(transform_dmarc(raw_dmarc))
+    except FuturesTimeoutError:
+        errors.append("DMARC: timed out")
+        checks.append(_timeout_card("DMARC"))
     except Exception as e:
         errors.append(f"DMARC: {str(e)}")
         checks.append(_error_card("DMARC", e))
@@ -1627,80 +1645,104 @@ def run_full_audit(domain: str, dkim_selector: Optional[str] = None) -> Dict[str
     # --- DMARC Tree Walk (dmarcbis-41 Section 4.10) ---
     tree_walk_result = None
     try:
-        tree_walk_result = dmarc_tree_walk(domain)
+        tree_walk_result = _run_with_timeout(dmarc_tree_walk, domain)
     except Exception as e:
         errors.append(f"Tree Walk: {str(e)}")
 
     # --- 2. SPF ---
     spf_record = None
     try:
-        raw_spf = _raw_check_spf(domain)
+        raw_spf = _run_with_timeout(_raw_check_spf, domain)
         raw_results["spf"] = raw_spf
         spf_record = raw_spf.get("record")
         checks.append(transform_spf(raw_spf))
+    except FuturesTimeoutError:
+        errors.append("SPF: timed out")
+        checks.append(_timeout_card("SPF"))
     except Exception as e:
         errors.append(f"SPF: {str(e)}")
         checks.append(_error_card("SPF", e))
 
     # --- 3. MX Records ---
     try:
-        raw_mx = check_mx(domain)
+        raw_mx = _run_with_timeout(check_mx, domain)
         raw_results["mx"] = raw_mx
         checks.append(transform_mx(raw_mx))
+    except FuturesTimeoutError:
+        errors.append("MX: timed out")
+        checks.append(_timeout_card("MX Records"))
     except Exception as e:
         errors.append(f"MX: {str(e)}")
         checks.append(_error_card("MX Records", e))
 
     # --- 4. MTA-STS ---
     try:
-        raw_mta_sts = check_mta_sts(domain)
+        raw_mta_sts = _run_with_timeout(check_mta_sts, domain)
         raw_results["mta_sts"] = raw_mta_sts
         checks.append(transform_mta_sts(raw_mta_sts, domain))
+    except FuturesTimeoutError:
+        errors.append("MTA-STS: timed out")
+        checks.append(_timeout_card("MTA-STS"))
     except Exception as e:
         errors.append(f"MTA-STS: {str(e)}")
         checks.append(_error_card("MTA-STS", e))
 
     # --- 5. TLS-RPT ---
     try:
-        raw_tls_rpt = check_tls_rpt(domain)
+        raw_tls_rpt = _run_with_timeout(check_tls_rpt, domain)
         raw_results["tls_rpt"] = raw_tls_rpt
         checks.append(transform_tls_rpt(raw_tls_rpt, domain))
+    except FuturesTimeoutError:
+        errors.append("TLS-RPT: timed out")
+        checks.append(_timeout_card("TLS-RPT"))
     except Exception as e:
         errors.append(f"TLS-RPT: {str(e)}")
         checks.append(_error_card("TLS-RPT", e))
 
     # --- 6. BIMI ---
     try:
-        raw_bimi = check_bimi(domain)
+        raw_bimi = _run_with_timeout(check_bimi, domain)
         raw_results["bimi"] = raw_bimi
         checks.append(transform_bimi(raw_bimi, domain))
+    except FuturesTimeoutError:
+        errors.append("BIMI: timed out")
+        checks.append(_timeout_card("BIMI"))
     except Exception as e:
         errors.append(f"BIMI: {str(e)}")
         checks.append(_error_card("BIMI", e))
 
     # --- 7. DNSSEC ---
     try:
-        raw_dnssec = _raw_check_dnssec(domain)
+        raw_dnssec = _run_with_timeout(_raw_check_dnssec, domain)
         raw_results["dnssec"] = raw_dnssec
         checks.append(transform_dnssec(raw_dnssec))
+    except FuturesTimeoutError:
+        errors.append("DNSSEC: timed out")
+        checks.append(_timeout_card("DNSSEC"))
     except Exception as e:
         errors.append(f"DNSSEC: {str(e)}")
         checks.append(_error_card("DNSSEC", e))
 
     # --- 8. CAA ---
     try:
-        raw_caa = _raw_check_caa(domain)
+        raw_caa = _run_with_timeout(_raw_check_caa, domain)
         raw_results["caa"] = raw_caa
         checks.append(transform_caa(raw_caa, domain))
+    except FuturesTimeoutError:
+        errors.append("CAA: timed out")
+        checks.append(_timeout_card("CAA"))
     except Exception as e:
         errors.append(f"CAA: {str(e)}")
         checks.append(_error_card("CAA", e))
 
     # --- 9. Nameservers ---
     try:
-        raw_ns = _raw_check_nameservers(domain)
+        raw_ns = _run_with_timeout(_raw_check_nameservers, domain)
         raw_results["nameservers"] = raw_ns
         checks.append(transform_nameservers(raw_ns))
+    except FuturesTimeoutError:
+        errors.append("Nameservers: timed out")
+        checks.append(_timeout_card("Nameservers"))
     except Exception as e:
         errors.append(f"Nameservers: {str(e)}")
         checks.append(_error_card("Nameservers", e))
@@ -1717,7 +1759,7 @@ def run_full_audit(domain: str, dkim_selector: Optional[str] = None) -> Dict[str
             }
             try:
                 import dns.resolver as _dkim_resolver
-                answers = _dkim_resolver.resolve(fqdn, "TXT")
+                answers = _run_with_timeout(_dkim_resolver.resolve, fqdn, "TXT")
                 txt = "".join(
                     s.decode() if isinstance(s, bytes) else s
                     for rdata in answers for s in rdata.strings
@@ -1729,13 +1771,18 @@ def run_full_audit(domain: str, dkim_selector: Optional[str] = None) -> Dict[str
                         "record": txt,
                         "key_size": key_analysis.get("key_bits"),
                     })
+            except FuturesTimeoutError:
+                raise  # Let outer handler catch it
             except Exception:
                 pass  # selector not found — found_selectors stays empty
         else:
             # No selector provided — fall back to auto-discovery
-            raw_dkim = smart_dkim_check(domain, spf_record)
+            raw_dkim = _run_with_timeout(smart_dkim_check, domain, spf_record)
         raw_results["dkim"] = raw_dkim
         checks.insert(2, transform_dkim(raw_dkim, domain))
+    except FuturesTimeoutError:
+        errors.append("DKIM: timed out")
+        checks.insert(2, _timeout_card("DKIM"))
     except Exception as e:
         errors.append(f"DKIM: {str(e)}")
         checks.insert(2, _error_card("DKIM", e))
@@ -1934,6 +1981,22 @@ def _build_priority_fixes(checks: List[Dict], score_result: Dict) -> List[str]:
 # ============================================================
 # Error Card Helper
 # ============================================================
+
+def _timeout_card(name: str) -> Dict:
+    """Generate a card for a check that timed out."""
+    return {
+        "name": name,
+        "status": "warn",
+        "pill_label": "Timeout",
+        "verdict": f"{name} check timed out",
+        "record": None,
+        "explanation": f"The {name} check did not complete within {CHECK_TIMEOUT} seconds. This usually means the domain's DNS server is slow to respond.",
+        "details": [
+            {"type": "warning", "text": f"Check timed out after {CHECK_TIMEOUT}s"},
+        ],
+        "fix": "Try running the audit again. If the issue persists, the domain's DNS infrastructure may have connectivity issues.",
+    }
+
 
 def _error_card(name: str, error: Exception) -> Dict:
     """Generate a card for a check that threw an exception."""
