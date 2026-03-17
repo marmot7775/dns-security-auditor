@@ -596,6 +596,16 @@ function renderTreeWalkFull(tw) {
         </div>`;
 
         html += `</div>`;
+
+        // Adoption note for inherited policies
+        if (tw.is_subdomain) {
+            html += `<div class="tw-footnote" style="animation-delay:${metaDelay}s">
+                <strong>Note:</strong> Policy inheritance via tree walk is a
+                <a href="https://datatracker.ietf.org/doc/draft-ietf-dmarc-dmarcbis/" target="_blank" rel="noopener">DMARCbis</a>
+                feature. Receivers still using RFC 7489 may not honor the inherited policy.
+                For the strongest protection, publish a dedicated DMARC record for this domain.
+            </div>`;
+        }
     } else {
         html += `<div class="tw-summary tw-no-policy" style="animation-delay:${metaDelay}s">No DMARC policy found in the DNS hierarchy.</div>`;
     }
