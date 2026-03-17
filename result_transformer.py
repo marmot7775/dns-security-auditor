@@ -109,7 +109,7 @@ def transform_dmarc(raw: Dict, tree_walk: Optional[Dict] = None) -> Dict:
         verdict = "Policy: reject (strongest)"
     elif policy == "quarantine":
         pct = raw.get("pct", 100)
-        verdict = f"Policy: quarantine"
+        verdict = "Policy: quarantine"
         if pct and pct < 100:
             verdict += f" ({pct}%)"
     elif policy == "none":
@@ -506,7 +506,7 @@ def transform_dkim(raw: Dict, domain: str) -> Dict:
             "verdict": f"No DKIM keys detected ({tested} selectors tested)",
             "record": None,
             "explanation": (
-                "No DKIM signing keys were detected among the {tested} common selectors tested. "
+                "No DKIM signing keys were found after checking {tested} common selectors. "
                 "This does not necessarily mean DKIM is not configured — your provider may use "
                 "custom or non-standard selectors that weren't in our test list. "
                 "DKIM adds a cryptographic signature to outgoing emails that proves the message "
@@ -1331,7 +1331,7 @@ def transform_nameservers(raw: Dict) -> Dict:
             "record": None,
             "explanation": (
                 "No nameserver records could be found for this domain. Nameservers are the "
-                "foundation of DNS -- without them, nothing works: no website, no email, nothing."
+                "foundation of DNS \u2014 without them, nothing works: no website, no email, no DNS resolution."
             ),
             "details": details,
             "fix": "Configure NS records with your domain registrar.",
@@ -1418,7 +1418,7 @@ def transform_nameservers(raw: Dict) -> Dict:
         "record": record,
         "explanation": (
             f"Found <strong>{ns_count}</strong> nameserver{'s' if ns_count != 1 else ''} for this domain. "
-            "Nameservers are the foundation of your DNS -- they answer every query for your domain. "
+            "Nameservers are the foundation of your DNS \u2014 they answer every query for your domain. "
             "Redundancy and network diversity are critical to prevent outages."
         ),
         "details": details,
@@ -1623,7 +1623,7 @@ def transform_blacklist(raw: Dict, domain: str) -> Dict:
         pill_label = "Clean"
 
     # Total lists checked
-    total_lists = len(ip_results[0]["listings"]) if ip_results else 0
+    total_lists = len(ip_results[0].get("listings", [])) if ip_results else 0
     total_lists += len(domain_results)
 
     # Verdict
