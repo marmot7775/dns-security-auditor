@@ -1,1 +1,0 @@
-import{s as o}from"./index.DFT9nVK6.js";const i={[o.ButtonLikeIconPosition.LEFT]:"left",[o.ButtonLikeIconPosition.RIGHT]:"right"};function s(t){return i[t??o.ButtonLikeIconPosition.LEFT]}export{s as m};
