@@ -467,7 +467,7 @@ function renderTreeWalkSimple(tw) {
                       : 'tw-pill-muted';
 
     return `
-        <div class="tree-walk tree-walk-simple">
+        <div class="tree-walk tree-walk-simple tw-animated">
             <div class="tw-header-row">
                 <div class="tree-walk-header">DMARC Policy Discovery</div>
                 <a class="tw-spec-badge" href="https://datatracker.ietf.org/doc/draft-ietf-dmarc-dmarcbis/"
@@ -490,8 +490,14 @@ function renderTreeWalkSimple(tw) {
 
 function renderTreeWalkFull(tw) {
     const specUrl = 'https://datatracker.ietf.org/doc/draft-ietf-dmarc-dmarcbis/';
+    const stepCount = tw.steps.length;
+    // Each step lands 150ms after the previous; metadata appears after the last step
+    const stepInterval = 0.15;            // seconds between steps
+    const lastStepLands = 0.05 + (stepCount - 1) * stepInterval + 0.35; // delay + anim duration
+    const metaDelay = (lastStepLands + 0.1).toFixed(2);
+
     let html = `
-        <div class="tree-walk">
+        <div class="tree-walk tw-animated">
             <div class="tw-header-row">
                 <div class="tree-walk-header">DMARC Policy Discovery</div>
                 <a class="tw-spec-badge" href="${specUrl}" target="_blank" rel="noopener">dmarcbis</a>
@@ -519,8 +525,11 @@ function renderTreeWalkFull(tw) {
         const sourceClass = isPolicySource ? 'tw-policy-source' : '';
         const connector = isLast ? 'tw-last' : '';
 
-        html += `<div class="tw-step ${statusClass} ${sourceClass} ${connector}">`;
-        html += `<div class="tw-connector"><div class="tw-dot"></div></div>`;
+        const stepDelay = (0.05 + i * stepInterval).toFixed(2);
+        const lineDelay = (0.05 + i * stepInterval + 0.13).toFixed(2);
+
+        html += `<div class="tw-step ${statusClass} ${sourceClass} ${connector}" style="animation-delay:${stepDelay}s">`;
+        html += `<div class="tw-connector" style="--line-delay:${lineDelay}s"><div class="tw-dot"></div></div>`;
         html += `<div class="tw-content">`;
         html += `<div class="tw-domain">${escapeHtml(step.query || '_dmarc.' + step.domain)}</div>`;
         html += `<div class="tw-label">${escapeHtml(step.label)}`;
@@ -545,7 +554,7 @@ function renderTreeWalkFull(tw) {
         const tag = tw.applied_tag || 'p';
         const tagExplanation = getTagExplanation(tag, tw);
 
-        html += `<div class="tw-meta">`;
+        html += `<div class="tw-meta" style="animation-delay:${metaDelay}s">`;
 
         if (tw.org_domain) {
             html += `<div class="tw-meta-row">
@@ -573,7 +582,7 @@ function renderTreeWalkFull(tw) {
 
         html += `</div>`;
     } else {
-        html += `<div class="tw-summary tw-no-policy">No DMARC policy found in the DNS hierarchy.</div>`;
+        html += `<div class="tw-summary tw-no-policy" style="animation-delay:${metaDelay}s">No DMARC policy found in the DNS hierarchy.</div>`;
     }
 
     html += '</div>';
