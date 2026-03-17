@@ -515,7 +515,10 @@ function renderTreeWalkFull(tw) {
             receivers walk up the DNS hierarchy to find an applicable policy.</div>`;
     }
 
-    // Timeline steps
+    // Timeline steps — pre-scan to find policy source index for line coloring
+    const policyIdx = tw.steps.findIndex((s, i) =>
+        s.found && tw.policy_source && s.domain === tw.policy_source && tw.is_subdomain);
+
     html += '<div class="tree-walk-steps">';
     tw.steps.forEach((step, i) => {
         const isLast = i === tw.steps.length - 1;
@@ -524,11 +527,13 @@ function renderTreeWalkFull(tw) {
         const statusClass = step.found ? 'tw-found' : 'tw-notfound';
         const sourceClass = isPolicySource ? 'tw-policy-source' : '';
         const connector = isLast ? 'tw-last' : '';
+        // Line on the step before the policy source turns green (leads into it)
+        const lineColor = (policyIdx > 0 && i === policyIdx - 1) ? 'tw-line-to-found' : '';
 
         const stepDelay = (0.05 + i * stepInterval).toFixed(2);
         const lineDelay = (0.05 + i * stepInterval + 0.13).toFixed(2);
 
-        html += `<div class="tw-step ${statusClass} ${sourceClass} ${connector}" style="animation-delay:${stepDelay}s">`;
+        html += `<div class="tw-step ${statusClass} ${sourceClass} ${lineColor} ${connector}" style="animation-delay:${stepDelay}s">`;
         html += `<div class="tw-connector" style="--line-delay:${lineDelay}s"><div class="tw-dot"></div></div>`;
         html += `<div class="tw-content">`;
         html += `<div class="tw-domain">${escapeHtml(step.query || '_dmarc.' + step.domain)}</div>`;
