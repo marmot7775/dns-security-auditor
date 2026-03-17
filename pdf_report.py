@@ -108,7 +108,7 @@ class AuditPDFReport(FPDF):
         self._font_mono = "JBMono" if jb_mono.exists() else "Courier"
 
     def header(self):
-        """Page header — thin branded bar."""
+        """Page header with thin branded bar."""
         # Skip header on page 1 (has its own branding)
         if self.page_no() == 1:
             return
@@ -117,7 +117,7 @@ class AuditPDFReport(FPDF):
         self.set_y(8)
         self.set_font(self._font_body, "B", 8)
         self.set_text_color(*COLORS["primary"])
-        self.cell(0, 5, f"DNS Security Audit — {self.domain}", align="L")
+        self.cell(0, 5, f"DNS Security Audit | {self.domain}", align="L")
         self.ln(10)
 
     def footer(self):

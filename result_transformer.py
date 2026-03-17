@@ -127,7 +127,7 @@ def transform_dmarc(raw: Dict, tree_walk: Optional[Dict] = None) -> Dict:
                 f"<strong>_dmarc.{raw.get('domain', '')}</strong>, but it inherits "
                 f"<strong>p=reject</strong> from <strong>{inherited_source}</strong> "
                 f"via the {tag_label} tag. "
-                f"This is the gold standard — emails that fail authentication are blocked entirely."
+                f"This is the gold standard. Emails that fail authentication are blocked entirely."
             )
         elif inherited_policy == "quarantine":
             explanation = (
@@ -143,7 +143,7 @@ def transform_dmarc(raw: Dict, tree_walk: Optional[Dict] = None) -> Dict:
                 f"<strong>_dmarc.{raw.get('domain', '')}</strong>, but it inherits "
                 f"<strong>p=none</strong> from <strong>{inherited_source}</strong> "
                 f"via the {tag_label} tag. "
-                f"This is monitoring only — failed emails are still delivered normally."
+                f"This is monitoring only. Failed emails are still delivered normally."
             )
         else:
             explanation = (
@@ -153,10 +153,10 @@ def transform_dmarc(raw: Dict, tree_walk: Optional[Dict] = None) -> Dict:
     elif not record:
         explanation = (
             f"No DMARC record exists at <strong>_dmarc.{raw.get('domain', '')}</strong>. "
-            f"DMARC is the single most important email security record — it tells receiving mail servers "
+            f"DMARC tells receiving mail servers "
             f"(Gmail, Outlook, Yahoo) how to handle emails that fail SPF and DKIM authentication. "
             f"Without it, anyone can send emails impersonating your domain with no consequences, "
-            f"and you have zero visibility into who is sending as your domain."
+            f"and you have no visibility into who is sending as your domain."
         )
     elif policy == "none":
         explanation = (
@@ -196,7 +196,7 @@ def transform_dmarc(raw: Dict, tree_walk: Optional[Dict] = None) -> Dict:
         elif inherited_policy == "none":
             details.append({"type": "warning", "text": f"Effective policy: none (inherited from {inherited_source})"})
 
-        details.append({"type": "info", "text": f"No record at _dmarc.{raw.get('domain', '')} — policy found via tree walk"})
+        details.append({"type": "info", "text": f"No record at _dmarc.{raw.get('domain', '')}. Policy found via tree walk"})
         details.append({"type": "info", "text": f"Applied tag: {applied_tag}= from {inherited_source}"})
 
         if tree_walk.get("org_domain"):
@@ -401,9 +401,9 @@ def transform_spf(raw: Dict) -> Dict:
 
         all_mech = raw.get("all_mechanism") or ""
         if all_mech == "-all":
-            details.append({"type": "good", "text": "-all (hardfail) \u2014 unauthorized servers are rejected"})
+            details.append({"type": "good", "text": "-all (hardfail). Unauthorized servers are rejected"})
         elif all_mech == "~all":
-            details.append({"type": "good", "text": "~all (softfail) \u2014 unauthorized senders are flagged but mail is still delivered"})
+            details.append({"type": "good", "text": "~all (softfail). Unauthorized senders are flagged but mail is still delivered"})
         elif all_mech == "?all":
             details.append({"type": "warning", "text": "Neutral (?all) provides no protection"})
         elif all_mech == "+all":
@@ -455,7 +455,7 @@ def transform_spf(raw: Dict) -> Dict:
             "type": "TXT",
             "host": domain_name,
             "value": "v=spf1 ~all",
-            "comment": "Starter record — add your mail server IPs and include mechanisms before tightening to -all",
+            "comment": "Starter record. Add your mail server IPs and include mechanisms before tightening to -all",
         })
     elif record:
         all_mech = raw.get("all_mechanism") or ""
@@ -507,13 +507,13 @@ def transform_dkim(raw: Dict, domain: str) -> Dict:
             "record": None,
             "explanation": (
                 "No DKIM signing keys were found after checking {tested} common selectors. "
-                "This does not necessarily mean DKIM is not configured — your provider may use "
+                "This does not necessarily mean DKIM is not configured. Your provider may use "
                 "custom or non-standard selectors that weren't in our test list. "
                 "DKIM adds a cryptographic signature to outgoing emails that proves the message "
                 "hasn't been tampered with and verifies the sending domain."
             ).format(tested=tested),
             "details": [
-                {"type": "warning", "text": f"Tested {tested} common selectors — no public keys found in DNS"},
+                {"type": "warning", "text": f"Tested {tested} common selectors, but no public keys found in DNS"},
                 {"type": "info", "text": "DKIM selectors are provider-specific and not publicly enumerable"},
                 {"type": "info", "text": "The DKIM public key is a TXT record in DNS at selector._domainkey.{domain}".format(domain=domain)},
             ],
@@ -649,7 +649,7 @@ def transform_mx(raw: Dict) -> Dict:
     # Verdict — meaningful at a glance
     provider_str = ", ".join(providers) if providers else ""
     if count == 1:
-        verdict = f"Single MX host{' — ' + provider_str if provider_str else ''}"
+        verdict = f"Single MX host{' (' + provider_str + ')' if provider_str else ''}"
     elif provider_str:
         verdict = provider_str
     else:
@@ -1168,7 +1168,7 @@ def transform_dane(raw: Dict, domain: str) -> Dict:
                 "to let sending servers verify mail server TLS certificates via DNS. "
                 "This domain has no MX records, so there are no mail servers to protect with DANE."
             ),
-            "details": [{"type": "info", "text": "No MX hosts — DANE check not applicable"}],
+            "details": [{"type": "info", "text": "No MX hosts. DANE check not applicable"}],
             "fix": None,
             "fix_records": None,
         }
@@ -1185,7 +1185,7 @@ def transform_dane(raw: Dict, domain: str) -> Dict:
                     })
         details.append({
             "type": "error",
-            "text": "TLSA records found but DNSSEC is not enabled — DANE is ineffective"
+            "text": "TLSA records found but DNSSEC is not enabled, so DANE is ineffective"
         })
         for issue in issues:
             if "dnssec" not in (issue.get("issue") or "").lower():
@@ -1226,7 +1226,7 @@ def transform_dane(raw: Dict, domain: str) -> Dict:
             if missing:
                 details.append({"type": "warning", "text": f"Missing DANE on: {', '.join(missing)}"})
 
-        details.append({"type": "good", "text": "DNSSEC is enabled — DANE chain of trust is valid"})
+        details.append({"type": "good", "text": "DNSSEC is enabled and the DANE chain of trust is valid"})
 
         for issue in issues:
             details.append(_issue_to_detail(issue))
@@ -1258,10 +1258,10 @@ def transform_dane(raw: Dict, domain: str) -> Dict:
 
     # No TLSA, has MX
     details = [
-        {"type": "warning", "text": f"Checked {mx_checked} MX host{'s' if mx_checked != 1 else ''} — no TLSA records found"},
+        {"type": "warning", "text": f"Checked {mx_checked} MX host{'s' if mx_checked != 1 else ''}, but no TLSA records found"},
     ]
     if dnssec_ok:
-        details.append({"type": "good", "text": "DNSSEC is enabled — ready for DANE deployment"})
+        details.append({"type": "good", "text": "DNSSEC is enabled and ready for DANE deployment"})
     else:
         details.append({"type": "info", "text": "DNSSEC is also required for DANE to work"})
 
@@ -1276,7 +1276,7 @@ def transform_dane(raw: Dict, domain: str) -> Dict:
         f"Usage 3 (DANE-EE), selector 1 (SPKI), matching type 1 (SHA-256) is the recommended configuration per RFC 7672."
     )
     if not dnssec_ok:
-        fix += " <strong>Note:</strong> Enable DNSSEC first — DANE requires it."
+        fix += " <strong>Note:</strong> Enable DNSSEC first. DANE requires it."
 
     # Generate example TLSA fix record for the no-TLSA case
     dane_fix_records = None
@@ -1331,7 +1331,7 @@ def transform_nameservers(raw: Dict) -> Dict:
             "record": None,
             "explanation": (
                 "No nameserver records could be found for this domain. Nameservers are the "
-                "foundation of DNS \u2014 without them, nothing works: no website, no email, no DNS resolution."
+                "foundation of DNS. Without them, nothing works: no website, no email, no DNS resolution."
             ),
             "details": details,
             "fix": "Configure NS records with your domain registrar.",
@@ -1418,7 +1418,7 @@ def transform_nameservers(raw: Dict) -> Dict:
         "record": record,
         "explanation": (
             f"Found <strong>{ns_count}</strong> nameserver{'s' if ns_count != 1 else ''} for this domain. "
-            "Nameservers are the foundation of your DNS \u2014 they answer every query for your domain. "
+            "Nameservers are the foundation of your DNS. They answer every query for your domain. "
             "Redundancy and network diversity are critical to prevent outages."
         ),
         "details": details,
@@ -1520,7 +1520,7 @@ def transform_ct(raw: Dict, domain: str) -> Dict:
 
     # Certificate sprawl
     if len(issuers) > 5:
-        details.append({"type": "info", "text": f"Certificates from {len(issuers)} different CAs — consider consolidating"})
+        details.append({"type": "info", "text": f"Certificates from {len(issuers)} different CAs. Consider consolidating"})
 
     # Subdomains
     if subdomains:
@@ -1639,7 +1639,7 @@ def transform_blacklist(raw: Dict, domain: str) -> Dict:
                 f"<strong>Warning:</strong> This domain's mail servers are listed on {total_listings} "
                 f"blocklist{'s' if total_listings != 1 else ''}. "
                 "Major blocklist listings (Spamhaus, Barracuda) cause significant email "
-                "deliverability problems — many receiving servers will reject or spam-folder your mail."
+                "deliverability problems. Many receiving servers will reject or spam-folder your mail."
             )
         else:
             explanation = (
@@ -1651,7 +1651,7 @@ def transform_blacklist(raw: Dict, domain: str) -> Dict:
     else:
         explanation = (
             f"Checked {len(ips_checked)} IP{'s' if len(ips_checked) != 1 else ''} and the domain "
-            f"against {total_lists} DNS-based blocklists. No listings found — your mail server "
+            f"against {total_lists} DNS-based blocklists. No listings found. Your mail server "
             "reputation is clean."
         )
 
@@ -1671,10 +1671,10 @@ def transform_blacklist(raw: Dict, domain: str) -> Dict:
                 meaning = listing.get("meaning", "Listed")
                 details.append({
                     "type": "error" if listing["list"] in ("Spamhaus ZEN", "Barracuda BRBL") else "warning",
-                    "text": f"{host_label}: {listing['list']} — {meaning}",
+                    "text": f"{host_label}: {listing['list']}: {meaning}",
                 })
             elif listing.get("error"):
-                details.append({"type": "info", "text": f"{host_label}: {listing['list']} — lookup failed"})
+                details.append({"type": "info", "text": f"{host_label}: {listing['list']}: lookup failed"})
 
         if not any_listed:
             details.append({"type": "good", "text": f"{host_label}: clean on all IP blocklists"})
@@ -1683,7 +1683,7 @@ def transform_blacklist(raw: Dict, domain: str) -> Dict:
     for dr in domain_results:
         if dr.get("listed"):
             meaning = dr.get("meaning", "Listed")
-            details.append({"type": "error", "text": f"{domain}: {dr['list']} — {meaning}"})
+            details.append({"type": "error", "text": f"{domain}: {dr['list']}: {meaning}"})
         else:
             details.append({"type": "good", "text": f"{domain}: clean on {dr['list']}"})
 

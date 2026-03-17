@@ -190,8 +190,8 @@ def _raw_check_dmarc(domain: str) -> Dict[str, Any]:
             "error",
             f"Multiple DMARC records found ({len(dmarc_records)})",
             "RFC 7489 requires exactly one DMARC record per domain. "
-            "When multiple records exist, DMARC processing aborts entirely — "
-            "none of them are valid. This is the same as having no DMARC at all.",
+            "When multiple records exist, DMARC processing aborts entirely. "
+            "None of them are valid. This is the same as having no DMARC at all.",
             "Remove duplicate DMARC records so only one remains.",
         )
         return result
@@ -307,7 +307,7 @@ def _raw_check_dmarc(domain: str) -> Dict[str, Any]:
                     f"Duplicate tag: '{key_clean}' appears multiple times",
                     f"The tag '{key_clean}' is defined more than once. "
                     "RFC 7489 does not define behavior for duplicate tags, so "
-                    "different receivers may use different values — unpredictable results.",
+                    "different receivers may use different values, leading to unpredictable results.",
                     f"Remove the duplicate '{key_clean}' tag. Keep only one.",
                 )
             seen_tags[key_clean] = value_clean
@@ -339,7 +339,7 @@ def _raw_check_dmarc(domain: str) -> Dict[str, Any]:
                         "info",
                         "Deprecated tag: 'ri' (removed in DMARCbis)",
                         "The ri (report interval) tag is removed in DMARCbis. "
-                        "It was rarely honored by receivers — most send aggregate "
+                        "It was rarely honored by receivers. Most send aggregate "
                         "reports on their own schedule regardless of ri.",
                         "Remove the ri tag. Report frequency is determined by receivers.",
                     )
@@ -360,7 +360,7 @@ def _raw_check_dmarc(domain: str) -> Dict[str, Any]:
                 _add_syntax(
                     f"Bare mailto: address without tag prefix",
                     "A 'mailto:' address appears without a rua= or ruf= tag prefix. "
-                    "Receivers will ignore it — no reports will be sent.",
+                    "Receivers will ignore it and no reports will be sent.",
                     "Change to: rua=mailto:address@example.com",
                 )
 
@@ -396,7 +396,7 @@ def _raw_check_dmarc(domain: str) -> Dict[str, Any]:
         if tags.get("rua"):
             _add_issue(
                 "warning",
-                "Missing policy tag (p=) — treated as p=none per DMARCbis",
+                "Missing policy tag (p=). Treated as p=none per DMARCbis",
                 "This record has no explicit policy tag. Because a rua= tag is present, "
                 "DMARCbis-compliant receivers will treat this as p=none (monitoring only). "
                 "However, some older receivers following RFC 7489 may ignore the record entirely.",
@@ -477,7 +477,7 @@ def _raw_check_dmarc(domain: str) -> Dict[str, Any]:
             "The psd tag only accepts 'y' (is a PSD), 'n' (not a PSD, is an "
             "Organizational Domain), or 'u' (unknown/default). "
             f"'{raw_psd}' is not valid.",
-            "Use psd=y, psd=n, or psd=u (or omit the tag — 'u' is the default).",
+            "Use psd=y, psd=n, or psd=u (or omit the tag; 'u' is the default).",
         )
     result["psd"] = raw_psd.lower() if raw_psd else None
 
@@ -494,7 +494,7 @@ def _raw_check_dmarc(domain: str) -> Dict[str, Any]:
                     f"rua address missing 'mailto:' prefix: {addr}",
                     "DMARC requires report addresses to be written as URIs with "
                     "a mailto: prefix. Without it, receivers won't send aggregate "
-                    "reports to this address — you lose visibility.",
+                    "reports to this address, so you lose visibility.",
                     f"Change to: rua=mailto:{addr}",
                 )
 
@@ -573,7 +573,7 @@ def _raw_check_dmarc(domain: str) -> Dict[str, Any]:
                     f"Invalid fo value: '{fv}' in fo={raw_fo}",
                     "The fo tag only accepts: 0 (all fail), 1 (any fail), "
                     "d (DKIM fail), s (SPF fail). Values are colon-separated.",
-                    "Use fo=1 (recommended — reports on any authentication failure).",
+                    "Use fo=1 (recommended; reports on any authentication failure).",
                 )
 
     # 6i. rf (report format)
@@ -611,8 +611,8 @@ def _raw_check_dmarc(domain: str) -> Dict[str, Any]:
             "warning",
             "DMARC policy is none (monitoring only)",
             "Policy p=none instructs receivers to deliver all email normally, "
-            "even when authentication fails. This is the correct first step — "
-            "it lets you collect data via aggregate reports — but it provides "
+            "even when authentication fails. This is the correct first step because "
+            "it lets you collect data via aggregate reports, but it provides "
             "no protection against spoofing. Failed emails still reach inboxes.",
             "Review aggregate reports to identify all legitimate senders, then "
             "upgrade to p=quarantine, and ultimately p=reject.",
@@ -646,7 +646,7 @@ def _raw_check_dmarc(domain: str) -> Dict[str, Any]:
         effective = "none" if policy == "quarantine" else "quarantine"
         _add_issue(
             "warning",
-            f"DMARC test mode active (t=y) — policy effectively {effective}",
+            f"DMARC test mode active (t=y). Policy effectively {effective}",
             f"The t=y tag signals DMARCbis-aware receivers to apply the policy "
             f"one level below {policy}. In practice, receivers will treat this as "
             f"p={effective}. This is the DMARCbis replacement for the pct= rollout.",
@@ -674,7 +674,7 @@ def _raw_check_dmarc(domain: str) -> Dict[str, Any]:
             severity,
             "No aggregate reporting (rua) configured",
             plain,
-            f"Add rua=mailto:dmarc-reports@{domain} — or use a DMARC reporting "
+            f"Add rua=mailto:dmarc-reports@{domain}, or use a DMARC reporting "
             "service like dmarcian, EasyDMARC, or Valimail for readable dashboards.",
         )
 
@@ -763,8 +763,8 @@ def _raw_check_spf(domain: str) -> Dict[str, Any]:
             "error",
             f"Multiple SPF records ({len(spf_records)})",
             "RFC 7208 requires exactly one SPF record per domain. "
-            "When multiple records exist, SPF returns a permanent error (permerror) — "
-            "none of them are valid. This is the same as having no SPF at all.",
+            "When multiple records exist, SPF returns a permanent error (permerror). "
+            "None of them are valid. This is the same as having no SPF at all.",
             "Merge into a single SPF record.",
         )
         return result
@@ -804,7 +804,7 @@ def _raw_check_spf(domain: str) -> Dict[str, Any]:
         if raw_lower.rstrip(":") in ("ip4", "ip6", "include", "exists", "a", "mx") and raw.endswith(":"):
             _add_syntax(
                 f"Space after '{raw}' separates it from its value",
-                f"'{part}' has a colon but no value — there may be a space between "
+                f"'{part}' has a colon but no value. There may be a space between "
                 "the mechanism and its argument. SPF mechanisms cannot have spaces "
                 "between the name, colon, and value.",
                 f"Remove the space: write as one token, e.g., ip4:1.2.3.4",
@@ -846,7 +846,7 @@ def _raw_check_spf(domain: str) -> Dict[str, Any]:
                     _add_syntax(
                         "Empty include: mechanism (no domain specified)",
                         "An include: mechanism has no domain. SPF cannot look up "
-                        "an empty domain — this wastes a DNS lookup and always fails.",
+                        "an empty domain. This wastes a DNS lookup and always fails.",
                         "Add a domain or remove the empty include.",
                     )
                 seen_mechanisms.append(part)
@@ -956,7 +956,7 @@ def _raw_check_spf(domain: str) -> Dict[str, Any]:
     if has_redirect and has_all:
         _add_issue(
             "warning",
-            "Both 'redirect=' and 'all' present — redirect is ignored",
+            "Both 'redirect=' and 'all' present. Redirect is ignored",
             "When an SPF record contains both a redirect= modifier and an 'all' "
             "mechanism, the redirect is ignored entirely. The 'all' mechanism "
             "takes precedence. If you intended to redirect SPF evaluation to "
@@ -982,7 +982,7 @@ def _raw_check_spf(domain: str) -> Dict[str, Any]:
             "error",
             f"SPF exceeds 10-lookup limit ({lookup_count} lookups)",
             "RFC 7208 limits SPF to 10 DNS lookups. Exceeding this causes "
-            "SPF to return a permanent error (permerror) — it fails entirely, "
+            "SPF to return a permanent error (permerror). It fails entirely, "
             "as if no SPF record existed.",
             "Reduce lookups by flattening includes to IP addresses or removing unused services.",
         )
@@ -1018,7 +1018,7 @@ def _raw_check_spf(domain: str) -> Dict[str, Any]:
             "No 'all' mechanism found",
             "SPF records should end with an 'all' mechanism to define what happens "
             "to mail from servers not listed in the record. Without it, the default "
-            "is neutral (?all) — no protection.",
+            "is neutral (?all), which provides no protection.",
             "Add -all to the end of the SPF record.",
         )
 
@@ -1137,7 +1137,7 @@ def _raw_check_dnssec(domain: str) -> Dict[str, Any]:
             "warning",
             "DNSSEC check timed out",
             "The DNSKEY query timed out. This does not necessarily mean DNSSEC is "
-            "unconfigured — large DNSKEY responses can exceed typical timeouts.",
+            "unconfigured. Large DNSKEY responses can exceed typical timeouts.",
             "Try checking with 'delv' or 'dig +dnssec' for a definitive answer.",
         )
     except Exception as e:
