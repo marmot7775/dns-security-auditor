@@ -1010,7 +1010,7 @@ main {
     height: calc(0.85rem + 0.15rem + 5px);  /* step gap + half of next dot */
     left: calc(50% - 1px);
     width: 2px;
-    background: var(--border-light);
+    background: var(--pass-border);
 }
 
 /* ── Tree Walk Animations ──────────────────────────────────────
@@ -1046,24 +1046,13 @@ main {
    Lines leading into the policy-source step transition to green. */
 .tw-animated .tw-step:not(.tw-last) .tw-connector::after {
     transform-origin: top;
-    transform: scaleY(0);
-    animation: twLineGrow 0.25s var(--ease-out) forwards;
-    animation-delay: var(--line-delay, 0.18s);
-}
-
-.tw-animated .tw-step.tw-line-to-found:not(.tw-last) .tw-connector::after {
-    animation: twLineGrowGreen 0.3s var(--ease-out) forwards;
+    animation: twLineGrow 0.25s var(--ease-out) backwards;
     animation-delay: var(--line-delay, 0.18s);
 }
 
 @keyframes twLineGrow {
     from { transform: scaleY(0); }
     to   { transform: scaleY(1); }
-}
-
-@keyframes twLineGrowGreen {
-    from { transform: scaleY(0); background: var(--border-light); }
-    to   { transform: scaleY(1); background: var(--pass-border); }
 }
 
 /* 3. Policy source dot: pulse ring when its step lands */
