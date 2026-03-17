@@ -447,17 +447,8 @@ function renderCheckBody(check) {
         html += renderTreeWalk(check._tree_walk);
     }
 
-    // Fix records removed — too presumptuous without knowing the user's infrastructure
-
-    // Fix recommendation
-    if (check.fix) {
-        html += `
-            <div class="fix-block">
-                <div class="fix-label">Recommended Action</div>
-                <div class="fix-text">${sanitizeHtml(check.fix)}</div>
-            </div>
-        `;
-    }
+    // Fix records and recommended actions removed from web UI.
+    // The tool identifies problems; fixing them is the consultant's job.
 
     if (!html) {
         html = '<div class="explanation">No issues detected.</div>';

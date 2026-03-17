@@ -244,8 +244,8 @@ def transform_dmarc(raw: Dict, tree_walk: Optional[Dict] = None) -> Dict:
         elif inherited_policy == "quarantine":
             fix = (
                 f"This subdomain is protected by p=quarantine inherited from <strong>{inherited_source}</strong>. "
-                f"For maximum protection, consider upgrading the parent's policy to p=reject, "
-                f"or publish a dedicated <strong>p=reject</strong> record at <strong>_dmarc.{domain_name}</strong>."
+                f"If you control the parent domain, consider upgrading to p=reject for maximum protection. "
+                f"Alternatively, you can publish a dedicated record at <strong>_dmarc.{domain_name}</strong>."
             )
         else:
             # reject — no fix needed
@@ -849,6 +849,7 @@ def transform_mta_sts(raw: Dict, domain: str, has_mx: bool = True) -> Dict:
             ),
             "details": [_issue_to_detail(i) for i in raw.get("issues", [])],
             "fix": (
+                f"Consider implementing MTA-STS to enforce TLS for inbound email. "
                 f"Add a TXT record at <strong>_mta-sts.{domain}</strong> with value "
                 f"<strong>v=STSv1; id={sts_id}</strong> and host a policy "
                 f"file at <strong>https://mta-sts.{domain}/.well-known/mta-sts.txt</strong>"
@@ -948,6 +949,7 @@ def transform_tls_rpt(raw: Dict, domain: str, has_mx: bool = True) -> Dict:
             ),
             "details": [_issue_to_detail(i) for i in raw.get("issues", [])],
             "fix": (
+                f"Consider adding TLS-RPT to gain visibility into TLS delivery failures. "
                 f"Add a TXT record at <strong>_smtp._tls.{domain}</strong> with value "
                 f"<strong>v=TLSRPTv1; rua=mailto:tls-reports@{domain}</strong>"
             ),
@@ -1038,7 +1040,8 @@ def transform_bimi(raw: Dict, domain: str, has_mx: bool = True) -> Dict:
                 {"type": "info", "text": "Gmail requires a Verified Mark Certificate (VMC) from DigiCert or Entrust"},
             ],
             "fix": (
-                f"First ensure DMARC is at p=quarantine or p=reject (with pct=100), then publish a BIMI record at "
+                f"If you want your brand logo displayed in email clients, ensure DMARC is at p=quarantine or p=reject "
+                f"(with pct=100), then publish a BIMI record at "
                 f"<strong>default._bimi.{domain}</strong> pointing to your SVG logo."
             ),
             "fix_records": [{
@@ -1118,7 +1121,7 @@ def transform_dnssec(raw: Dict) -> Dict:
             ),
             "details": details,
             "fix": (
-                "Enable DNSSEC through your domain registrar or DNS hosting provider. "
+                "Consider enabling DNSSEC through your domain registrar or DNS hosting provider. "
                 "Most major registrars support one-click DNSSEC activation."
             ),
             "fix_records": None,  # DNSSEC requires registrar/DNS provider activation, not manual DNS records
@@ -1217,8 +1220,9 @@ def transform_caa(raw: Dict, domain: str) -> Dict:
             ),
             "details": details,
             "fix": (
-                f'Add a CAA record: <strong>0 issue "letsencrypt.org"</strong> (replace with your CA). '
-                f'Add <strong>0 iodef "mailto:security@{domain}"</strong> to receive violation alerts.'
+                f"Consider adding CAA records to restrict which certificate authorities can issue "
+                f"certificates for your domain. Set the issue tag to your CA (for example, letsencrypt.org) "
+                f"and add an iodef tag to receive violation alerts."
             ),
             "fix_records": [
                 {
@@ -1426,12 +1430,11 @@ def transform_dane(raw: Dict, domain: str) -> Dict:
     # Build example TLSA record using first MX host
     example_host = tlsa_records[0]["mx_host"] if tlsa_records else "mail.example.com"
     fix = (
-        f"Publish a TLSA record for each MX host. Example for {example_host}:<br>"
-        f"<strong>_25._tcp.{example_host}</strong> IN TLSA <strong>3 1 1 &lt;SHA-256 hash of server certificate SPKI&gt;</strong><br><br>"
-        f"Usage 3 (DANE-EE), selector 1 (SPKI), matching type 1 (SHA-256) is the recommended configuration per RFC 7672."
+        "Consider publishing DANE TLSA records for your MX hosts to add DNS-based certificate "
+        "verification for inbound email."
     )
     if not dnssec_ok:
-        fix += " <strong>Note:</strong> Enable DNSSEC first. DANE requires it."
+        fix += " <strong>Note:</strong> DNSSEC must be enabled before DANE can take effect."
 
     # Generate example TLSA fix record for the no-TLSA case
     dane_fix_records = None

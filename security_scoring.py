@@ -504,8 +504,8 @@ class EmailSecurityScorer:
             dkim_score = scores['dkim']
             if dkim_score == 0:
                 recommendations.append(
-                    "🟡 HIGH: No DKIM keys were detected. Verify DKIM signing is enabled with your email provider "
-                    "and confirm the public key is published in DNS"
+                    "🟡 HIGH: No DKIM keys were detected. If this domain sends email, verify DKIM signing is enabled "
+                    "with your email provider and confirm the public key is published in DNS"
                 )
             elif dkim_score < 12:
                 dkim_details = details.get('dkim', {})
@@ -524,7 +524,7 @@ class EmailSecurityScorer:
             tls_rpt = audit_results.get('tls_rpt', {})
             if not mta_sts.get('configured') and not tls_rpt.get('configured'):
                 recommendations.append(
-                    "🟢 LOW: Implement MTA-STS and TLS-RPT to enforce TLS encryption for inbound email"
+                    "🟢 LOW: Consider implementing MTA-STS and TLS-RPT to enforce TLS encryption for inbound email"
                 )
 
         # DANE recommendation when MTA-STS exists but DANE doesn't
@@ -533,7 +533,7 @@ class EmailSecurityScorer:
             mta_sts = audit_results.get('mta_sts', {})
             if not dane.get('configured') and (mta_sts.get('configured') or mta_sts.get('txt_record')):
                 recommendations.append(
-                    "🟢 LOW: Add DANE TLSA records to complement MTA-STS with DNS-based certificate verification"
+                    "🟢 LOW: Consider adding DANE TLSA records to complement MTA-STS with DNS-based certificate verification"
                 )
 
         return recommendations[:5]
