@@ -9,6 +9,7 @@ uvicorn[standard]>=0.24.0
 # Optional: Enhanced Features
 python-dateutil>=2.8.2  # For date parsing
 requests>=2.31.0        # For HTTP requests (if needed)
+fpdf2>=2.7.0            # PDF report generation
 
 # Development Dependencies (optional)
 pytest>=7.4.0           # For testing

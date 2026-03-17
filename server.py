@@ -2,6 +2,7 @@
 DNS Security Auditor - FastAPI Server
 ======================================
 GET  /api/audit?domain=example.com  -- run full audit
+GET  /api/audit/pdf?domain=...      -- download PDF report
 GET  /api/health                     -- health check
 GET  /docs                           -- interactive API docs
 GET  /                               -- serve frontend
@@ -26,6 +27,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from starlette.middleware.base import BaseHTTPMiddleware
 
 from audit_engine import run_full_audit
+from pdf_report import generate_audit_pdf
 
 
 # ============================================================
@@ -258,6 +260,68 @@ async def audit_domain(
     _set_cached(domain, result)
 
     return JSONResponse(content=result)
+
+
+# ============================================================
+# PDF Report Endpoint
+# ============================================================
+
+@app.get("/api/audit/pdf", tags=["Audit"])
+async def audit_pdf(
+    request: Request,
+    domain: str = Query(..., description="Domain to generate PDF report for"),
+    selector: Optional[str] = Query(None, description="DKIM selector"),
+):
+    """
+    Download a professional PDF audit report.
+
+    Reuses cached audit data when available; otherwise runs a fresh audit.
+    """
+    # Rate limiting (shared with /api/audit)
+    client_ip = request.client.host if request.client else "unknown"
+    if not _check_rate_limit(client_ip):
+        return JSONResponse(
+            status_code=429,
+            content={"detail": "Rate limit exceeded. Please wait a minute before trying again."},
+            headers={"Retry-After": str(RATE_LIMIT_WINDOW)},
+        )
+
+    domain = _validate_domain(domain)
+    log.info("PDF requested: %s (ip=%s)", domain, client_ip)
+
+    # Reuse cached audit data if available
+    cached = _get_cached(domain)
+    if cached:
+        data = cached
+        log.info("PDF using cached data: %s", domain)
+    else:
+        # Run fresh audit
+        start = time.time()
+        try:
+            data = run_full_audit(domain, dkim_selector=selector)
+        except Exception as e:
+            log.error("PDF audit failed for %s: %s", domain, str(e)[:200], exc_info=True)
+            raise HTTPException(status_code=500, detail="Audit failed — cannot generate PDF")
+        elapsed = round(time.time() - start, 2)
+        log.info("PDF audit complete: %s — %.2fs", domain, elapsed)
+        _set_cached(domain, data)
+
+    # Generate PDF
+    try:
+        pdf_bytes = generate_audit_pdf(data)
+    except Exception as e:
+        log.error("PDF generation failed for %s: %s", domain, str(e)[:200], exc_info=True)
+        raise HTTPException(status_code=500, detail="PDF generation failed")
+
+    filename = f"dns-audit-{domain}.pdf"
+    return Response(
+        content=pdf_bytes,
+        media_type="application/pdf",
+        headers={
+            "Content-Disposition": f'attachment; filename="{filename}"',
+            "Cache-Control": "no-store",
+        },
+    )
 
 
 # ============================================================

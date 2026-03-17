@@ -376,14 +376,20 @@ function createResultCard(check, index) {
         card.classList.toggle('expanded');
     });
 
-    // Copy buttons
+    // Copy buttons (DNS record blocks + fix record blocks)
     card.querySelectorAll('.copy-btn').forEach(btn => {
         btn.addEventListener('click', (e) => {
             e.stopPropagation();
             if (!navigator.clipboard) return;
-            const block = btn.closest('.record-block');
-            const record = block?.querySelector('.record-text')?.textContent
-                || block?.textContent?.replace('Copy', '').trim() || '';
+            let record = '';
+            const fixBlock = btn.closest('.fix-record-block');
+            if (fixBlock) {
+                record = fixBlock.querySelector('.fix-record-value')?.textContent || '';
+            } else {
+                const block = btn.closest('.record-block');
+                record = block?.querySelector('.record-text')?.textContent
+                    || block?.textContent?.replace('Copy', '').trim() || '';
+            }
             navigator.clipboard.writeText(record).then(() => {
                 btn.textContent = 'Copied';
                 btn.classList.add('copied');
@@ -442,6 +448,25 @@ function renderCheckBody(check) {
     // Tree walk visualization (DMARC only)
     if (check._tree_walk) {
         html += renderTreeWalk(check._tree_walk);
+    }
+
+    // Fix records — copy-paste-ready DNS records
+    if (check.fix_records && check.fix_records.length > 0) {
+        html += '<div class="fix-records">';
+        html += '<div class="fix-records-label">DNS Records to Add</div>';
+        check.fix_records.forEach(rec => {
+            html += `
+                <div class="fix-record-block">
+                    <div class="fix-record-header">
+                        <span class="fix-record-type">${escapeHtml(rec.type)}</span>
+                        <span class="fix-record-host">${escapeHtml(rec.host)}</span>
+                        <button class="copy-btn fix-record-copy">Copy</button>
+                    </div>
+                    <div class="fix-record-value">${escapeHtml(rec.value)}</div>
+                    ${rec.comment ? `<div class="fix-record-comment">${escapeHtml(rec.comment)}</div>` : ''}
+                </div>`;
+        });
+        html += '</div>';
     }
 
     // Fix recommendation
@@ -639,6 +664,44 @@ document.getElementById('export-btn').addEventListener('click', () => {
     a.click();
     document.body.removeChild(a);
     URL.revokeObjectURL(url);
+});
+
+// ============================================================
+// PDF Report Download
+// ============================================================
+
+document.getElementById('pdf-btn').addEventListener('click', () => {
+    if (!lastAuditData) return;
+    const btn = document.getElementById('pdf-btn');
+    const span = btn.querySelector('span');
+    const origText = span.textContent;
+    span.textContent = 'Generating...';
+    btn.disabled = true;
+
+    const url = `${API_BASE}/audit/pdf?domain=${encodeURIComponent(lastAuditData.domain)}`;
+    fetch(url)
+        .then(resp => {
+            if (!resp.ok) throw new Error(`PDF generation failed (${resp.status})`);
+            return resp.blob();
+        })
+        .then(blob => {
+            const blobUrl = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = blobUrl;
+            a.download = `dns-audit-${lastAuditData.domain}.pdf`;
+            document.body.appendChild(a);
+            a.click();
+            document.body.removeChild(a);
+            URL.revokeObjectURL(blobUrl);
+            span.textContent = origText;
+            btn.disabled = false;
+        })
+        .catch(err => {
+            console.error('PDF error:', err);
+            span.textContent = 'Failed';
+            btn.disabled = false;
+            setTimeout(() => { span.textContent = origText; }, 2000);
+        });
 });
 
 // ============================================================
