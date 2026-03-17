@@ -1,18 +1,80 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+*.egg-info/
+*.egg
+dist/
+build/
+eggs/
+*.whl
+
+# Virtual environments
 .venv/
 venv/
-__pycache__/
-*.pyc
-.DS_Store
-.env
-*.log
-# Python caches
-__pycache__/
-*.pyc
+env/
+ENV/
 
-# Local backups / patches
+# Environment variables / secrets
+.env
+.env.*
+!.env.example
+
+# IDE / Editor
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+.project
+.settings/
+
+# OS junk
+.DS_Store
+Thumbs.db
+Desktop.ini
+*:Zone.Identifier
+
+# Logs
+*.log
+logs/
+
+# Archives / backups
+*.zip
+*.tar.gz
 *.bak
 *.patch
-*.zip
+*.orig
 
 # Old project copies
 dns-security-auditor/
+dns_auditor/
+dns_auditor_backup/
+
+# Shell scripts (project uses Procfile)
+doitall.sh
+project-fixup.sh
+run.sh
+run_cli.sh
+text.sh
+
+# Streamlit config (not used in web app)
+.streamlit/
+config.toml
+
+# Test / coverage
+.coverage
+htmlcov/
+.pytest_cache/
+.tox/
+.nox/
+
+# Node (if any frontend tooling added later)
+node_modules/
+package-lock.json
+
+# Misc
+*.sqlite3
+*.db
+

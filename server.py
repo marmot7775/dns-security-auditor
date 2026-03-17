@@ -2,8 +2,6 @@
 DNS Security Auditor - FastAPI Server
 ======================================
 GET  /api/audit?domain=example.com  -- run full audit
-GET  /api/treewalk?domain=...       -- tree walk JSON
-GET  /treewalk?domain=...           -- animated tree walk visualization
 GET  /                               -- serve frontend
 GET  /static/*                       -- serve static assets
 
@@ -11,21 +9,18 @@ Usage:
     uvicorn server:app --host 0.0.0.0 --port 8000
 """
 
-import html as html_lib
-import json
 import re
 import time
+from collections import defaultdict
 from pathlib import Path
 from typing import Optional
 
-from fastapi import FastAPI, Query, HTTPException
+from fastapi import FastAPI, Query, HTTPException, Request
 from fastapi.staticfiles import StaticFiles
-from fastapi.responses import FileResponse, HTMLResponse, JSONResponse
+from fastapi.responses import FileResponse, JSONResponse
 from fastapi.middleware.cors import CORSMiddleware
 
 from audit_engine import run_full_audit
-from dmarc_tree_walk import dmarc_tree_walk
-from treewalk_card import render_landing_page, render_tree_walk_page
 
 
 # ============================================================
@@ -40,10 +35,44 @@ app = FastAPI(
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
+    allow_origins=[
+        "https://dns-audit.com",
+        "https://www.dns-audit.com",
+        "http://localhost:8000",
+        "http://127.0.0.1:8000",
+    ],
     allow_methods=["GET"],
     allow_headers=["*"],
 )
+
+
+# ============================================================
+# Rate limiting (in-memory, per-IP)
+# ============================================================
+
+_rate_limits: dict = defaultdict(list)
+RATE_LIMIT_MAX = 10       # max requests
+RATE_LIMIT_WINDOW = 60    # per 60 seconds
+
+
+def _check_rate_limit(client_ip: str) -> bool:
+    """Return True if the request is allowed, False if rate-limited."""
+    now = time.time()
+    # Prune old timestamps
+    _rate_limits[client_ip] = [
+        ts for ts in _rate_limits[client_ip]
+        if now - ts < RATE_LIMIT_WINDOW
+    ]
+    if len(_rate_limits[client_ip]) >= RATE_LIMIT_MAX:
+        return False
+    _rate_limits[client_ip].append(now)
+    # Prevent unbounded memory growth: prune stale IPs periodically
+    if len(_rate_limits) > 10000:
+        cutoff = now - RATE_LIMIT_WINDOW
+        stale = [ip for ip, ts in _rate_limits.items() if not ts or ts[-1] < cutoff]
+        for ip in stale:
+            del _rate_limits[ip]
+    return True
 
 
 # ============================================================
@@ -52,22 +81,26 @@ app.add_middleware(
 
 _cache: dict = {}
 CACHE_TTL = 300  # 5 minutes
+CACHE_MAX_SIZE = 500
 
 
 def _get_cached(domain: str) -> Optional[dict]:
     entry = _cache.get(domain)
     if entry and (time.time() - entry["ts"]) < CACHE_TTL:
         return entry["data"]
+    # Expired — clean up
+    if entry:
+        del _cache[domain]
     return None
 
 
 def _set_cached(domain: str, data: dict):
     _cache[domain] = {"data": data, "ts": time.time()}
-    # Evict old entries if cache grows too large
-    if len(_cache) > 500:
+    # Evict oldest entries if cache grows too large
+    if len(_cache) > CACHE_MAX_SIZE:
         oldest = sorted(_cache.items(), key=lambda x: x[1]["ts"])[:100]
         for key, _ in oldest:
-            del _cache[key]
+            _cache.pop(key, None)
 
 
 # ============================================================
@@ -112,6 +145,7 @@ def _validate_domain(domain: str) -> str:
 
 @app.get("/api/audit")
 async def audit_domain(
+    request: Request,
     domain: str = Query(..., description="Domain to audit (e.g., example.com)"),
     selector: Optional[str] = Query(None, description="DKIM selector (e.g., google, s1)"),
     scope: Optional[str] = Query(None, description="Audit scope: complete, email_full, dmarc, transport, dns_infra, security_scan"),
@@ -126,6 +160,14 @@ async def audit_domain(
     - Priority fixes
     - Detected email vendors
     """
+    # Rate limiting
+    client_ip = request.client.host if request.client else "unknown"
+    if not _check_rate_limit(client_ip):
+        raise HTTPException(
+            status_code=429,
+            detail="Rate limit exceeded. Please wait a minute before trying again.",
+        )
+
     domain = _validate_domain(domain)
 
     # Check cache
@@ -159,31 +201,6 @@ async def health():
 
 
 # ============================================================
-# Tree Walk Endpoints
-# ============================================================
-
-@app.get("/api/treewalk")
-async def treewalk_api(
-    domain: str = Query(..., description="Domain to tree walk"),
-):
-    """Perform a DMARCbis DNS tree walk and return structured results."""
-    domain = _validate_domain(domain)
-    return dmarc_tree_walk(domain)
-
-
-@app.get("/treewalk", response_class=HTMLResponse)
-async def treewalk_page(
-    domain: str = Query(None, description="Domain to visualize"),
-):
-    """Serve the interactive animated DMARCbis tree walk visualization."""
-    if not domain:
-        return HTMLResponse(content=render_landing_page())
-    domain = _validate_domain(domain)
-    tw_result = dmarc_tree_walk(domain)
-    return HTMLResponse(content=render_tree_walk_page(tw_result))
-
-
-# ============================================================
 # Static files & frontend
 # ============================================================
 
@@ -199,3 +216,4 @@ else:
     @app.get("/")
     async def index():
         return {"message": "DNS Security Auditor API. Put static files in ./static/"}
+

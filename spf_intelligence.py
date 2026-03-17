@@ -228,7 +228,7 @@ def smart_dkim_check(domain: str, spf_record: Optional[str] = None, max_selector
                 if txt.startswith('v=spf1'):
                     spf_record = txt
                     break
-        except:
+        except Exception:
             spf_record = None
     
     # SMART MODE: Use SPF analysis
@@ -257,7 +257,7 @@ def smart_dkim_check(domain: str, spf_record: Optional[str] = None, max_selector
             dkim_record = str(answers[0]).replace('" "', '').strip('"')
 
             # Validate this is actually a DKIM record, not a wildcard/SPF catch-all
-            if not ("p=" in dkim_record and not dkim_record.strip().startswith("v=spf1")):
+            if "p=" not in dkim_record or dkim_record.strip().startswith("v=spf1"):
                 continue
             
             # Analyze key type
@@ -325,3 +325,4 @@ if __name__ == "__main__":
     print(f"\nTotal selectors to test: {len(prioritized)}")
     print(f"HIGH PRIORITY (from SPF): {len([s for s in prioritized if s in ['google', 'k1', 'k2', 'k3', 'em', 's1', 's2']])}")
     print(f"LOW PRIORITY (generic): {len(prioritized) - len([s for s in prioritized if s in ['google', 'k1', 'k2', 'k3', 'em', 's1', 's2']])}")
+

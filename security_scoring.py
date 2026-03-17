@@ -360,18 +360,21 @@ class EmailSecurityScorer:
         score = 0
         details = {}
 
-        # MTA-STS configured
-        if audit_results.get('mta_sts', {}).get('configured'):
+        # MTA-STS configured — check for txt_record or configured flag
+        mta_sts = audit_results.get('mta_sts', {})
+        if mta_sts.get('configured') or mta_sts.get('txt_record'):
             score += 4
             details['mta_sts'] = 'Configured'
 
-        # TLS-RPT configured
-        if audit_results.get('tls_rpt', {}).get('configured'):
+        # TLS-RPT configured — check for record or configured flag
+        tls_rpt = audit_results.get('tls_rpt', {})
+        if tls_rpt.get('configured') or tls_rpt.get('record'):
             score += 4
             details['tls_rpt'] = 'Configured'
 
-        # BIMI configured
-        if audit_results.get('bimi', {}).get('configured'):
+        # BIMI configured — check for record or configured flag
+        bimi = audit_results.get('bimi', {})
+        if bimi.get('configured') or bimi.get('record'):
             score += 2
             details['bimi'] = 'Configured'
 
@@ -569,3 +572,4 @@ if __name__ == "__main__":
     result = scorer.calculate_score(sample_audit)
     
     print(scorer.format_score_report(result))
+
