@@ -15,6 +15,9 @@ from typing import Any, Dict, List, Optional
 import dns.resolver
 import dns.flags
 import dns.exception
+import dns.message
+import dns.query
+import dns.rdatatype
 
 from checks_extra import check_mta_sts, check_tls_rpt, check_bimi
 from mx_check import check_mx
@@ -1116,15 +1119,100 @@ def _raw_check_dnssec(domain: str) -> Dict[str, Any]:
         )
 
     # Check DS records at the parent (proves the chain is anchored)
-    try:
-        ds_answers = resolver.resolve(domain, "DS")
+    # DS records ONLY exist at the parent zone — child nameservers never serve them.
+    # Strategy:
+    #   Method 1: Direct DS query via recursive resolver (works when resolver is smart)
+    #   Method 2: Query parent NS directly via dns.query.udp (no delegation following)
+    #   Method 3: AD flag on DNSKEY response = chain already validated by resolver
+    ds_found = False
+    ds_algos = set()
+
+    # Method 1: Direct DS query via recursive resolver
+    for attempt_resolver in [resolver, _get_dnssec_resolver(timeout=12.0)]:
+        if ds_found:
+            break
+        try:
+            ds_answers = attempt_resolver.resolve(domain, "DS")
+            ds_found = True
+            for rdata in ds_answers:
+                ds_algos.add(rdata.algorithm)
+        except (dns.resolver.NoAnswer, dns.resolver.NXDOMAIN):
+            continue
+        except Exception:
+            continue
+
+    # Method 2: Query parent zone NS directly with dns.query.udp
+    # This bypasses any delegation — we talk directly to the parent NS
+    # which is the ONLY zone that holds the DS record.
+    if not ds_found:
+        try:
+            parts = domain.split(".")
+            if len(parts) >= 2:
+                # Parent zone: for "example.com" -> "com", for "sub.example.com" -> "example.com"
+                parent = ".".join(parts[1:])
+
+                parent_resolver = _get_dnssec_resolver(timeout=10.0)
+                parent_ns_answers = parent_resolver.resolve(parent, "NS")
+                parent_ns_ips = []
+                for ns_rdata in parent_ns_answers:
+                    ns_name = str(ns_rdata.target)
+                    try:
+                        a_answers = parent_resolver.resolve(ns_name, "A")
+                        for a_rdata in a_answers:
+                            parent_ns_ips.append(str(a_rdata.address))
+                    except Exception:
+                        pass
+
+                # Build a raw DS query with DO flag and send directly to parent NS
+                if parent_ns_ips:
+
+                    ds_query = dns.message.make_query(
+                        domain, dns.rdatatype.DS, want_dnssec=True
+                    )
+                    ds_query.flags |= dns.flags.RD  # ask for recursion just in case
+
+                    for ns_ip in parent_ns_ips[:4]:
+                        if ds_found:
+                            break
+                        try:
+                            response = dns.query.udp(ds_query, ns_ip, timeout=8.0)
+                            # Check for DS records in the answer section
+                            for rrset in response.answer:
+                                if rrset.rdtype == dns.rdatatype.DS:
+                                    ds_found = True
+                                    for rdata in rrset:
+                                        ds_algos.add(rdata.algorithm)
+                                    break
+                        except Exception:
+                            continue
+
+                    # If UDP failed (possible truncation), try TCP
+                    if not ds_found:
+                        for ns_ip in parent_ns_ips[:2]:
+                            if ds_found:
+                                break
+                            try:
+                                response = dns.query.tcp(ds_query, ns_ip, timeout=10.0)
+                                for rrset in response.answer:
+                                    if rrset.rdtype == dns.rdatatype.DS:
+                                        ds_found = True
+                                        for rdata in rrset:
+                                            ds_algos.add(rdata.algorithm)
+                                        break
+                            except Exception:
+                                continue
+        except Exception:
+            pass
+
+    # Method 3: If DNSKEY query had AD flag set, the chain is validated
+    # (meaning DS must exist even if we couldn't fetch it directly)
+    if not ds_found and result.get("validated"):
+        ds_found = True  # AD flag proves the chain is complete
+
+    if ds_found:
         result["has_ds"] = True
-        ds_algos = set()
-        for rdata in ds_answers:
-            ds_algos.add(rdata.algorithm)
         result["ds_algorithms"] = sorted(ds_algos)
-    except dns.resolver.NoAnswer:
-        # Definitive: parent zone has no DS record for this domain
+    else:
         if result["has_dnssec"]:
             _add_issue(
                 "warning",
@@ -1132,18 +1220,6 @@ def _raw_check_dnssec(domain: str) -> Dict[str, Any]:
                 "DNSSEC keys are published but may not be anchored in the parent zone. "
                 "Without a DS record at the parent, resolvers cannot validate the chain of trust.",
                 "Add a DS record at your domain registrar pointing to your DNSKEY.",
-            )
-    except dns.resolver.NXDOMAIN:
-        pass  # Domain doesn't exist at parent level — already flagged by DNSKEY check
-    except Exception as e:
-        # Timeout/network error — don't claim DS is missing, we don't know
-        if result["has_dnssec"]:
-            _add_issue(
-                "info",
-                f"Could not verify DS record: {type(e).__name__}",
-                "Unable to check if a DS record exists at the parent zone due to a resolver error. "
-                "DNSSEC keys were found but chain anchoring could not be confirmed.",
-                "Verify manually with 'dig DS <domain>' or check your registrar's DNSSEC settings.",
             )
 
     # Set final status
