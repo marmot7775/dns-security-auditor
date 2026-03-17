@@ -1015,13 +1015,14 @@ main {
 }
 
 /* Vertical line connecting dots — positioned absolutely so it
-   extends through the step's padding into the next step's dot */
+   extends from below the current dot to the center of the next dot.
+   Gap = step padding-bottom (0.85rem) + next connector padding-top (0.15rem). */
 .tw-step:not(.tw-last) .tw-connector::after {
     content: '';
     position: absolute;
-    top: calc(0.15rem + 10px + 3px);  /* padding-top + dot height + small gap */
-    bottom: calc(-0.85rem + 0.15rem + 5px);  /* into next step's padding, stop at its dot center */
-    left: calc(50% - 1px);  /* center the 2px line */
+    top: calc(0.15rem + 10px);  /* connector padding-top + dot height */
+    height: calc(0.85rem + 0.15rem + 5px);  /* step gap + half of next dot */
+    left: calc(50% - 1px);
     width: 2px;
     background: var(--border-light);
 }
