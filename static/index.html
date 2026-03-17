@@ -15,9 +15,9 @@
     <meta name="twitter:title" content="DNS Security Auditor">
     <meta name="twitter:description" content="Free DNS and email security audit with security grade and actionable fixes.">
     <link rel="canonical" href="https://dns-audit.com">
-    <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><rect rx='20' width='100' height='100' fill='%230a3d6b'/><text x='50' y='68' font-size='55' text-anchor='middle' fill='white' font-family='sans-serif' font-weight='bold'>A</text></svg>">
+    <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><rect width='100' height='100' rx='18' fill='%231a1b1e'/><rect y='0' width='100' height='30' rx='18' fill='%232a2a2e'/><rect y='22' width='100' height='8' fill='%232a2a2e'/><circle cx='18' cy='15' r='5' fill='%23ff5f57'/><circle cx='33' cy='15' r='5' fill='%23febc2e'/><circle cx='48' cy='15' r='5' fill='%2328c840'/><text x='12' y='62' font-family='monospace' font-size='22' font-weight='700'><tspan fill='%235DCAA5'>$ </tspan><tspan fill='%2397C459'>dig</tspan></text><text x='12' y='84' font-family='monospace' font-size='18' font-weight='600' fill='%2385B7EB'>+secure</text></svg>">
     <link href="https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,400;0,9..40,500;0,9..40,600;0,9..40,700;1,9..40,400&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
-    <link rel="stylesheet" href="/static/style.css?v=dane5">
+    <link rel="stylesheet" href="/static/style.css?v=logo1">
 </head>
 <body>
 
@@ -25,10 +25,15 @@
     <header class="site-header">
         <div class="container header-inner">
             <a href="/" class="logo">
-                <div class="logo-icon">
-                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
-                        <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/>
-                    </svg>
+                <div class="logo-terminal">
+                    <div class="logo-titlebar">
+                        <span class="logo-dot logo-dot-red"></span>
+                        <span class="logo-dot logo-dot-yellow"></span>
+                        <span class="logo-dot logo-dot-green"></span>
+                    </div>
+                    <div class="logo-cmd">
+                        <span class="logo-prompt">$&nbsp;</span><span class="logo-bin">dig</span>&nbsp;<span class="logo-flag">+secure</span>
+                    </div>
                 </div>
                 <span class="logo-text">dns<span class="logo-accent">-audit</span>.com</span>
             </a>
@@ -198,7 +203,7 @@
         </div>
     </footer>
 
-    <script src="/static/app.js?v=dane5"></script>
+    <script src="/static/app.js?v=logo1"></script>
 </body>
 </html>
 

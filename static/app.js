@@ -8,11 +8,11 @@ const API_BASE = '/api';
 // -- Scope definitions: which checks to show per scope --
 const SCOPE_CHECKS = {
     complete:      null, // null = show all
-    email_full:    ['DMARC', 'SPF', 'DKIM', 'MX Records', 'MX', 'MTA-STS', 'TLS-RPT', 'BIMI'],
+    email_full:    ['DMARC', 'SPF', 'DKIM', 'MX Records', 'MX', 'MTA-STS', 'TLS-RPT', 'BIMI', 'Blacklist'],
     dmarc:         ['DMARC'],
     transport:     ['MTA-STS', 'TLS-RPT', 'DANE', 'MX Records', 'MX'],
-    dns_infra:     ['DNSSEC', 'CAA', 'DANE', 'Nameservers'],
-    security_scan: ['DMARC', 'SPF', 'DKIM', 'DNSSEC', 'DANE'],
+    dns_infra:     ['DNSSEC', 'CAA', 'DANE', 'Nameservers', 'Certificate Transparency'],
+    security_scan: ['DMARC', 'SPF', 'DKIM', 'DNSSEC', 'DANE', 'Certificate Transparency', 'Blacklist'],
 };
 
 // Severity sort order (lower = higher priority = displayed first)
@@ -106,18 +106,20 @@ async function runAudit(domain) {
 // ============================================================
 
 const LOADING_STEPS = [
-    { pct: 7,  msg: 'Resolving DNS records...' },
-    { pct: 16, msg: 'Checking DMARC policy...' },
-    { pct: 25, msg: 'Analyzing SPF configuration...' },
-    { pct: 35, msg: 'Discovering DKIM selectors...' },
-    { pct: 44, msg: 'Checking MX records...' },
-    { pct: 52, msg: 'Validating MTA-STS...' },
-    { pct: 59, msg: 'Checking TLS-RPT...' },
-    { pct: 65, msg: 'Looking for BIMI record...' },
-    { pct: 72, msg: 'Verifying DNSSEC chain...' },
-    { pct: 78, msg: 'Checking CAA records...' },
-    { pct: 84, msg: 'Checking DANE TLSA records...' },
-    { pct: 90, msg: 'Fingerprinting email services...' },
+    { pct: 6,  msg: 'Resolving DNS records...' },
+    { pct: 13, msg: 'Checking DMARC policy...' },
+    { pct: 20, msg: 'Analyzing SPF configuration...' },
+    { pct: 28, msg: 'Discovering DKIM selectors...' },
+    { pct: 35, msg: 'Checking MX records...' },
+    { pct: 42, msg: 'Validating MTA-STS...' },
+    { pct: 48, msg: 'Checking TLS-RPT...' },
+    { pct: 54, msg: 'Looking for BIMI record...' },
+    { pct: 60, msg: 'Verifying DNSSEC chain...' },
+    { pct: 66, msg: 'Checking CAA records...' },
+    { pct: 72, msg: 'Checking DANE TLSA records...' },
+    { pct: 78, msg: 'Querying certificate transparency logs...' },
+    { pct: 85, msg: 'Checking IP and domain blocklists...' },
+    { pct: 91, msg: 'Fingerprinting email services...' },
     { pct: 97, msg: 'Calculating security score...' },
 ];
 

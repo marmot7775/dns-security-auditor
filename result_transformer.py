@@ -20,7 +20,7 @@ Each card looks like:
 """
 
 from typing import Any, Dict, List, Optional
-from datetime import datetime
+from datetime import datetime, timezone
 
 from dkim_formatter import analyze_dkim_key_strength
 
@@ -76,14 +76,33 @@ def _first_fix(issues: List[Dict]) -> Optional[str]:
 # DMARC
 # ============================================================
 
-def transform_dmarc(raw: Dict) -> Dict:
+def transform_dmarc(raw: Dict, tree_walk: Optional[Dict] = None) -> Dict:
     status = _map_status(raw.get("status", "error"))
     policy = raw.get("policy", "")
     record = raw.get("record")
     pill_label = None
 
+    # Check if this domain inherits policy via tree walk
+    inherited = (
+        not record
+        and tree_walk
+        and tree_walk.get("policy_source")
+        and tree_walk.get("is_subdomain")
+    )
+    inherited_policy = tree_walk.get("effective_policy") if inherited else None
+    inherited_source = tree_walk.get("policy_source") if inherited else None
+
     # Build verdict
-    if not record:
+    if inherited:
+        verdict = f"Inherited: {inherited_policy} (from {inherited_source})"
+        if inherited_policy == "reject":
+            status = "pass"
+        elif inherited_policy == "quarantine":
+            status = "pass"
+        elif inherited_policy == "none":
+            status = "warn"
+        pill_label = "Inherited"
+    elif not record:
         verdict = "No DMARC record found"
         pill_label = "Missing"
     elif policy == "reject":
@@ -99,7 +118,39 @@ def transform_dmarc(raw: Dict) -> Dict:
         verdict = f"Policy: {policy}" if policy else "Invalid record"
 
     # Build explanation
-    if not record:
+    if inherited:
+        applied_tag = tree_walk.get("applied_tag", "p")
+        tag_label = {"sp": "subdomain policy (sp=)", "np": "non-existent subdomain policy (np=)", "p": "domain policy (p=)"}.get(applied_tag, f"{applied_tag}=")
+        if inherited_policy == "reject":
+            explanation = (
+                f"This subdomain does not have its own DMARC record at "
+                f"<strong>_dmarc.{raw.get('domain', '')}</strong>, but it inherits "
+                f"<strong>p=reject</strong> from <strong>{inherited_source}</strong> "
+                f"via the {tag_label} tag. "
+                f"This is the gold standard — emails that fail authentication are blocked entirely."
+            )
+        elif inherited_policy == "quarantine":
+            explanation = (
+                f"This subdomain does not have its own DMARC record at "
+                f"<strong>_dmarc.{raw.get('domain', '')}</strong>, but it inherits "
+                f"<strong>p=quarantine</strong> from <strong>{inherited_source}</strong> "
+                f"via the {tag_label} tag. "
+                f"Emails that fail authentication are routed to the recipient's spam folder."
+            )
+        elif inherited_policy == "none":
+            explanation = (
+                f"This subdomain does not have its own DMARC record at "
+                f"<strong>_dmarc.{raw.get('domain', '')}</strong>, but it inherits "
+                f"<strong>p=none</strong> from <strong>{inherited_source}</strong> "
+                f"via the {tag_label} tag. "
+                f"This is monitoring only — failed emails are still delivered normally."
+            )
+        else:
+            explanation = (
+                f"This subdomain inherits DMARC policy <strong>{inherited_policy}</strong> "
+                f"from <strong>{inherited_source}</strong>."
+            )
+    elif not record:
         explanation = (
             f"No DMARC record exists at <strong>_dmarc.{raw.get('domain', '')}</strong>. "
             f"DMARC is the single most important email security record — it tells receiving mail servers "
@@ -136,7 +187,22 @@ def transform_dmarc(raw: Dict) -> Dict:
 
     # Details
     details = []
-    if record:
+    if inherited:
+        applied_tag = tree_walk.get("applied_tag", "p")
+        if inherited_policy == "reject":
+            details.append({"type": "good", "text": f"Effective policy: reject (inherited from {inherited_source})"})
+        elif inherited_policy == "quarantine":
+            details.append({"type": "good", "text": f"Effective policy: quarantine (inherited from {inherited_source})"})
+        elif inherited_policy == "none":
+            details.append({"type": "warning", "text": f"Effective policy: none (inherited from {inherited_source})"})
+
+        details.append({"type": "info", "text": f"No record at _dmarc.{raw.get('domain', '')} — policy found via tree walk"})
+        details.append({"type": "info", "text": f"Applied tag: {applied_tag}= from {inherited_source}"})
+
+        if tree_walk.get("org_domain"):
+            details.append({"type": "info", "text": f"Organizational domain: {tree_walk['org_domain']}"})
+
+    elif record:
         if policy == "reject":
             details.append({"type": "good", "text": "Policy p=reject provides maximum protection"})
         elif policy == "quarantine":
@@ -168,7 +234,23 @@ def transform_dmarc(raw: Dict) -> Dict:
 
     # Fix
     domain_name = raw.get("domain", "")
-    if not record:
+    if inherited:
+        if inherited_policy == "none":
+            fix = (
+                f"The inherited policy from <strong>{inherited_source}</strong> is p=none (monitoring only). "
+                f"Either upgrade the parent domain's policy to p=quarantine or p=reject, "
+                f"or publish a dedicated DMARC record at <strong>_dmarc.{domain_name}</strong> with a stronger policy."
+            )
+        elif inherited_policy == "quarantine":
+            fix = (
+                f"This subdomain is protected by p=quarantine inherited from <strong>{inherited_source}</strong>. "
+                f"For maximum protection, consider upgrading the parent's policy to p=reject, "
+                f"or publish a dedicated <strong>p=reject</strong> record at <strong>_dmarc.{domain_name}</strong>."
+            )
+        else:
+            # reject — no fix needed
+            fix = None
+    elif not record:
         fix = (
             f"Add this TXT record at <strong>_dmarc.{domain_name}</strong>:<br>"
             f"<code>v=DMARC1; p=none; rua=mailto:dmarc-reports@{domain_name}; fo=1</code><br><br>"
@@ -188,12 +270,21 @@ def transform_dmarc(raw: Dict) -> Dict:
     else:
         fix = _first_fix(raw.get("issues", []))
 
+    # For inherited policy, show the parent's record
+    display_record = record
+    if inherited and not display_record:
+        # Pull record from tree walk steps
+        for step in (tree_walk.get("steps") or []):
+            if step.get("found") and step.get("record"):
+                display_record = step["record"]
+                break
+
     return {
         "name": "DMARC",
         "status": status,
-        "pill_label": pill_label if not record else None,
+        "pill_label": pill_label,
         "verdict": verdict,
-        "record": record,
+        "record": display_record,
         "explanation": explanation,
         "details": details,
         "fix": fix,
@@ -1215,6 +1306,295 @@ def transform_nameservers(raw: Dict) -> Dict:
             "Nameservers are the foundation of your DNS -- they answer every query for your domain. "
             "Redundancy and network diversity are critical to prevent outages."
         ),
+        "details": details,
+        "fix": fix,
+    }
+
+
+# ============================================================
+# Certificate Transparency
+# ============================================================
+
+def transform_ct(raw: Dict, domain: str) -> Dict:
+    total = raw.get("total_certs", 0)
+    active = raw.get("active_certs", 0)
+    issuers = raw.get("issuers", [])
+    wildcards = raw.get("wildcards", [])
+    expiring = raw.get("expiring_soon", [])
+    expired = raw.get("expired_recent", [])
+    subdomains = raw.get("subdomains_found", [])
+    caa_mismatches = raw.get("caa_mismatches", [])
+    issues = raw.get("issues", [])
+
+    # No certs found
+    if total == 0:
+        return {
+            "name": "Certificate Transparency",
+            "status": "pass",
+            "pill_label": "No certs",
+            "verdict": "No certificates found in CT logs",
+            "record": None,
+            "explanation": (
+                "No certificates were found in Certificate Transparency logs for this domain. "
+                "This likely means the domain has never had HTTPS configured."
+            ),
+            "details": [
+                {"type": "info", "text": "No certificates found in public CT logs"},
+            ],
+            "fix": None,
+        }
+
+    # Determine status
+    status = "pass"
+    pill_label = None
+    if caa_mismatches:
+        status = "warn"
+        pill_label = "CAA mismatch"
+    elif expiring:
+        status = "warn"
+        pill_label = "Expiring"
+    else:
+        pill_label = f"{active} cert{'s' if active != 1 else ''}"
+
+    # Verdict
+    issuer_summary = ", ".join(i["name"] for i in issuers[:2])
+    if len(issuers) > 2:
+        issuer_summary += f" +{len(issuers) - 2} more"
+    verdict = f"{active} active cert{'s' if active != 1 else ''} from {len(issuers)} issuer{'s' if len(issuers) != 1 else ''}"
+
+    # Explanation
+    explanation = (
+        f"Found <strong>{total}</strong> certificate{'s' if total != 1 else ''} in Certificate Transparency logs, "
+        f"of which <strong>{active}</strong> {'are' if active != 1 else 'is'} currently active."
+    )
+    if caa_mismatches:
+        explanation += (
+            " <strong>Warning:</strong> Some certificates were issued by CAs not authorized by your CAA records."
+        )
+
+    # Details
+    details = []
+    details.append({"type": "good", "text": f"{active} active certificates from {len(issuers)} issuer{'s' if len(issuers) != 1 else ''}"})
+
+    # Issuer breakdown
+    issuer_parts = []
+    for i in issuers[:5]:
+        issuer_parts.append(f"{i['name']} ({i['count']})")
+    if issuer_parts:
+        details.append({"type": "info", "text": f"Issuers: {', '.join(issuer_parts)}"})
+
+    # CAA mismatches
+    for mm in caa_mismatches:
+        details.append({
+            "type": "warning",
+            "text": f"CAA allows [{', '.join(mm['caa_allows'])}] but certs found from {mm['cert_issuer']}",
+        })
+
+    # Wildcards
+    if wildcards:
+        details.append({"type": "info", "text": f"{len(wildcards)} wildcard certificate{'s' if len(wildcards) != 1 else ''} found"})
+
+    # Expiring
+    for exp in expiring[:3]:
+        details.append({
+            "type": "warning",
+            "text": f"Expiring in {exp['days_left']} days: {exp['common_name']}",
+        })
+
+    # Certificate sprawl
+    if len(issuers) > 5:
+        details.append({"type": "info", "text": f"Certificates from {len(issuers)} different CAs — consider consolidating"})
+
+    # Subdomains
+    if subdomains:
+        details.append({"type": "info", "text": f"{len(subdomains)} unique subdomain{'s' if len(subdomains) != 1 else ''} discovered via CT"})
+
+    # Append raw issues
+    for issue in issues:
+        details.append(_issue_to_detail(issue))
+
+    # Fix (only for CAA mismatches)
+    fix = None
+    if caa_mismatches:
+        mismatched_cas = ", ".join(mm["cert_issuer"] for mm in caa_mismatches[:3])
+        fix = (
+            f"Update your CAA record to include <strong>{mismatched_cas}</strong>, "
+            f"or revoke certificates from unauthorized CAs. If these are older certs issued "
+            f"before CAA was configured, they will naturally expire."
+        )
+
+    return {
+        "name": "Certificate Transparency",
+        "status": status,
+        "pill_label": pill_label,
+        "verdict": verdict,
+        "record": None,
+        "explanation": explanation,
+        "details": details,
+        "fix": fix,
+    }
+
+
+# ============================================================
+# Blacklist
+# ============================================================
+
+def transform_blacklist(raw: Dict, domain: str) -> Dict:
+    ips_checked = raw.get("ips_checked", [])
+    ip_results = raw.get("ip_results", [])
+    domain_results = raw.get("domain_results", [])
+    total_listings = raw.get("total_listings", 0)
+    issues = raw.get("issues", [])
+
+    DELIST_URLS = {
+        "Spamhaus ZEN": "https://check.spamhaus.org/",
+        "Spamhaus DBL": "https://check.spamhaus.org/",
+        "Barracuda BRBL": "https://www.barracudacentral.org/lookups",
+        "SpamCop": "https://www.spamcop.net/bl.shtml",
+    }
+
+    # No MX IPs to check
+    if not ips_checked and not domain_results:
+        return {
+            "name": "Blacklist",
+            "status": "pass",
+            "pill_label": "N/A",
+            "verdict": "No MX servers to check",
+            "record": None,
+            "explanation": (
+                "No MX server IPs were available to check against DNS-based blocklists. "
+                "This domain may not have MX records configured."
+            ),
+            "details": [{"type": "info", "text": "No MX servers to check against blocklists"}],
+            "fix": None,
+        }
+
+    # Determine status and collect listings
+    tier1_listed = False
+    tier2_only = False
+    listed_names = []
+
+    for ip_result in ip_results:
+        for listing in ip_result.get("listings", []):
+            if listing.get("listed"):
+                list_name = listing["list"]
+                listed_names.append(list_name)
+                if list_name in ("Spamhaus ZEN", "Barracuda BRBL"):
+                    tier1_listed = True
+                else:
+                    tier2_only = True
+
+    for dr in domain_results:
+        if dr.get("listed"):
+            list_name = dr["list"]
+            listed_names.append(list_name)
+            if list_name == "Spamhaus DBL":
+                tier1_listed = True
+            else:
+                tier2_only = True
+
+    if tier1_listed:
+        status = "fail"
+        pill_label = "Listed"
+    elif tier2_only:
+        status = "warn"
+        pill_label = "Listed"
+    else:
+        status = "pass"
+        pill_label = "Clean"
+
+    # Total lists checked
+    total_lists = len(ip_results[0]["listings"]) if ip_results else 0
+    total_lists += len(domain_results)
+
+    # Verdict
+    if total_listings > 0:
+        verdict = f"Listed on {total_listings} blocklist{'s' if total_listings != 1 else ''}"
+    else:
+        verdict = f"Clean on all {total_lists} blocklists checked"
+
+    # Explanation
+    if total_listings > 0:
+        if tier1_listed:
+            explanation = (
+                f"<strong>Warning:</strong> This domain's mail servers are listed on {total_listings} "
+                f"blocklist{'s' if total_listings != 1 else ''}. "
+                "Major blocklist listings (Spamhaus, Barracuda) cause significant email "
+                "deliverability problems — many receiving servers will reject or spam-folder your mail."
+            )
+        else:
+            explanation = (
+                f"This domain's mail servers appear on {total_listings} secondary "
+                f"blocklist{'s' if total_listings != 1 else ''}. "
+                "These have less impact than major lists but may still affect deliverability "
+                "with some receivers."
+            )
+    else:
+        explanation = (
+            f"Checked {len(ips_checked)} IP{'s' if len(ips_checked) != 1 else ''} and the domain "
+            f"against {total_lists} DNS-based blocklists. No listings found — your mail server "
+            "reputation is clean."
+        )
+
+    # Details
+    details = []
+
+    # Per-IP results
+    for ip_result in ip_results:
+        ip = ip_result["ip"]
+        mx_host = ip_result.get("mx_host", "")
+        host_label = f"{mx_host} ({ip})" if mx_host else ip
+
+        any_listed = False
+        for listing in ip_result.get("listings", []):
+            if listing.get("listed"):
+                any_listed = True
+                meaning = listing.get("meaning", "Listed")
+                details.append({
+                    "type": "error" if listing["list"] in ("Spamhaus ZEN", "Barracuda BRBL") else "warning",
+                    "text": f"{host_label}: {listing['list']} — {meaning}",
+                })
+            elif listing.get("error"):
+                details.append({"type": "info", "text": f"{host_label}: {listing['list']} — lookup failed"})
+
+        if not any_listed:
+            details.append({"type": "good", "text": f"{host_label}: clean on all IP blocklists"})
+
+    # Domain results
+    for dr in domain_results:
+        if dr.get("listed"):
+            meaning = dr.get("meaning", "Listed")
+            details.append({"type": "error", "text": f"{domain}: {dr['list']} — {meaning}"})
+        else:
+            details.append({"type": "good", "text": f"{domain}: clean on {dr['list']}"})
+
+    # Append raw issues
+    for issue in issues:
+        details.append(_issue_to_detail(issue))
+
+    # Fix
+    fix = None
+    if total_listings > 0:
+        delist_parts = []
+        seen_urls = set()
+        for name in listed_names:
+            url = DELIST_URLS.get(name)
+            if url and url not in seen_urls:
+                seen_urls.add(url)
+                delist_parts.append(f"<strong>{name}</strong>: {url}")
+        if delist_parts:
+            fix = "Request delisting from each blocklist:<br>" + "<br>".join(delist_parts)
+            fix += "<br><br>Investigate the root cause (compromised account, open relay, or spam complaint spike) before requesting removal."
+        else:
+            fix = "Investigate the root cause of the listing and contact the blocklist operator for removal."
+
+    return {
+        "name": "Blacklist",
+        "status": status,
+        "pill_label": pill_label,
+        "verdict": verdict,
+        "record": None,
+        "explanation": explanation,
         "details": details,
         "fix": fix,
     }
