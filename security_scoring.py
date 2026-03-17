@@ -286,7 +286,9 @@ class EmailSecurityScorer:
 
         found_selectors = dkim.get('found_selectors', [])
         if not found_selectors:
-            return 0, {'reason': 'No DKIM keys found', 'impact': 'HIGH'}
+            # DKIM selectors are private and cannot be enumerated from the outside.
+            # Not finding keys does not mean they don't exist. Give neutral credit.
+            return 12, {'reason': 'No DKIM keys detected (selectors are not publicly enumerable)', 'impact': 'UNKNOWN'}
 
         # Has at least one key: +8 points
         score += 8
@@ -336,7 +338,8 @@ class EmailSecurityScorer:
 
         found_selectors = dkim.get('found_selectors', [])
         if not found_selectors:
-            return 0, {'reason': 'No keys to evaluate'}
+            # Can't evaluate key security without visible keys. Give neutral credit.
+            return 6, {'reason': 'No keys detected to evaluate (selectors are not publicly enumerable)'}
 
         # Key age/rotation status
         overdue = key_age.get('overdue', 0)
