@@ -35,77 +35,96 @@ class EmailSecurityScorer:
     
     def calculate_score(self, audit_results: Dict) -> Dict:
         """
-        Calculate comprehensive security score
-        
-        Args:
-            audit_results: Complete audit data from all checks
-            
-        Returns:
-            {
-                'total_score': int (0-100),
-                'grade': str (A-F),
-                'category_scores': dict,
-                'strengths': list,
-                'weaknesses': list,
-                'recommendations': list
-            }
+        Calculate comprehensive security score.
+
+        Context-aware: if the domain has no MX records (doesn't receive/send
+        mail), email-specific categories (SPF, DKIM, best-practices) are
+        scored generously so a perfectly valid non-mail subdomain doesn't
+        get an F.
         """
         scores = {}
         details = {}
-        
-        # 1. DMARC Score (25 points)
+        has_mx = audit_results.get('has_mx', True)  # default True for backward compat
+
+        # 1. DMARC Score (30 points)
         dmarc_score, dmarc_details = self._score_dmarc(
             audit_results.get('dmarc_results', {})
         )
         scores['dmarc'] = dmarc_score
         details['dmarc'] = dmarc_details
-        
-        # 2. SPF Score (20 points)
-        spf_score, spf_details = self._score_spf(
-            audit_results.get('spf_results', {})
-        )
+
+        # 2. SPF Score (25 points)
+        if has_mx:
+            spf_score, spf_details = self._score_spf(
+                audit_results.get('spf_results', {})
+            )
+        else:
+            # No MX = no mail sending expected. Give full credit if there's
+            # an inherited DMARC reject (domain is protected), partial otherwise.
+            inherited = audit_results.get('dmarc_results', {}).get('inherited_policy')
+            if inherited in ('reject', 'quarantine'):
+                spf_score, spf_details = 25, {'reason': 'N/A — non-mail subdomain (protected by DMARC)'}
+            else:
+                spf_score, spf_details = self._score_spf(audit_results.get('spf_results', {}))
         scores['spf'] = spf_score
         details['spf'] = spf_details
-        
-        # 3. DKIM Score (25 points)
-        dkim_score, dkim_details = self._score_dkim(
-            audit_results.get('dkim_results', {})
-        )
+
+        # 3. DKIM Score (20 points)
+        if has_mx:
+            dkim_score, dkim_details = self._score_dkim(
+                audit_results.get('dkim_results', {})
+            )
+        else:
+            inherited = audit_results.get('dmarc_results', {}).get('inherited_policy')
+            if inherited in ('reject', 'quarantine'):
+                dkim_score, dkim_details = 20, {'reason': 'N/A — non-mail subdomain (protected by DMARC)'}
+            else:
+                dkim_score, dkim_details = self._score_dkim(audit_results.get('dkim_results', {}))
         scores['dkim'] = dkim_score
         details['dkim'] = dkim_details
-        
-        # 4. Key Security Score (15 points)
-        key_score, key_details = self._score_key_security(
-            audit_results.get('dkim_results', {}),
-            audit_results.get('key_age_analysis', {})
-        )
+
+        # 4. Key Security Score (10 points)
+        if has_mx:
+            key_score, key_details = self._score_key_security(
+                audit_results.get('dkim_results', {}),
+                audit_results.get('key_age_analysis', {})
+            )
+        else:
+            key_score, key_details = 10, {'reason': 'N/A — non-mail subdomain'}
         scores['key_security'] = key_score
         details['key_security'] = key_details
-        
-        # 5. Vendor Intelligence Score (10 points)
+
+        # 5. Vendor Intelligence Score (5 points)
         vendor_score, vendor_details = self._score_vendor_intelligence(
             audit_results.get('vendor_fingerprint', {})
         )
         scores['vendor_intelligence'] = vendor_score
         details['vendor_intelligence'] = vendor_details
-        
-        # 6. Best Practices Score (5 points)
-        practices_score, practices_details = self._score_best_practices(
-            audit_results
-        )
+
+        # 6. Best Practices Score (10 points)
+        if has_mx:
+            practices_score, practices_details = self._score_best_practices(
+                audit_results
+            )
+        else:
+            inherited = audit_results.get('dmarc_results', {}).get('inherited_policy')
+            if inherited in ('reject', 'quarantine'):
+                practices_score, practices_details = 10, {'reason': 'N/A — non-mail subdomain (protected by DMARC)'}
+            else:
+                practices_score, practices_details = self._score_best_practices(audit_results)
         scores['best_practices'] = practices_score
         details['best_practices'] = practices_details
-        
+
         # Calculate total
         total_score = sum(scores.values())
         grade = self._calculate_grade(total_score)
-        
+
         # Identify strengths and weaknesses
         strengths, weaknesses = self._identify_strengths_weaknesses(scores, details)
-        
+
         # Generate recommendations
         recommendations = self._generate_recommendations(scores, details, audit_results)
-        
+
         return {
             'total_score': round(total_score, 1),
             'grade': grade,
@@ -117,14 +136,38 @@ class EmailSecurityScorer:
         }
     
     def _score_dmarc(self, dmarc: Dict) -> Tuple[float, Dict]:
-        """Score DMARC configuration (30 points max)"""
+        """Score DMARC configuration (30 points max).
+
+        Handles both direct records and inherited policies from tree walk.
+        """
         score = 0
         details = {}
 
-        if not dmarc.get('record'):
+        inherited_policy = dmarc.get('inherited_policy')
+        has_record = dmarc.get('record')
+
+        # No record AND no inherited policy
+        if not has_record and not inherited_policy:
             return 0, {'reason': 'No DMARC record', 'impact': 'CRITICAL'}
 
-        # Has record: +6 points
+        # Inherited policy (subdomain without own record)
+        if not has_record and inherited_policy:
+            details['inherited'] = True
+            # Credit the inherited policy — the domain IS protected
+            if inherited_policy == 'reject':
+                score = 26  # Full policy credit, slight deduction for no own record
+                details['policy'] = 'reject (inherited, excellent)'
+            elif inherited_policy == 'quarantine':
+                score = 22
+                details['policy'] = 'quarantine (inherited, good)'
+            elif inherited_policy == 'none':
+                score = 8
+                details['policy'] = 'none (inherited, monitoring only)'
+            else:
+                score = 5
+            return min(score, 30), details
+
+        # Has own record: +6 points
         score += 6
         details['has_record'] = True
 
@@ -418,11 +461,17 @@ class EmailSecurityScorer:
 
         # DMARC recommendations
         dmarc = audit_results.get('dmarc_results', {})
-        if not dmarc.get('record'):
+        inherited = dmarc.get('inherited_policy')
+        if not dmarc.get('record') and not inherited:
             domain = dmarc.get('domain', 'yourdomain.com')
             recommendations.append(
                 f"🔴 CRITICAL: Publish a DMARC record. Add this TXT record at _dmarc.{domain}: "
                 f"v=DMARC1; p=none; rua=mailto:dmarc-reports@{domain}; fo=1"
+            )
+        elif not dmarc.get('record') and inherited == 'none':
+            recommendations.append(
+                "🟡 HIGH: Inherited DMARC policy is p=none (monitoring only). "
+                "Upgrade the parent domain's policy or publish a dedicated record with stronger enforcement"
             )
         elif dmarc.get('policy') == 'none':
             recommendations.append(
@@ -435,8 +484,9 @@ class EmailSecurityScorer:
             )
 
         # SPF recommendations
+        has_mx = audit_results.get('has_mx', True)
         spf = audit_results.get('spf_results', {})
-        if not spf.get('record'):
+        if not spf.get('record') and has_mx:
             recommendations.append("🔴 CRITICAL: Publish an SPF record listing your authorized sending servers")
         elif spf.get('lookup_count', 0) > 10:
             count = spf['lookup_count']
@@ -445,26 +495,27 @@ class EmailSecurityScorer:
                 f"Flatten includes to IP addresses or remove unused sending services"
             )
 
-        # DKIM recommendations
-        dkim_score = scores['dkim']
-        if dkim_score == 0:
-            recommendations.append(
-                "🟡 HIGH: No DKIM keys were detected. Verify DKIM signing is enabled with your email provider "
-                "and confirm the public key is published in DNS"
-            )
-        elif dkim_score < 12:
-            dkim_details = details.get('dkim', {})
-            if 'weak' in str(dkim_details.get('key_strength', '')).lower():
-                recommendations.append("🟡 HIGH: Upgrade 1024-bit DKIM keys to 2048-bit or stronger")
+        # DKIM recommendations (only for mail-sending domains)
+        if has_mx:
+            dkim_score = scores['dkim']
+            if dkim_score == 0:
+                recommendations.append(
+                    "🟡 HIGH: No DKIM keys were detected. Verify DKIM signing is enabled with your email provider "
+                    "and confirm the public key is published in DNS"
+                )
+            elif dkim_score < 12:
+                dkim_details = details.get('dkim', {})
+                if 'weak' in str(dkim_details.get('key_strength', '')).lower():
+                    recommendations.append("🟡 HIGH: Upgrade 1024-bit DKIM keys to 2048-bit or stronger")
 
-        # Key security recommendations
-        if scores['key_security'] > 0 and scores['key_security'] < 6:
-            key_details = details.get('key_security', {})
-            if 'overdue' in str(key_details.get('rotation_status', '')).lower():
-                recommendations.append("🟡 MEDIUM: Rotate overdue DKIM keys for better security")
+            # Key security recommendations
+            if scores['key_security'] > 0 and scores['key_security'] < 6:
+                key_details = details.get('key_security', {})
+                if 'overdue' in str(key_details.get('rotation_status', '')).lower():
+                    recommendations.append("🟡 MEDIUM: Rotate overdue DKIM keys for better security")
 
-        # Best practices
-        if scores['best_practices'] < 4:
+        # Best practices (only for mail-sending domains)
+        if has_mx and scores['best_practices'] < 4:
             mta_sts = audit_results.get('mta_sts', {})
             tls_rpt = audit_results.get('tls_rpt', {})
             if not mta_sts.get('configured') and not tls_rpt.get('configured'):
@@ -473,12 +524,13 @@ class EmailSecurityScorer:
                 )
 
         # DANE recommendation when MTA-STS exists but DANE doesn't
-        dane = audit_results.get('dane', {})
-        mta_sts = audit_results.get('mta_sts', {})
-        if not dane.get('configured') and (mta_sts.get('configured') or mta_sts.get('txt_record')):
-            recommendations.append(
-                "🟢 LOW: Add DANE TLSA records to complement MTA-STS with DNS-based certificate verification"
-            )
+        if has_mx:
+            dane = audit_results.get('dane', {})
+            mta_sts = audit_results.get('mta_sts', {})
+            if not dane.get('configured') and (mta_sts.get('configured') or mta_sts.get('txt_record')):
+                recommendations.append(
+                    "🟢 LOW: Add DANE TLSA records to complement MTA-STS with DNS-based certificate verification"
+                )
 
         return recommendations[:5]
     

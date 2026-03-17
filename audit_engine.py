@@ -2480,13 +2480,15 @@ def run_full_audit(domain: str, dkim_selector: Optional[str] = None) -> Dict[str
         checks.append(_error_card("Blacklist", e))
 
     # --- Security Score ---
-    score_result = _calculate_score(raw_results, domain)
+    score_result = _calculate_score(raw_results, domain, tree_walk=tree_walk_result)
 
     # --- Vendor Fingerprinting ---
     vendors = _get_vendors(raw_results, domain)
 
     # --- Priority Fixes ---
-    priority_fixes = _build_priority_fixes(checks, score_result)
+    raw_mx = raw_results.get("mx", {})
+    has_mx = bool(raw_mx.get("records")) or bool(raw_mx.get("mx_details"))
+    priority_fixes = _build_priority_fixes(checks, score_result, has_mx=has_mx)
 
     # --- Assemble final response ---
     elapsed = (datetime.now() - start_time).total_seconds()
@@ -2511,11 +2513,15 @@ def run_full_audit(domain: str, dkim_selector: Optional[str] = None) -> Dict[str
 # Score Calculation
 # ============================================================
 
-def _calculate_score(raw_results: Dict, domain: str) -> Dict:
+def _calculate_score(raw_results: Dict, domain: str, tree_walk: Optional[Dict] = None) -> Dict:
     """Build the audit_results dict that EmailSecurityScorer expects."""
     try:
-        # DMARC results
+        # DMARC results — include inherited policy info
         raw_dmarc = raw_results.get("dmarc", {})
+        inherited_policy = None
+        if not raw_dmarc.get("record") and tree_walk and tree_walk.get("policy_source") and tree_walk.get("is_subdomain"):
+            inherited_policy = tree_walk.get("effective_policy")
+
         dmarc_for_scorer = {
             "record": raw_dmarc.get("record"),
             "policy": raw_dmarc.get("policy", ""),
@@ -2524,7 +2530,12 @@ def _calculate_score(raw_results: Dict, domain: str) -> Dict:
             "ruf": raw_dmarc.get("ruf"),
             "sp": raw_dmarc.get("sp"),
             "domain": domain,
+            "inherited_policy": inherited_policy,
         }
+
+        # Detect non-mail-sending subdomains: no MX + inherited DMARC
+        raw_mx = raw_results.get("mx", {})
+        has_mx = bool(raw_mx.get("records")) or bool(raw_mx.get("mx_details"))
 
         # SPF results
         raw_spf = raw_results.get("spf", {})
@@ -2589,6 +2600,7 @@ def _calculate_score(raw_results: Dict, domain: str) -> Dict:
             "tls_rpt": {"configured": tls_rpt_configured},
             "bimi": {"configured": bimi_configured},
             "dane": {"configured": dane_configured},
+            "has_mx": has_mx,
         }
 
         scorer = EmailSecurityScorer()
@@ -2633,11 +2645,17 @@ def _get_vendors(raw_results: Dict, domain: str) -> List[Dict]:
 # Priority Fixes
 # ============================================================
 
-def _build_priority_fixes(checks: List[Dict], score_result: Dict) -> List[str]:
+def _build_priority_fixes(checks: List[Dict], score_result: Dict, has_mx: bool = True) -> List[str]:
     """
     Build prioritized fix list from check results and scorer recommendations.
     Maximum 5 items, ordered by severity. Deduplicates by check name.
+
+    For non-mail domains (has_mx=False), skip email-infrastructure fixes
+    since they're not applicable.
     """
+    # Checks that only matter for mail-sending domains
+    MAIL_ONLY_CHECKS = {"SPF", "MX Records", "MX", "MTA-STS", "TLS-RPT", "DKIM", "BIMI", "DANE"}
+
     fixes = []
     covered_checks = set()
 
@@ -2658,6 +2676,9 @@ def _build_priority_fixes(checks: List[Dict], score_result: Dict) -> List[str]:
         if check.get("status") == "fail" and check.get("fix"):
             check_name = check.get("name", "")
             if check_name in covered_checks:
+                continue
+            # Skip email-infrastructure fixes for non-mail domains
+            if not has_mx and check_name in MAIL_ONLY_CHECKS:
                 continue
             # Skip error cards (generic retry messages aren't actionable)
             if check.get("pill_label") == "Error":

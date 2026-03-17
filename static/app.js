@@ -219,8 +219,18 @@ function renderResults(data) {
         });
     }
 
-    // -- Sort by severity: fail → warn → pass --
+    // -- Sort: email auth first (DMARC, SPF, DKIM), then severity --
+    const PIN_TOP = ['DMARC', 'SPF', 'DKIM'];
     checks.sort((a, b) => {
+        const aPin = PIN_TOP.indexOf(a.name);
+        const bPin = PIN_TOP.indexOf(b.name);
+        const aIsPinned = aPin !== -1;
+        const bIsPinned = bPin !== -1;
+        // Pinned checks always first, in defined order
+        if (aIsPinned && bIsPinned) return aPin - bPin;
+        if (aIsPinned) return -1;
+        if (bIsPinned) return 1;
+        // Everything else sorted by severity
         const sa = SEVERITY_ORDER[a.status] ?? 3;
         const sb = SEVERITY_ORDER[b.status] ?? 3;
         return sa - sb;
