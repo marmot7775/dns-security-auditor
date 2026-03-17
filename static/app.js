@@ -182,6 +182,9 @@ function renderResults(data) {
         hideLoading();
         resultsSection.style.display = 'block';
 
+        // Scroll results into view so user sees the report
+        resultsSection.scrollIntoView({ behavior: 'smooth', block: 'start' });
+
         // Update URL for sharing
         const url = new URL(window.location);
         url.searchParams.set('d', data.domain);
