@@ -186,12 +186,33 @@ main {
     color: var(--primary);
 }
 
+.header-nav {
+    display: flex;
+    align-items: center;
+    gap: 1.25rem;
+}
+
 .site-tagline {
     font-size: 0.82rem;
     font-weight: 500;
     color: var(--text-tertiary);
     letter-spacing: 0.01em;
     white-space: nowrap;
+}
+
+.header-link {
+    font-size: 0.82rem;
+    font-weight: 600;
+    color: var(--text-secondary);
+    text-decoration: none;
+    padding: 0.3rem 0.7rem;
+    border-radius: 6px;
+    transition: color var(--duration) var(--ease), background var(--duration) var(--ease);
+}
+
+.header-link:hover {
+    color: var(--primary);
+    background: var(--primary-subtle);
 }
 
 /* ==========================================================================
@@ -1644,6 +1665,10 @@ main {
 
     .site-tagline {
         display: none;
+    }
+
+    .header-nav {
+        gap: 0;
     }
 
     .audit-input-section {
