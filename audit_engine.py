@@ -46,6 +46,7 @@ from result_transformer import (
     transform_tls_rpt,
     transform_bimi,
     transform_dnssec,
+    transform_dane,
     transform_caa,
     transform_nameservers,
 )
@@ -1628,6 +1629,160 @@ def _raw_check_nameservers(domain: str) -> Dict[str, Any]:
     return result
 
 
+def _raw_check_dane(domain: str, raw_results: Dict[str, Any]) -> Dict[str, Any]:
+    """Check DANE TLSA records for each MX host.
+
+    DANE (RFC 7672) lets sending MTAs verify a mail server's TLS certificate
+    via DNS by publishing TLSA records at _25._tcp.<mx-host>.  DANE requires
+    DNSSEC to be meaningful — without it the TLSA records can be spoofed.
+
+    This is a DNS-only check (no STARTTLS connections).
+    """
+    USAGE_NAMES = {
+        0: "PKIX-TA", 1: "PKIX-EE", 2: "DANE-TA", 3: "DANE-EE",
+    }
+    SELECTOR_NAMES = {0: "Full cert", 1: "SPKI"}
+    MATCHING_NAMES = {0: "Exact", 1: "SHA-256", 2: "SHA-512"}
+
+    result = {
+        "check": "DANE",
+        "domain": domain,
+        "has_tlsa": False,
+        "dnssec_validated": False,
+        "mx_hosts_checked": 0,
+        "mx_hosts_with_tlsa": 0,
+        "tlsa_records": [],
+        "issues": [],
+        "status": "ok",
+    }
+
+    def _add_issue(severity, issue, plain_english, fix):
+        result["issues"].append({
+            "severity": severity, "issue": issue,
+            "plain_english": plain_english, "fix": fix,
+        })
+
+    # Get MX hosts from earlier check
+    raw_mx = raw_results.get("mx", {})
+    mx_details = raw_mx.get("mx_details", [])
+    mx_hosts = [d["hostname"] for d in mx_details if d.get("hostname") and d.get("resolved")]
+    if not mx_hosts:
+        # Fall back to raw records list
+        for rec in raw_mx.get("records", []):
+            parts = rec.strip().split()
+            if len(parts) >= 2:
+                host = parts[-1].rstrip(".")
+                if host:
+                    mx_hosts.append(host)
+
+    if not mx_hosts:
+        result["status"] = "ok"
+        return result
+
+    # DNSSEC status from earlier check
+    raw_dnssec = raw_results.get("dnssec", {})
+    dnssec_ok = raw_dnssec.get("has_dnssec", False) and raw_dnssec.get("has_ds", False)
+    result["dnssec_validated"] = dnssec_ok
+
+    resolver = _get_dnssec_resolver()
+    result["mx_hosts_checked"] = len(mx_hosts)
+
+    for mx_host in mx_hosts:
+        query_name = f"_25._tcp.{mx_host}"
+        host_result = {
+            "mx_host": mx_host,
+            "query_name": query_name,
+            "found": False,
+            "records": [],
+            "error": None,
+        }
+
+        try:
+            answers = resolver.resolve(query_name, "TLSA")
+            for rdata in answers:
+                usage = rdata.usage
+                selector = rdata.selector
+                mtype = rdata.mtype
+                cert_data = rdata.cert.hex()
+
+                rec_info = {
+                    "usage": usage,
+                    "usage_name": USAGE_NAMES.get(usage, f"Unknown ({usage})"),
+                    "selector": selector,
+                    "selector_name": SELECTOR_NAMES.get(selector, f"Unknown ({selector})"),
+                    "matching_type": mtype,
+                    "matching_type_name": MATCHING_NAMES.get(mtype, f"Unknown ({mtype})"),
+                    "cert_data_short": cert_data[:16] + "..." if len(cert_data) > 16 else cert_data,
+                    "raw": f"{usage} {selector} {mtype} {cert_data[:64]}...",
+                }
+                host_result["records"].append(rec_info)
+
+                # Per-record warnings
+                if usage in (0, 1):
+                    _add_issue(
+                        "warning",
+                        f"PKIX usage ({USAGE_NAMES[usage]}) on {mx_host}",
+                        f"TLSA usage {usage} ({USAGE_NAMES[usage]}) relies on the CA PKI system. "
+                        "RFC 7672 recommends usage 2 (DANE-TA) or 3 (DANE-EE) for SMTP.",
+                        f"Change the TLSA record for {mx_host} to usage 3 (DANE-EE) with selector 1 (SPKI).",
+                    )
+                if mtype == 0:
+                    _add_issue(
+                        "warning",
+                        f"Full certificate matching (matching type 0) on {mx_host}",
+                        "Matching type 0 stores the full certificate data. "
+                        "SHA-256 (type 1) or SHA-512 (type 2) are preferred for smaller records and easier rotation.",
+                        f"Use matching type 1 (SHA-256) for the TLSA record on {mx_host}.",
+                    )
+
+            if host_result["records"]:
+                host_result["found"] = True
+                result["has_tlsa"] = True
+                result["mx_hosts_with_tlsa"] += 1
+
+        except dns.resolver.NoAnswer:
+            pass  # No TLSA — not an error per se
+        except dns.resolver.NXDOMAIN:
+            pass  # No TLSA
+        except dns.resolver.LifetimeTimeout:
+            host_result["error"] = "Query timed out"
+        except Exception as e:
+            host_result["error"] = str(e)[:120]
+
+        result["tlsa_records"].append(host_result)
+
+    # Cross-check: TLSA without DNSSEC
+    if result["has_tlsa"] and not dnssec_ok:
+        _add_issue(
+            "error",
+            "TLSA records found but DNSSEC is not enabled",
+            "DANE requires DNSSEC to be secure. Without DNSSEC, an attacker can spoof "
+            "or strip the TLSA records, completely defeating DANE. Sending MTAs that "
+            "follow RFC 7672 will ignore TLSA records when DNSSEC validation fails.",
+            "Enable DNSSEC for your domain before relying on DANE.",
+        )
+
+    # Mixed coverage warning
+    if result["has_tlsa"] and result["mx_hosts_with_tlsa"] < result["mx_hosts_checked"]:
+        missing = [h["mx_host"] for h in result["tlsa_records"] if not h["found"]]
+        _add_issue(
+            "warning",
+            f"DANE not configured on all MX hosts ({result['mx_hosts_with_tlsa']}/{result['mx_hosts_checked']})",
+            f"Some MX hosts have TLSA records but others do not: {', '.join(missing)}. "
+            "Sending MTAs may fall back to opportunistic TLS for those hosts.",
+            f"Add TLSA records for: {', '.join(missing)}",
+        )
+
+    # Set final status
+    severities = [i["severity"] for i in result["issues"]]
+    if "error" in severities:
+        result["status"] = "error"
+    elif "warning" in severities:
+        result["status"] = "warning"
+
+    return result
+
+
 # ============================================================
 # Main Audit Orchestrator
 # ============================================================
@@ -1769,7 +1924,19 @@ def run_full_audit(domain: str, dkim_selector: Optional[str] = None) -> Dict[str
         errors.append(f"Nameservers: {str(e)}")
         checks.append(_error_card("Nameservers", e))
 
-    # --- 10. DKIM (direct lookup of user-provided selector) ---
+    # --- 10. DANE ---
+    try:
+        raw_dane = _run_with_timeout(_raw_check_dane, domain, raw_results)
+        raw_results["dane"] = raw_dane
+        checks.append(transform_dane(raw_dane, domain))
+    except FuturesTimeoutError:
+        errors.append("DANE: timed out")
+        checks.append(_timeout_card("DANE"))
+    except Exception as e:
+        errors.append(f"DANE: {str(e)}")
+        checks.append(_error_card("DANE", e))
+
+    # --- 11. DKIM (direct lookup of user-provided selector) ---
     try:
         if dkim_selector and dkim_selector.strip():
             sel = dkim_selector.strip()
@@ -1906,6 +2073,7 @@ def _calculate_score(raw_results: Dict, domain: str) -> Dict:
         mta_sts_configured = bool(raw_results.get("mta_sts", {}).get("txt_record"))
         tls_rpt_configured = bool(raw_results.get("tls_rpt", {}).get("record"))
         bimi_configured = bool(raw_results.get("bimi", {}).get("record"))
+        dane_configured = bool(raw_results.get("dane", {}).get("has_tlsa"))
 
         # Assemble for scorer
         audit_input = {
@@ -1917,6 +2085,7 @@ def _calculate_score(raw_results: Dict, domain: str) -> Dict:
             "mta_sts": {"configured": mta_sts_configured},
             "tls_rpt": {"configured": tls_rpt_configured},
             "bimi": {"configured": bimi_configured},
+            "dane": {"configured": dane_configured},
         }
 
         scorer = EmailSecurityScorer()
@@ -1977,7 +2146,7 @@ def _build_priority_fixes(checks: List[Dict], score_result: Dict) -> List[str]:
         if clean and clean not in fixes:
             fixes.append(clean)
             # Track which checks are covered to avoid duplicates
-            for keyword in ['DMARC', 'SPF', 'DKIM', 'MTA-STS', 'TLS-RPT', 'MX', 'CAA', 'Nameservers', 'DNSSEC']:
+            for keyword in ['DMARC', 'SPF', 'DKIM', 'MTA-STS', 'TLS-RPT', 'MX', 'CAA', 'Nameservers', 'DNSSEC', 'DANE']:
                 if keyword.lower() in clean.lower():
                     covered_checks.add(keyword)
 

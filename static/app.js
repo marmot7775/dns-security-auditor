@@ -10,9 +10,9 @@ const SCOPE_CHECKS = {
     complete:      null, // null = show all
     email_full:    ['DMARC', 'SPF', 'DKIM', 'MX Records', 'MX', 'MTA-STS', 'TLS-RPT', 'BIMI'],
     dmarc:         ['DMARC'],
-    transport:     ['MTA-STS', 'TLS-RPT', 'MX Records', 'MX'],
-    dns_infra:     ['DNSSEC', 'CAA', 'Nameservers'],
-    security_scan: ['DMARC', 'SPF', 'DKIM', 'DNSSEC'],
+    transport:     ['MTA-STS', 'TLS-RPT', 'DANE', 'MX Records', 'MX'],
+    dns_infra:     ['DNSSEC', 'CAA', 'DANE', 'Nameservers'],
+    security_scan: ['DMARC', 'SPF', 'DKIM', 'DNSSEC', 'DANE'],
 };
 
 // Severity sort order (lower = higher priority = displayed first)
@@ -20,6 +20,7 @@ const SEVERITY_ORDER = { fail: 0, warn: 1, pass: 2 };
 
 let currentScope = 'complete';
 let lastAuditData = null;
+let auditStartTime = 0;
 
 // -- DOM References --
 const auditForm      = document.getElementById('audit-form');
@@ -74,6 +75,7 @@ function normalizeDomain(input) {
 
 // -- Main audit runner --
 async function runAudit(domain) {
+    auditStartTime = performance.now();
     showLoading();
     hideResults();
 
@@ -102,17 +104,18 @@ async function runAudit(domain) {
 // ============================================================
 
 const LOADING_STEPS = [
-    { pct: 8,  msg: 'Resolving DNS records...' },
-    { pct: 18, msg: 'Checking DMARC policy...' },
-    { pct: 28, msg: 'Analyzing SPF configuration...' },
-    { pct: 40, msg: 'Discovering DKIM selectors...' },
-    { pct: 50, msg: 'Checking MX records...' },
-    { pct: 60, msg: 'Validating MTA-STS...' },
-    { pct: 68, msg: 'Checking TLS-RPT...' },
-    { pct: 74, msg: 'Looking for BIMI record...' },
-    { pct: 80, msg: 'Verifying DNSSEC chain...' },
-    { pct: 86, msg: 'Checking CAA records...' },
-    { pct: 92, msg: 'Fingerprinting email services...' },
+    { pct: 7,  msg: 'Resolving DNS records...' },
+    { pct: 16, msg: 'Checking DMARC policy...' },
+    { pct: 25, msg: 'Analyzing SPF configuration...' },
+    { pct: 35, msg: 'Discovering DKIM selectors...' },
+    { pct: 44, msg: 'Checking MX records...' },
+    { pct: 52, msg: 'Validating MTA-STS...' },
+    { pct: 59, msg: 'Checking TLS-RPT...' },
+    { pct: 65, msg: 'Looking for BIMI record...' },
+    { pct: 72, msg: 'Verifying DNSSEC chain...' },
+    { pct: 78, msg: 'Checking CAA records...' },
+    { pct: 84, msg: 'Checking DANE TLSA records...' },
+    { pct: 90, msg: 'Fingerprinting email services...' },
     { pct: 97, msg: 'Calculating security score...' },
 ];
 
@@ -194,7 +197,13 @@ function renderResults(data) {
 
     // Domain banner
     document.getElementById('result-domain').textContent = data.domain;
-    document.getElementById('result-timestamp').textContent = formatTimestamp(data.timestamp || new Date().toISOString());
+
+    // Timestamp + duration
+    const auditDuration = ((performance.now() - auditStartTime) / 1000).toFixed(1);
+    const now = new Date();
+    const tsText = now.toLocaleDateString('en-US', { year: 'numeric', month: 'short', day: 'numeric' })
+        + ' ' + now.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit', timeZoneName: 'short' });
+    document.getElementById('result-timestamp').textContent = `${tsText}  \u00b7  ${auditDuration}s`;
 
     // -- Filter checks by scope --
     let checks = data.checks || [];
@@ -445,20 +454,77 @@ function renderCheckBody(check) {
 function renderTreeWalk(tw) {
     if (!tw || !tw.steps || tw.steps.length === 0) return '';
 
-    let html = '<div class="tree-walk">';
-    html += '<div class="tree-walk-header">DNS Tree Walk</div>';
-    html += '<div class="tree-walk-steps">';
+    // Simple mode: domain has its own DMARC record (1 step, found at author domain)
+    const isSimple = tw.steps.length === 1 && tw.steps[0].found && !tw.is_subdomain;
+    return isSimple ? renderTreeWalkSimple(tw) : renderTreeWalkFull(tw);
+}
 
+function renderTreeWalkSimple(tw) {
+    const domain = escapeHtml(tw.domain);
+    const policy = escapeHtml(tw.effective_policy || 'none');
+    const policyClass = policy === 'reject' ? 'tw-pill-pass'
+                      : policy === 'quarantine' ? 'tw-pill-warn'
+                      : 'tw-pill-muted';
+
+    return `
+        <div class="tree-walk tree-walk-simple">
+            <div class="tw-header-row">
+                <div class="tree-walk-header">DMARC Policy Discovery</div>
+                <a class="tw-spec-badge" href="https://datatracker.ietf.org/doc/draft-ietf-dmarc-dmarcbis/"
+                   target="_blank" rel="noopener">dmarcbis</a>
+            </div>
+            <div class="tw-simple-body">
+                <span class="tw-simple-check">&#10003;</span>
+                <span><strong>${domain}</strong> publishes its own DMARC record &mdash; no policy inheritance needed.</span>
+            </div>
+            <div class="tw-simple-policy">
+                Policy: <span class="tw-pill ${policyClass}">${policy}</span>
+            </div>
+            <div class="tw-footnote">
+                Under <a href="https://datatracker.ietf.org/doc/draft-ietf-dmarc-dmarcbis/" target="_blank" rel="noopener">dmarcbis</a>,
+                receivers walk up the DNS hierarchy to find an applicable DMARC policy when a domain lacks its own record.
+                This domain has a direct record, so the walk is not needed.
+            </div>
+        </div>`;
+}
+
+function renderTreeWalkFull(tw) {
+    const specUrl = 'https://datatracker.ietf.org/doc/draft-ietf-dmarc-dmarcbis/';
+    let html = `
+        <div class="tree-walk">
+            <div class="tw-header-row">
+                <div class="tree-walk-header">DMARC Policy Discovery</div>
+                <a class="tw-spec-badge" href="${specUrl}" target="_blank" rel="noopener">dmarcbis</a>
+            </div>`;
+
+    // Educational intro
+    if (!tw.policy_source) {
+        html += `<div class="tw-intro">This domain does not have its own DMARC record.
+            Under <a href="${specUrl}" target="_blank" rel="noopener">dmarcbis</a>,
+            receivers walk up the DNS hierarchy looking for an applicable policy.
+            <strong>No policy was found.</strong></div>`;
+    } else if (tw.is_subdomain) {
+        html += `<div class="tw-intro">This domain does not have its own DMARC record.
+            Under <a href="${specUrl}" target="_blank" rel="noopener">dmarcbis</a>,
+            receivers walk up the DNS hierarchy to find an applicable policy.</div>`;
+    }
+
+    // Timeline steps
+    html += '<div class="tree-walk-steps">';
     tw.steps.forEach((step, i) => {
         const isLast = i === tw.steps.length - 1;
+        const isPolicySource = step.found && tw.policy_source &&
+            step.domain === tw.policy_source && tw.is_subdomain;
         const statusClass = step.found ? 'tw-found' : 'tw-notfound';
+        const sourceClass = isPolicySource ? 'tw-policy-source' : '';
         const connector = isLast ? 'tw-last' : '';
 
-        html += `<div class="tw-step ${statusClass} ${connector}">`;
+        html += `<div class="tw-step ${statusClass} ${sourceClass} ${connector}">`;
         html += `<div class="tw-connector"><div class="tw-dot"></div></div>`;
         html += `<div class="tw-content">`;
-        html += `<div class="tw-domain">${escapeHtml(step.domain)}</div>`;
+        html += `<div class="tw-domain">${escapeHtml(step.query || '_dmarc.' + step.domain)}</div>`;
         html += `<div class="tw-label">${escapeHtml(step.label)}`;
+        if (isPolicySource) html += ` <span class="tw-source-badge">policy source</span>`;
         if (step.stop_reason) html += ` &middot; stopped (${escapeHtml(step.stop_reason)})`;
         html += `</div>`;
         if (step.found && step.record) {
@@ -468,24 +534,66 @@ function renderTreeWalk(tw) {
         }
         html += `</div></div>`;
     });
-
     html += '</div>';
 
-    // Summary line
+    // Metadata summary
     if (tw.policy_source) {
+        const policy = escapeHtml(tw.effective_policy || 'none');
+        const policyClass = policy === 'reject' ? 'tw-pill-pass'
+                          : policy === 'quarantine' ? 'tw-pill-warn'
+                          : 'tw-pill-muted';
         const tag = tw.applied_tag || 'p';
-        const inherited = tw.is_subdomain ? ' (inherited)' : '';
-        html += `<div class="tw-summary">`;
-        html += `Effective policy: <strong>${escapeHtml(tw.effective_policy)}</strong>`;
-        html += ` from <strong>${escapeHtml(tw.policy_source)}</strong>`;
-        html += ` via <code>${escapeHtml(tag)}</code> tag${inherited}`;
+        const tagExplanation = getTagExplanation(tag, tw);
+
+        html += `<div class="tw-meta">`;
+
+        if (tw.org_domain) {
+            html += `<div class="tw-meta-row">
+                <span class="tw-meta-label">Organizational Domain</span>
+                <span class="tw-meta-value"><code>${escapeHtml(tw.org_domain)}</code></span>
+            </div>`;
+        }
+
+        html += `<div class="tw-meta-row">
+            <span class="tw-meta-label">Effective Policy</span>
+            <span class="tw-meta-value"><span class="tw-pill ${policyClass}">${policy}</span>
+                from <strong>${escapeHtml(tw.policy_source)}</strong></span>
+        </div>`;
+
+        html += `<div class="tw-meta-row">
+            <span class="tw-meta-label">Applied Tag</span>
+            <span class="tw-meta-value"><code>${escapeHtml(tag)}</code> &mdash; ${tagExplanation}</span>
+        </div>`;
+
+        const walkQueries = tw.query_count != null ? tw.query_count : (tw.steps.length - 1);
+        html += `<div class="tw-meta-row">
+            <span class="tw-meta-label">Walk Queries</span>
+            <span class="tw-meta-value">${walkQueries} of 8 max</span>
+        </div>`;
+
         html += `</div>`;
     } else {
-        html += `<div class="tw-summary tw-no-policy">No DMARC policy found in hierarchy</div>`;
+        html += `<div class="tw-summary tw-no-policy">No DMARC policy found in the DNS hierarchy.</div>`;
     }
 
     html += '</div>';
     return html;
+}
+
+function getTagExplanation(tag, tw) {
+    switch (tag) {
+        case 'sp':
+            return 'the parent domain\'s <code>sp</code> (subdomain policy), which it explicitly set for subdomains';
+        case 'np':
+            return 'the parent domain\'s <code>np</code> (non-existent subdomain policy), because this domain does not exist in DNS';
+        case 'p':
+            if (tw.is_subdomain) {
+                return 'the parent domain\'s <code>p</code> (domain policy), used as fallback because no <code>sp</code> tag was set';
+            }
+            return 'this domain\'s own <code>p</code> (domain policy)';
+        default:
+            return `<code>${escapeHtml(tag)}</code>`;
+    }
 }
 
 // ============================================================

@@ -7,7 +7,7 @@ Scoring categories:
 1. DMARC Configuration (30 points) - most critical
 2. SPF Configuration (25 points) - foundational
 3. DKIM Configuration (20 points) - important but detection is imperfect
-4. Best Practices (10 points) - MTA-STS, TLS-RPT, BIMI
+4. Best Practices (10 points) - MTA-STS, TLS-RPT, DANE
 5. Key Security (10 points) - key hygiene bonus
 6. Vendor Intelligence (5 points) - detection bonus
 
@@ -372,11 +372,11 @@ class EmailSecurityScorer:
             score += 4
             details['tls_rpt'] = 'Configured'
 
-        # BIMI configured — check for record or configured flag
-        bimi = audit_results.get('bimi', {})
-        if bimi.get('configured') or bimi.get('record'):
+        # DANE configured
+        dane = audit_results.get('dane', {})
+        if dane.get('configured'):
             score += 2
-            details['bimi'] = 'Configured'
+            details['dane'] = 'Configured'
 
         return min(score, 10), details
     
@@ -471,6 +471,14 @@ class EmailSecurityScorer:
                 recommendations.append(
                     "🟢 LOW: Implement MTA-STS and TLS-RPT to enforce TLS encryption for inbound email"
                 )
+
+        # DANE recommendation when MTA-STS exists but DANE doesn't
+        dane = audit_results.get('dane', {})
+        mta_sts = audit_results.get('mta_sts', {})
+        if not dane.get('configured') and (mta_sts.get('configured') or mta_sts.get('txt_record')):
+            recommendations.append(
+                "🟢 LOW: Add DANE TLSA records to complement MTA-STS with DNS-based certificate verification"
+            )
 
         return recommendations[:5]
     

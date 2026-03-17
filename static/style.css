@@ -821,14 +821,22 @@ main {
 }
 
 /* ==========================================================================
-   TREE WALK VISUALIZATION
+   DMARC POLICY DISCOVERY (TREE WALK VISUALIZATION)
    ========================================================================== */
 .tree-walk {
     margin: 1rem 0;
-    padding: 1.1rem 1.25rem;
+    padding: 1.35rem 1.5rem;
     background: var(--bg);
     border: 1px solid var(--border-light);
     border-radius: var(--radius);
+}
+
+/* Header row: title + dmarcbis badge */
+.tw-header-row {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    margin-bottom: 0.85rem;
 }
 
 .tree-walk-header {
@@ -837,9 +845,101 @@ main {
     letter-spacing: 0.08em;
     text-transform: uppercase;
     color: var(--text-tertiary);
-    margin-bottom: 0.85rem;
 }
 
+.tw-spec-badge {
+    font-size: 0.6rem;
+    font-weight: 600;
+    letter-spacing: 0.04em;
+    color: var(--primary);
+    background: var(--primary-subtle);
+    border: 1px solid var(--primary-border);
+    padding: 0.1rem 0.4rem;
+    border-radius: 4px;
+    text-decoration: none;
+    text-transform: lowercase;
+    line-height: 1;
+    white-space: nowrap;
+}
+
+.tw-spec-badge:hover {
+    background: var(--primary);
+    color: var(--text-inverse);
+}
+
+/* Intro / educational text */
+.tw-intro {
+    font-size: 0.82rem;
+    color: var(--text-secondary);
+    line-height: 1.65;
+    margin-bottom: 1rem;
+}
+
+.tw-intro a {
+    color: var(--primary-light);
+    text-decoration: none;
+    border-bottom: 1px solid var(--primary-border);
+}
+
+.tw-intro a:hover {
+    color: var(--primary);
+    border-bottom-color: var(--primary);
+}
+
+/* -- Simple mode (own record, no walk needed) -- */
+.tree-walk-simple {
+    padding: 1.25rem 1.5rem;
+}
+
+.tw-simple-body {
+    display: flex;
+    align-items: flex-start;
+    gap: 0.5rem;
+    font-size: 0.88rem;
+    color: var(--text-secondary);
+    line-height: 1.6;
+}
+
+.tw-simple-check {
+    color: var(--pass);
+    font-size: 1rem;
+    font-weight: 700;
+    flex-shrink: 0;
+    line-height: 1.6;
+}
+
+.tw-simple-body strong {
+    color: var(--text-primary);
+    font-weight: 600;
+}
+
+.tw-simple-policy {
+    margin-top: 0.65rem;
+    padding-left: 1.5rem;
+    font-size: 0.82rem;
+    color: var(--text-secondary);
+}
+
+.tw-footnote {
+    margin-top: 0.85rem;
+    padding-top: 0.75rem;
+    border-top: 1px solid var(--border-light);
+    font-size: 0.72rem;
+    color: var(--text-tertiary);
+    line-height: 1.65;
+}
+
+.tw-footnote a {
+    color: var(--primary-light);
+    text-decoration: none;
+    border-bottom: 1px solid var(--primary-border);
+}
+
+.tw-footnote a:hover {
+    color: var(--primary);
+}
+
+/* -- Full mode timeline -- */
 .tree-walk-steps {
     position: relative;
     padding-left: 0.25rem;
@@ -873,6 +973,7 @@ main {
     background: var(--surface);
     flex-shrink: 0;
     z-index: 1;
+    transition: box-shadow var(--duration) var(--ease);
 }
 
 .tw-found .tw-dot {
@@ -883,6 +984,11 @@ main {
 .tw-notfound .tw-dot {
     border-color: var(--border);
     background: var(--surface);
+}
+
+/* Glow on the policy-source step */
+.tw-policy-source .tw-dot {
+    box-shadow: 0 0 0 3px var(--pass-bg);
 }
 
 /* Vertical line connecting dots */
@@ -912,6 +1018,21 @@ main {
     margin-top: 0.1rem;
 }
 
+.tw-source-badge {
+    display: inline-block;
+    font-size: 0.6rem;
+    font-weight: 600;
+    color: var(--pass);
+    background: var(--pass-bg);
+    border: 1px solid var(--pass-border);
+    padding: 0.05rem 0.35rem;
+    border-radius: 4px;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    vertical-align: middle;
+    margin-left: 0.25rem;
+}
+
 .tw-record {
     font-family: var(--font-mono);
     font-size: 0.72rem;
@@ -928,6 +1049,84 @@ main {
     margin-top: 0.2rem;
 }
 
+/* -- Policy pill badges -- */
+.tw-pill {
+    display: inline-block;
+    font-size: 0.72rem;
+    font-weight: 600;
+    padding: 0.1rem 0.45rem;
+    border-radius: 4px;
+    letter-spacing: 0.02em;
+    vertical-align: middle;
+}
+
+.tw-pill-pass {
+    color: var(--pass);
+    background: var(--pass-bg);
+    border: 1px solid var(--pass-border);
+}
+
+.tw-pill-warn {
+    color: var(--warn);
+    background: var(--warn-bg);
+    border: 1px solid var(--warn-border);
+}
+
+.tw-pill-muted {
+    color: var(--text-tertiary);
+    background: var(--bg);
+    border: 1px solid var(--border);
+}
+
+/* -- Metadata summary section -- */
+.tw-meta {
+    margin-top: 0.85rem;
+    padding-top: 0.75rem;
+    border-top: 1px solid var(--border-light);
+    display: flex;
+    flex-direction: column;
+    gap: 0.4rem;
+}
+
+.tw-meta-row {
+    display: flex;
+    align-items: baseline;
+    gap: 0.75rem;
+    font-size: 0.8rem;
+    line-height: 1.55;
+}
+
+.tw-meta-label {
+    flex-shrink: 0;
+    width: 140px;
+    font-size: 0.72rem;
+    font-weight: 600;
+    color: var(--text-tertiary);
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+}
+
+.tw-meta-value {
+    flex: 1;
+    color: var(--text-secondary);
+    min-width: 0;
+}
+
+.tw-meta-value strong {
+    color: var(--text-primary);
+    font-weight: 600;
+}
+
+.tw-meta-value code {
+    font-family: var(--font-mono);
+    font-size: 0.76rem;
+    background: var(--surface);
+    padding: 0.1rem 0.35rem;
+    border-radius: 3px;
+    border: 1px solid var(--border-light);
+}
+
+/* Summary fallback (no policy found) */
 .tw-summary {
     margin-top: 0.85rem;
     padding-top: 0.75rem;
@@ -937,23 +1136,25 @@ main {
     line-height: 1.55;
 }
 
-.tw-summary strong {
-    color: var(--text-primary);
-    font-weight: 600;
-}
-
-.tw-summary code {
-    font-family: var(--font-mono);
-    font-size: 0.76rem;
-    background: var(--surface);
-    padding: 0.1rem 0.35rem;
-    border-radius: 3px;
-    border: 1px solid var(--border-light);
-}
-
 .tw-no-policy {
     color: var(--fail);
     font-weight: 500;
+}
+
+/* -- Responsive: meta rows stack on narrow screens -- */
+@media (max-width: 640px) {
+    .tw-meta-row {
+        flex-direction: column;
+        gap: 0.1rem;
+    }
+
+    .tw-meta-label {
+        width: auto;
+    }
+
+    .tree-walk {
+        padding: 1.1rem 1rem;
+    }
 }
 
 /* Explanation text */
