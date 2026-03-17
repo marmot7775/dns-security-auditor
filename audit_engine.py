@@ -319,14 +319,36 @@ def _raw_check_dmarc(domain: str) -> Dict[str, Any]:
                     f"Check spelling. Valid DMARC tags are: {', '.join(sorted(KNOWN_TAGS))}.",
                 )
             elif key_clean in DEPRECATED_TAGS:
-                _add_issue(
-                    "info",
-                    f"Deprecated tag: '{key_clean}' (removed in DMARCbis)",
-                    f"The '{key_clean}' tag was part of RFC 7489 but has been removed "
-                    "in DMARCbis (draft-ietf-dmarc-dmarcbis). Receivers will ignore it. "
-                    "It won't cause errors, but it's dead weight in your record.",
-                    f"Remove the '{key_clean}' tag to keep your record clean.",
-                )
+                # Tag-specific deprecation guidance per dmarcbis-41
+                if key_clean == "pct":
+                    _add_issue(
+                        "warning",
+                        "Deprecated tag: 'pct' (removed in DMARCbis)",
+                        "The pct tag is removed in DMARCbis (draft-ietf-dmarc-dmarcbis-41). "
+                        "It was replaced by the t= tag for policy rollout testing. "
+                        "Current receivers still honor pct, but DMARCbis-compliant receivers "
+                        "will ignore it.",
+                        "Remove pct and use t=y (test mode) for gradual rollout, "
+                        "or t=n / omit t for full enforcement.",
+                    )
+                elif key_clean == "ri":
+                    _add_issue(
+                        "info",
+                        "Deprecated tag: 'ri' (removed in DMARCbis)",
+                        "The ri (report interval) tag is removed in DMARCbis. "
+                        "It was rarely honored by receivers — most send aggregate "
+                        "reports on their own schedule regardless of ri.",
+                        "Remove the ri tag. Report frequency is determined by receivers.",
+                    )
+                elif key_clean == "rf":
+                    _add_issue(
+                        "info",
+                        "Deprecated tag: 'rf' (removed in DMARCbis)",
+                        "The rf (report format) tag is removed in DMARCbis. "
+                        "The only value ever defined was 'afrf', making the tag "
+                        "redundant.",
+                        "Remove the rf tag.",
+                    )
 
             tags[key_clean] = value_clean
         else:
