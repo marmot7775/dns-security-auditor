@@ -63,7 +63,7 @@ class EmailSecurityScorer:
             # an inherited DMARC reject (domain is protected), partial otherwise.
             inherited = audit_results.get('dmarc_results', {}).get('inherited_policy')
             if inherited in ('reject', 'quarantine'):
-                spf_score, spf_details = 25, {'reason': 'N/A — non-mail subdomain (protected by DMARC)'}
+                spf_score, spf_details = 25, {'reason': 'N/A: non-mail subdomain (protected by DMARC)'}
             else:
                 spf_score, spf_details = self._score_spf(audit_results.get('spf_results', {}))
         scores['spf'] = spf_score
@@ -77,7 +77,7 @@ class EmailSecurityScorer:
         else:
             inherited = audit_results.get('dmarc_results', {}).get('inherited_policy')
             if inherited in ('reject', 'quarantine'):
-                dkim_score, dkim_details = 20, {'reason': 'N/A — non-mail subdomain (protected by DMARC)'}
+                dkim_score, dkim_details = 20, {'reason': 'N/A: non-mail subdomain (protected by DMARC)'}
             else:
                 dkim_score, dkim_details = self._score_dkim(audit_results.get('dkim_results', {}))
         scores['dkim'] = dkim_score
@@ -90,7 +90,7 @@ class EmailSecurityScorer:
                 audit_results.get('key_age_analysis', {})
             )
         else:
-            key_score, key_details = 10, {'reason': 'N/A — non-mail subdomain'}
+            key_score, key_details = 10, {'reason': 'N/A: non-mail subdomain'}
         scores['key_security'] = key_score
         details['key_security'] = key_details
 
@@ -109,7 +109,7 @@ class EmailSecurityScorer:
         else:
             inherited = audit_results.get('dmarc_results', {}).get('inherited_policy')
             if inherited in ('reject', 'quarantine'):
-                practices_score, practices_details = 10, {'reason': 'N/A — non-mail subdomain (protected by DMARC)'}
+                practices_score, practices_details = 10, {'reason': 'N/A: non-mail subdomain (protected by DMARC)'}
             else:
                 practices_score, practices_details = self._score_best_practices(audit_results)
         scores['best_practices'] = practices_score

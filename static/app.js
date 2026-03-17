@@ -509,7 +509,7 @@ function renderTreeWalkSimple(tw) {
             </div>
             <div class="tw-simple-body">
                 <span class="tw-simple-check">&#10003;</span>
-                <span><strong>${domain}</strong> publishes its own DMARC record &mdash; no policy inheritance needed.</span>
+                <span><strong>${domain}</strong> publishes its own DMARC record. No policy inheritance needed.</span>
             </div>
             <div class="tw-simple-policy">
                 Policy: <span class="tw-pill ${policyClass}">${policy}</span>
@@ -610,7 +610,7 @@ function renderTreeWalkFull(tw) {
 
         html += `<div class="tw-meta-row">
             <span class="tw-meta-label">Applied Tag</span>
-            <span class="tw-meta-value"><code>${escapeHtml(tag)}</code> &mdash; ${tagExplanation}</span>
+            <span class="tw-meta-value"><code>${escapeHtml(tag)}</code>: ${tagExplanation}</span>
         </div>`;
 
         const walkQueries = tw.query_count != null ? tw.query_count : (tw.steps.length - 1);
