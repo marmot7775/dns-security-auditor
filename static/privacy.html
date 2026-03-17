@@ -4,12 +4,122 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Privacy & Terms | dns-audit.com</title>
-    <meta name="description" content="Privacy policy and terms of use for dns-audit.com, a free DNS and email security auditing tool.">
+    <meta name="description" content="Privacy policy and terms of use for dns-audit.com. We explain exactly what data we process, how long we keep it, and what third parties are involved.">
+    <link rel="canonical" href="https://dns-audit.com/privacy">
     <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><rect width='100' height='100' rx='18' fill='%231a1b1e'/><rect y='0' width='100' height='30' rx='18' fill='%232a2a2e'/><rect y='22' width='100' height='8' fill='%232a2a2e'/><circle cx='18' cy='15' r='5' fill='%23ff5f57'/><circle cx='33' cy='15' r='5' fill='%23febc2e'/><circle cx='48' cy='15' r='5' fill='%2328c840'/><text x='12' y='62' font-family='monospace' font-size='22' font-weight='700'><tspan fill='%235DCAA5'>$ </tspan><tspan fill='%2397C459'>dig</tspan></text><text x='12' y='84' font-family='monospace' font-size='18' font-weight='600' fill='%2385B7EB'>+secure</text></svg>">
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,400;0,9..40,500;0,9..40,600;0,9..40,700;1,9..40,400&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
-    <link rel="stylesheet" href="/static/style.css?v=dc2e229">
+    <link rel="stylesheet" href="/static/style.css">
+    <style>
+        .privacy-section {
+            padding-top: 3.5rem;
+            padding-bottom: 2.25rem;
+        }
+        .privacy-card {
+            background: var(--surface);
+            border-radius: 14px;
+            padding: 2.85rem 2.85rem 2.6rem;
+            box-shadow: var(--shadow-lg);
+            border: 1px solid var(--border-light);
+            position: relative;
+            overflow: hidden;
+        }
+        .privacy-card::before {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: 0;
+            right: 0;
+            height: 3px;
+            background: linear-gradient(90deg, var(--primary) 0%, var(--primary-light) 50%, var(--primary) 100%);
+        }
+        .privacy-card h1 {
+            font-size: 1.65rem;
+            font-weight: 700;
+            letter-spacing: -0.03em;
+            color: var(--text-primary);
+            margin-bottom: 0.3rem;
+        }
+        .privacy-card .last-updated {
+            font-size: 0.82rem;
+            color: var(--text-tertiary);
+            margin-bottom: 1.5rem;
+        }
+        .privacy-card h2 {
+            font-size: 1.15rem;
+            font-weight: 700;
+            color: var(--text-primary);
+            margin-top: 2rem;
+            margin-bottom: 0.5rem;
+            letter-spacing: -0.02em;
+        }
+        .privacy-card p {
+            font-size: 0.92rem;
+            color: var(--text-secondary);
+            line-height: 1.7;
+            margin-bottom: 0.75rem;
+        }
+        .privacy-card ul {
+            list-style: none;
+            padding: 0;
+            margin: 0 0 0.75rem 0;
+        }
+        .privacy-card li {
+            font-size: 0.92rem;
+            color: var(--text-secondary);
+            line-height: 1.7;
+            padding: 0.3rem 0;
+            padding-left: 1.4rem;
+            position: relative;
+        }
+        .privacy-card li::before {
+            content: '';
+            position: absolute;
+            left: 0;
+            top: 0.72rem;
+            width: 6px;
+            height: 6px;
+            border-radius: 50%;
+            background: var(--primary-light);
+        }
+        .privacy-card strong {
+            color: var(--text-primary);
+            font-weight: 600;
+        }
+        .privacy-card a {
+            color: var(--primary-light);
+            text-decoration: none;
+            font-weight: 500;
+        }
+        .privacy-card a:hover {
+            text-decoration: underline;
+        }
+        .privacy-cta {
+            display: inline-flex;
+            align-items: center;
+            gap: 0.5rem;
+            margin-top: 1.8rem;
+            padding: 0.7rem 1.4rem;
+            background: var(--primary);
+            color: var(--text-inverse);
+            border-radius: var(--radius);
+            font-size: 0.92rem;
+            font-weight: 600;
+            text-decoration: none;
+            transition: background var(--duration) var(--ease);
+        }
+        .privacy-cta:hover {
+            background: var(--primary-hover);
+            text-decoration: none;
+            color: var(--text-inverse);
+        }
+        @media (max-width: 600px) {
+            .privacy-card {
+                padding: 2rem 1.35rem 1.8rem;
+            }
+        }
+    </style>
 </head>
 <body>
 
@@ -34,36 +144,72 @@
     </header>
 
     <main class="container">
-        <div class="audit-input-card" style="max-width: 720px; margin: 2rem auto;">
+        <section class="privacy-section">
+            <div class="privacy-card">
 
-            <h1 class="audit-title">Privacy &amp; Terms</h1>
+                <h1>Privacy &amp; Terms</h1>
+                <div class="last-updated">Last updated: March 2026</div>
 
-            <h2 style="margin-top: 1.5rem; margin-bottom: 0.75rem; font-size: 1.15rem;">Privacy</h2>
-            <ul style="margin: 0 0 1.25rem 1.25rem; line-height: 1.7;">
-                <li>We don't collect personal data. No accounts, no cookies, no tracking.</li>
-                <li>When you run an audit, we query public DNS records for the domain you enter. That's it.</li>
-                <li>We don't store audit results permanently. Cached results expire within minutes.</li>
-                <li>We log basic request data (IP address, domain queried, timestamp) for rate limiting and abuse prevention. These logs are not shared with anyone.</li>
-                <li>We use Cloudflare as a CDN. Cloudflare has its own <a href="https://www.cloudflare.com/privacypolicy/" target="_blank" rel="noopener">privacy policy</a>.</li>
-            </ul>
+                <p>dns-audit.com is operated by Neil Anuskiewicz. This page explains exactly what data we process, how long we keep it, and who else is involved. We built a security tool, so we take this seriously.</p>
 
-            <h2 style="margin-top: 1.5rem; margin-bottom: 0.75rem; font-size: 1.15rem;">Terms of Use</h2>
-            <ul style="margin: 0 0 1.25rem 1.25rem; line-height: 1.7;">
-                <li>This tool queries public DNS records. It does not perform any intrusive security testing.</li>
-                <li>Results are informational only. We do our best to be accurate, but DNS can be complex and we can't guarantee every result is perfect.</li>
-                <li>Don't abuse the service (automated bulk queries, scraping, etc.). We rate-limit to keep things fair for everyone.</li>
-                <li>This is a free tool provided as-is. No warranties, no SLA.</li>
-            </ul>
+                <h2>What We Collect</h2>
+                <p>dns-audit.com does not require an account, does not set cookies, and does not use analytics or tracking scripts. When you run an audit, here is what we process:</p>
+                <ul>
+                    <li><strong>Domain name.</strong> The domain you enter in the search box. We use it to query public DNS records on your behalf. This is not personal data; DNS records are public by design.</li>
+                    <li><strong>IP address.</strong> Your IP address is logged for rate limiting and abuse prevention. On our server, we see the IP provided by Cloudflare (see Third Parties below). We do not use it for tracking or identification.</li>
+                    <li><strong>Timestamp and request metadata.</strong> We log when each audit runs, how long it takes, and the resulting grade. This helps us monitor service health and detect abuse.</li>
+                    <li><strong>DKIM selector (optional).</strong> If you provide a custom DKIM selector, we use it for that audit only.</li>
+                </ul>
 
-            <h2 style="margin-top: 1.5rem; margin-bottom: 0.75rem; font-size: 1.15rem;">Contact</h2>
-            <p style="line-height: 1.7; margin-bottom: 1.5rem;">
-                Built and maintained by Neil Anuskiewicz.
-                You can find me on <a href="https://www.linkedin.com/in/neilanuskiewicz/" target="_blank" rel="noopener">LinkedIn</a>.
-            </p>
+                <h2>What We Do Not Collect</h2>
+                <ul>
+                    <li>No personal information (name, email, phone)</li>
+                    <li>No account or login data</li>
+                    <li>No cookies or browser fingerprinting</li>
+                    <li>No analytics scripts (no Google Analytics, no tracking pixels)</li>
+                    <li>No advertising or marketing data</li>
+                </ul>
 
-            <p><a href="/">&larr; Back to dns-audit.com</a></p>
+                <h2>Data Retention</h2>
+                <p><strong>Audit results</strong> are cached in server memory for 5 minutes to reduce redundant DNS queries. After that, they are discarded. We do not store audit results in any database.</p>
+                <p><strong>Server logs</strong> (IP address, domain queried, timestamp) are retained in standard application logs. These rotate automatically and are not retained beyond what the operating system manages.</p>
+                <p><strong>Rate limit data</strong> (IP address and request timestamps) is held in memory only and cleared when the service restarts.</p>
 
-        </div>
+                <h2>Third Parties</h2>
+                <p>We use two external services:</p>
+                <ul>
+                    <li><strong>Cloudflare.</strong> All traffic to dns-audit.com passes through Cloudflare, which provides CDN and DDoS protection. Cloudflare processes your IP address and request headers as part of its service. Their privacy policy is at <a href="https://www.cloudflare.com/privacypolicy/" target="_blank" rel="noopener">cloudflare.com/privacypolicy</a>.</li>
+                    <li><strong>Google Fonts.</strong> We load the DM Sans and JetBrains Mono typefaces from Google Fonts. Google may log your IP address when serving these files. Their privacy policy is at <a href="https://policies.google.com/privacy" target="_blank" rel="noopener">policies.google.com/privacy</a>.</li>
+                </ul>
+                <p>We do not share, sell, or transfer any data to anyone else.</p>
+
+                <h2>How Audits Work</h2>
+                <p>When you run an audit, our server queries public DNS infrastructure (authoritative nameservers, public resolvers, Certificate Transparency logs, and DNS-based blocklists) for the domain you entered. All of this information is publicly available to anyone with a DNS client. We do not access any private systems, internal networks, or authenticated services. The audit is read-only and non-intrusive.</p>
+
+                <h2>Terms of Use</h2>
+                <p>By using dns-audit.com, you agree to the following:</p>
+                <ul>
+                    <li><strong>Informational only.</strong> Audit results are provided for informational purposes. We do our best to be accurate, but DNS configurations are complex and we cannot guarantee that every result is correct in every situation.</li>
+                    <li><strong>Fair use.</strong> The service is rate-limited to 10 requests per minute per IP address. Automated bulk queries, scraping, and any activity intended to degrade the service are not permitted.</li>
+                    <li><strong>No warranty.</strong> dns-audit.com is provided as-is, free of charge. There is no SLA, no uptime guarantee, and no warranty of any kind.</li>
+                    <li><strong>Your responsibility.</strong> You are responsible for how you use the audit results. We provide recommendations, but implementing DNS changes is your decision.</li>
+                </ul>
+
+                <h2>Your Rights</h2>
+                <p>Since we do not collect personal data or maintain user accounts, there is very little to exercise rights over. That said, if you believe your IP address has been logged and you want to discuss it, you are welcome to reach out.</p>
+
+                <h2>Contact</h2>
+                <p>dns-audit.com is operated by Neil Anuskiewicz, an email security and deliverability consultant. You can reach me on <a href="https://www.linkedin.com/in/neilanuskiewicz/" target="_blank" rel="noopener">LinkedIn</a>.</p>
+
+                <a href="/" class="privacy-cta">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" width="16" height="16">
+                        <circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/>
+                    </svg>
+                    Run an Audit
+                </a>
+
+            </div>
+        </section>
     </main>
 
     <footer class="site-footer">
