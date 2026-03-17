@@ -1000,21 +1000,22 @@ main {
     box-shadow: 0 0 0 3px var(--pass-bg);
 }
 
-/* Vertical line connecting dots — positioned absolutely so it
-   extends from below the current dot to the center of the next dot.
-   Gap = step padding-bottom (0.85rem) + next connector padding-top (0.15rem). */
-.tw-step:not(.tw-last) .tw-connector::after {
+/* Vertical line connecting dots — runs from bottom of this dot
+   to the top of the next dot.  We position it on the .tw-step
+   (not .tw-connector) so it can span the full step height. */
+.tw-step:not(.tw-last)::before {
     content: '';
     position: absolute;
-    top: calc(0.15rem + 10px);  /* connector padding-top + dot height */
-    height: calc(0.85rem + 0.15rem + 5px);  /* step gap + half of next dot */
-    left: calc(50% - 1px);
+    left: calc(0.25rem + 7px - 1px);  /* steps padding-left + half connector width - half line width */
+    top: calc(0.15rem + 10px);  /* connector padding-top + dot size */
+    bottom: 0;
     width: 2px;
     background: var(--border);
+    z-index: 0;
 }
 
 /* Line leading into the policy-source step turns green */
-.tw-step.tw-line-to-found:not(.tw-last) .tw-connector::after {
+.tw-step.tw-line-to-found:not(.tw-last)::before {
     background: var(--pass);
 }
 
@@ -1049,7 +1050,7 @@ main {
 /* 2. Connector line draws itself downward.
    --line-delay is set per-step via inline style in JS.
    Lines leading into the policy-source step transition to green. */
-.tw-animated .tw-step:not(.tw-last) .tw-connector::after {
+.tw-animated .tw-step:not(.tw-last)::before {
     transform-origin: top;
     animation: twLineGrow 0.25s var(--ease-out) backwards;
     animation-delay: var(--line-delay, 0.18s);
@@ -1118,7 +1119,7 @@ main {
         opacity: 1;
         transform: none;
     }
-    .tw-animated .tw-step:not(.tw-last) .tw-connector::after {
+    .tw-animated .tw-step:not(.tw-last)::before {
         animation: none;
     }
 }
