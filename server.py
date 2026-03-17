@@ -20,7 +20,7 @@ from typing import Optional
 
 from fastapi import FastAPI, Query, HTTPException, Request
 from fastapi.staticfiles import StaticFiles
-from fastapi.responses import FileResponse, JSONResponse
+from fastapi.responses import FileResponse, JSONResponse, PlainTextResponse, Response
 from fastapi.middleware.cors import CORSMiddleware
 from starlette.middleware.base import BaseHTTPMiddleware
 
@@ -72,6 +72,16 @@ app.add_middleware(
 # ============================================================
 
 class SecurityHeadersMiddleware(BaseHTTPMiddleware):
+    CSP = (
+        "default-src 'self'; "
+        "font-src 'self' https://fonts.googleapis.com https://fonts.gstatic.com; "
+        "style-src 'self' https://fonts.googleapis.com; "
+        "img-src 'self' data:; "
+        "script-src 'self'; "
+        "connect-src 'self'; "
+        "frame-ancestors 'none'"
+    )
+
     async def dispatch(self, request: Request, call_next):
         response = await call_next(request)
         response.headers["X-Content-Type-Options"] = "nosniff"
@@ -79,6 +89,7 @@ class SecurityHeadersMiddleware(BaseHTTPMiddleware):
         response.headers["X-XSS-Protection"] = "1; mode=block"
         response.headers["Referrer-Policy"] = "strict-origin-when-cross-origin"
         response.headers["Permissions-Policy"] = "camera=(), microphone=(), geolocation=()"
+        response.headers["Content-Security-Policy"] = self.CSP
         if request.url.path.startswith("/api/"):
             response.headers["Cache-Control"] = "no-store"
         return response
@@ -255,6 +266,38 @@ async def health():
             "TLS-RPT", "BIMI", "DNSSEC", "CAA", "Nameservers",
         ],
     }
+
+
+# ============================================================
+# SEO: robots.txt & sitemap.xml
+# ============================================================
+
+@app.get("/robots.txt", response_class=PlainTextResponse, tags=["SEO"])
+async def robots_txt():
+    return (
+        "User-agent: *\n"
+        "Allow: /\n"
+        "Disallow: /api/\n"
+        "Disallow: /docs\n"
+        "Disallow: /redoc\n"
+        "\n"
+        "Sitemap: https://dns-audit.com/sitemap.xml\n"
+    )
+
+
+@app.get("/sitemap.xml", tags=["SEO"])
+async def sitemap_xml():
+    xml = (
+        '<?xml version="1.0" encoding="UTF-8"?>\n'
+        '<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">\n'
+        "  <url>\n"
+        "    <loc>https://dns-audit.com/</loc>\n"
+        "    <changefreq>weekly</changefreq>\n"
+        "    <priority>1.0</priority>\n"
+        "  </url>\n"
+        "</urlset>\n"
+    )
+    return Response(content=xml, media_type="application/xml")
 
 
 # ============================================================
