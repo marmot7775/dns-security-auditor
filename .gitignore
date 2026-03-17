@@ -59,6 +59,14 @@ project-fixup.sh
 run.sh
 run_cli.sh
 text.sh
+check_service.sh
+fix_server.sh
+server_fix.sh
+logss-dns.sh
+push_to_server.sh
+
+# Operational scripts (not project code)
+generate_selectors.py
 
 # Streamlit config (not used in web app)
 .streamlit/
