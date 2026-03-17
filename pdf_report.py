@@ -57,10 +57,12 @@ GRADE_COLORS = {
 # ============================================================
 
 def _strip_html(text: str) -> str:
-    """Remove HTML tags from text for PDF rendering."""
+    """Remove HTML tags and decode entities for PDF rendering."""
     import re
+    import html as html_mod
     text = re.sub(r"<br\s*/?>", "\n", text)
     text = re.sub(r"<[^>]+>", "", text)
+    text = html_mod.unescape(text)
     return text
 
 
@@ -205,7 +207,7 @@ class AuditPDFReport(FPDF):
         self.set_y(cy + r + 4)
 
     def _render_summary_bar(self):
-        """Render pass/warn/fail summary as colored boxes."""
+        """Render pass/warn/fail summary as colored boxes in a row."""
         pass_count = sum(1 for c in self.checks if c.get("status") == "pass")
         warn_count = sum(1 for c in self.checks if c.get("status") == "warn")
         fail_count = sum(1 for c in self.checks if c.get("status") == "fail")
@@ -214,6 +216,7 @@ class AuditPDFReport(FPDF):
         gap = 5
         total_w = box_w * 3 + gap * 2
         start_x = (210 - total_w) / 2
+        row_y = self.get_y()  # fixed y for entire row
 
         for i, (label, count, color) in enumerate([
             ("Passing", pass_count, COLORS["pass"]),
@@ -221,25 +224,23 @@ class AuditPDFReport(FPDF):
             ("Issues", fail_count, COLORS["fail"]),
         ]):
             x = start_x + i * (box_w + gap)
-            y = self.get_y()
 
             # Box background
             self.set_fill_color(color[0], color[1], color[2])
-            self.set_draw_color(*COLORS["border"])
-            self.rect(x, y, box_w, 22, "F")
+            self.rect(x, row_y, box_w, 22, "F")
 
             # Count
             self.set_font(self._font_body, "B", 16)
             self.set_text_color(255, 255, 255)
-            self.set_xy(x, y + 2)
+            self.set_xy(x, row_y + 2)
             self.cell(box_w, 10, str(count), align="C")
 
             # Label
             self.set_font(self._font_body, "", 7)
-            self.set_xy(x, y + 12)
+            self.set_xy(x, row_y + 12)
             self.cell(box_w, 6, label.upper(), align="C")
 
-        self.set_y(self.get_y() + 26)
+        self.set_y(row_y + 26)
 
     def _render_priority_fixes(self):
         """Render priority fixes section."""
@@ -282,6 +283,7 @@ class AuditPDFReport(FPDF):
 
     def _render_check_cards(self):
         """Render each check as a card block."""
+        self.add_page()  # Start checks on a fresh page
         for check in self.checks:
             self._render_check_card(check)
 
@@ -387,28 +389,38 @@ class AuditPDFReport(FPDF):
         if check.get("fix"):
             self._render_fix_block(check["fix"], x, w)
 
-        self.ln(6)
+        self.ln(3)
 
         # Bottom border
         self.set_draw_color(*COLORS["border"])
         self.set_line_width(0.2)
         self.line(x, self.get_y(), x + w, self.get_y())
-        self.ln(6)
+        self.ln(4)
 
     def _render_record_block(self, record: str, x: float, w: float):
         """Render a DNS record in a dark terminal-style block."""
-        self.set_fill_color(*COLORS["record_bg"])
-        lines = record.split("\n")
-        block_h = len(lines) * 4.2 + 6
-        y = self.get_y()
+        self.set_font(self._font_mono, "", 7)
+        content_w = w - 8
 
+        # Calculate wrapped height
+        lines = record.split("\n")
+        total_lines = 0
+        for line in lines:
+            line_w = self.get_string_width(line)
+            total_lines += max(1, math.ceil(line_w / content_w)) if line else 1
+        block_h = total_lines * 4.2 + 6
+
+        # Page break if needed
+        if self.get_y() + block_h > 275:
+            self.add_page()
+
+        y = self.get_y()
+        self.set_fill_color(*COLORS["record_bg"])
         self.rect(x, y, w, block_h, "F")
 
-        self.set_font(self._font_mono, "", 7)
         self.set_text_color(*COLORS["record_txt"])
-        for i, line in enumerate(lines):
-            self.set_xy(x + 4, y + 3 + i * 4.2)
-            self.cell(w - 8, 4, line)
+        self.set_xy(x + 4, y + 3)
+        self.multi_cell(content_w, 4.2, record, align="L")
 
         self.set_y(y + block_h + 3)
 
@@ -494,11 +506,15 @@ class AuditPDFReport(FPDF):
         """Render a fix recommendation block."""
         self.ln(2)
         text = _strip_html(fix)
+        content_w = w - 10
 
-        # Estimate height
-        chars_per_line = 80
-        text_lines = max(1, math.ceil(len(text) / chars_per_line))
-        block_h = text_lines * 4.5 + 10
+        # Measure actual height needed
+        self.set_font(self._font_body, "", 8)
+        text_w = self.get_string_width(text)
+        text_lines = max(1, math.ceil(text_w / content_w))
+        # Account for newlines in text
+        text_lines += text.count("\n")
+        block_h = text_lines * 4.5 + 12
 
         # Check page break
         if self.get_y() + block_h > 275:
@@ -523,8 +539,8 @@ class AuditPDFReport(FPDF):
         # Text
         self.set_font(self._font_body, "", 8)
         self.set_text_color(*COLORS["text"])
-        self.set_xy(x + 6, y + 7)
-        self.multi_cell(w - 10, 4.5, text, new_x="LMARGIN", new_y="NEXT")
+        self.set_xy(x + 6, y + 8)
+        self.multi_cell(content_w, 4.5, text, new_x="LMARGIN", new_y="NEXT")
 
         self.set_y(y + block_h + 2)
 
