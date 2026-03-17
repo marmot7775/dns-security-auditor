@@ -233,8 +233,15 @@ main {
 .audit-subtitle {
     font-size: 0.92rem;
     color: var(--text-secondary);
-    margin-bottom: 1.85rem;
+    margin-bottom: 0.5rem;
     line-height: 1.55;
+}
+
+.audit-trust {
+    font-size: 0.82rem;
+    color: var(--text-tertiary);
+    margin-bottom: 1.85rem;
+    line-height: 1.5;
 }
 
 .audit-form {
