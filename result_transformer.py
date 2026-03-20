@@ -135,17 +135,17 @@ def transform_dmarc(raw: Dict, tree_walk: Optional[Dict] = None) -> Dict:
         )
         if inherited_policy == "reject":
             explanation = (
-                f"This subdomain does not have its own DMARC record at "
-                f"<strong>_dmarc.{raw.get('domain', '')}</strong>, but it inherits "
+                f"This subdomain has no DMARC record at "
+                f"<strong>_dmarc.{raw.get('domain', '')}</strong>, but inherits "
                 f"<strong>p=reject</strong> from <strong>{inherited_source}</strong> "
                 f"via the {tag_label} tag. "
-                f"This is the gold standard. Emails that fail authentication are blocked entirely."
+                f"Emails that fail authentication are blocked entirely."
                 + _adoption_note
             )
         elif inherited_policy == "quarantine":
             explanation = (
-                f"This subdomain does not have its own DMARC record at "
-                f"<strong>_dmarc.{raw.get('domain', '')}</strong>, but it inherits "
+                f"This subdomain has no DMARC record at "
+                f"<strong>_dmarc.{raw.get('domain', '')}</strong>, but inherits "
                 f"<strong>p=quarantine</strong> from <strong>{inherited_source}</strong> "
                 f"via the {tag_label} tag. "
                 f"Emails that fail authentication are routed to the recipient's spam folder."
@@ -153,11 +153,11 @@ def transform_dmarc(raw: Dict, tree_walk: Optional[Dict] = None) -> Dict:
             )
         elif inherited_policy == "none":
             explanation = (
-                f"This subdomain does not have its own DMARC record at "
-                f"<strong>_dmarc.{raw.get('domain', '')}</strong>, but it inherits "
+                f"This subdomain has no DMARC record at "
+                f"<strong>_dmarc.{raw.get('domain', '')}</strong>, but inherits "
                 f"<strong>p=none</strong> from <strong>{inherited_source}</strong> "
                 f"via the {tag_label} tag. "
-                f"This is monitoring only. Failed emails are still delivered normally."
+                f"This is monitoring only -- failing emails are delivered normally with no enforcement action."
                 + _adoption_note
             )
         else:
@@ -169,9 +169,8 @@ def transform_dmarc(raw: Dict, tree_walk: Optional[Dict] = None) -> Dict:
     elif not record:
         explanation = (
             f"No DMARC record exists at <strong>_dmarc.{raw.get('domain', '')}</strong>. "
-            f"DMARC tells receiving mail servers "
-            f"(Gmail, Outlook, Yahoo) how to handle emails that fail SPF and DKIM authentication. "
-            f"Without it, anyone can send emails impersonating your domain with no consequences, "
+            f"DMARC tells receiving mail servers how to handle messages that fail SPF and DKIM checks. "
+            f"Without it, receivers have no policy to act on for authentication failures, "
             f"and you have no visibility into who is sending as your domain."
         )
     elif policy == "none":
@@ -183,13 +182,14 @@ def transform_dmarc(raw: Dict, tree_walk: Optional[Dict] = None) -> Dict:
     elif policy == "quarantine":
         explanation = (
             f"Your DMARC policy is <strong>quarantine</strong>. Emails that fail authentication "
-            f"are routed to the recipient's spam folder. This provides good protection, but "
-            f"<strong>p=reject</strong> is the strongest option."
+            f"are routed to the recipient's spam folder. This enforces authentication results "
+            f"while allowing borderline cases to be reviewed. Upgrade to <strong>p=reject</strong> "
+            f"to block failing messages outright."
         )
     elif policy == "reject":
         explanation = (
-            f"Your DMARC policy is <strong>reject</strong> - the gold standard. "
-            f"Emails that fail authentication are blocked entirely and never reach the recipient."
+            f"Your DMARC policy is <strong>reject</strong>. "
+            f"Emails that fail authentication are blocked and never reach the recipient."
         )
     else:
         explanation = f"DMARC record found but the policy value is unexpected: '{policy}'."
@@ -372,7 +372,7 @@ def transform_spf(raw: Dict, has_mx: bool = True) -> Dict:
         verdict = "No SPF record (no mail)"
         pill_label = "No mail"
     elif not record:
-        verdict = "No sender authorization in place"
+        verdict = "No authorized IP list published"
         pill_label = "Missing"
     else:
         all_mech = raw.get("all_mechanism") or ""
@@ -382,11 +382,11 @@ def transform_spf(raw: Dict, has_mx: bool = True) -> Dict:
         elif lookups > 10:
             verdict = f"Broken -- exceeds lookup limit ({lookups}/10)"
         elif not all_mech and raw.get("has_redirect"):
-            verdict = "Sender authorization via redirect"
+            verdict = "Authorized senders via redirect"
         elif not all_mech:
             verdict = "Configured but missing an all mechanism"
         else:
-            verdict = "Sender authorization configured"
+            verdict = "Authorized IP list published"
 
     # Explanation
     if null_spf:
@@ -405,9 +405,9 @@ def transform_spf(raw: Dict, has_mx: bool = True) -> Dict:
         )
     elif not record:
         explanation = (
-            "No SPF record found. SPF lists which mail servers are authorized to send email "
-            "for your domain. Without it, receiving servers have no way to verify if a message "
-            "actually came from your mail infrastructure."
+            "No SPF record found. SPF (RFC 7208) specifies which IP addresses are authorized "
+            "to send email for your domain. Without it, receiving servers cannot use SPF to "
+            "validate whether a message originated from your mail infrastructure."
         )
     else:
         all_mech = raw.get("all_mechanism") or ""
@@ -449,9 +449,11 @@ def transform_spf(raw: Dict, has_mx: bool = True) -> Dict:
 
         if lookups and lookups > 8:
             explanation += (
-                f" <strong>Note:</strong> SPF uses {lookups} DNS lookups "
-                f"({'at the 10-lookup limit' if lookups == 10 else 'EXCEEDS the 10-lookup limit' if lookups > 10 else 'approaching the 10-lookup limit'}). "
-                f"RFC 7208 limits SPF to 10 DNS lookups to prevent performance issues."
+                f" <strong>Note:</strong> SPF requires {lookups} DNS lookups "
+                f"({'at' if lookups == 10 else 'exceeding' if lookups > 10 else 'approaching'} the 10-lookup limit). "
+                f"RFC 7208 Section 4.6.4 limits SPF evaluation to 10 DNS-querying mechanisms "
+                f"(include, a, mx, ptr, exists). Exceeding this limit causes a PermError, "
+                f"which receivers may treat as SPF failure."
             )
 
     # Details
@@ -552,7 +554,7 @@ def transform_spf(raw: Dict, has_mx: bool = True) -> Dict:
             "type": "TXT",
             "host": domain_name,
             "value": "v=spf1 ~all",
-            "comment": "Starter record. Add your mail server IPs and includes before tightening to -all.",
+            "comment": "Placeholder that blocks all senders. Replace ~all with your authorized mail servers and includes before deploying.",
         })
 
     return {
@@ -670,7 +672,7 @@ def transform_dkim(raw: Dict, domain: str, has_mx: bool = True) -> Dict:
         details.append(_issue_to_detail(issue))
 
     # Verdict
-    verdict = f"{len(found)} signing key{'s' if len(found) != 1 else ''} verified"
+    verdict = f"{len(found)} DKIM public key{'s' if len(found) != 1 else ''} published in DNS"
 
     # Status
     status = "pass"
@@ -688,13 +690,15 @@ def transform_dkim(raw: Dict, domain: str, has_mx: bool = True) -> Dict:
         f"published in DNS."
     )
     if vendor_names:
-        explanation += f" Vendors detected: {', '.join(sorted(vendor_names))}."
+        explanation += f" Sending providers detected: {', '.join(sorted(vendor_names))}."
     explanation += (
-        " Each key is a TXT record at <strong>selector._domainkey.{domain}</strong> that receiving "
-        "servers use to verify the cryptographic signature on incoming email."
+        " Each key is a TXT record at <strong>selector._domainkey.{domain}</strong>. "
+        "Receiving servers retrieve this key to verify the DKIM signature on incoming messages "
+        "(RFC 6376). Note: this audit confirms the public key exists in DNS -- "
+        "it does not test live message signatures."
     ).format(domain=domain)
     if raw.get("discovery_method") == "spf_intelligent":
-        explanation += " Used SPF-based intelligent discovery for faster, targeted results."
+        explanation += " Selectors were targeted using SPF-based sender discovery."
 
     # Fix
     fix = None
@@ -703,8 +707,10 @@ def transform_dkim(raw: Dict, domain: str, has_mx: bool = True) -> Dict:
     elif weak_keys:
         selectors_str = ", ".join(weak_keys)
         fix = (
-            f"Upgrade the following 1024-bit keys to 2048-bit or stronger: "
-            f"<strong>{selectors_str}</strong>. Contact the corresponding provider to rotate these keys."
+            f"The following selectors use 1024-bit keys, which are below current recommendations: "
+            f"<strong>{selectors_str}</strong>. "
+            f"Key rotation is provider-specific -- check your email provider's documentation "
+            f"for how to generate and publish a new 2048-bit or Ed25519 key pair."
         )
     elif raw.get("issues"):
         fix = _first_fix(raw.get("issues", []))
@@ -766,9 +772,13 @@ def transform_mx(raw: Dict) -> Dict:
 
     # Explanation
     if count >= 2:
-        explanation = f"MX records are properly configured with <strong>{count} hosts</strong> for redundancy."
+        explanation = f"MX records are configured with <strong>{count} hosts</strong> for redundancy."
     else:
-        explanation = "Only one MX record found. A single mail server is a single point of failure."
+        explanation = (
+            "Only one MX record is configured. If this host becomes unavailable, inbound email "
+            "delivery will fail until it recovers. Some providers handle redundancy internally "
+            "behind a single hostname, but this cannot be verified from DNS alone."
+        )
     if providers:
         explanation += f" Provider: {', '.join(providers)}."
 
@@ -861,9 +871,9 @@ def transform_mta_sts(raw: Dict, domain: str, has_mx: bool = True) -> Dict:
             "verdict": "No MTA-STS record found",
             "record": None,
             "explanation": (
-                "MTA-STS tells sending mail servers to only deliver email over encrypted TLS "
-                "connections. Without it, an attacker could intercept email in transit via a "
-                "TLS downgrade attack."
+                "MTA-STS (RFC 8461) lets you declare that email to your domain must be delivered "
+                "over authenticated TLS. Without it, a network attacker can force a TLS downgrade "
+                "or perform a man-in-the-middle attack on SMTP delivery to your mail servers."
             ),
             "details": [_issue_to_detail(i) for i in raw.get("issues", [])],
             "fix": (
@@ -893,18 +903,21 @@ def transform_mta_sts(raw: Dict, domain: str, has_mx: bool = True) -> Dict:
     explanation = ""
     if policy_mode == "enforce":
         explanation = (
-            "MTA-STS is in <strong>enforce</strong> mode. Sending servers are required to use "
-            "TLS encryption when delivering email to your domain. Connections that can't establish "
-            "TLS will fail rather than fall back to plaintext."
+            "MTA-STS is in <strong>enforce</strong> mode (RFC 8461). Sending servers that "
+            "support MTA-STS are required to use authenticated TLS when delivering to your domain. "
+            "If TLS cannot be established, delivery fails rather than falling back to plaintext."
         )
     elif policy_mode == "testing":
         explanation = (
-            "MTA-STS is in <strong>testing</strong> mode. Senders will attempt TLS but won't "
-            "reject delivery if TLS fails. You'll receive TLS-RPT reports to monitor issues. "
-            "Move to enforce mode once you've confirmed TLS works reliably."
+            "MTA-STS is in <strong>testing</strong> mode. Senders attempt TLS but will not "
+            "refuse delivery if TLS fails. TLS-RPT reports will capture any failures. "
+            "Move to <strong>enforce</strong> mode once you've confirmed reliable TLS delivery."
         )
     elif policy_mode == "none":
-        explanation = "MTA-STS is configured but set to <strong>none</strong>, which disables it."
+        explanation = (
+            "MTA-STS is configured but the policy mode is set to <strong>none</strong>, "
+            "which disables enforcement. The record has no protective effect in this state."
+        )
 
     details = [_issue_to_detail(i) for i in raw.get("issues", [])]
     fix = _first_fix(raw.get("issues", []))
@@ -961,9 +974,10 @@ def transform_tls_rpt(raw: Dict, domain: str, has_mx: bool = True) -> Dict:
             "verdict": "No TLS-RPT record found",
             "record": None,
             "explanation": (
-                "TLS-RPT (TLS Reporting) gives you visibility into TLS delivery failures. "
-                "Without it, you have no way to know if email to your domain is being "
-                "downgraded to plaintext or failing TLS negotiation."
+                "TLS-RPT (RFC 8460) enables receiving servers to report SMTP TLS delivery failures "
+                "back to you. Without it, you have no visibility into whether inbound email is "
+                "encountering TLS negotiation problems. TLS-RPT complements MTA-STS and DANE by "
+                "surfacing delivery issues that those policies may be causing or encountering."
             ),
             "details": [_issue_to_detail(i) for i in raw.get("issues", [])],
             "fix": (
@@ -983,8 +997,10 @@ def transform_tls_rpt(raw: Dict, domain: str, has_mx: bool = True) -> Dict:
     verdict = f"Reports to {len(destinations)} destination{'s' if len(destinations) != 1 else ''}"
 
     explanation = (
-        "TLS-RPT is configured. Sending mail servers will report TLS connection failures "
-        "when delivering to your domain, giving you visibility into encryption issues."
+        "TLS-RPT (RFC 8460) is configured. Sending mail servers that support the protocol "
+        "will report SMTP TLS failures to your specified destinations, giving you visibility "
+        "into encryption issues on inbound delivery. This is particularly useful alongside "
+        "MTA-STS or DANE to detect delivery problems caused by TLS policy enforcement."
     )
     if destinations:
         explanation += f" Reports are sent to: {', '.join(destinations[:3])}."
@@ -1047,26 +1063,27 @@ def transform_bimi(raw: Dict, domain: str, has_mx: bool = True) -> Dict:
             "record": None,
             "explanation": (
                 "BIMI (Brand Indicators for Message Identification) is not a security protocol. "
-                "It is a brand trust and recognition feature that displays your logo next to "
-                "emails in supporting clients like Gmail and Apple Mail, helping recipients "
-                "identify legitimate messages from your organization at a glance. "
-                "It requires DMARC enforcement (p=quarantine or p=reject) as a prerequisite."
+                "It is a brand recognition feature that displays your logo next to emails in "
+                "supporting clients (Gmail, Apple Mail, Yahoo Mail). "
+                "BIMI is currently a draft standard, not a published RFC. "
+                "It requires DMARC at p=quarantine or p=reject as a prerequisite."
             ),
             "details": [
-                {"type": "info", "text": "BIMI is about brand trust and recognition, not security"},
-                {"type": "info", "text": "Requires DMARC policy of quarantine or reject"},
-                {"type": "info", "text": "Gmail requires a Verified Mark Certificate (VMC) from DigiCert or Entrust"},
+                {"type": "info", "text": "BIMI is about brand recognition, not security"},
+                {"type": "info", "text": "Requires DMARC policy of p=quarantine or p=reject at pct=100"},
+                {"type": "info", "text": "Gmail requires a Verified Mark Certificate (VMC); Apple Mail does not"},
             ],
             "fix": (
-                f"If you want your brand logo displayed in email clients, ensure DMARC is at p=quarantine or p=reject "
-                f"(with pct=100), then publish a BIMI record at "
-                f"<strong>default._bimi.{domain}</strong> pointing to your SVG logo."
+                f"To display your brand logo in supporting mail clients, ensure DMARC is at "
+                f"p=quarantine or p=reject (with pct=100), then publish a BIMI record at "
+                f"<strong>default._bimi.{domain}</strong> pointing to an SVG Tiny P/S logo. "
+                f"A VMC is required for Gmail logo display but not for all clients."
             ),
             "fix_records": [{
                 "type": "TXT",
                 "host": f"default._bimi.{domain}",
                 "value": "v=BIMI1; l=https://example.com/logo.svg;",
-                "comment": "Replace URL with your brand's SVG logo (Tiny P/S). Gmail requires a VMC certificate.",
+                "comment": "Replace URL with your SVG logo (Tiny P/S profile required). A VMC is required for Gmail display but not all clients.",
             }],
         }
 
@@ -1086,8 +1103,8 @@ def transform_bimi(raw: Dict, domain: str, has_mx: bool = True) -> Dict:
         explanation += " A Verified Mark Certificate (VMC) is referenced."
     elif not vmc_url:
         explanation += (
-            " <strong>Note:</strong> No VMC (Verified Mark Certificate) is specified. "
-            "Gmail requires a VMC for BIMI logo display."
+            " <strong>Note:</strong> No VMC (Verified Mark Certificate) is referenced. "
+            "Gmail requires a VMC for BIMI logo display; other clients (e.g. Apple Mail) do not."
         )
 
     details = [_issue_to_detail(i) for i in raw.get("issues", [])]
@@ -1135,7 +1152,7 @@ def transform_dnssec(raw: Dict) -> Dict:
     if not has_dnssec:
         details = [
             {"type": "warning", "text": "No DNSKEY records found"},
-            {"type": "info", "text": "DNSSEC requires support from both your registrar and DNS host"},
+            {"type": "info", "text": "DNSSEC requires support from both your registrar and DNS hosting provider"},
         ]
         for issue in issues:
             details.append(_issue_to_detail(issue))
@@ -1147,15 +1164,17 @@ def transform_dnssec(raw: Dict) -> Dict:
             "verdict": "DNSSEC not configured",
             "record": None,
             "explanation": (
-                "DNSSEC cryptographically signs your DNS records to prevent spoofing and "
-                "cache poisoning attacks. While not required for email authentication, "
-                "it strengthens overall DNS security and is increasingly expected for "
-                "security-conscious organizations."
+                "DNSSEC (RFC 4033/4034/4035) cryptographically signs DNS records so that "
+                "resolvers can verify responses have not been tampered with, preventing cache "
+                "poisoning and DNS spoofing. It is also a prerequisite for DANE. "
+                "Enabling DNSSEC requires coordination between your registrar (for the DS record) "
+                "and your DNS hosting provider (for DNSKEY records and zone signing)."
             ),
             "details": details,
             "fix": (
-                "Consider enabling DNSSEC through your domain registrar or DNS hosting provider. "
-                "Most major registrars support one-click DNSSEC activation."
+                "Enable DNSSEC through your DNS hosting provider, then publish the DS record "
+                "at your domain registrar to complete the chain of trust. "
+                "Many registrars and DNS hosts support this through their control panels."
             ),
             "fix_records": None,  # DNSSEC requires registrar/DNS provider activation, not manual DNS records
         }
@@ -1173,7 +1192,7 @@ def transform_dnssec(raw: Dict) -> Dict:
         if chain_valid is True:
             details.append({"type": "good", "text": "DS digest matches DNSKEY (chain of trust verified)"})
         elif chain_valid is False:
-            details.append({"type": "error", "text": "DS digest does NOT match any DNSKEY (broken chain)"})
+            details.append({"type": "error", "text": "DS digest does NOT match any DNSKEY (broken chain -- validating resolvers will return SERVFAIL)"})
     else:
         details.append({"type": "warning", "text": "No DS record at parent zone (chain may not validate)"})
 
@@ -1217,9 +1236,10 @@ def transform_dnssec(raw: Dict) -> Dict:
         "verdict": verdict,
         "record": None,
         "explanation": (
-            "DNSSEC is enabled. Your DNS records are cryptographically signed, "
-            "preventing cache poisoning and DNS spoofing attacks. Resolvers can "
-            "verify that DNS responses have not been tampered with."
+            "DNSSEC is enabled. Your DNS records are cryptographically signed per "
+            "RFC 4033/4034/4035, allowing validating resolvers to confirm that responses "
+            "have not been tampered with. This prevents cache poisoning and DNS spoofing, "
+            "and is required for DANE to function."
         ),
         "details": details,
         "fix": fix,
@@ -1257,15 +1277,17 @@ def transform_caa(raw: Dict, domain: str) -> Dict:
             "verdict": "No CAA records found",
             "record": None,
             "explanation": (
-                "CAA (Certification Authority Authorization) records specify which Certificate Authorities "
-                "are allowed to issue SSL/TLS certificates for your domain. Without CAA records, any CA "
-                "can issue certificates, increasing the risk of unauthorized or fraudulent certificate issuance."
+                "CAA records (RFC 8659) specify which Certificate Authorities are authorized "
+                "to issue TLS certificates for your domain. Compliant CAs must check CAA records "
+                "before issuance. Without CAA records, any compliant CA may issue certificates "
+                "for your domain -- there is no restriction to enforce."
             ),
             "details": details,
             "fix": (
-                f"Consider adding CAA records to restrict which certificate authorities can issue "
-                f"certificates for your domain. Set the issue tag to your CA (for example, letsencrypt.org) "
-                f"and add an iodef tag to receive violation alerts."
+                f"Add CAA records to restrict which CAs may issue certificates for your domain. "
+                f"Use the <code>issue</code> tag for your CA (for example, <code>letsencrypt.org</code>), "
+                f"<code>issuewild</code> to control wildcard issuance, and "
+                f"<code>iodef</code> to receive violation reports."
             ),
             "fix_records": [
                 {
@@ -1335,9 +1357,10 @@ def transform_caa(raw: Dict, domain: str) -> Dict:
         "verdict": verdict,
         "record": record_display,
         "explanation": (
-            "CAA records restrict which Certificate Authorities can issue SSL/TLS certificates "
-            "for your domain. This prevents unauthorized CAs from issuing certificates that "
-            "could be used in man-in-the-middle attacks."
+            "CAA records (RFC 8659) restrict which Certificate Authorities may issue TLS certificates "
+            "for your domain. Compliant CAs check these records before issuance and must not issue "
+            "if they are not listed. Certificate Transparency logs can be used to detect issuance "
+            "by CAs not authorized in your CAA records."
         ),
         "details": details,
         "fix": fix,
@@ -1366,9 +1389,9 @@ def transform_dane(raw: Dict, domain: str) -> Dict:
             "verdict": "No MX hosts to check",
             "record": None,
             "explanation": (
-                "DANE (DNS-Based Authentication of Named Entities) publishes TLSA records "
-                "to let sending servers verify mail server TLS certificates via DNS. "
-                "This domain has no MX records, so there are no mail servers to protect with DANE."
+                "DANE (RFC 7672) publishes TLSA records that allow sending servers to verify "
+                "your mail server's TLS certificate directly via DNS, without relying on a CA. "
+                "This domain has no MX records, so DANE is not applicable."
             ),
             "details": [{"type": "info", "text": "No MX hosts. DANE check not applicable"}],
             "fix": None,
@@ -1400,8 +1423,9 @@ def transform_dane(raw: Dict, domain: str) -> Dict:
             "record": None,
             "explanation": (
                 "DANE TLSA records are published for your MX hosts, but DNSSEC is not enabled. "
-                "Without DNSSEC, an attacker can spoof or strip TLSA records, completely defeating DANE. "
-                "RFC 7672-compliant senders will ignore these TLSA records until DNSSEC is active."
+                "DANE requires DNSSEC (RFC 7672 Section 2.2) -- without it, an attacker can forge "
+                "or strip TLSA records, completely defeating the authentication. "
+                "Senders that implement RFC 7672 will ignore TLSA records that are not DNSSEC-validated."
             ),
             "details": details,
             "fix": "Enable DNSSEC for your domain before relying on DANE. Once DNSSEC is active, your existing TLSA records will become effective.",
@@ -1449,9 +1473,10 @@ def transform_dane(raw: Dict, domain: str) -> Dict:
             "verdict": verdict,
             "record": None,
             "explanation": (
-                "DANE is configured and secured with DNSSEC. Sending mail servers that support "
-                "DANE can verify your mail server's TLS certificate through DNS, preventing "
-                "man-in-the-middle attacks even if a Certificate Authority is compromised."
+                "DANE (RFC 7672) is configured and backed by DNSSEC. Sending mail servers that "
+                "implement RFC 7672 can verify your mail server's TLS certificate through DNS-based "
+                "TLSA records, independent of the Certificate Authority infrastructure. "
+                "This prevents TLS certificate substitution attacks on SMTP delivery."
             ),
             "details": details,
             "fix": fix,
@@ -1497,9 +1522,10 @@ def transform_dane(raw: Dict, domain: str) -> Dict:
         "verdict": "No DANE TLSA records",
         "record": None,
         "explanation": (
-            "DANE (DNS-Based Authentication of Named Entities) uses TLSA records to let sending "
-            "mail servers verify your mail server's TLS certificate through DNS. This provides "
-            "stronger security than relying on Certificate Authorities alone, and complements MTA-STS."
+            "DANE (RFC 7672) uses TLSA records to let sending mail servers verify your mail "
+            "server's TLS certificate through DNS, without depending on the CA infrastructure. "
+            "DANE requires DNSSEC to be effective -- without it, TLSA records cannot be trusted. "
+            "DANE and MTA-STS serve complementary roles for enforcing SMTP TLS."
         ),
         "details": details,
         "fix": fix,
@@ -1665,8 +1691,9 @@ def transform_nameservers(raw: Dict, domain: str = "") -> Dict:
         "record": record,
         "explanation": (
             f"Found <strong>{ns_count}</strong> nameserver{'s' if ns_count != 1 else ''} for this domain. "
-            "Nameservers are the foundation of your DNS. They answer every query for your domain. "
-            "Redundancy and network diversity are critical to prevent outages."
+            "Nameservers are authoritative for your DNS zone -- they answer queries for all your "
+            "DNS records. Multiple nameservers on distinct network paths reduce the risk of a "
+            "single point of failure causing a full DNS outage for your domain."
         ),
         "details": details,
         "fix": fix,
@@ -1761,12 +1788,14 @@ def transform_ct(raw: Dict, domain: str) -> Dict:
 
     # Explanation
     explanation = (
-        f"Found <strong>{total}</strong> certificate{'s' if total != 1 else ''} in Certificate Transparency logs, "
-        f"of which <strong>{active}</strong> {'are' if active != 1 else 'is'} currently active."
+        f"Found <strong>{total}</strong> certificate{'s' if total != 1 else ''} in Certificate Transparency logs "
+        f"(RFC 6962), of which <strong>{active}</strong> {'are' if active != 1 else 'is'} currently active. "
+        f"CT logs provide a publicly auditable record of all certificates issued for your domain."
     )
     if caa_mismatches:
         explanation += (
-            " <strong>Warning:</strong> Some certificates were issued by CAs not authorized by your CAA records."
+            " <strong>Note:</strong> Some certificates were issued by CAs not listed in your CAA records. "
+            "This may indicate issuance before CAA was configured, or a CAA policy gap."
         )
 
     # Details
@@ -1815,9 +1844,10 @@ def transform_ct(raw: Dict, domain: str) -> Dict:
     if caa_mismatches:
         mismatched_cas = ", ".join(mm["cert_issuer"] for mm in caa_mismatches[:3])
         fix = (
-            f"Update your CAA record to include <strong>{mismatched_cas}</strong>, "
-            f"or revoke certificates from unauthorized CAs. If these are older certs issued "
-            f"before CAA was configured, they will naturally expire."
+            f"Review certificates from <strong>{mismatched_cas}</strong>. "
+            f"If these CAs should be authorized, add them to your CAA record. "
+            f"If they should not be, consider requesting revocation. "
+            f"Certificates issued before CAA records were in place will expire naturally."
         )
 
     return {
@@ -1916,23 +1946,23 @@ def transform_blacklist(raw: Dict, domain: str) -> Dict:
     if total_listings > 0:
         if tier1_listed:
             explanation = (
-                f"<strong>Warning:</strong> This domain's mail servers are listed on {total_listings} "
+                f"This domain's mail servers are listed on {total_listings} "
                 f"blocklist{'s' if total_listings != 1 else ''}. "
-                "Major blocklist listings (Spamhaus, Barracuda) cause significant email "
-                "deliverability problems. Many receiving servers will reject or spam-folder your mail."
+                "Major blocklists (Spamhaus, Barracuda) are widely used by receiving servers and "
+                "listings can significantly affect deliverability. Listings can result from spam "
+                "activity, compromised accounts, or false positives -- investigate before requesting removal."
             )
         else:
             explanation = (
                 f"This domain's mail servers appear on {total_listings} secondary "
                 f"blocklist{'s' if total_listings != 1 else ''}. "
-                "These have less impact than major lists but may still affect deliverability "
-                "with some receivers."
+                "Secondary listings have less industry-wide impact than major lists but may still "
+                "affect deliverability with some receivers. Verify the listing reason before acting."
             )
     else:
         explanation = (
             f"Checked {len(ips_checked)} IP{'s' if len(ips_checked) != 1 else ''} and the domain "
-            f"against {total_lists} DNS-based blocklists. No listings found. Your mail server "
-            "reputation is clean."
+            f"against {total_lists} DNS-based blocklists. No listings found."
         )
 
     # Details
@@ -1983,9 +2013,14 @@ def transform_blacklist(raw: Dict, domain: str) -> Dict:
                 delist_parts.append(f"<strong>{name}</strong>: <a href=\"{url}\" target=\"_blank\" rel=\"noopener\">{url}</a>")
         if delist_parts:
             fix = "Request delisting from each blocklist:<br>" + "<br>".join(delist_parts)
-            fix += "<br><br>Investigate the root cause (compromised account, open relay, or spam complaint spike) before requesting removal."
+            fix += (
+                "<br><br>Before requesting removal, identify the reason for the listing. "
+                "Common causes include a compromised sending account, misconfigured open relay, "
+                "a spike in spam complaints, or -- in some cases -- a false positive. "
+                "Removing the underlying cause first reduces the chance of re-listing."
+            )
         else:
-            fix = "Investigate the root cause of the listing and contact the blocklist operator for removal."
+            fix = "Review the listing reason with each blocklist operator and request removal once the underlying issue is resolved."
 
     return {
         "name": "Blacklist",
