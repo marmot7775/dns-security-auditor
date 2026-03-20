@@ -8,11 +8,11 @@ const API_BASE = '/api';
 // -- Scope definitions: which checks to show per scope --
 const SCOPE_CHECKS = {
     complete:      null, // null = show all
-    email_full:    ['DMARC', 'SPF', 'DKIM', 'MX Records', 'MX', 'MTA-STS', 'TLS-RPT', 'BIMI', 'Blacklist'],
+    email_full:    ['DMARC', 'SPF', 'DKIM', 'MX Records', 'MX', 'MTA-STS', 'TLS-RPT', 'BIMI', 'Blocklist'],
     dmarc:         ['DMARC', 'SPF', 'DKIM'],
     transport:     ['MTA-STS', 'TLS-RPT', 'DANE', 'MX Records', 'MX'],
     dns_infra:     ['DNSSEC', 'CAA', 'DANE', 'Nameservers', 'Certificate Transparency'],
-    security_scan: ['DMARC', 'SPF', 'DKIM', 'DNSSEC', 'DANE', 'Certificate Transparency', 'Blacklist', 'CAA', 'MTA-STS'],
+    security_scan: ['DMARC', 'SPF', 'DKIM', 'DNSSEC', 'DANE', 'Certificate Transparency', 'Blocklist', 'CAA', 'MTA-STS'],
 };
 
 // Severity sort order (lower = higher priority = displayed first)
@@ -183,7 +183,7 @@ const STEP_MESSAGES = {
     'DANE':                     'Checking DANE TLSA records...',
     'DKIM':                     'Discovering DKIM selectors...',
     'Certificate Transparency': 'Querying certificate transparency logs...',
-    'Blacklist':                'Checking IP and domain blocklists...',
+    'Blocklist':                'Checking IP and domain blocklists...',
     'Vendor Fingerprinting':    'Fingerprinting email services...',
     'Scoring':                  'Calculating security score...',
 };
