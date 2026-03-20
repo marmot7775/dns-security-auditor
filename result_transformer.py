@@ -138,7 +138,7 @@ def transform_dmarc(raw: Dict, tree_walk: Optional[Dict] = None) -> Dict:
                 "using the Public Suffix List."
             )
         _best_practice = (
-            " For the strongest protection, publish a dedicated DMARC record for this subdomain."
+            ""
         )
         if inherited_policy == "reject":
             explanation = (
