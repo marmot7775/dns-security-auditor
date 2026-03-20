@@ -163,67 +163,67 @@
                 <tbody>
                     <tr>
                         <td>DMARC</td>
-                        <td>Query <code>_dmarc.domain</code> TXT record. Parse policy, reporting, alignment, and subdomain tags. Perform DMARCbis tree walk for subdomains. Validate syntax, detect deprecated tags (pct, ri, rf).</td>
+                        <td>Query <code>_dmarc.domain</code> TXT record. Parse policy, reporting, alignment, and subdomain tags. Perform DMARCbis tree walk for subdomains. Validate syntax, detect deprecated tags (pct, ri, rf) and new tags (t, np, psd). Verify external report authorization per Section 7.1.</td>
                         <td><a href="https://datatracker.ietf.org/doc/draft-ietf-dmarc-dmarcbis/" target="_blank" rel="noopener">DMARCbis</a></td>
                     </tr>
                     <tr>
                         <td>SPF</td>
-                        <td>Query domain TXT records for <code>v=spf1</code>. Recursively resolve all includes to count total DNS lookups. Detect multiple records, void lookups, deprecated mechanisms.</td>
+                        <td>Query domain TXT records for <code>v=spf1</code>. Recursively resolve all includes to count total DNS lookups. Detect multiple records, void lookups, deprecated mechanisms, invalid IPs, overly broad CIDRs.</td>
                         <td><a href="https://datatracker.ietf.org/doc/html/rfc7208" target="_blank" rel="noopener">RFC 7208</a></td>
                     </tr>
                     <tr>
                         <td>DKIM</td>
-                        <td>Query common selectors at <code>selector._domainkey.domain</code>. Analyze key type and strength. Use SPF-based vendor detection to prioritize relevant selectors.</td>
+                        <td>Query common selectors at <code>selector._domainkey.domain</code>. Analyze key type (RSA/Ed25519) and strength. Use SPF-based vendor detection to prioritize relevant selectors. Support direct lookup of user-supplied selectors.</td>
                         <td><a href="https://datatracker.ietf.org/doc/html/rfc6376" target="_blank" rel="noopener">RFC 6376</a></td>
                     </tr>
                     <tr>
                         <td>MX</td>
-                        <td>Query MX records. Verify each host resolves. Detect null MX (RFC 7505). Identify mail providers.</td>
+                        <td>Query MX records. Verify each host resolves. Detect null MX (RFC 7505). Identify mail providers. Check for dangling MX (hosts that do not resolve).</td>
                         <td><a href="https://datatracker.ietf.org/doc/html/rfc5321" target="_blank" rel="noopener">RFC 5321</a></td>
                     </tr>
                     <tr>
                         <td>MTA-STS</td>
-                        <td>Query <code>_mta-sts.domain</code> TXT record. Check for hosted policy file. Validate policy mode (enforce, testing, none).</td>
+                        <td>Query <code>_mta-sts.domain</code> TXT record. Fetch and parse HTTPS policy file. Validate mode, MX pattern matching, and max_age.</td>
                         <td><a href="https://datatracker.ietf.org/doc/html/rfc8461" target="_blank" rel="noopener">RFC 8461</a></td>
                     </tr>
                     <tr>
                         <td>TLS-RPT</td>
-                        <td>Query <code>_smtp._tls.domain</code> TXT record. Validate reporting destinations.</td>
+                        <td>Query <code>_smtp._tls.domain</code> TXT record. Validate reporting destinations (mailto and HTTPS).</td>
                         <td><a href="https://datatracker.ietf.org/doc/html/rfc8460" target="_blank" rel="noopener">RFC 8460</a></td>
                     </tr>
                     <tr>
                         <td>BIMI</td>
-                        <td>Query <code>default._bimi.domain</code> TXT record. Validate SVG logo URL and profile. Check for VMC/CMC certificate reference.</td>
-                        <td>Draft (BIMI Working Group)</td>
+                        <td>Record parsing, DMARC enforcement prerequisite check (including inherited policies), SVG logo fetch with Tiny PS profile validation, script element detection, external reference scanning, viewBox verification, file size check, VMC certificate tag analysis.</td>
+                        <td>Draft (BIMI WG)</td>
                     </tr>
                     <tr>
                         <td>DNSSEC</td>
-                        <td>Query DNSKEY records. Verify DS record at parent zone. Validate chain of trust (DS digest matches DNSKEY). Check algorithm currency.</td>
+                        <td>DNSKEY presence, DS record validation at parent zone (recursive + direct parent NS query), algorithm analysis per RFC 8624, chain of trust verification via AD flag and DS-to-DNSKEY digest matching.</td>
                         <td><a href="https://datatracker.ietf.org/doc/html/rfc4033" target="_blank" rel="noopener">RFC 4033</a>/4034/4035</td>
                     </tr>
                     <tr>
                         <td>CAA</td>
-                        <td>Query CAA records. Identify authorized CAs, wildcard policy, and violation reporting (iodef).</td>
+                        <td>Certificate Authority Authorization records, issuer restrictions (issue), wildcard policy (issuewild), incident reporting (iodef).</td>
                         <td><a href="https://datatracker.ietf.org/doc/html/rfc8659" target="_blank" rel="noopener">RFC 8659</a></td>
                     </tr>
                     <tr>
                         <td>DANE</td>
-                        <td>Query TLSA records for MX hosts at <code>_25._tcp.mx-host</code>. Verify DNSSEC is present (required for DANE).</td>
+                        <td>TLSA record lookup for each MX host, usage/selector/matching type analysis, DNSSEC dependency enforcement per RFC 7672.</td>
                         <td><a href="https://datatracker.ietf.org/doc/html/rfc7672" target="_blank" rel="noopener">RFC 7672</a></td>
                     </tr>
                     <tr>
                         <td>Nameservers</td>
-                        <td>Query NS records. Test each for authoritative response, resolution, SOA serial consistency, network diversity, IPv6 support.</td>
+                        <td>NS count, resolution and authoritative response verification, SOA serial consistency, IPv6 support, network diversity across /24 ranges, provider identification.</td>
                         <td></td>
                     </tr>
                     <tr>
                         <td>CT</td>
-                        <td>Query crt.sh for Certificate Transparency log entries. Identify active certificates, issuers, wildcards, expiring certs, CAA mismatches.</td>
+                        <td>CT log query via crt.sh, issuer breakdown, CAA mismatch detection, expiring certificate alerts, subdomain discovery.</td>
                         <td><a href="https://datatracker.ietf.org/doc/html/rfc6962" target="_blank" rel="noopener">RFC 6962</a></td>
                     </tr>
                     <tr>
                         <td>Blocklist</td>
-                        <td>Query Spamhaus DBL for domain-based blocklist status.</td>
+                        <td>Domain reputation check against Spamhaus DBL with return code interpretation (spam, phishing, malware, botnet C&amp;C).</td>
                         <td></td>
                     </tr>
                 </tbody>
@@ -251,19 +251,19 @@
                     <tr><th>Category</th><th>Weight</th><th>What It Measures</th></tr>
                 </thead>
                 <tbody>
-                    <tr><td>DMARC</td><td>25 points</td><td>Policy strength, reporting, alignment configuration</td></tr>
-                    <tr><td>SPF</td><td>20 points</td><td>Record presence, mechanism quality, lookup count</td></tr>
-                    <tr><td>DKIM</td><td>15 points</td><td>Key presence, key strength, redundancy</td></tr>
-                    <tr><td>Best Practices</td><td>20 points</td><td>MTA-STS, TLS-RPT, DANE</td></tr>
-                    <tr><td>Key Security</td><td>10 points</td><td>Key hygiene, rotation, testing mode</td></tr>
-                    <tr><td>Vendor Intelligence</td><td>10 points</td><td>Email service provider detection and configuration</td></tr>
+                    <tr><td>DMARC</td><td>25 points</td><td>Policy strength, alignment mode, reporting, subdomain policy</td></tr>
+                    <tr><td>SPF</td><td>20 points</td><td>Record presence, all mechanism, lookup count, include complexity</td></tr>
+                    <tr><td>DKIM</td><td>15 points</td><td>Key discovery, key type, cryptographic strength</td></tr>
+                    <tr><td>Best Practices</td><td>20 points</td><td>MTA-STS (8 pts), TLS-RPT (8 pts), DANE (4 pts)</td></tr>
+                    <tr><td>Key Security</td><td>10 points</td><td>DKIM key strength, rotation hygiene, algorithm modernity</td></tr>
+                    <tr><td>Vendor Intelligence</td><td>10 points</td><td>Email service provider detection confidence</td></tr>
                 </tbody>
             </table>
             <div class="method-note">
                 DKIM scoring does not penalize domains where selectors were not detected, because selectors are private and cannot be verified from outside. A domain with undetectable DKIM receives full credit in this category.
             </div>
             <div class="method-note">
-                DNSSEC, CAA, Nameservers, Certificate Transparency, and Blocklist checks are evaluated and reported in the audit results but do not currently contribute to the numeric score.
+                DNSSEC, CAA, Nameservers, Certificate Transparency, and Blocklist checks are evaluated and reported in the audit results but do not contribute to the numeric score.
             </div>
             <div class="method-note">
                 A broken SPF record (PermError from exceeding the 10-lookup limit) receives zero points in the SPF category regardless of other mechanisms.
@@ -271,7 +271,7 @@
 
             <h2 class="method-h2">Authentication Resilience</h2>
             <p class="method-p">
-                Beyond pass/fail, we assess how resilient your authentication is to real-world failure scenarios. A domain where both SPF and DKIM are functional has <strong>high</strong> resilience because either can independently satisfy DMARC. A domain relying on SPF alone has <strong>moderate</strong> resilience because forwarded mail will fail. A domain where DKIM selectors could not be detected is also rated <strong>moderate</strong>, since DKIM may be configured but could not be confirmed. A domain with broken SPF and no detected DKIM has <strong>low</strong> resilience. Authentication Resilience is an informational assessment and does not contribute to the numeric score.
+                Beyond pass/fail, we assess how resilient your authentication is to real-world failure scenarios. A domain where both SPF and DKIM are functional has <strong>high</strong> resilience because either can independently satisfy DMARC. <strong>Moderate</strong> resilience covers several scenarios: SPF functional but DKIM not confirmed (DKIM selectors are private and may exist but were not detected), DKIM functional but SPF broken, or DMARC not yet enforcing. A domain with broken SPF and no detected DKIM has <strong>low</strong> resilience. Authentication Resilience is an informational assessment and does not contribute to the numeric score.
             </p>
 
             <h2 class="method-h2">Standards Reference</h2>
