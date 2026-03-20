@@ -2381,30 +2381,13 @@ def _raw_check_blacklist(domain: str, raw_results: Dict[str, Any]) -> Dict[str, 
     import ipaddress
     import socket
 
-    # Blocklists: (name, hostname, type, tier, delisting_url)
-    IP_LISTS = [
-        ("Spamhaus ZEN", "zen.spamhaus.org", 1, "https://check.spamhaus.org/"),
-        ("Barracuda BRBL", "b.barracudacentral.org", 1, "https://www.barracudacentral.org/lookups"),
-        ("SpamCop", "bl.spamcop.net", 2, "https://www.spamcop.net/bl.shtml"),
-        ("SORBS", "dnsbl.sorbs.net", 2, None),
-        ("UCEProtect L1", "dnsbl-1.uceprotect.net", 2, None),
-    ]
+    # Domain-based blocklists only. IP-based checks were removed because
+    # MX host IPs are shared infrastructure (e.g. Microsoft 365, Google)
+    # that the audited domain does not control. A listing on a shared IP
+    # says nothing about the domain's reputation.
     DOMAIN_LISTS = [
         ("Spamhaus DBL", "dbl.spamhaus.org", 1, "https://check.spamhaus.org/"),
     ]
-
-    # Spamhaus return code meanings
-    SPAMHAUS_CODES = {
-        "127.0.0.2": "SBL - Spamhaus Block List (spam sources)",
-        "127.0.0.3": "SBL CSS - Spamhaus CSS (spam operations)",
-        "127.0.0.4": "XBL - Exploits Block List (compromised hosts)",
-        "127.0.0.5": "XBL - Exploits Block List (compromised hosts)",
-        "127.0.0.6": "XBL - Exploits Block List (compromised hosts)",
-        "127.0.0.7": "XBL - Exploits Block List (compromised hosts)",
-        "127.0.0.9": "SBL DROP - Spamhaus DROP (hijacked space)",
-        "127.0.0.10": "PBL - Policy Block List (dynamic/residential IP)",
-        "127.0.0.11": "PBL - Policy Block List (ISP maintained)",
-    }
     SPAMHAUS_DBL_CODES = {
         "127.0.1.2": "Spam domain",
         "127.0.1.4": "Phishing domain",
@@ -2443,93 +2426,6 @@ def _raw_check_blacklist(domain: str, raw_results: Dict[str, Any]) -> Dict[str, 
             return None
         except Exception:
             return None
-
-    def _check_ip_against_list(ip: str, list_name: str, list_host: str) -> Dict:
-        """Check a single IP against a single DNSBL."""
-        # Reverse IP octets
-        parts = ip.split(".")
-        if len(parts) != 4:
-            return {"list": list_name, "listed": False, "return_code": None, "meaning": None, "error": "Not IPv4"}
-        reversed_ip = ".".join(reversed(parts))
-        query = f"{reversed_ip}.{list_host}"
-
-        return_code = _dnsbl_lookup(query)
-        listed = return_code is not None
-
-        meaning = None
-        if listed:
-            if "spamhaus" in list_host:
-                meaning = SPAMHAUS_CODES.get(return_code)
-                # PBL (127.0.0.10, 127.0.0.11) is a policy list, not a spam list.
-                # Normal for MX host IPs and should not be flagged.
-                if return_code in ("127.0.0.10", "127.0.0.11"):
-                    return {"list": list_name, "listed": False, "return_code": return_code, "meaning": None}
-                # 127.255.255.254 and 127.255.255.255 are Spamhaus error/test responses.
-                # They indicate the query was made via a public resolver or hit rate limits.
-                # Not a real listing.
-                if return_code and return_code.startswith("127.255.255."):
-                    return {"list": list_name, "listed": False, "return_code": return_code, "meaning": None, "error": "Spamhaus query blocked (public resolver)"}
-            if not meaning:
-                meaning = f"Listed (response: {return_code})"
-
-        return {"list": list_name, "listed": listed, "return_code": return_code, "meaning": meaning}
-
-    # Get MX IPs from raw results
-    raw_mx = raw_results.get("mx", {})
-    mx_details = raw_mx.get("mx_details", [])
-
-    # Build IP-to-host mapping
-    ip_host_map = {}  # ip -> mx_host
-    all_ips = []
-    for mx_detail in mx_details:
-        hostname = mx_detail.get("hostname", "")
-        for ip in mx_detail.get("ips", []):
-            # Skip IPv6 (most DNSBLs don't support it) and private IPs
-            try:
-                addr = ipaddress.ip_address(ip)
-                if addr.version == 6:
-                    continue
-                if addr.is_private or addr.is_loopback or addr.is_reserved:
-                    continue
-            except ValueError:
-                continue
-            if ip not in ip_host_map:
-                ip_host_map[ip] = hostname
-                all_ips.append(ip)
-
-    result["ips_checked"] = all_ips
-
-    # Check IPs against all lists using ThreadPoolExecutor for parallelism
-    if all_ips:
-        ip_results_map = {}  # ip -> list of results
-        for ip in all_ips:
-            ip_results_map[ip] = []
-
-        with ThreadPoolExecutor(max_workers=10) as executor:
-            futures = {}
-            for ip in all_ips:
-                for list_name, list_host, tier, delist_url in IP_LISTS:
-                    future = executor.submit(_check_ip_against_list, ip, list_name, list_host)
-                    futures[future] = (ip, list_name, tier, delist_url)
-
-            for future in as_completed(futures, timeout=30):
-                ip, list_name, tier, delist_url = futures[future]
-                try:
-                    check_result = future.result(timeout=5)
-                    ip_results_map[ip].append(check_result)
-                except Exception:
-                    ip_results_map[ip].append({
-                        "list": list_name, "listed": False, "return_code": None,
-                        "meaning": None, "error": "Lookup failed",
-                    })
-
-        # Build structured IP results
-        for ip in all_ips:
-            result["ip_results"].append({
-                "ip": ip,
-                "mx_host": ip_host_map.get(ip, ""),
-                "listings": ip_results_map[ip],
-            })
 
     # Check domain against domain-based lists
     for list_name, list_host, tier, delist_url in DOMAIN_LISTS:
