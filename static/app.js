@@ -9,10 +9,10 @@ const API_BASE = '/api';
 const SCOPE_CHECKS = {
     complete:      null, // null = show all
     email_full:    ['DMARC', 'SPF', 'DKIM', 'MX Records', 'MX', 'MTA-STS', 'TLS-RPT', 'BIMI', 'Blacklist'],
-    dmarc:         ['DMARC'],
+    dmarc:         ['DMARC', 'SPF', 'DKIM'],
     transport:     ['MTA-STS', 'TLS-RPT', 'DANE', 'MX Records', 'MX'],
     dns_infra:     ['DNSSEC', 'CAA', 'DANE', 'Nameservers', 'Certificate Transparency'],
-    security_scan: ['DMARC', 'SPF', 'DKIM', 'DNSSEC', 'DANE', 'Certificate Transparency', 'Blacklist'],
+    security_scan: ['DMARC', 'SPF', 'DKIM', 'DNSSEC', 'DANE', 'Certificate Transparency', 'Blacklist', 'CAA', 'MTA-STS'],
 };
 
 // Severity sort order (lower = higher priority = displayed first)

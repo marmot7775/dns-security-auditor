@@ -65,10 +65,10 @@ from result_transformer import (
 SCOPE_CHECKS = {
     "complete":      None,  # None = run all
     "email_full":    {"dmarc", "mx", "spf", "dkim", "mta_sts", "tls_rpt", "bimi", "blacklist"},
-    "dmarc":         {"dmarc"},
+    "dmarc":         {"dmarc", "spf", "dkim"},
     "transport":     {"mx", "mta_sts", "tls_rpt", "dane"},
     "dns_infra":     {"dnssec", "caa", "dane", "nameservers", "ct"},
-    "security_scan": {"dmarc", "spf", "dkim", "dnssec", "dane", "ct", "blacklist"},
+    "security_scan": {"dmarc", "spf", "dkim", "dnssec", "dane", "ct", "blacklist", "caa", "mta_sts"},
 }
 
 # Checks that depend on MX raw results
