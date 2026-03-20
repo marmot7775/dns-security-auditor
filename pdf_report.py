@@ -80,6 +80,10 @@ class AuditPDFReport(FPDF):
         self.checks = data.get("checks", [])
         self.priority_fixes = data.get("priority_fixes", [])
         self.vendors = data.get("vendors", [])
+        self.anomalies = data.get("anomalies") or []
+        self.remediation_plan = data.get("remediation_plan") or {}
+        self.score_data = data.get("score", {})
+        self._records_for_appendix = []
 
         # Register fonts
         self._register_fonts()
@@ -168,6 +172,14 @@ class AuditPDFReport(FPDF):
         # Summary stats bar
         self._render_summary_bar()
         self.ln(10)
+
+        # Risk level
+        self._render_risk_level()
+        self.ln(6)
+
+        # Category score breakdown
+        self._render_category_breakdown()
+        self.ln(6)
 
         # Priority fixes
         if self.priority_fixes:
@@ -275,22 +287,281 @@ class AuditPDFReport(FPDF):
         self.set_text_color(*COLORS["text_sec"])
         self.multi_cell(0, 5, " · ".join(vendor_parts), new_x="LMARGIN", new_y="NEXT")
 
+    def _render_risk_level(self):
+        """Render risk level badge based on grade."""
+        risk_map = {
+            "A": ("Low", COLORS["pass"]),
+            "B": ("Low", COLORS["pass"]),
+            "C": ("Medium", COLORS["warn"]),
+            "D": ("High", COLORS["fail"]),
+            "F": ("Critical", COLORS["fail"]),
+        }
+        risk_label, risk_color = risk_map.get(self.grade, ("Unknown", COLORS["text_dim"]))
+
+        self.set_font(self._font_body, "B", 9)
+        self.set_text_color(*COLORS["text_dim"])
+        self.cell(0, 6, "RISK LEVEL", align="C", new_x="LMARGIN", new_y="NEXT")
+
+        self.set_font(self._font_body, "B", 12)
+        self.set_text_color(*risk_color)
+        self.cell(0, 7, risk_label, align="C", new_x="LMARGIN", new_y="NEXT")
+
+    def _render_category_breakdown(self):
+        """Render category score bars."""
+        category_scores = self.score_data.get("category_scores") or {}
+        if not category_scores:
+            return
+
+        weights = {
+            "dmarc": 30, "spf": 25, "dkim": 20,
+            "best_practices": 10, "key_security": 10, "vendor_intelligence": 5,
+        }
+        labels = {
+            "dmarc": "DMARC", "spf": "SPF", "dkim": "DKIM",
+            "best_practices": "Best Practices", "key_security": "Key Security",
+            "vendor_intelligence": "Vendor Intel",
+        }
+
+        self.set_font(self._font_body, "B", 9)
+        self.set_text_color(*COLORS["text_dim"])
+        self.cell(0, 6, "SCORE BREAKDOWN", new_x="LMARGIN", new_y="NEXT")
+        self.ln(2)
+
+        x = self.l_margin
+        bar_w = 100
+        label_w = 45
+        score_w = 25
+
+        for cat_key in ["dmarc", "spf", "dkim", "best_practices", "key_security", "vendor_intelligence"]:
+            cat_score = category_scores.get(cat_key, 0)
+            max_score = weights.get(cat_key, 10)
+            label = labels.get(cat_key, cat_key)
+            pct = min(cat_score / max_score, 1.0) if max_score > 0 else 0
+
+            # Label
+            self.set_font(self._font_body, "", 8)
+            self.set_text_color(*COLORS["text_sec"])
+            self.set_x(x)
+            self.cell(label_w, 5, label)
+
+            # Bar background
+            bar_y = self.get_y() + 0.5
+            self.set_fill_color(*COLORS["bg"])
+            self.rect(x + label_w, bar_y, bar_w, 4, "F")
+
+            # Bar fill
+            fill_color = COLORS["pass"] if pct >= 0.7 else COLORS["warn"] if pct >= 0.4 else COLORS["fail"]
+            self.set_fill_color(*fill_color)
+            if pct > 0:
+                self.rect(x + label_w, bar_y, bar_w * pct, 4, "F")
+
+            # Score text
+            self.set_font(self._font_body, "", 7)
+            self.set_text_color(*COLORS["text_dim"])
+            self.set_xy(x + label_w + bar_w + 3, self.get_y())
+            self.cell(score_w, 5, f"{cat_score:.0f}/{max_score}")
+
+            self.ln(6)
+
     # ============================================================
-    # Pages 2+: Detailed Check Cards
+    # Anomalies Section
+    # ============================================================
+
+    def _render_anomalies(self):
+        """Render the 'What's Unusual' anomaly section."""
+        if not self.anomalies:
+            return
+
+        if self.get_y() > 240:
+            self.add_page()
+
+        self.set_font(self._font_body, "B", 11)
+        self.set_text_color(*COLORS["primary"])
+        self.cell(0, 7, "What's Unusual", new_x="LMARGIN", new_y="NEXT")
+        self.ln(2)
+
+        severity_colors = {
+            "critical": COLORS["fail"],
+            "high": COLORS["warn"],
+            "medium": COLORS["text_dim"],
+        }
+
+        for anomaly in self.anomalies:
+            if self.get_y() > 265:
+                self.add_page()
+
+            sev = anomaly.get("severity", "medium")
+            sev_color = severity_colors.get(sev, COLORS["text_dim"])
+            x = self.l_margin
+            w = 210 - self.l_margin - self.r_margin
+
+            # Severity accent
+            self.set_fill_color(*sev_color)
+            self.rect(x, self.get_y(), 2.5, 12, "F")
+
+            # Title
+            self.set_font(self._font_body, "B", 8.5)
+            self.set_text_color(*sev_color)
+            sev_label = {"critical": "CRITICAL", "high": "HIGH", "medium": "MEDIUM"}.get(sev, sev.upper())
+            self.set_x(x + 5)
+            self.cell(18, 5, sev_label)
+
+            self.set_font(self._font_body, "B", 8.5)
+            self.set_text_color(*COLORS["text"])
+            self.cell(0, 5, anomaly.get("title", ""), new_x="LMARGIN", new_y="NEXT")
+
+            # Description
+            desc = anomaly.get("description", "")
+            if desc:
+                self.set_font(self._font_body, "", 8)
+                self.set_text_color(*COLORS["text_sec"])
+                self.set_x(x + 5)
+                self.multi_cell(w - 5, 4, desc, new_x="LMARGIN", new_y="NEXT")
+
+            # Recommendation
+            rec = anomaly.get("recommendation", "")
+            if rec:
+                self.set_font(self._font_body, "", 7.5)
+                self.set_text_color(*COLORS["pass"])
+                self.set_x(x + 5)
+                self.multi_cell(w - 5, 4, f"-> {rec}", new_x="LMARGIN", new_y="NEXT")
+
+            self.ln(3)
+
+    # ============================================================
+    # Remediation Plan
+    # ============================================================
+
+    def _render_remediation_plan(self):
+        """Render the remediation plan section."""
+        immediate = self.remediation_plan.get("immediate") or []
+        short_term = self.remediation_plan.get("short_term") or []
+        long_term = self.remediation_plan.get("long_term") or []
+
+        if not immediate and not short_term and not long_term:
+            return
+
+        self.add_page()
+
+        self.set_font(self._font_body, "B", 14)
+        self.set_text_color(*COLORS["primary"])
+        self.cell(0, 8, "Remediation Plan", new_x="LMARGIN", new_y="NEXT")
+        self.ln(4)
+
+        phases = [
+            ("Immediate Actions", immediate, COLORS["fail"]),
+            ("Short-Term (1-2 Weeks)", short_term, COLORS["warn"]),
+            ("Long-Term (1-3 Months)", long_term, COLORS["text_dim"]),
+        ]
+
+        for phase_title, steps, phase_color in phases:
+            if not steps:
+                continue
+
+            if self.get_y() > 255:
+                self.add_page()
+
+            # Phase header
+            self.set_font(self._font_body, "B", 10)
+            self.set_text_color(*phase_color)
+            self.cell(0, 7, phase_title, new_x="LMARGIN", new_y="NEXT")
+            self.ln(2)
+
+            x = self.l_margin
+            w = 210 - self.l_margin - self.r_margin
+
+            for i, step in enumerate(steps, 1):
+                if self.get_y() > 268:
+                    self.add_page()
+
+                # Step number + title
+                self.set_font(self._font_body, "B", 9)
+                self.set_text_color(*COLORS["text"])
+                self.set_x(x)
+                self.cell(8, 5, f"{i}.")
+
+                self.set_font(self._font_body, "B", 9)
+                self.cell(0, 5, step.get("title", ""), new_x="LMARGIN", new_y="NEXT")
+
+                # Description
+                desc = step.get("description", "")
+                if desc:
+                    self.set_font(self._font_body, "", 8)
+                    self.set_text_color(*COLORS["text_sec"])
+                    self.set_x(x + 8)
+                    self.multi_cell(w - 8, 4.2, desc, new_x="LMARGIN", new_y="NEXT")
+
+                # Effort + impact badges
+                effort = step.get("effort", "")
+                impact = step.get("impact", "")
+                if effort or impact:
+                    self.set_font(self._font_body, "", 7)
+                    self.set_text_color(*COLORS["text_dim"])
+                    self.set_x(x + 8)
+                    badge_text = []
+                    if effort:
+                        badge_text.append(f"Effort: {effort}")
+                    if impact:
+                        badge_text.append(f"Impact: {impact}")
+                    self.cell(0, 4, " | ".join(badge_text), new_x="LMARGIN", new_y="NEXT")
+
+                self.ln(3)
+
+            self.ln(3)
+
+    # ============================================================
+    # Appendix -- Raw DNS Records
+    # ============================================================
+
+    def _render_appendix(self):
+        """Render appendix with raw DNS records."""
+        if not self._records_for_appendix:
+            return
+
+        self.add_page()
+
+        self.set_font(self._font_body, "B", 14)
+        self.set_text_color(*COLORS["primary"])
+        self.cell(0, 8, "Appendix: Raw DNS Records", new_x="LMARGIN", new_y="NEXT")
+        self.ln(4)
+
+        x = self.l_margin
+        w = 210 - self.l_margin - self.r_margin
+
+        for entry in self._records_for_appendix:
+            if self.get_y() > 250:
+                self.add_page()
+
+            # Check name
+            self.set_font(self._font_body, "B", 9)
+            self.set_text_color(*COLORS["text"])
+            self.cell(0, 5, entry["name"], new_x="LMARGIN", new_y="NEXT")
+            self.ln(1)
+
+            # Record block
+            self._render_record_block(entry["record"], x, w)
+
+    # ============================================================
+    # Pages 2+: Detailed Findings
     # ============================================================
 
     def _render_check_cards(self):
         """Render each check as a card block."""
         self.add_page()  # Start checks on a fresh page
+
+        # Section heading
+        self.set_font(self._font_body, "B", 14)
+        self.set_text_color(*COLORS["primary"])
+        self.cell(0, 8, "Findings", new_x="LMARGIN", new_y="NEXT")
+        self.ln(4)
+
         for check in self.checks:
             self._render_check_card(check)
 
     def _estimate_card_height(self, check: Dict) -> float:
-        """Estimate the height a card will occupy (approximate)."""
+        """Estimate the height a card will occupy (approximate).
+        Records are now in the appendix, so not counted here."""
         h = 14  # header
-        if check.get("record"):
-            lines = len(check["record"].split("\n"))
-            h += 6 + lines * 4.5
         if check.get("explanation"):
             text = _strip_html(check["explanation"])
             chars_per_line = 85
@@ -356,9 +627,12 @@ class AuditPDFReport(FPDF):
 
         self.set_y(start_y + 14)
 
-        # DNS record
+        # DNS record -- collect for appendix instead of inline
         if check.get("record"):
-            self._render_record_block(check["record"], x, w)
+            self._records_for_appendix.append({
+                "name": check.get("name", ""),
+                "record": check["record"],
+            })
 
         # Explanation
         if check.get("explanation"):
@@ -438,11 +712,20 @@ class AuditPDFReport(FPDF):
         """Generate the complete PDF and return as bytes."""
         self.alias_nb_pages()
 
-        # Page 1: Executive Summary
+        # Page 1: Executive Summary (enhanced with risk level + category breakdown)
         self._render_executive_summary()
 
-        # Pages 2+: Detailed Check Cards
+        # Anomalies -- "What's Unusual" (if any)
+        self._render_anomalies()
+
+        # Remediation Plan (if any steps)
+        self._render_remediation_plan()
+
+        # Detailed Findings (records moved to appendix)
         self._render_check_cards()
+
+        # Appendix -- Raw DNS Records
+        self._render_appendix()
 
         return self.output()
 

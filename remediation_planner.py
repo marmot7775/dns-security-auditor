@@ -92,7 +92,7 @@ def build_remediation_plan(
     tls_rpt_record = tls_rpt.get("record") or ""
 
     # DKIM: look at all found selectors for weak keys
-    found_selectors = dkim.get("found_selectors") or {}
+    found_selectors = dkim.get("found_selectors") or []
     has_weak_dkim = _has_weak_dkim_keys(found_selectors)
     has_any_dkim = bool(found_selectors)
 
@@ -386,18 +386,21 @@ def build_remediation_plan(
 # Internal helpers
 # ============================================================
 
-def _has_weak_dkim_keys(found_selectors: dict) -> bool:
+def _has_weak_dkim_keys(found_selectors) -> bool:
     """Return True if any selector has a key size <= 1024 bits.
 
-    Handles the nested structure produced by the DKIM checker, where each
-    selector value may be a dict containing a ``key_analysis`` sub-dict with
-    a ``key_bits`` integer, or a top-level ``key_bits`` integer.
+    found_selectors is a list of dicts, each with key_size, key_bits, or
+    key_analysis.key_bits fields.
     """
-    for selector, info in found_selectors.items():
-        if not isinstance(info, dict):
+    if not found_selectors or not isinstance(found_selectors, list):
+        return False
+    for sel in found_selectors:
+        if not isinstance(sel, dict):
             continue
-        key_analysis = info.get("key_analysis") or {}
-        bits = key_analysis.get("key_bits") or info.get("key_bits")
+        bits = sel.get("key_size") or sel.get("key_bits")
+        if bits is None:
+            key_analysis = sel.get("key_analysis") or {}
+            bits = key_analysis.get("key_bits")
         if bits is not None and isinstance(bits, (int, float)) and bits <= 1024:
             return True
     return False

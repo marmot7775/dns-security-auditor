@@ -421,6 +421,32 @@ function renderResults(data) {
         resultsList.parentNode.insertBefore(defensiveCard, resultsList);
     }
 
+    // -- Anomalies ("What's Unusual") --
+    const anomaliesSection = document.getElementById('anomalies-section');
+    const anomaliesList = document.getElementById('anomalies-list');
+    anomaliesList.innerHTML = '';
+
+    if (data.anomalies && data.anomalies.length > 0) {
+        anomaliesSection.style.display = 'block';
+        data.anomalies.forEach(a => {
+            const sevClass = {critical: 'fail', high: 'warn', medium: 'info'}[a.severity] || 'info';
+            const sevLabel = {critical: 'Critical', high: 'High', medium: 'Medium'}[a.severity] || a.severity;
+            const item = document.createElement('div');
+            item.className = `anomaly-card anomaly-${sevClass}`;
+            item.innerHTML = `
+                <div class="anomaly-top">
+                    <span class="anomaly-severity ${sevClass}">${sevLabel}</span>
+                    <span class="anomaly-title">${escapeHtml(a.title)}</span>
+                </div>
+                <div class="anomaly-desc">${escapeHtml(a.description)}</div>
+                ${a.recommendation ? `<div class="anomaly-rec">${escapeHtml(a.recommendation)}</div>` : ''}
+            `;
+            anomaliesList.appendChild(item);
+        });
+    } else {
+        anomaliesSection.style.display = 'none';
+    }
+
     checks.forEach((check, i) => {
         // Attach tree walk + DMARC eval data to the DMARC check
         if ((check.name || '').toUpperCase().includes('DMARC') && data.tree_walk) {
@@ -552,14 +578,14 @@ function createResultCard(check, index) {
         }
     });
 
-    // Copy buttons (DNS record blocks + fix record blocks)
+    // Copy buttons (DNS record blocks + fix preview blocks)
     card.querySelectorAll('.copy-btn').forEach(btn => {
         btn.addEventListener('click', (e) => {
             e.stopPropagation();
             let record = '';
-            const fixBlock = btn.closest('.fix-record-block');
-            if (fixBlock) {
-                record = fixBlock.querySelector('.fix-record-value')?.textContent || '';
+            const fixDiff = btn.closest('.fix-diff-after');
+            if (fixDiff) {
+                record = fixDiff.querySelector('.fix-diff-record')?.textContent || '';
             } else {
                 const block = btn.closest('.record-block');
                 record = block?.querySelector('.record-text')?.textContent
@@ -646,13 +672,70 @@ function renderCheckBody(check) {
         html += renderSpfTree(check._spf_tree);
     }
 
-    // Fix records and recommended actions removed from web UI.
-    // The tool identifies problems; fixing them is the consultant's job.
+    // Fix preview -- before/after DNS records
+    if (check.fix_records && check.fix_records.length > 0) {
+        html += renderFixPreview(check.fix_records);
+    }
 
     if (!html) {
         html = '<div class="explanation">No issues detected.</div>';
     }
 
+    return html;
+}
+
+// ============================================================
+// Fix Preview -- before/after DNS records
+// ============================================================
+
+function renderFixPreview(fixRecords) {
+    let html = '<div class="fix-preview">';
+    html += '<div class="fix-preview-label">Fix Preview</div>';
+
+    for (const fr of fixRecords) {
+        html += '<div class="fix-preview-item">';
+
+        // Record type + host header
+        html += `<div class="fix-preview-host">${escapeHtml(fr.type)} record at <strong>${escapeHtml(fr.host)}</strong></div>`;
+
+        // Before/after diff
+        html += '<div class="fix-diff">';
+        if (fr.current) {
+            html += `<div class="fix-diff-panel fix-diff-before">
+                <div class="fix-diff-tag">Current</div>
+                <div class="fix-diff-record">${escapeHtml(fr.current)}</div>
+            </div>`;
+        } else {
+            html += `<div class="fix-diff-panel fix-diff-before fix-diff-missing">
+                <div class="fix-diff-tag">Current</div>
+                <div class="fix-diff-record">Not configured</div>
+            </div>`;
+        }
+        html += `<div class="fix-diff-arrow">&rarr;</div>`;
+        html += `<div class="fix-diff-panel fix-diff-after">
+            <div class="fix-diff-tag">Suggested</div>
+            <div class="fix-diff-record">${escapeHtml(fr.suggested)}</div>
+            <button class="copy-btn">Copy</button>
+        </div>`;
+        html += '</div>';
+
+        // Impact + side effects
+        if (fr.impact) {
+            html += `<div class="fix-impact"><span class="fix-impact-icon">&#9650;</span> ${escapeHtml(fr.impact)}</div>`;
+        }
+        if (fr.side_effects) {
+            html += `<div class="fix-side-effects"><span class="fix-side-icon">&#9888;</span> ${escapeHtml(fr.side_effects)}</div>`;
+        }
+
+        // Comment
+        if (fr.comment) {
+            html += `<div class="fix-comment">${escapeHtml(fr.comment)}</div>`;
+        }
+
+        html += '</div>';
+    }
+
+    html += '</div>';
     return html;
 }
 
