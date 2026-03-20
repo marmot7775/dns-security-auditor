@@ -2711,6 +2711,104 @@ details.st-node > summary:hover {
 }
 
 /* ==========================================================================
+   Authentication Resilience
+   ========================================================================== */
+
+.resilience-section {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    padding: 1rem 1.25rem;
+    margin-bottom: 1.25rem;
+}
+
+.resilience-header {
+    font-size: 0.88rem;
+    font-weight: 700;
+    color: var(--primary);
+    margin-bottom: 0.65rem;
+}
+
+.resilience-summary {
+    display: flex;
+    align-items: center;
+    gap: 0.6rem;
+    margin-bottom: 0.65rem;
+}
+
+.resilience-level {
+    font-size: 0.68rem;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    padding: 0.2rem 0.55rem;
+    border-radius: 4px;
+    color: #fff;
+    flex-shrink: 0;
+}
+
+.resilience-pass { background: var(--pass); }
+.resilience-warn { background: #b8860b; }
+.resilience-fail { background: var(--fail); }
+
+.resilience-text {
+    font-size: 0.82rem;
+    color: var(--text-primary);
+    line-height: 1.5;
+}
+
+.resilience-mechanisms {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.5rem;
+    margin-bottom: 0.65rem;
+}
+
+.resilience-mech {
+    display: flex;
+    align-items: center;
+    gap: 0.35rem;
+    font-size: 0.76rem;
+    padding: 0.3rem 0.6rem;
+    background: var(--bg);
+    border-radius: 5px;
+    border: 1px solid var(--border-light);
+}
+
+.resilience-mech-name {
+    font-weight: 700;
+    font-family: var(--font-mono);
+    font-size: 0.72rem;
+    color: var(--text-primary);
+}
+
+.resilience-mech-status {
+    font-size: 0.68rem;
+    font-weight: 600;
+    padding: 0.1rem 0.35rem;
+    border-radius: 3px;
+}
+
+.resilience-mech-status.resilience-pass { background: var(--pass-bg); color: var(--pass); }
+.resilience-mech-status.resilience-warn { background: var(--warn-bg); color: var(--warn); }
+.resilience-mech-status.resilience-fail { background: var(--fail-bg); color: var(--fail); }
+
+.resilience-mech-note {
+    font-size: 0.72rem;
+    color: var(--text-tertiary);
+}
+
+.resilience-risk-text {
+    font-size: 0.78rem;
+    color: var(--text-secondary);
+    line-height: 1.6;
+    padding: 0.5rem 0.75rem;
+    background: var(--bg);
+    border-left: 3px solid var(--primary-border);
+    border-radius: 0 5px 5px 0;
+}
+
+/* ==========================================================================
    Fix Preview -- before/after DNS records
    ========================================================================== */
 
