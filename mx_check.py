@@ -309,21 +309,11 @@ def check_mx(domain: str, deep_scan: bool = False) -> Dict[str, Any]:
                 "Mail delivery will fail for this MX.",
                 f"Add A/AAAA records for '{hostname}'."))
 
+        # PTR/FCrDNS data is collected but not flagged as an issue.
+        # PTR matters for outbound sending IPs, not inbound MX hosts.
         for ip in mx_detail["ips"]:
             ptr_result = _check_ptr(ip)
             mx_detail["ptr_results"].append(ptr_result)
-            if not ptr_result["ptr"]:
-                result["issues"].append(_make_issue(
-                    "warning", f"No reverse DNS (PTR) for {ip}",
-                    f"IP {ip} has no PTR record.",
-                    "Reduced deliverability.",
-                    f"Add PTR record for {ip} pointing to {hostname}."))
-            elif not ptr_result["fcrdns"]:
-                result["issues"].append(_make_issue(
-                    "warning", f"FCrDNS mismatch for {ip}",
-                    f"PTR is '{ptr_result['ptr']}' but doesn't resolve back to {ip}.",
-                    "Some receivers will flag mail.",
-                    f"Ensure {ptr_result['ptr']} resolves to {ip}."))
 
         result["mx_details"].append(mx_detail)
 
