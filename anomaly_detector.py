@@ -119,7 +119,8 @@ def detect_anomalies(raw_results: dict, score_result: dict, has_mx: bool, is_def
         wildcard_detected = dkim.get("wildcard_detected", False)
         # Skip if DKIM check didn't complete (timeout or not run)
         dkim_tested_count = dkim.get("tested_count", 0)
-        if not found_selectors and not wildcard_detected and dkim_tested_count > 0:
+        dkim_timed_out = dkim.get("timed_out", False)
+        if not found_selectors and not wildcard_detected and dkim_tested_count > 0 and not dkim_timed_out:
             anomalies.append({
                 "title": "No DKIM keys detected (DMARC relies on SPF alone)",
                 "description": (
