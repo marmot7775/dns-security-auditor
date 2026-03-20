@@ -128,7 +128,7 @@ def detect_anomalies(raw_results: dict, score_result: dict, has_mx: bool) -> lis
             anomalies.append({
                 "title": "BIMI record without DMARC enforcement",
                 "description": (
-                    "A BIMI record is published but DMARC policy is \"{}\" -- "
+                    "A BIMI record is published but DMARC policy is \"{}\", "
                     "not quarantine or reject. Mail clients will not display the "
                     "BIMI logo because DMARC enforcement is required."
                 ).format(dmarc_policy or "none"),
@@ -177,7 +177,7 @@ def detect_anomalies(raw_results: dict, score_result: dict, has_mx: bool) -> lis
                 "title": "Single nameserver",
                 "description": (
                     "Only one nameserver was found. If it becomes unreachable, "
-                    "the entire domain goes offline -- including mail delivery, "
+                    "the entire domain goes offline, including mail delivery, "
                     "web, and all DNS-dependent services."
                 ),
                 "severity": "high",
