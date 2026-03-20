@@ -1094,20 +1094,20 @@ function renderSpfExecution(exec) {
 function renderDmarcEvaluation(ev) {
     if (!ev) return '';
 
-    const spfPillClass = ev.spf_result === 'pass' ? 'de-pill-pass'
+    const spfPillClass = (ev.spf_result === 'pass' || ev.spf_result === 'configured') ? 'de-pill-pass'
                        : ev.spf_result === 'none' ? 'de-pill-muted'
                        : 'de-pill-fail';
-    const dkimPillClass = ev.dkim_result === 'pass' ? 'de-pill-pass'
+    const dkimPillClass = (ev.dkim_result === 'pass' || ev.dkim_result === 'configured') ? 'de-pill-pass'
                         : ev.dkim_result === 'none' ? 'de-pill-muted'
                         : 'de-pill-fail';
-    const dmarcPillClass = ev.dmarc_result === 'pass' ? 'de-pill-pass' : 'de-pill-fail';
+    const dmarcPillClass = (ev.dmarc_result === 'pass' || ev.dmarc_result === 'configured') ? 'de-pill-pass' : 'de-pill-fail';
     const policyPillClass = ev.policy === 'reject' ? 'de-pill-pass'
                           : ev.policy === 'quarantine' ? 'de-pill-warn'
                           : 'de-pill-muted';
 
-    const spfAlignIcon = ev.spf_aligned ? '&#10003; aligned' : '&#10005; not aligned';
+    const spfAlignIcon = ev.spf_aligned ? '&#10003; alignment possible' : '&#10005; not configured';
     const spfAlignClass = ev.spf_aligned ? 'de-aligned' : 'de-not-aligned';
-    const dkimAlignIcon = ev.dkim_aligned ? '&#10003; aligned' : '&#10005; not aligned';
+    const dkimAlignIcon = ev.dkim_aligned ? '&#10003; alignment possible' : '&#10005; not configured';
     const dkimAlignClass = ev.dkim_aligned ? 'de-aligned' : 'de-not-aligned';
 
     const dispLabel = ev.disposition === 'none' ? 'delivered'

@@ -3677,6 +3677,16 @@ def _build_resilience_analysis(
             "service signing messages correctly. SPF provides a useful safety net even though DKIM is "
             "the more resilient mechanism."
         )
+    elif dkim_functional and not spf_functional and dmarc_enforcing:
+        level = "moderate"
+        summary = (
+            "DKIM is configured and provides a path to DMARC alignment, but no SPF record was found. "
+            "DKIM is the more resilient mechanism (survives forwarding), so this is stronger than SPF alone."
+        )
+        risk = (
+            "Publishing an SPF record would add a second alignment path. While DKIM alone can satisfy "
+            "DMARC, having both provides redundancy if one mechanism fails for a given message."
+        )
     elif dkim_inconclusive and spf_functional and dmarc_enforcing:
         level = "moderate"
         summary = (

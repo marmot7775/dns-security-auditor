@@ -228,11 +228,11 @@ def build_dmarc_evaluation(raw_dmarc: Dict, raw_spf: Dict,
     elif spf_status == "error" or spf_lookup_count > 10:
         spf_result = "permerror"
     else:
-        spf_result = "pass"
+        spf_result = "configured"
 
     # --- DKIM result ---
     found_selectors = raw_dkim.get("found_selectors", []) if raw_dkim else []
-    dkim_result = "pass" if found_selectors else "none"
+    dkim_result = "configured" if found_selectors else "none"
 
     # --- DMARC record and alignment modes ---
     dmarc_record = raw_dmarc.get("record")
@@ -245,15 +245,15 @@ def build_dmarc_evaluation(raw_dmarc: Dict, raw_spf: Dict,
     spf_alignment_mode = "strict" if aspf == "s" else "relaxed"
     dkim_alignment_mode = "strict" if adkim == "s" else "relaxed"
 
-    # For this educational display, we assume alignment passes for
-    # properly configured mail (same organizational domain)
-    spf_aligned = spf_result == "pass"
-    dkim_aligned = dkim_result == "pass"
+    # For this educational display based on DNS records only (not live mail),
+    # we show alignment as "possible" when the mechanism is configured
+    spf_aligned = spf_result == "configured"
+    dkim_aligned = dkim_result == "configured"
 
     # --- DMARC result ---
-    # DMARC passes if EITHER (SPF pass + aligned) OR (DKIM pass + aligned)
-    dmarc_pass = (spf_result == "pass" and spf_aligned) or (dkim_result == "pass" and dkim_aligned)
-    dmarc_result = "pass" if dmarc_pass else "fail"
+    # DMARC can pass if EITHER (SPF configured + aligned) OR (DKIM configured + aligned)
+    dmarc_pass = spf_aligned or dkim_aligned
+    dmarc_result = "configured" if dmarc_pass else "fail"
 
     # --- Policy ---
     policy = raw_dmarc.get("policy") or ""
@@ -268,23 +268,25 @@ def build_dmarc_evaluation(raw_dmarc: Dict, raw_spf: Dict,
         disposition = policy  # apply the domain's policy
 
     # --- Explanation ---
+    # This is a DNS-only assessment, not a live mail test
     if dmarc_pass:
-        passing_methods = []
-        if spf_result == "pass" and spf_aligned:
-            passing_methods.append("SPF")
-        if dkim_result == "pass" and dkim_aligned:
-            passing_methods.append("DKIM")
-        methods_str = " and ".join(passing_methods)
+        configured_methods = []
+        if spf_aligned:
+            configured_methods.append("SPF")
+        if dkim_aligned:
+            configured_methods.append("DKIM")
+        methods_str = " and ".join(configured_methods)
         explanation = (
-            f"DMARC passes because {methods_str} "
-            f"{'both pass' if len(passing_methods) > 1 else 'passes'} "
-            f"with {spf_alignment_mode} alignment. "
-            f"Legitimate mail from authorized servers will be delivered."
+            f"{methods_str} {'are' if len(configured_methods) > 1 else 'is'} configured "
+            f"with {spf_alignment_mode} alignment, providing "
+            f"{'redundant paths' if len(configured_methods) > 1 else 'a path'} to DMARC pass. "
+            f"Based on DNS records only, not live mail testing."
         )
     else:
         explanation = (
-            "DMARC fails because neither SPF nor DKIM passes with alignment. "
-            f"The domain's policy ({policy}) determines how receivers handle the message."
+            "Neither SPF nor DKIM is configured in a way that can satisfy DMARC alignment. "
+            f"The domain's policy ({policy}) determines how receivers handle failing messages. "
+            "Based on DNS records only, not live mail testing."
         )
 
     return {

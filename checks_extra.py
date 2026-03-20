@@ -785,7 +785,7 @@ def check_bimi(domain: str, dmarc_enforcing_override: bool = None) -> Dict[str, 
                                 # Check baseProfile
                                 base_profile = root.get("baseProfile", "").lower()
                                 result["svg_profile"] = base_profile or None
-                                if base_profile in ("tiny-ps", "tiny"):
+                                if base_profile == "tiny-ps":
                                     result["issues"].append(_make_issue(
                                         "good", f"SVG baseProfile is '{root.get('baseProfile')}'",
                                         "The SVG declares the correct profile for BIMI.",
