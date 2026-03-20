@@ -195,7 +195,7 @@ def _validate_mta_sts_policy(policy_text: str, domain: str) -> Tuple[Dict[str, A
                     "Change to 'version: STSv1'.",
                 ))
         elif key == "mode":
-            policy["mode"] = value
+            policy["mode"] = value.lower()
             valid_modes = {"enforce", "testing", "none"}
             if value.lower() not in valid_modes:
                 issues.append(_make_issue(
@@ -255,6 +255,13 @@ def _validate_mta_sts_policy(policy_text: str, domain: str) -> Tuple[Dict[str, A
                 "This field will be ignored.",
                 f"Remove '{key}' from the policy file.",
             ))
+        if key != "mx" and key in seen_keys:
+            issues.append(_make_issue(
+                "error", f"Duplicate policy field: '{key}'",
+                "RFC 8461 requires each non-mx field to appear at most once.",
+                "The second value silently overwrites the first.",
+                f"Remove the duplicate '{key}' line.",
+            ))
         seen_keys.add(key)
 
     if policy["version"] is None:
@@ -285,8 +292,9 @@ def _validate_mta_sts_policy(policy_text: str, domain: str) -> Tuple[Dict[str, A
             for mx_host in actual_mx_hosts:
                 if pattern_lower.startswith("*."):
                     suffix = pattern_lower[1:]  # e.g. ".example.com"
-                    if mx_host == suffix.lstrip(".") or (
+                    if (
                         mx_host.endswith(suffix) and "." not in mx_host[:-len(suffix)]
+                        and len(mx_host) > len(suffix.lstrip("."))
                     ):
                         matched = True
                         break
@@ -364,6 +372,7 @@ def check_mta_sts(domain: str) -> Dict[str, Any]:
                     "Cannot verify MTA-STS policy.",
                     f"Ensure mta-sts.{domain} points to a public IP address.",
                 ))
+                result["status"] = "warning"
                 return result
             resp = requests.get(policy_url, timeout=10, allow_redirects=False)
             if resp.status_code == 200:
@@ -477,7 +486,7 @@ def _validate_tls_rpt_record(record: str) -> Tuple[Dict[str, str], List[Dict]]:
             "TLS-RPT must specify where to send reports.", "",
             "Add rua=mailto:tls-reports@yourdomain.com"))
     else:
-        uris = [u.strip() for u in tags["rua"].split(",")]
+        uris = [u.strip() for u in tags["rua"].split(",") if u.strip()]
         for uri in uris:
             uri_lower = uri.lower()
             if uri_lower.startswith("mailto:"):
@@ -540,11 +549,11 @@ def check_tls_rpt(domain: str) -> Dict[str, Any]:
     result["issues"].extend(tag_issues)
 
     if "rua" in tags:
-        result["report_destinations"] = [u.strip() for u in tags["rua"].split(",")]
+        result["report_destinations"] = [u.strip() for u in tags["rua"].split(",") if u.strip()]
 
     # MTA-STS synergy check
     mta_sts_txt = _lookup_txt(f"_mta-sts.{domain}")
-    has_mta_sts = any("sts" in r.lower() for r in mta_sts_txt)
+    has_mta_sts = any(r.strip().lower().startswith("v=stsv1") for r in mta_sts_txt)
     if not has_mta_sts:
         result["issues"].append(_make_issue(
             "info", "TLS-RPT configured but MTA-STS is not",
@@ -714,7 +723,7 @@ def check_bimi(domain: str) -> Dict[str, Any]:
                     "Ensure the logo URL points to a public server.",
                 ))
             else:
-                resp = requests.head(result["logo_url"], timeout=10, allow_redirects=False)
+                resp = requests.head(result["logo_url"], timeout=10, allow_redirects=True)
                 if resp.status_code != 200:
                     result["issues"].append(_make_issue(
                         "warning", f"Logo URL returned HTTP {resp.status_code}",

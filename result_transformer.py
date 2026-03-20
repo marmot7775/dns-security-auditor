@@ -114,7 +114,7 @@ def transform_dmarc(raw: Dict, tree_walk: Optional[Dict] = None) -> Dict:
     elif policy == "quarantine":
         pct = raw.get("pct", 100)
         verdict = "Policy: quarantine"
-        if pct and pct < 100:
+        if pct is not None and pct < 100:
             verdict += f" ({pct}%)"
         # p=quarantine is enforcing; treat as pass even if rua is absent
         status = "pass"
@@ -424,10 +424,15 @@ def transform_spf(raw: Dict, has_mx: bool = True) -> Dict:
                 "<strong>WARNING:</strong> SPF record uses <strong>+all</strong>, which authorizes "
                 "the entire internet to send email as your domain. This is almost certainly a misconfiguration."
             )
-        elif not all_mech:
+        elif not all_mech and raw.get("has_redirect"):
             explanation = (
                 "SPF record uses a <strong>redirect</strong> modifier instead of an explicit "
                 "<strong>all</strong> mechanism. The SPF evaluation is delegated to another domain's record."
+            )
+        elif not all_mech:
+            explanation = (
+                "SPF record is missing an <strong>all</strong> mechanism. Without it, the default behavior "
+                "is neutral (?all), providing no protection against unauthorized senders."
             )
         else:
             explanation = "SPF record found."
@@ -1415,7 +1420,7 @@ def transform_dane(raw: Dict, domain: str) -> Dict:
         verdict = f"DANE-protected ({mx_with_tlsa}/{mx_checked} MX hosts)"
         fix = _first_fix(issues)
         if not fix and mx_with_tlsa < mx_checked:
-            missing = [h["mx_host"] for h in tlsa_records if not h["found"]]
+            missing = [h["mx_host"] for h in tlsa_records if not h["found"] and not h.get("error")]
             fix = f"Add TLSA records for: {', '.join(missing)}"
 
         return {

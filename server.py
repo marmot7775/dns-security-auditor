@@ -227,7 +227,7 @@ def _set_cached(cache_key: str, data: dict):
 # ============================================================
 
 DOMAIN_PATTERN = re.compile(
-    r"^(?!-)[A-Za-z0-9-]{1,63}(?<!-)(\.[A-Za-z0-9-]{1,63})*\.[A-Za-z]{2,}$"
+    r"^(?!-)[A-Za-z0-9-]{1,63}(?<!-)(\.(?!-)[A-Za-z0-9-]{1,63}(?<!-))*\.[A-Za-z]{2,}$"
 )
 
 
@@ -328,7 +328,7 @@ async def audit_domain(
         # Return a minimal error result instead of a 500 so the frontend can show something
         result = {
             "domain": domain,
-            "timestamp": datetime.now().isoformat(),
+            "timestamp": datetime.now(timezone.utc).isoformat(),
             "score": {"total": 0, "grade": "?"},
             "checks": [],
             "priority_fixes": [],
@@ -344,8 +344,9 @@ async def audit_domain(
                result.get("score", {}).get("grade", "?"),
                elapsed, len(result.get("checks", [])), source="web")
 
-    # Cache result
-    _set_cached(cache_key, result)
+    # Cache result (skip caching errors -- they may be transient)
+    if "error" not in result:
+        _set_cached(cache_key, result)
 
     return JSONResponse(content=result)
 
@@ -409,7 +410,7 @@ async def audit_stream(
             log.error("SSE audit failed for %s: %s", domain, str(e)[:200], exc_info=True)
             error_result = {
                 "domain": domain,
-                "timestamp": datetime.now().isoformat(),
+                "timestamp": datetime.now(timezone.utc).isoformat(),
                 "score": {"total": 0, "grade": "?"},
                 "checks": [],
                 "priority_fixes": [],
@@ -418,6 +419,7 @@ async def audit_stream(
             }
             progress_q.put({"_done": True, "_result": error_result})
 
+    sse_start_time = time.time()
     audit_thread = threading.Thread(target=_run_audit, daemon=True)
     audit_thread.start()
 
@@ -435,14 +437,16 @@ async def audit_stream(
 
             if "_done" in msg:
                 result = msg["_result"]
-                _set_cached(cache_key, result)
-                start_elapsed = result.get("elapsed_seconds", 0)
+                # Skip caching errors -- they may be transient
+                if "error" not in result:
+                    _set_cached(cache_key, result)
+                elapsed = round(time.time() - sse_start_time, 2)
                 log.info("SSE audit complete: %s -- %.2fs, grade=%s",
-                         domain, start_elapsed, result.get("score", {}).get("grade", "?"))
+                         domain, elapsed, result.get("score", {}).get("grade", "?"))
                 # Audit log (GDPR-safe)
                 _log_audit(request, domain, scope,
                            result.get("score", {}).get("grade", "?"),
-                           start_elapsed, len(result.get("checks", [])), source="sse")
+                           elapsed, len(result.get("checks", [])), source="sse")
                 yield f"data: {json.dumps({'done': True, 'result': result})}\n\n"
                 return
             else:
@@ -483,6 +487,8 @@ async def audit_pdf(
         )
 
     domain = _validate_domain(domain)
+    if selector and not SELECTOR_PATTERN.match(selector.strip()):
+        raise HTTPException(status_code=400, detail="Invalid DKIM selector")
     log.info("PDF requested: %s (ip=%s)", domain, client_ip)
 
     cache_key = f"{domain}:{selector or ''}:complete"

@@ -21,7 +21,7 @@ def normalize_domain(value: str) -> str:
         .removeprefix("https://")
         .removeprefix("www.")
     )
-    return domain.split("/")[0].split("?")[0].rstrip(".")
+    return domain.split("/")[0].split("?")[0].split("#")[0].split(":")[0].rstrip(".")
 
 
 def audit_dns_security(
