@@ -33,7 +33,7 @@ def detect_anomalies(raw_results: dict, score_result: dict, has_mx: bool) -> lis
     mta_sts = raw_results.get("mta_sts") or {}
     tls_rpt = raw_results.get("tls_rpt") or {}
     bimi = raw_results.get("bimi") or {}
-    dns_infra = raw_results.get("dns_infra") or {}
+    nameservers_raw = raw_results.get("nameservers") or {}
     dnssec = raw_results.get("dnssec") or {}
 
     dmarc_policy = (dmarc.get("policy") or "").lower()
@@ -60,9 +60,8 @@ def detect_anomalies(raw_results: dict, score_result: dict, has_mx: bool) -> lis
 
     # 2. DMARC enforcement without DKIM (only for mail-sending domains)
     if dmarc_present and dmarc_enforced and has_mx:
-        dkim_keys = dkim.get("keys") or []
-        dkim_selectors_found = [k for k in dkim_keys if k.get("public_key")]
-        if not dkim_selectors_found:
+        found_selectors = dkim.get("found_selectors") or []
+        if not found_selectors:
             anomalies.append({
                 "title": "DMARC enforcement without DKIM",
                 "description": (
@@ -142,10 +141,10 @@ def detect_anomalies(raw_results: dict, score_result: dict, has_mx: bool) -> lis
 
     # 6. Mixed DKIM key strengths
     if dkim:
-        dkim_keys = dkim.get("keys") or []
+        found_selectors = dkim.get("found_selectors") or []
         key_bits = []
-        for k in dkim_keys:
-            bits = k.get("key_bits") or k.get("bits")
+        for k in found_selectors:
+            bits = k.get("key_size") or k.get("key_bits") or k.get("bits")
             if bits is not None:
                 try:
                     key_bits.append(int(bits))
@@ -170,9 +169,10 @@ def detect_anomalies(raw_results: dict, score_result: dict, has_mx: bool) -> lis
                 })
 
     # 7. Single nameserver
-    if dns_infra:
-        nameservers = dns_infra.get("nameservers") or []
-        if isinstance(nameservers, list) and len(nameservers) == 1:
+    if nameservers_raw:
+        ns_count = nameservers_raw.get("ns_count", 0)
+        nameservers = nameservers_raw.get("nameservers") or []
+        if ns_count == 1 or (isinstance(nameservers, list) and len(nameservers) == 1):
             anomalies.append({
                 "title": "Single nameserver",
                 "description": (
@@ -193,9 +193,8 @@ def detect_anomalies(raw_results: dict, score_result: dict, has_mx: bool) -> lis
         spf_record = spf.get("record") or spf.get("raw_record") or ""
         spf_is_null = "v=spf1 -all" in spf_record or spf_record.strip() == "v=spf1 -all"
 
-        dkim_keys = dkim.get("keys") or []
-        dkim_selectors_found = [k for k in dkim_keys if k.get("public_key")]
-        no_dkim = not dkim_selectors_found
+        found_selectors = dkim.get("found_selectors") or []
+        no_dkim = not found_selectors
 
         if dmarc_policy == "reject" and no_dkim and spf_is_null:
             anomalies.append({
@@ -245,7 +244,7 @@ def detect_anomalies(raw_results: dict, score_result: dict, has_mx: bool) -> lis
 
     # 10. DNSSEC broken chain
     if dnssec:
-        has_dnskey = bool(dnssec.get("dnskey") or dnssec.get("has_dnskey"))
+        has_dnskey = bool(dnssec.get("has_dnssec") or dnssec.get("has_dnskey"))
         chain_valid = dnssec.get("chain_valid")
         if has_dnskey and chain_valid is False:
             anomalies.append({

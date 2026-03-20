@@ -34,6 +34,8 @@ from spf_recursive import count_spf_lookups
 from advanced_fingerprinting import AdvancedVendorFingerprinter
 from security_scoring import EmailSecurityScorer
 from dkim_formatter import analyze_dkim_key_strength
+from anomaly_detector import detect_anomalies
+from remediation_planner import build_remediation_plan
 from dkim_key_age import DKIMKeyAgeAnalyzer
 from dkim_tag_analyzer import DKIMTagAnalyzer
 from dmarc_tree_walk import dmarc_tree_walk
@@ -3135,6 +3137,18 @@ def run_full_audit(domain: str, dkim_selector: Optional[str] = None,
     priority_fixes = _build_priority_fixes(checks, score_result, has_mx=has_mx)
     _notify("Scoring")
 
+    # --- Anomaly Detection ("What's Unusual") ---
+    try:
+        anomalies = detect_anomalies(raw_results, score_result, has_mx)
+    except Exception:
+        anomalies = []
+
+    # --- Remediation Plan ---
+    try:
+        remediation_plan = build_remediation_plan(checks, raw_results, has_mx)
+    except Exception:
+        remediation_plan = {"immediate": [], "short_term": [], "long_term": []}
+
     # --- Assemble final response ---
     elapsed = (datetime.now(timezone.utc) - start_time).total_seconds()
 
@@ -3145,9 +3159,15 @@ def run_full_audit(domain: str, dkim_selector: Optional[str] = None,
         "score": {
             "total": score_result.get("total_score", 0),
             "grade": score_result.get("grade", "?"),
+            "category_scores": score_result.get("category_scores", {}),
+            "weaknesses": score_result.get("weaknesses", []),
+            "strengths": score_result.get("strengths", []),
+            "recommendations": score_result.get("recommendations", []),
         },
         "checks": checks,
         "priority_fixes": priority_fixes,
+        "anomalies": anomalies,
+        "remediation_plan": remediation_plan,
         "vendors": vendors,
         "tree_walk": tree_walk_result,
         "spf_execution": spf_execution,

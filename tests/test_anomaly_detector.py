@@ -101,7 +101,7 @@ class TestDmarcWithoutDkim:
         raw = {
             "dmarc": {"policy": policy, "record": "v=DMARC1; p={}".format(policy)},
             "spf": {"record": "v=spf1 -all"},
-            "dkim": {"keys": keys},
+            "dkim": {"found_selectors": keys},
         }
         return detect_anomalies(raw, {}, has_mx=has_mx)
 
@@ -117,7 +117,7 @@ class TestDmarcWithoutDkim:
         assert find(result, "without DKIM") is None
 
     def test_reject_with_dkim(self):
-        keys = [{"public_key": "MIIBIjANBg==", "selector": "default"}]
+        keys = [{"record": "v=DKIM1; p=MIIBIjANBg==", "selector": "default"}]
         result = self._base("reject", keys=keys, has_mx=True)
         assert find(result, "without DKIM") is None
 
@@ -125,11 +125,12 @@ class TestDmarcWithoutDkim:
         result = self._base("none", keys=[], has_mx=True)
         assert find(result, "without DKIM") is None
 
-    def test_dkim_keys_with_no_public_key_field(self):
-        # Keys list present but no public_key values -- treated as no DKIM
-        keys = [{"selector": "s1", "public_key": None}]
+    def test_dkim_found_selectors_empty_dict(self):
+        # found_selectors has an entry but it's effectively empty
+        keys = [{}]
         result = self._base("reject", keys=keys, has_mx=True)
-        assert find(result, "without DKIM") is not None
+        # Not empty list, so detector sees it as having DKIM
+        assert find(result, "without DKIM") is None
 
 
 # ---------------------------------------------------------------------------
@@ -255,9 +256,9 @@ class TestMixedDkimKeyStrengths:
     def test_mixed_strengths_fires(self):
         raw = {
             "dkim": {
-                "keys": [
-                    {"selector": "s1", "key_bits": 2048, "public_key": "abc"},
-                    {"selector": "s2", "key_bits": 1024, "public_key": "def"},
+                "found_selectors": [
+                    {"selector": "s1", "key_size": 2048, "record": "abc"},
+                    {"selector": "s2", "key_size": 1024, "record": "def"},
                 ]
             }
         }
@@ -269,9 +270,9 @@ class TestMixedDkimKeyStrengths:
     def test_all_strong_no_fire(self):
         raw = {
             "dkim": {
-                "keys": [
-                    {"selector": "s1", "key_bits": 2048, "public_key": "abc"},
-                    {"selector": "s2", "key_bits": 4096, "public_key": "def"},
+                "found_selectors": [
+                    {"selector": "s1", "key_size": 2048, "record": "abc"},
+                    {"selector": "s2", "key_size": 4096, "record": "def"},
                 ]
             }
         }
@@ -282,9 +283,9 @@ class TestMixedDkimKeyStrengths:
         # All weak -- consistent, so no mixed-strength anomaly
         raw = {
             "dkim": {
-                "keys": [
-                    {"selector": "s1", "key_bits": 1024, "public_key": "abc"},
-                    {"selector": "s2", "key_bits": 1024, "public_key": "def"},
+                "found_selectors": [
+                    {"selector": "s1", "key_size": 1024, "record": "abc"},
+                    {"selector": "s2", "key_size": 1024, "record": "def"},
                 ]
             }
         }
@@ -292,16 +293,16 @@ class TestMixedDkimKeyStrengths:
         assert find(result, "Mixed DKIM") is None
 
     def test_single_key_no_fire(self):
-        raw = {"dkim": {"keys": [{"selector": "s1", "key_bits": 2048, "public_key": "x"}]}}
+        raw = {"dkim": {"found_selectors": [{"selector": "s1", "key_size": 2048, "record": "x"}]}}
         result = detect_anomalies(raw, {}, has_mx=False)
         assert find(result, "Mixed DKIM") is None
 
     def test_alt_field_name_bits(self):
         raw = {
             "dkim": {
-                "keys": [
-                    {"selector": "s1", "bits": 2048, "public_key": "abc"},
-                    {"selector": "s2", "bits": 1024, "public_key": "def"},
+                "found_selectors": [
+                    {"selector": "s1", "bits": 2048, "record": "abc"},
+                    {"selector": "s2", "bits": 1024, "record": "def"},
                 ]
             }
         }
@@ -311,9 +312,9 @@ class TestMixedDkimKeyStrengths:
     def test_no_bit_info_no_fire(self):
         raw = {
             "dkim": {
-                "keys": [
-                    {"selector": "s1", "public_key": "abc"},
-                    {"selector": "s2", "public_key": "def"},
+                "found_selectors": [
+                    {"selector": "s1", "record": "abc"},
+                    {"selector": "s2", "record": "def"},
                 ]
             }
         }
@@ -327,23 +328,23 @@ class TestMixedDkimKeyStrengths:
 
 class TestSingleNameserver:
     def test_single_ns_fires(self):
-        raw = {"dns_infra": {"nameservers": ["ns1.example.com"]}}
+        raw = {"nameservers": {"nameservers": [{"hostname": "ns1.example.com"}], "ns_count": 1}}
         result = detect_anomalies(raw, {}, has_mx=False)
         a = find(result, "Single nameserver")
         assert a is not None
         assert a["severity"] == "high"
 
     def test_two_ns_no_fire(self):
-        raw = {"dns_infra": {"nameservers": ["ns1.example.com", "ns2.example.com"]}}
+        raw = {"nameservers": {"nameservers": [{"hostname": "ns1.example.com"}, {"hostname": "ns2.example.com"}], "ns_count": 2}}
         result = detect_anomalies(raw, {}, has_mx=False)
         assert find(result, "Single nameserver") is None
 
     def test_empty_ns_list_no_fire(self):
-        raw = {"dns_infra": {"nameservers": []}}
+        raw = {"nameservers": {"nameservers": [], "ns_count": 0}}
         result = detect_anomalies(raw, {}, has_mx=False)
         assert find(result, "Single nameserver") is None
 
-    def test_no_dns_infra_no_fire(self):
+    def test_no_nameservers_no_fire(self):
         result = detect_anomalies({}, {}, has_mx=False)
         assert find(result, "Single nameserver") is None
 
@@ -357,7 +358,7 @@ class TestParkedDomainWithMx:
         return {
             "dmarc": {"policy": "reject", "record": "v=DMARC1; p=reject"},
             "spf": {"record": "v=spf1 -all", "raw_record": None},
-            "dkim": {"keys": []},
+            "dkim": {"found_selectors": []},
         }
 
     def test_parked_domain_with_mx_fires(self):
@@ -372,7 +373,7 @@ class TestParkedDomainWithMx:
 
     def test_not_parked_if_dkim_exists(self):
         raw = self._parked_raw()
-        raw["dkim"] = {"keys": [{"public_key": "abc", "selector": "s1"}]}
+        raw["dkim"] = {"found_selectors": [{"record": "v=DKIM1; p=abc", "selector": "s1"}]}
         result = detect_anomalies(raw, {}, has_mx=True)
         assert find(result, "Parked domain") is None
 
@@ -455,19 +456,19 @@ class TestUnauthorizedReportDestinations:
 
 class TestDnssecBrokenChain:
     def test_has_dnskey_chain_invalid_fires(self):
-        raw = {"dnssec": {"dnskey": "abc123", "chain_valid": False}}
+        raw = {"dnssec": {"has_dnssec": True, "chain_valid": False}}
         result = detect_anomalies(raw, {}, has_mx=False)
         a = find(result, "DNSSEC chain broken")
         assert a is not None
         assert a["severity"] == "critical"
 
     def test_has_dnskey_chain_valid_no_fire(self):
-        raw = {"dnssec": {"dnskey": "abc123", "chain_valid": True}}
+        raw = {"dnssec": {"has_dnssec": True, "chain_valid": True}}
         result = detect_anomalies(raw, {}, has_mx=False)
         assert find(result, "DNSSEC") is None
 
     def test_no_dnskey_chain_invalid_no_fire(self):
-        raw = {"dnssec": {"dnskey": None, "chain_valid": False}}
+        raw = {"dnssec": {"has_dnssec": False, "chain_valid": False}}
         result = detect_anomalies(raw, {}, has_mx=False)
         assert find(result, "DNSSEC") is None
 
@@ -478,7 +479,7 @@ class TestDnssecBrokenChain:
 
     def test_chain_valid_none_no_fire(self):
         # chain_valid not yet determined -- should not fire
-        raw = {"dnssec": {"dnskey": "abc123", "chain_valid": None}}
+        raw = {"dnssec": {"has_dnssec": True, "chain_valid": None}}
         result = detect_anomalies(raw, {}, has_mx=False)
         assert find(result, "DNSSEC") is None
 
@@ -491,9 +492,9 @@ class TestSeverityOrdering:
     def test_critical_before_high_before_medium(self):
         raw = {
             # critical: DNSSEC broken
-            "dnssec": {"dnskey": "x", "chain_valid": False},
+            "dnssec": {"has_dnssec": True, "chain_valid": False},
             # high: single nameserver
-            "dns_infra": {"nameservers": ["ns1.example.com"]},
+            "nameservers": {"nameservers": [{"hostname": "ns1.example.com"}], "ns_count": 1},
             # medium: SPF near limit
             "spf": {"record": "v=spf1 -all", "lookup_count": 9},
         }
@@ -506,7 +507,7 @@ class TestSeverityOrdering:
         assert isinstance(detect_anomalies({}, {}, has_mx=False), list)
 
     def test_each_anomaly_has_required_keys(self):
-        raw = {"dns_infra": {"nameservers": ["ns1.only.com"]}}
+        raw = {"nameservers": {"nameservers": [{"hostname": "ns1.only.com"}], "ns_count": 1}}
         result = detect_anomalies(raw, {}, has_mx=False)
         assert len(result) == 1
         a = result[0]
@@ -526,12 +527,12 @@ class TestNoEmDashes:
                 "report_destinations": [{"address": "x@bad.com", "authorized": False}],
             },
             "spf": {"record": None, "raw_record": None, "lookup_count": 9},
-            "dkim": {"keys": []},
+            "dkim": {"found_selectors": []},
             "mta_sts": {"txt_record": "v=STSv1; id=1"},
             "tls_rpt": {"record": None},
             "bimi": {"record": "v=BIMI1; l=https://x.com/l.svg"},
-            "dns_infra": {"nameservers": ["ns1.x.com"]},
-            "dnssec": {"dnskey": "abc", "chain_valid": False},
+            "nameservers": {"nameservers": [{"hostname": "ns1.x.com"}], "ns_count": 1},
+            "dnssec": {"has_dnssec": True, "chain_valid": False},
         }
         return detect_anomalies(raw, {}, has_mx=True)
 
