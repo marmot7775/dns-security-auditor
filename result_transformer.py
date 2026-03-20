@@ -103,23 +103,23 @@ def transform_dmarc(raw: Dict, tree_walk: Optional[Dict] = None) -> Dict:
             status = "warn"
         pill_label = "Inherited"
     elif not record:
-        verdict = "No protection against email spoofing"
+        verdict = "No DMARC policy published"
         status = "fail"
         pill_label = "Missing"
     elif policy == "reject":
-        verdict = "Fully enforced -- spoofed email is blocked"
+        verdict = "p=reject -- receivers requested to reject failures"
         # p=reject is always a pass regardless of what the audit engine returned
         # (the engine may flag "warning" for missing rua, but the policy itself is correct)
         status = "pass"
     elif policy == "quarantine":
         pct = raw.get("pct", 100)
-        verdict = "Spoofed email goes to spam"
+        verdict = "p=quarantine -- failures sent to spam"
         if pct is not None and pct < 100:
-            verdict += f" ({pct}% enforced)"
+            verdict += f" ({pct}% applied)"
         # p=quarantine is enforcing; treat as pass even if rua is absent
         status = "pass"
     elif policy == "none":
-        verdict = "Monitoring only -- no spoofing protection yet"
+        verdict = "p=none -- monitoring only, no enforcement"
         status = "warn"
     else:
         verdict = f"Policy: {policy}" if policy else "Invalid record"
@@ -139,7 +139,8 @@ def transform_dmarc(raw: Dict, tree_walk: Optional[Dict] = None) -> Dict:
                 f"<strong>_dmarc.{raw.get('domain', '')}</strong>, but inherits "
                 f"<strong>p=reject</strong> from <strong>{inherited_source}</strong> "
                 f"via the {tag_label} tag. "
-                f"Emails that fail authentication are blocked entirely."
+                f"Receivers that honor DMARC are requested to reject messages where neither "
+                f"SPF nor DKIM passes with aligned domains (RFC 7489 Section 6.3)."
                 + _adoption_note
             )
         elif inherited_policy == "quarantine":
@@ -148,7 +149,7 @@ def transform_dmarc(raw: Dict, tree_walk: Optional[Dict] = None) -> Dict:
                 f"<strong>_dmarc.{raw.get('domain', '')}</strong>, but inherits "
                 f"<strong>p=quarantine</strong> from <strong>{inherited_source}</strong> "
                 f"via the {tag_label} tag. "
-                f"Emails that fail authentication are routed to the recipient's spam folder."
+                f"Receivers that honor DMARC are requested to route failures to the spam folder."
                 + _adoption_note
             )
         elif inherited_policy == "none":
@@ -157,7 +158,8 @@ def transform_dmarc(raw: Dict, tree_walk: Optional[Dict] = None) -> Dict:
                 f"<strong>_dmarc.{raw.get('domain', '')}</strong>, but inherits "
                 f"<strong>p=none</strong> from <strong>{inherited_source}</strong> "
                 f"via the {tag_label} tag. "
-                f"This is monitoring only -- failing emails are delivered normally with no enforcement action."
+                f"This is monitoring only -- receivers take no enforcement action, but aggregate reports "
+                f"provide visibility into authentication results."
                 + _adoption_note
             )
         else:
@@ -169,27 +171,32 @@ def transform_dmarc(raw: Dict, tree_walk: Optional[Dict] = None) -> Dict:
     elif not record:
         explanation = (
             f"No DMARC record exists at <strong>_dmarc.{raw.get('domain', '')}</strong>. "
-            f"DMARC tells receiving mail servers how to handle messages that fail SPF and DKIM checks. "
-            f"Without it, receivers have no policy to act on for authentication failures, "
-            f"and you have no visibility into who is sending as your domain."
+            f"DMARC (RFC 7489) lets you tell receivers how to handle messages where neither "
+            f"SPF nor DKIM passes with a domain that aligns with your From address. "
+            f"Without it, receivers have no policy to act on, "
+            f"and you receive no aggregate reports about who is using your domain to send email."
         )
     elif policy == "none":
         explanation = (
-            f"Your DMARC policy is set to <strong>none</strong> (monitoring only). "
-            f"Emails that fail SPF and DKIM checks are still delivered normally. "
-            f"You get aggregate reports for visibility, but there is no protection against spoofing."
+            f"Your DMARC policy is <strong>p=none</strong> -- monitoring only. "
+            f"Receivers take no enforcement action on messages that fail alignment, but "
+            f"aggregate reports (rua) give you visibility into authentication results. "
+            f"This is the right starting point for understanding your email ecosystem before enforcing."
         )
     elif policy == "quarantine":
         explanation = (
-            f"Your DMARC policy is <strong>quarantine</strong>. Emails that fail authentication "
-            f"are routed to the recipient's spam folder. This enforces authentication results "
-            f"while allowing borderline cases to be reviewed. Upgrade to <strong>p=reject</strong> "
-            f"to block failing messages outright."
+            f"Your DMARC policy is <strong>p=quarantine</strong>. Receivers that honor DMARC "
+            f"are requested to route messages to the spam folder when neither SPF nor DKIM "
+            f"passes with an aligned domain. DMARC requires only one of SPF or DKIM to pass "
+            f"with alignment -- DKIM is preferred because it survives mail forwarding."
         )
     elif policy == "reject":
         explanation = (
-            f"Your DMARC policy is <strong>reject</strong>. "
-            f"Emails that fail authentication are blocked and never reach the recipient."
+            f"Your DMARC policy is <strong>p=reject</strong>. Receivers that honor DMARC "
+            f"are requested to reject messages where neither SPF nor DKIM passes with an "
+            f"aligned domain. Major mailbox providers (Gmail, Outlook, Yahoo) honor this policy. "
+            f"DMARC requires only one of SPF or DKIM to pass with alignment -- "
+            f"DKIM is the more resilient mechanism because it survives mail forwarding."
         )
     else:
         explanation = f"DMARC record found but the policy value is unexpected: '{policy}'."
@@ -220,11 +227,11 @@ def transform_dmarc(raw: Dict, tree_walk: Optional[Dict] = None) -> Dict:
 
     elif record:
         if policy == "reject":
-            details.append({"type": "good", "text": "Policy p=reject provides maximum protection"})
+            details.append({"type": "good", "text": "Policy p=reject -- receivers requested to reject authentication failures"})
         elif policy == "quarantine":
-            details.append({"type": "good", "text": "Policy p=quarantine sends failures to spam"})
+            details.append({"type": "good", "text": "Policy p=quarantine -- receivers requested to send failures to spam"})
         elif policy == "none":
-            details.append({"type": "warning", "text": "Policy p=none provides no enforcement"})
+            details.append({"type": "warning", "text": "Policy p=none -- monitoring only, no enforcement requested"})
 
         report_dests = raw.get("report_destinations")
         if report_dests and raw.get("rua"):
@@ -276,34 +283,34 @@ def transform_dmarc(raw: Dict, tree_walk: Optional[Dict] = None) -> Dict:
         if inherited_policy == "none":
             fix = (
                 f"The inherited policy from <strong>{inherited_source}</strong> is p=none (monitoring only). "
-                f"Either upgrade the parent domain's policy to p=quarantine or p=reject, "
-                f"or publish a dedicated DMARC record at <strong>_dmarc.{domain_name}</strong> with a stronger policy."
+                f"Either move the parent domain to an enforcement policy, "
+                f"or publish a dedicated DMARC record at <strong>_dmarc.{domain_name}</strong>."
             )
         elif inherited_policy == "quarantine":
             fix = (
-                f"This subdomain is protected by p=quarantine inherited from <strong>{inherited_source}</strong>. "
-                f"If you control the parent domain, consider upgrading to p=reject for maximum protection. "
-                f"Alternatively, you can publish a dedicated record at <strong>_dmarc.{domain_name}</strong>."
+                f"This subdomain inherits p=quarantine from <strong>{inherited_source}</strong>. "
+                f"To request rejection instead of spam delivery, upgrade the parent domain's policy "
+                f"or publish a dedicated record at <strong>_dmarc.{domain_name}</strong> with p=reject."
             )
         else:
             # reject — no fix needed
             fix = None
     elif not record:
         fix = (
-            f"Add this TXT record at <strong>_dmarc.{domain_name}</strong>:<br>"
-            f"<code>v=DMARC1; p=none; rua=mailto:dmarc-reports@{domain_name}; fo=1</code><br><br>"
-            f"Start with <strong>p=none</strong> to collect aggregate reports without affecting delivery. "
-            f"Once you've confirmed all legitimate senders pass SPF/DKIM, move to "
-            f"<strong>p=quarantine</strong> then <strong>p=reject</strong>."
+            f"Publish a TXT record at <strong>_dmarc.{domain_name}</strong>. "
+            f"Start with <strong>p=none</strong> and an <strong>rua</strong> address to receive "
+            f"aggregate reports. These reports will show you which sources send mail using your "
+            f"domain and whether they pass SPF/DKIM alignment. Move to an enforcement policy "
+            f"only after you understand your sending ecosystem."
         )
     elif raw.get("syntax_errors") or any(i.get("severity") == "error" for i in raw.get("issues", [])):
         # Prioritize syntax/error fixes over generic policy advice
         fix = _first_fix(raw.get("syntax_errors", [])) or _first_fix(raw.get("issues", []))
     elif policy == "none":
         fix = (
-            "Review your DMARC aggregate reports to confirm all legitimate senders pass authentication. "
-            "Then upgrade to <strong>p=quarantine</strong>, and ultimately <strong>p=reject</strong> "
-            "for full spoofing protection."
+            "Review your DMARC aggregate reports to identify all legitimate senders and confirm "
+            "they pass SPF or DKIM with aligned domains. Once you are confident in your sender "
+            "inventory, move to an enforcement policy (<strong>p=quarantine</strong> or <strong>p=reject</strong>)."
         )
     else:
         fix = _first_fix(raw.get("issues", []))
@@ -416,7 +423,9 @@ def transform_spf(raw: Dict, has_mx: bool = True) -> Dict:
         if all_mech == "-all":
             explanation = (
                 "SPF record ends with <strong>-all</strong> (hardfail). "
-                "Receivers are instructed to reject email from servers not listed in this record."
+                "This declares that no other servers are authorized. In practice, most receivers "
+                "use SPF results as an input to DMARC evaluation and spam filtering rather than "
+                "rejecting on SPF alone."
             )
         elif all_mech == "~all":
             explanation = (
@@ -478,7 +487,7 @@ def transform_spf(raw: Dict, has_mx: bool = True) -> Dict:
 
         all_mech = raw.get("all_mechanism") or ""
         if all_mech == "-all":
-            details.append({"type": "good", "text": "-all (hardfail). Unauthorized servers are rejected"})
+            details.append({"type": "good", "text": "-all (hardfail) -- declares no other servers are authorized"})
         elif all_mech == "~all":
             details.append({"type": "good", "text": "~all (softfail). Unauthorized senders are flagged but mail is still delivered"})
         elif all_mech == "?all":
@@ -514,8 +523,8 @@ def transform_spf(raw: Dict, has_mx: bool = True) -> Dict:
         pass
     elif not record and not has_mx:
         fix = (
-            "Publish a null SPF record (<strong>v=spf1 -all</strong>) to explicitly signal "
-            "that this domain does not send email. This is a best practice that helps prevent spoofing."
+            "Publish a null SPF record (<strong>v=spf1 -all</strong>) to explicitly declare "
+            "that no IP addresses are authorized to send email for this domain."
         )
     else:
         fix = _first_fix(raw.get("issues", []))

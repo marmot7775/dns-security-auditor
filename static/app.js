@@ -531,8 +531,8 @@ function createResultCard(check, index) {
     // Auto-collapse: pass = collapsed, fail/warn = expanded
     // DMARC is always expanded (important check + tree walk visualization)
     const isDmarc = (check.name || '').toUpperCase() === 'DMARC';
-    const isExpanded = isDmarc || check.status !== 'pass';
-    card.className = `result-card${isExpanded ? ' expanded' : ''}`;
+    const isExpanded = true;
+    card.className = 'result-card expanded';
     card.dataset.status = check.status;
     card.style.animationDelay = `${0.05 + index * 0.04}s`;
 
