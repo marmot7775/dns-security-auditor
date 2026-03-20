@@ -2214,84 +2214,9 @@ details.st-node > summary:hover {
     margin-bottom: 0.65rem;
 }
 
-.fix-record-block {
-    background: #1b1e24;
-    border: 1px solid #2a2d35;
-    border-radius: var(--radius);
-    padding: 0.85rem 1rem;
-    margin-bottom: 0.55rem;
-    position: relative;
-}
+/* Old dark fix-record-block removed. See definition below with light styling. */
 
-.fix-record-block:last-child {
-    margin-bottom: 0;
-}
-
-.fix-record-header {
-    display: flex;
-    align-items: center;
-    gap: 0.55rem;
-    margin-bottom: 0.5rem;
-}
-
-.fix-record-type {
-    font-family: var(--font-mono);
-    font-size: 0.68rem;
-    font-weight: 600;
-    color: #4ade80;
-    background: rgba(74, 222, 128, 0.12);
-    border: 1px solid rgba(74, 222, 128, 0.25);
-    padding: 0.12rem 0.45rem;
-    border-radius: 4px;
-    letter-spacing: 0.03em;
-    flex-shrink: 0;
-}
-
-.fix-record-host {
-    font-family: var(--font-mono);
-    font-size: 0.78rem;
-    color: #85B7EB;
-    flex: 1;
-    min-width: 0;
-    overflow: hidden;
-    text-overflow: ellipsis;
-}
-
-.fix-record-copy {
-    position: static;
-    flex-shrink: 0;
-}
-
-.fix-record-value {
-    font-family: var(--font-mono);
-    font-size: 0.78rem;
-    line-height: 1.7;
-    color: #dfe3eb;
-    word-break: break-all;
-    padding-right: 0.5rem;
-}
-
-.fix-record-comment {
-    font-family: var(--font-body);
-    font-size: 0.72rem;
-    color: #8b92a0;
-    margin-top: 0.45rem;
-    line-height: 1.55;
-    font-style: italic;
-}
-
-/* Responsive fix records */
-@media (max-width: 640px) {
-    .fix-record-header {
-        flex-wrap: wrap;
-    }
-
-    .fix-record-host {
-        order: 3;
-        width: 100%;
-        margin-top: 0.15rem;
-    }
-}
+/* Old dark-themed fix-record styles removed. Light-themed versions are below. */
 
 /* Detail items (sub-findings) */
 .detail-item {
