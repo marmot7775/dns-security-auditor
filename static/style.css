@@ -19,7 +19,7 @@
     --border-light: #e8ecf0;
     --text-primary: #1a1a1a;
     --text-secondary: #4d4d4d;
-    --text-tertiary: #7d7d7d;
+    --text-tertiary: #6b6b6b;
     --text-inverse: #ffffff;
 
     /* Status - calm, expert, never alarming */
@@ -66,6 +66,7 @@ html {
     font-size: 16px;
     -webkit-font-smoothing: antialiased;
     -moz-osx-font-smoothing: grayscale;
+    scroll-behavior: smooth;
 }
 
 body {
@@ -2112,3 +2113,153 @@ html, body {
         padding: 0.18rem 0.45rem;
     }
 }
+
+/* ==========================================================================
+   FOCUS, NOTCH, LANDSCAPE, PRINT
+   ========================================================================== */
+
+/* Focus rings that match button shapes */
+.scope-btn:focus-visible {
+    outline: 2px solid var(--primary);
+    outline-offset: 2px;
+    border-radius: 100px;
+}
+
+.share-btn:focus-visible,
+.pdf-btn:focus-visible,
+.toggle-all-btn:focus-visible,
+.error-retry:focus-visible,
+.run-another-btn:focus-visible {
+    outline: 2px solid var(--primary);
+    outline-offset: 2px;
+    border-radius: var(--radius);
+}
+
+.copy-btn:focus-visible {
+    outline: 2px solid var(--primary);
+    outline-offset: 1px;
+    border-radius: 5px;
+}
+
+.selector-toggle:focus-visible {
+    outline: 2px solid var(--primary);
+    outline-offset: 2px;
+    border-radius: 4px;
+}
+
+.result-header:focus-visible {
+    outline: 2px solid var(--primary);
+    outline-offset: -2px;
+    border-radius: var(--radius-lg);
+}
+
+/* Safe area for notched phones (iPhone X+) */
+.site-header {
+    padding-left: env(safe-area-inset-left);
+    padding-right: env(safe-area-inset-right);
+}
+
+.site-footer {
+    padding-bottom: calc(2rem + env(safe-area-inset-bottom));
+}
+
+.container {
+    padding-left: max(1.5rem, env(safe-area-inset-left));
+    padding-right: max(1.5rem, env(safe-area-inset-right));
+}
+
+@media (max-width: 640px) {
+    .container {
+        padding-left: max(1rem, env(safe-area-inset-left));
+        padding-right: max(1rem, env(safe-area-inset-right));
+    }
+}
+
+/* Landscape phone -- tighten vertical spacing */
+@media (max-height: 500px) and (orientation: landscape) {
+    .audit-input-section {
+        padding-top: 1.5rem;
+        padding-bottom: 1rem;
+    }
+
+    .audit-input-card {
+        padding: 1.35rem 1.5rem 1.25rem;
+    }
+
+    .audit-title {
+        font-size: 1.25rem;
+        margin-bottom: 0.25rem;
+    }
+
+    .audit-subtitle {
+        margin-bottom: 0.3rem;
+    }
+
+    .audit-trust {
+        margin-bottom: 1rem;
+    }
+
+    .scope-selector {
+        margin-bottom: 1rem;
+    }
+
+    .site-header .header-inner {
+        height: 48px;
+    }
+}
+
+/* Print stylesheet */
+@media print {
+    .site-header,
+    .audit-input-section,
+    .loading-section,
+    .banner-actions,
+    .toggle-all-btn,
+    .run-another,
+    .site-footer,
+    .scope-selector,
+    .copy-btn {
+        display: none !important;
+    }
+
+    body {
+        background: white;
+        color: black;
+    }
+
+    .results-section {
+        display: block !important;
+    }
+
+    .result-card {
+        break-inside: avoid;
+        box-shadow: none;
+        border: 1px solid #ccc;
+    }
+
+    .result-card.expanded .result-body {
+        grid-template-rows: 1fr;
+    }
+
+    .result-body-inner {
+        padding: 0 1rem 1rem;
+        border-top: 1px solid #ccc;
+        padding-top: 0.75rem;
+    }
+
+    .record-block {
+        background: #f5f5f5;
+        color: #333;
+        border: 1px solid #ccc;
+    }
+
+    .summary-grid {
+        grid-template-columns: repeat(4, 1fr);
+    }
+
+    .priority-section {
+        border: 1px solid #ccc;
+        background: #fff8f8;
+    }
+}
+
