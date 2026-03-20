@@ -265,8 +265,10 @@ function renderResults(data) {
         hideLoading();
         resultsSection.style.display = 'block';
 
-        // Scroll results into view so user sees the report
-        resultsSection.scrollIntoView({ behavior: 'smooth', block: 'start' });
+        // Scroll results into view, with offset so grade/resilience is visible
+        const yOffset = -20;
+        const y = resultsSection.getBoundingClientRect().top + window.pageYOffset + yOffset;
+        window.scrollTo({ top: y, behavior: 'smooth' });
 
         // Update URL for sharing
         const url = new URL(window.location);
