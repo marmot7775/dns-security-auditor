@@ -176,8 +176,8 @@ def transform_dmarc(raw: Dict, tree_walk: Optional[Dict] = None) -> Dict:
             f"As of late 2024, Google and Yahoo made "
             f"<a href=\"https://datatracker.ietf.org/doc/html/rfc9716\" target=\"_blank\" rel=\"noopener\">DMARC</a> "
             f"a mandatory requirement for senders. Without it, your emails are more likely to be "
-            f"throttled or sent to spam. Anyone can also send email using your exact domain name, "
-            f"enabling brand impersonation and phishing attacks, with no policy for receivers to act on."
+            f"throttled or sent to spam. There is also no policy telling receivers how to handle "
+            f"messages that fail authentication, leaving the domain exposed to impersonation."
         )
     elif policy == "none":
         explanation = (
