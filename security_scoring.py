@@ -184,7 +184,9 @@ class EmailSecurityScorer:
             details['policy'] = 'none (monitoring only)'
 
         # Percentage
-        pct = dmarc.get('pct') or 100
+        pct = dmarc.get('pct')
+        if pct is None:
+            pct = 100
         if pct == 100:
             score += 6
             details['percentage'] = '100% (full enforcement)'

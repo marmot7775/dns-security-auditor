@@ -324,7 +324,7 @@ def check_mta_sts(domain: str) -> Dict[str, Any]:
 
     txt_name = f"_mta-sts.{domain}"
     all_txt = _lookup_txt(txt_name)
-    sts_records = [r for r in all_txt if "sts" in r.lower()]
+    sts_records = [r for r in all_txt if r.strip().lower().startswith("v=stsv1")]
 
     if not sts_records:
         result["status"] = "warning"
@@ -512,7 +512,7 @@ def check_tls_rpt(domain: str) -> Dict[str, Any]:
 
     txt_name = f"_smtp._tls.{domain}"
     all_txt = _lookup_txt(txt_name)
-    rpt_records = [r for r in all_txt if "tlsrpt" in r.lower()]
+    rpt_records = [r for r in all_txt if r.strip().lower().startswith("v=tlsrptv1")]
 
     if not rpt_records:
         result["status"] = "warning"
@@ -648,7 +648,7 @@ def check_bimi(domain: str) -> Dict[str, Any]:
 
     bimi_name = f"default._bimi.{domain}"
     all_txt = _lookup_txt(bimi_name)
-    bimi_records = [r for r in all_txt if "bimi1" in r.lower()]
+    bimi_records = [r for r in all_txt if r.strip().lower().startswith("v=bimi1")]
 
     if not bimi_records:
         result["status"] = "info"

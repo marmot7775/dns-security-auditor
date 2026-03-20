@@ -17,9 +17,9 @@ def normalize_domain(value: str) -> str:
     if "@" in domain:
         domain = domain.split("@")[-1]
     domain = (
-        domain.replace("http://", "")
-        .replace("https://", "")
-        .replace("www.", "")
+        domain.removeprefix("http://")
+        .removeprefix("https://")
+        .removeprefix("www.")
     )
     return domain.split("/")[0].split("?")[0].rstrip(".")
 
