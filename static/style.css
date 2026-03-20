@@ -1868,6 +1868,8 @@ main {
     }
 
     .scope-btn svg {
+        width: 12px;
+        height: 12px;
         display: none;
     }
 

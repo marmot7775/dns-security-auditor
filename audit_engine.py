@@ -2308,13 +2308,49 @@ def _run_with_timeout(func, *args, timeout=CHECK_TIMEOUT):
     return future.result(timeout=timeout)
 
 
-def run_full_audit(domain: str, dkim_selector: Optional[str] = None, scope: Optional[str] = None) -> Dict[str, Any]:
+def _count_checks_for_scope(scope_set) -> int:
+    """Count how many check steps will run for a given scope."""
+    count = 0
+    needs_dmarc = scope_set is None or "dmarc" in scope_set
+    needs_mx = scope_set is None or bool(scope_set & (_MX_DEPENDENTS | {"mx"}))
+    needs_spf = scope_set is None or bool(scope_set & (_SPF_DEPENDENTS | {"spf"}))
+
+    # Tree walk runs only when DMARC is needed
+    if needs_dmarc:
+        count += 1  # tree walk
+        count += 1  # dmarc check
+    if needs_mx:
+        count += 1
+    if needs_spf:
+        count += 1
+
+    other_checks = ["mta_sts", "tls_rpt", "bimi", "dnssec", "caa",
+                     "nameservers", "dane", "dkim", "ct", "blacklist"]
+    for ck in other_checks:
+        if _should_include(ck, scope_set):
+            count += 1
+
+    # Vendor fingerprinting runs when email checks are in scope
+    _email_checks = {"dmarc", "spf", "dkim", "mx"}
+    if scope_set is None or bool(scope_set & _email_checks):
+        count += 1
+    # Scoring always runs
+    count += 1
+    return count
+
+
+def run_full_audit(domain: str, dkim_selector: Optional[str] = None,
+                   scope: Optional[str] = None,
+                   progress_callback=None) -> Dict[str, Any]:
     """
     Run all security checks and return the complete audit result
     in the format expected by the frontend.
 
     Each check runs in a try/except so one failure doesn't kill the audit.
     Per-check timeouts prevent hung DNS queries from blocking the entire audit.
+
+    If progress_callback is provided, it is called after each check with:
+        progress_callback(step_name: str, completed: int, total: int)
     """
     start_time = datetime.now()
     checks = []
@@ -2323,6 +2359,14 @@ def run_full_audit(domain: str, dkim_selector: Optional[str] = None, scope: Opti
 
     # Resolve scope to a set of check keys (None = run everything)
     scope_set = SCOPE_CHECKS.get(scope) if scope else None
+    total_checks = _count_checks_for_scope(scope_set)
+    completed = 0
+
+    def _notify(step_name):
+        nonlocal completed
+        completed += 1
+        if progress_callback:
+            progress_callback(step_name, completed, total_checks)
 
     # Determine which dependency checks must run even if not in scope
     needs_dmarc = scope_set is None or "dmarc" in scope_set
@@ -2337,6 +2381,7 @@ def run_full_audit(domain: str, dkim_selector: Optional[str] = None, scope: Opti
             tree_walk_result = _run_with_timeout(dmarc_tree_walk, domain)
         except Exception as e:
             errors.append(f"Tree Walk: {str(e)}")
+        _notify("Tree Walk")
 
     # --- 1. DMARC ---
     if needs_dmarc:
@@ -2353,6 +2398,7 @@ def run_full_audit(domain: str, dkim_selector: Optional[str] = None, scope: Opti
             errors.append(f"DMARC: {str(e)}")
             if _should_include("dmarc", scope_set):
                 checks.append(_error_card("DMARC", e))
+        _notify("DMARC")
 
     # --- 2. MX Records (run before SPF so we know if domain sends mail) ---
     if needs_mx:
@@ -2369,6 +2415,7 @@ def run_full_audit(domain: str, dkim_selector: Optional[str] = None, scope: Opti
             errors.append(f"MX: {str(e)}")
             if _should_include("mx", scope_set):
                 checks.append(_error_card("MX Records", e))
+        _notify("MX")
 
     has_mx = bool(raw_results.get("mx", {}).get("records")) or bool(raw_results.get("mx", {}).get("mx_details"))
 
@@ -2389,6 +2436,7 @@ def run_full_audit(domain: str, dkim_selector: Optional[str] = None, scope: Opti
             errors.append(f"SPF: {str(e)}")
             if _should_include("spf", scope_set):
                 checks.append(_error_card("SPF", e))
+        _notify("SPF")
 
     # --- 4. MTA-STS ---
     if _should_include("mta_sts", scope_set):
@@ -2402,6 +2450,7 @@ def run_full_audit(domain: str, dkim_selector: Optional[str] = None, scope: Opti
         except Exception as e:
             errors.append(f"MTA-STS: {str(e)}")
             checks.append(_error_card("MTA-STS", e))
+        _notify("MTA-STS")
 
     # --- 5. TLS-RPT ---
     if _should_include("tls_rpt", scope_set):
@@ -2415,6 +2464,7 @@ def run_full_audit(domain: str, dkim_selector: Optional[str] = None, scope: Opti
         except Exception as e:
             errors.append(f"TLS-RPT: {str(e)}")
             checks.append(_error_card("TLS-RPT", e))
+        _notify("TLS-RPT")
 
     # --- 6. BIMI ---
     if _should_include("bimi", scope_set):
@@ -2428,6 +2478,7 @@ def run_full_audit(domain: str, dkim_selector: Optional[str] = None, scope: Opti
         except Exception as e:
             errors.append(f"BIMI: {str(e)}")
             checks.append(_error_card("BIMI", e))
+        _notify("BIMI")
 
     # --- 7. DNSSEC ---
     if _should_include("dnssec", scope_set):
@@ -2441,6 +2492,7 @@ def run_full_audit(domain: str, dkim_selector: Optional[str] = None, scope: Opti
         except Exception as e:
             errors.append(f"DNSSEC: {str(e)}")
             checks.append(_error_card("DNSSEC", e))
+        _notify("DNSSEC")
 
     # --- 8. CAA ---
     if _should_include("caa", scope_set):
@@ -2454,6 +2506,7 @@ def run_full_audit(domain: str, dkim_selector: Optional[str] = None, scope: Opti
         except Exception as e:
             errors.append(f"CAA: {str(e)}")
             checks.append(_error_card("CAA", e))
+        _notify("CAA")
 
     # --- 9. Nameservers ---
     if _should_include("nameservers", scope_set):
@@ -2467,6 +2520,7 @@ def run_full_audit(domain: str, dkim_selector: Optional[str] = None, scope: Opti
         except Exception as e:
             errors.append(f"Nameservers: {str(e)}")
             checks.append(_error_card("Nameservers", e))
+        _notify("Nameservers")
 
     # --- 10. DANE ---
     if _should_include("dane", scope_set):
@@ -2480,6 +2534,7 @@ def run_full_audit(domain: str, dkim_selector: Optional[str] = None, scope: Opti
         except Exception as e:
             errors.append(f"DANE: {str(e)}")
             checks.append(_error_card("DANE", e))
+        _notify("DANE")
 
     # --- 11. DKIM (direct lookup of user-provided selector) ---
     if _should_include("dkim", scope_set):
@@ -2524,6 +2579,7 @@ def run_full_audit(domain: str, dkim_selector: Optional[str] = None, scope: Opti
             errors.append(f"DKIM: {str(e)}")
             dkim_pos = min(2, len(checks))
             checks.insert(dkim_pos, _error_card("DKIM", e))
+        _notify("DKIM")
 
     # --- 12. Certificate Transparency ---
     if _should_include("ct", scope_set):
@@ -2537,6 +2593,7 @@ def run_full_audit(domain: str, dkim_selector: Optional[str] = None, scope: Opti
         except Exception as e:
             errors.append(f"Certificate Transparency: {str(e)}")
             checks.append(_error_card("Certificate Transparency", e))
+        _notify("Certificate Transparency")
 
     # --- 13. Blacklist ---
     if _should_include("blacklist", scope_set):
@@ -2550,6 +2607,7 @@ def run_full_audit(domain: str, dkim_selector: Optional[str] = None, scope: Opti
         except Exception as e:
             errors.append(f"Blacklist: {str(e)}")
             checks.append(_error_card("Blacklist", e))
+        _notify("Blacklist")
 
     # --- Vendor Fingerprinting (only useful for email scopes) ---
     fp_vendors = []
@@ -2561,6 +2619,7 @@ def run_full_audit(domain: str, dkim_selector: Optional[str] = None, scope: Opti
             fp_vendors = fp_result.get("vendors", [])
         except Exception:
             pass
+        _notify("Vendor Fingerprinting")
 
     # --- Security Score ---
     score_result = _calculate_score(raw_results, domain, tree_walk=tree_walk_result, fp_vendors=fp_vendors)
@@ -2572,6 +2631,7 @@ def run_full_audit(domain: str, dkim_selector: Optional[str] = None, scope: Opti
     raw_mx = raw_results.get("mx", {})
     has_mx = bool(raw_mx.get("records")) or bool(raw_mx.get("mx_details"))
     priority_fixes = _build_priority_fixes(checks, score_result, has_mx=has_mx)
+    _notify("Scoring")
 
     # --- Detect Defensive DNS pattern ---
     # Only detect when all three signals are available
