@@ -8,6 +8,7 @@ Based on real-world consulting experience with 100+ enterprise deployments.
 
 import re
 import dns.resolver
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from typing import List, Dict, Set, Optional
 
 # Map SPF includes to vendors and their DKIM selectors
@@ -270,41 +271,39 @@ def smart_dkim_check(domain: str, spf_record: Optional[str] = None, max_selector
     except Exception:
         pass  # No wildcard -- proceed normally
 
-    # Test selectors in priority order
-    for selector in selectors_to_test:
-        result['tested_count'] += 1
+    # Test selectors in parallel
+    vendors_detected = result.get('vendors_detected', [])
+
+    def _test_selector(selector: str) -> dict | None:
         fqdn = f"{selector}._domainkey.{domain}"
-        
         try:
-            answers = dns.resolver.resolve(fqdn, 'TXT')
+            resolver = dns.resolver.Resolver()
+            resolver.lifetime = 3
+            answers = resolver.resolve(fqdn, 'TXT')
             dkim_record = str(answers[0]).replace('" "', '').strip('"')
 
-            # Validate this is actually a DKIM record, not a wildcard/SPF catch-all
             if "p=" not in dkim_record or dkim_record.strip().startswith("v=spf1"):
-                continue
-            
-            # Analyze key type
+                return None
+
             key_type = 'Unknown'
             if 'k=rsa' in dkim_record or 'p=' in dkim_record:
                 key_match = re.search(r'p=([A-Za-z0-9+/=]+)', dkim_record)
                 if key_match:
                     key_data = key_match.group(1)
-                    # Estimate key size from base64 length
                     if len(key_data) > 300:
                         key_type = 'RSA 2048-bit'
                     elif len(key_data) > 150:
                         key_type = 'RSA 1024-bit'
                     else:
                         key_type = 'RSA (size unknown)'
-            
-            # Match to detected vendor
+
             matched_vendor = None
-            for vendor in result.get('vendors_detected', []):
+            for vendor in vendors_detected:
                 if selector in vendor['dkim_selectors']:
                     matched_vendor = vendor['vendor']
                     break
-            
-            result['found_selectors'].append({
+
+            return {
                 'selector': selector,
                 'fqdn': fqdn,
                 'record': dkim_record,
@@ -312,13 +311,31 @@ def smart_dkim_check(domain: str, spf_record: Optional[str] = None, max_selector
                 'key_type': key_type,
                 'vendor': matched_vendor,
                 'discovery_priority': 'HIGH' if matched_vendor else 'LOW',
-            })
-            
-        except (dns.resolver.NXDOMAIN, dns.resolver.NoAnswer):
-            continue
+            }
         except Exception:
-            continue
-    
+            return None
+
+    found = []
+    with ThreadPoolExecutor(max_workers=15) as executor:
+        futures = {
+            executor.submit(_test_selector, sel): sel
+            for sel in selectors_to_test
+        }
+        for future in as_completed(futures):
+            r = future.result()
+            if r:
+                found.append(r)
+                if len(found) >= 10:
+                    executor.shutdown(wait=False, cancel_futures=True)
+                    break
+
+    # Preserve priority order from SPF-based ranking
+    selector_order = {sel: i for i, sel in enumerate(selectors_to_test)}
+    found.sort(key=lambda r: selector_order.get(r['selector'], 999))
+
+    result['found_selectors'] = found
+    result['tested_count'] = len(selectors_to_test)
+
     return result
 
 
