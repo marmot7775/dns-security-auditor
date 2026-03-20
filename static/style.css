@@ -3273,12 +3273,12 @@ details.st-node > summary:hover {
    RESPONSIVE FIXES -- comprehensive coverage
    ========================================================================== */
 
-/* Prevent horizontal scroll without creating a scroll container.
-   overflow-x: clip does NOT trigger overflow-y: auto, so the normal
-   document scroll remains on html and the flex-column footer is reachable. */
+/* Prevent horizontal scroll by constraining width instead of overflow.
+   overflow-x on html/body can create scroll containers that hide the footer. */
 html, body {
-    overflow-x: clip;
+    max-width: 100vw;
 }
+
 
 /* -- Tablet (768px): banner stacks, tagline hides -- */
 @media (max-width: 768px) {
