@@ -132,7 +132,7 @@ def build_remediation_plan(
             "title": "Remove +all From SPF",
             "description": (
                 "Your SPF record ends with +all, which authorizes every server on the "
-                "internet to send mail as your domain -- SPF provides no value in this state."
+                "internet to send mail as your domain. SPF provides no value in this state."
             ),
             "effort": "low",
             "impact": "high",
@@ -189,7 +189,7 @@ def build_remediation_plan(
         short_term.append({
             "title": "Upgrade DMARC to p=quarantine",
             "description": (
-                "DMARC p=none is monitoring-only -- unauthenticated mail is still delivered. "
+                "DMARC p=none is monitoring-only; unauthenticated mail is still delivered. "
                 "Once your SPF and DKIM pass rates look healthy in reports, advance to p=quarantine."
             ),
             "effort": "low",
@@ -242,7 +242,7 @@ def build_remediation_plan(
             "title": "Add TLS-RPT Record",
             "description": (
                 "TLS-RPT (RFC 8460) enables receiving reports about TLS failures from "
-                "mail servers connecting to your domain -- useful for diagnosing delivery problems."
+                "mail servers connecting to your domain, useful for diagnosing delivery problems."
             ),
             "effort": "low",
             "impact": "medium",
@@ -300,7 +300,7 @@ def build_remediation_plan(
             "title": "Tighten SPF to -all",
             "description": (
                 "Switching from ~all (softfail) to -all (hardfail) makes a stronger authorization "
-                "declaration. In practice, the difference matters mainly for DMARC alignment -- "
+                "declaration. In practice, the difference matters mainly for DMARC alignment; "
                 "few receivers reject on SPF result alone."
             ),
             "effort": "low",

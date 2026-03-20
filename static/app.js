@@ -324,8 +324,8 @@ function renderResults(data) {
     // Tab title with issue summary
     const issues = failCount + warnCount;
     document.title = issues > 0
-        ? `(${issues} issue${issues > 1 ? 's' : ''}) ${data.domain} -- DNS Audit`
-        : `All clear -- ${data.domain} -- DNS Audit`;
+        ? `(${issues} issue${issues > 1 ? 's' : ''}) ${data.domain} | DNS Audit`
+        : `All clear: ${data.domain} | DNS Audit`;
 
     // Grade color-coding
     const gradeCard = document.querySelector('.grade-card');
@@ -1139,16 +1139,16 @@ function renderReportChain(rc) {
         if (dest.authorized === true) {
             authHtml = '<span class="rc-auth rc-authorized">&#10003; External authorization verified</span>';
         } else if (dest.authorized === false) {
-            authHtml = '<span class="rc-auth rc-unauthorized">&#10005; Not authorized -- reports will be dropped</span>';
+            authHtml = '<span class="rc-auth rc-unauthorized">&#10005; Not authorized (reports will be dropped)</span>';
         } else {
-            authHtml = '<span class="rc-auth rc-same-domain">&#10003; Same domain -- no external authorization needed</span>';
+            authHtml = '<span class="rc-auth rc-same-domain">&#10003; Same domain (no external authorization needed)</span>';
         }
 
         let mxHtml = '';
         if (dest.has_mx === true) {
             mxHtml = '<span class="rc-mx-ok">Can receive mail &#10003;</span>';
         } else if (dest.has_mx === false && dest.is_external) {
-            mxHtml = '<span class="rc-mx-fail">Cannot receive mail -- no MX</span>';
+            mxHtml = '<span class="rc-mx-fail">Cannot receive mail (no MX)</span>';
         }
 
         let serviceHtml = '';
@@ -1206,7 +1206,7 @@ function renderSpfTree(tree) {
                 </div>
                 <div class="st-budget-note">RFC 7208 limits SPF to 10 DNS-querying mechanisms (include, a, mx, redirect, exists). Exceeding this causes a PermError.</div>
             </div>
-            <div class="st-tree-label">Include hierarchy -- each include costs 1 lookup plus any nested lookups</div>`;
+            <div class="st-tree-label">Include hierarchy: each include costs 1 lookup plus any nested lookups</div>`;
 
     html += renderTreeNode(tree.root, tree.total_lookups, true);
 

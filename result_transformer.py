@@ -107,19 +107,19 @@ def transform_dmarc(raw: Dict, tree_walk: Optional[Dict] = None) -> Dict:
         status = "fail"
         pill_label = "Missing"
     elif policy == "reject":
-        verdict = "p=reject -- receivers requested to reject failures"
+        verdict = "p=reject (receivers requested to reject failures)"
         # p=reject is always a pass regardless of what the audit engine returned
         # (the engine may flag "warning" for missing rua, but the policy itself is correct)
         status = "pass"
     elif policy == "quarantine":
         pct = raw.get("pct", 100)
-        verdict = "p=quarantine -- failures sent to spam"
+        verdict = "p=quarantine (failures sent to spam)"
         if pct is not None and pct < 100:
             verdict += f" (pct={pct})"
         # p=quarantine is enforcing; treat as pass even if rua is absent
         status = "pass"
     elif policy == "none":
-        verdict = "p=none -- monitoring only, no enforcement"
+        verdict = "p=none (monitoring only, no enforcement)"
         status = "warn"
     else:
         verdict = f"Policy: {policy}" if policy else "Invalid record"
@@ -159,7 +159,7 @@ def transform_dmarc(raw: Dict, tree_walk: Optional[Dict] = None) -> Dict:
                 f"<strong>_dmarc.{raw.get('domain', '')}</strong>, but inherits "
                 f"<strong>p=none</strong> from <strong>{inherited_source}</strong> "
                 f"via the {tag_label} tag. "
-                f"This is monitoring only -- receivers take no enforcement action, but aggregate reports "
+                f"This is monitoring only; receivers take no enforcement action, but aggregate reports "
                 f"provide visibility into authentication results."
                 + _adoption_note
             )
@@ -179,7 +179,7 @@ def transform_dmarc(raw: Dict, tree_walk: Optional[Dict] = None) -> Dict:
         )
     elif policy == "none":
         explanation = (
-            f"Your DMARC policy is <strong>p=none</strong> -- monitoring only. "
+            f"Your DMARC policy is <strong>p=none</strong> (monitoring only). "
             f"Receivers take no enforcement action on messages that fail alignment, but "
             f"aggregate reports (rua) give you visibility into authentication results. "
             f"This is the right starting point for understanding your email ecosystem before enforcing."
@@ -189,14 +189,14 @@ def transform_dmarc(raw: Dict, tree_walk: Optional[Dict] = None) -> Dict:
             f"Your DMARC policy is <strong>p=quarantine</strong>. Receivers that honor DMARC "
             f"are requested to route messages to the spam folder when neither SPF nor DKIM "
             f"passes with an aligned domain. DMARC requires only one of SPF or DKIM to pass "
-            f"with alignment -- DKIM is preferred because it survives mail forwarding."
+            f"with alignment. DKIM is preferred because it survives mail forwarding."
         )
     elif policy == "reject":
         explanation = (
             f"Your DMARC policy is <strong>p=reject</strong>. Receivers that honor DMARC "
             f"are requested to reject messages where neither SPF nor DKIM passes with an "
             f"aligned domain. "
-            f"DMARC requires only one of SPF or DKIM to pass with alignment -- "
+            f"DMARC requires only one of SPF or DKIM to pass with alignment. "
             f"DKIM is the more resilient mechanism because it survives mail forwarding."
         )
     else:
@@ -228,11 +228,11 @@ def transform_dmarc(raw: Dict, tree_walk: Optional[Dict] = None) -> Dict:
 
     elif record:
         if policy == "reject":
-            details.append({"type": "good", "text": "Policy p=reject -- receivers requested to reject authentication failures"})
+            details.append({"type": "good", "text": "Policy p=reject: receivers requested to reject authentication failures"})
         elif policy == "quarantine":
-            details.append({"type": "good", "text": "Policy p=quarantine -- receivers requested to send failures to spam"})
+            details.append({"type": "good", "text": "Policy p=quarantine: receivers requested to send failures to spam"})
         elif policy == "none":
-            details.append({"type": "warning", "text": "Policy p=none -- monitoring only, no enforcement requested"})
+            details.append({"type": "warning", "text": "Policy p=none: monitoring only, no enforcement requested"})
 
         report_dests = raw.get("report_destinations")
         if report_dests and raw.get("rua"):
@@ -269,7 +269,7 @@ def transform_dmarc(raw: Dict, tree_walk: Optional[Dict] = None) -> Dict:
 
         pct = raw.get("pct")
         if pct is not None and pct < 100:
-            details.append({"type": "warning", "text": f"pct={pct} -- policy applied to only {pct}% of failing messages (pct is removed in RFC 9716)"})
+            details.append({"type": "warning", "text": f"pct={pct}: policy applied to only {pct}% of failing messages (pct is removed in RFC 9716)"})
 
         # Append all issues from the audit engine (syntax_errors already merged into issues)
         for issue in raw.get("issues", []):
@@ -299,7 +299,7 @@ def transform_dmarc(raw: Dict, tree_walk: Optional[Dict] = None) -> Dict:
     elif not record:
         fix = (
             f"Publish a DMARC TXT record at <strong>_dmarc.{domain_name}</strong> with <strong>p=none</strong>. "
-            f"Requires an <strong>rua=</strong> reporting address -- either your own mailbox "
+            f"Requires an <strong>rua=</strong> reporting address: either your own mailbox "
             f"(reports arrive as compressed XML) or a DMARC reporting service that provides a dashboard."
         )
     elif raw.get("syntax_errors") or any(i.get("severity") == "error" for i in raw.get("issues", [])):
@@ -378,7 +378,7 @@ def transform_spf(raw: Dict, has_mx: bool = True) -> Dict:
         if all_mech == "+all":
             verdict = "Authorizes the entire internet to send as you"
         elif lookups > 10:
-            verdict = f"Broken -- exceeds lookup limit ({lookups}/10)"
+            verdict = f"Broken: exceeds lookup limit ({lookups}/10)"
         elif not all_mech and raw.get("has_redirect"):
             verdict = "SPF configured (via redirect)"
         elif not all_mech:
@@ -415,14 +415,14 @@ def transform_spf(raw: Dict, has_mx: bool = True) -> Dict:
             explanation = (
                 "SPF record ends with <strong>-all</strong> (hardfail), declaring that servers "
                 "not listed in this record are not authorized to send mail for your domain. "
-                "SPF results feed into DMARC alignment evaluation -- enforcement decisions "
+                "SPF results feed into DMARC alignment evaluation; enforcement decisions "
                 "are made at the DMARC policy layer, not by SPF alone."
             )
         elif all_mech == "~all":
             explanation = (
                 "SPF record ends with <strong>~all</strong> (softfail), indicating that servers "
                 "not listed in this record are not authorized but should not be outright rejected. "
-                "Like -all, the SPF result feeds into DMARC alignment evaluation -- "
+                "Like -all, the SPF result feeds into DMARC alignment evaluation; "
                 "enforcement decisions are made at the DMARC policy layer."
             )
         elif all_mech == "?all":
@@ -481,9 +481,9 @@ def transform_spf(raw: Dict, has_mx: bool = True) -> Dict:
 
         all_mech = raw.get("all_mechanism") or ""
         if all_mech == "-all":
-            details.append({"type": "good", "text": "-all (hardfail) -- declares no other servers are authorized"})
+            details.append({"type": "good", "text": "-all (hardfail): declares no other servers are authorized"})
         elif all_mech == "~all":
-            details.append({"type": "good", "text": "~all (softfail) -- unlisted servers are not authorized"})
+            details.append({"type": "good", "text": "~all (softfail): unlisted servers are not authorized"})
         elif all_mech == "?all":
             details.append({"type": "warning", "text": "Neutral (?all) provides no protection"})
         elif all_mech == "+all":
@@ -556,7 +556,7 @@ def transform_spf(raw: Dict, has_mx: bool = True) -> Dict:
             "type": "TXT",
             "host": domain_name,
             "value": "v=spf1 -all",
-            "comment": "Null SPF -- declares this domain does not send email",
+            "comment": "Null SPF: declares this domain does not send email",
         })
     # No copy-paste for starter SPF -- user must identify their authorized senders first
 
@@ -698,7 +698,7 @@ def transform_dkim(raw: Dict, domain: str, has_mx: bool = True) -> Dict:
     explanation += (
         " Each key is a TXT record at <strong>selector._domainkey.{domain}</strong>. "
         "Receiving servers retrieve this key to verify the DKIM signature on incoming messages "
-        "(<a href=\"https://datatracker.ietf.org/doc/html/rfc6376\" target=\"_blank\" rel=\"noopener\">RFC 6376</a>). Note: this audit confirms the public key exists in DNS -- "
+        "(<a href=\"https://datatracker.ietf.org/doc/html/rfc6376\" target=\"_blank\" rel=\"noopener\">RFC 6376</a>). Note: this audit confirms the public key exists in DNS; "
         "it does not test live message signatures."
     ).format(domain=domain)
     if raw.get("discovery_method") == "spf_intelligent":
@@ -713,7 +713,7 @@ def transform_dkim(raw: Dict, domain: str, has_mx: bool = True) -> Dict:
         fix = (
             f"The following selectors use 1024-bit keys, which are below current recommendations: "
             f"<strong>{selectors_str}</strong>. "
-            f"Key rotation is provider-specific -- check your email provider's documentation "
+            f"Key rotation is provider-specific. Check your email provider's documentation "
             f"for how to generate and publish a new 2048-bit or Ed25519 key pair."
         )
     elif raw.get("issues"):
@@ -786,7 +786,7 @@ def transform_mx(raw: Dict) -> Dict:
                 "type": "MX",
                 "host": raw.get("domain", ""),
                 "value": "0 .",
-                "comment": "Null MX (RFC 7505) -- declares this domain does not accept email",
+                "comment": "Null MX (RFC 7505): declares this domain does not accept email",
             }],
         }
 
@@ -916,7 +916,7 @@ def transform_mta_sts(raw: Dict, domain: str, has_mx: bool = True) -> Dict:
     if policy_mode == "enforce":
         verdict = "Inbound email must use encryption"
     elif policy_mode == "testing":
-        verdict = "Monitoring TLS -- not yet enforcing"
+        verdict = "Monitoring TLS, not yet enforcing"
     elif policy_mode == "none":
         verdict = "Configured but disabled"
     else:
@@ -1005,7 +1005,7 @@ def transform_tls_rpt(raw: Dict, domain: str, has_mx: bool = True) -> Dict:
             "fix": (
                 f"Publish a TLS-RPT TXT record at <strong>_smtp._tls.{domain}</strong>. "
                 f"Requires a reporting address (<strong>rua=</strong>) that can receive JSON-formatted "
-                f"TLS failure reports -- either your own mailbox or a reporting service."
+                f"TLS failure reports: either your own mailbox or a reporting service."
             ),
             "fix_records": None,
         }
@@ -1203,7 +1203,7 @@ def transform_dnssec(raw: Dict) -> Dict:
         if chain_valid is True:
             details.append({"type": "good", "text": "DS digest matches DNSKEY (chain of trust verified)"})
         elif chain_valid is False:
-            details.append({"type": "error", "text": "DS digest does NOT match any DNSKEY (broken chain -- validating resolvers will return SERVFAIL)"})
+            details.append({"type": "error", "text": "DS digest does NOT match any DNSKEY (broken chain; validating resolvers will return SERVFAIL)"})
     else:
         details.append({"type": "warning", "text": "No DS record at parent zone (chain may not validate)"})
 
@@ -1291,7 +1291,7 @@ def transform_caa(raw: Dict, domain: str) -> Dict:
                 "CAA records (<a href=\"https://datatracker.ietf.org/doc/html/rfc8659\" target=\"_blank\" rel=\"noopener\">RFC 8659</a>) specify which Certificate Authorities are authorized "
                 "to issue TLS certificates for your domain. Compliant CAs must check CAA records "
                 "before issuance. Without CAA records, any compliant CA may issue certificates "
-                "for your domain -- there is no restriction to enforce."
+                "for your domain. There is no restriction to enforce."
             ),
             "details": details,
             "fix": (
@@ -1421,7 +1421,7 @@ def transform_dane(raw: Dict, domain: str) -> Dict:
             "record": None,
             "explanation": (
                 "DANE TLSA records are published for your MX hosts, but DNSSEC is not enabled. "
-                "DANE requires DNSSEC (<a href=\"https://datatracker.ietf.org/doc/html/rfc7672\" target=\"_blank\" rel=\"noopener\">RFC 7672</a> Section 2.2) -- without it, an attacker can forge "
+                "DANE requires DNSSEC (<a href=\"https://datatracker.ietf.org/doc/html/rfc7672\" target=\"_blank\" rel=\"noopener\">RFC 7672</a> Section 2.2). Without it, an attacker can forge "
                 "or strip TLSA records, completely defeating the authentication. "
                 "Senders that implement RFC 7672 will ignore TLSA records that are not DNSSEC-validated."
             ),
@@ -1518,7 +1518,7 @@ def transform_dane(raw: Dict, domain: str) -> Dict:
         "explanation": (
             "DANE (<a href=\"https://datatracker.ietf.org/doc/html/rfc7672\" target=\"_blank\" rel=\"noopener\">RFC 7672</a>) uses TLSA records to let sending mail servers verify your mail "
             "server's TLS certificate through DNS, without depending on the CA infrastructure. "
-            "DANE requires DNSSEC to be effective -- without it, TLSA records cannot be trusted. "
+            "DANE requires DNSSEC to be effective. Without it, TLSA records cannot be trusted. "
             "DANE and MTA-STS serve complementary roles for enforcing SMTP TLS."
         ),
         "details": details,
@@ -1623,9 +1623,9 @@ def transform_nameservers(raw: Dict, domain: str = "") -> Dict:
             rtt = ns.get("response_time_ms")
             if auth is True:
                 rtt_str = f", {rtt}ms" if rtt is not None else ""
-                details.append({"type": "good", "text": f"{ns['hostname']}{ip_part} -- authoritative{rtt_str}"})
+                details.append({"type": "good", "text": f"{ns['hostname']}{ip_part}: authoritative{rtt_str}"})
             elif auth is False:
-                details.append({"type": "error", "text": f"{ns['hostname']}{ip_part} -- NOT authoritative (lame delegation)"})
+                details.append({"type": "error", "text": f"{ns['hostname']}{ip_part}: NOT authoritative (lame delegation)"})
             else:
                 # auth is None -- query failed or not attempted
                 ipv4_str = ", ".join(ns.get("ipv4", []))
@@ -1685,7 +1685,7 @@ def transform_nameservers(raw: Dict, domain: str = "") -> Dict:
         "record": record,
         "explanation": (
             f"Found <strong>{ns_count}</strong> nameserver{'s' if ns_count != 1 else ''} for this domain. "
-            "Nameservers are authoritative for your DNS zone -- they answer queries for all your "
+            "Nameservers are authoritative for your DNS zone. They answer queries for all your "
             "DNS records. Multiple nameservers on distinct network paths reduce the risk of a "
             "single point of failure causing a full DNS outage for your domain."
         ),
@@ -1956,7 +1956,7 @@ def transform_blacklist(raw: Dict, domain: str) -> Dict:
             fix += (
                 "<br><br>Before requesting removal, identify the reason for the listing. "
                 "Common causes include a compromised sending account, misconfigured open relay, "
-                "a spike in spam complaints, or -- in some cases -- a false positive. "
+                "a spike in spam complaints, or in some cases a false positive. "
                 "Removing the underlying cause first reduces the chance of re-listing."
             )
         else:
