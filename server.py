@@ -48,6 +48,41 @@ log = logging.getLogger("dns-auditor")
 
 
 # ============================================================
+# Audit log (GDPR-safe -- no IP, no geolocation)
+# ============================================================
+
+AUDIT_LOG_PATH = Path(__file__).parent / "audit.log"
+_audit_log_lock = threading.Lock()
+
+
+def _log_audit(request: Request, domain: str, scope: str, grade: str,
+               duration: float, checks: int, source: str = "web"):
+    """Write a GDPR-safe JSON-lines audit log entry.
+
+    Logged: domain, timestamp, scope, grade, duration, check count,
+            user-agent (browser/OS only), source (web/sse/pdf).
+    NOT logged: IP address, geolocation, cookies, personal data.
+    """
+    ua = request.headers.get("User-Agent", "unknown")
+    entry = {
+        "ts": datetime.utcnow().strftime("%Y-%m-%dT%H:%M:%SZ"),
+        "domain": domain,
+        "scope": scope or "complete",
+        "grade": grade,
+        "duration_s": duration,
+        "checks": checks,
+        "ua": ua[:200],
+        "source": source,
+    }
+    try:
+        with _audit_log_lock:
+            with open(AUDIT_LOG_PATH, "a") as f:
+                f.write(json.dumps(entry) + "\n")
+    except Exception as e:
+        log.warning("Audit log write failed: %s", e)
+
+
+# ============================================================
 # App
 # ============================================================
 
@@ -286,6 +321,11 @@ async def audit_domain(
     elapsed = round(time.time() - start, 2)
     log.info("Audit complete: %s -- %.2fs, grade=%s", domain, elapsed, result.get("score", {}).get("grade", "?"))
 
+    # Audit log (GDPR-safe)
+    _log_audit(request, domain, scope,
+               result.get("score", {}).get("grade", "?"),
+               elapsed, len(result.get("checks", [])), source="web")
+
     # Cache result
     _set_cached(cache_key, result)
 
@@ -380,6 +420,10 @@ async def audit_stream(
                 start_elapsed = result.get("elapsed_seconds", 0)
                 log.info("SSE audit complete: %s -- %.2fs, grade=%s",
                          domain, start_elapsed, result.get("score", {}).get("grade", "?"))
+                # Audit log (GDPR-safe)
+                _log_audit(request, domain, scope,
+                           result.get("score", {}).get("grade", "?"),
+                           start_elapsed, len(result.get("checks", [])), source="sse")
                 yield f"data: {json.dumps({'done': True, 'result': result})}\n\n"
                 return
             else:
