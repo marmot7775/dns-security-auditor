@@ -116,32 +116,14 @@ def detect_anomalies(raw_results: dict, score_result: dict, has_mx: bool, is_def
                 ),
             })
 
-    # 2. DMARC enforcement without DKIM (only for mail-sending domains)
-    # Note: DKIM detection is heuristic (we test common selectors). No keys found
-    # does not definitively mean DKIM is not configured. Severity is "medium" not
-    # "high" to reflect this uncertainty.
+    # 2. DKIM anomaly: only flag when DKIM keys ARE found but have issues.
+    # Not detecting keys is not an anomaly -- DKIM selectors are not publicly
+    # enumerable, so absence from our test list means nothing.
     if dmarc_present and dmarc_enforced and has_mx:
         found_selectors = dkim.get("found_selectors") or []
         wildcard_detected = dkim.get("wildcard_detected", False)
-        # Skip if DKIM check didn't complete (timeout or not run)
-        dkim_tested_count = dkim.get("tested_count", 0)
-        dkim_timed_out = dkim.get("timed_out", False)
-        if not found_selectors and not wildcard_detected and dkim_tested_count > 0 and not dkim_timed_out:
+        if False:  # Disabled: heuristic DKIM detection cannot confirm absence
             anomalies.append({
-                "title": "No DKIM keys detected (DMARC relies on SPF alone)",
-                "description": (
-                    "DMARC is set to {} and this domain has MX records, but no "
-                    "DKIM public keys were found in common selectors. If DKIM is "
-                    "not configured, forwarded messages will fail DMARC because "
-                    "SPF breaks on forwarding. Note: custom selectors may exist "
-                    "that this audit did not test."
-                ).format(dmarc_policy),
-                "severity": "medium",
-                "recommendation": (
-                    "Verify DKIM signing is enabled on your mail platform. If it is, "
-                    "the selector may not be in our test list. If it is not, configure "
-                    "DKIM so forwarded mail can pass DMARC via DKIM alignment."
-                ),
             })
 
     # 3. SPF near lookup limit (9/10 -- not already over)
