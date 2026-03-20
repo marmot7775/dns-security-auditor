@@ -183,19 +183,22 @@ class EmailSecurityScorer:
             score += 3   # Monitoring only
             details['policy'] = 'none (monitoring only)'
 
-        # Percentage
+        # Percentage -- anything below 100 on an enforcement policy is a significant gap
         pct = dmarc.get('pct')
         if pct is None:
             pct = 100
         if pct == 100:
             score += 6
             details['percentage'] = '100% (full enforcement)'
-        elif pct >= 50:
+        elif pct >= 75:
             score += 3
-            details['percentage'] = f'{pct}% (partial enforcement)'
-        else:
+            details['percentage'] = f'{pct}% (nearly enforcing -- raise to 100)'
+        elif pct >= 50:
             score += 1
-            details['percentage'] = f'{pct}% (minimal enforcement)'
+            details['percentage'] = f'{pct}% (half of spoofed mail still gets through)'
+        else:
+            score += 0
+            details['percentage'] = f'{pct}% (negligible enforcement -- effectively monitoring only)'
 
         # Reporting configured
         if dmarc.get('rua') or dmarc.get('ruf'):
@@ -209,6 +212,16 @@ class EmailSecurityScorer:
         if dmarc.get('sp'):
             score += 2
             details['subdomain_policy'] = 'Configured'
+
+        # Alignment mode bonus (within the 30-point cap)
+        adkim = (dmarc.get('adkim') or 'r').lower()
+        aspf = (dmarc.get('aspf') or 'r').lower()
+        if adkim == 's' and aspf == 's':
+            details['alignment'] = 'Strict DKIM + SPF alignment (strongest)'
+        elif adkim == 's' or aspf == 's':
+            details['alignment'] = 'Mixed alignment (one strict, one relaxed)'
+        else:
+            details['alignment'] = 'Relaxed alignment (default -- consider strict for tighter security)'
 
         return min(score, 30), details
     
@@ -226,12 +239,15 @@ class EmailSecurityScorer:
 
         # All mechanism (policy)
         all_mechanism = (spf.get('all') or '').lower()
-        if all_mechanism in ['-all', '~all']:
-            score += 10  # Strict
-            details['all_mechanism'] = f'{all_mechanism} (good)'
+        if all_mechanism == '-all':
+            score += 10  # Hard fail -- unauthorized mail rejected
+            details['all_mechanism'] = '-all (hard fail, excellent)'
+        elif all_mechanism == '~all':
+            score += 7   # Soft fail -- mail tagged but still delivered
+            details['all_mechanism'] = '~all (soft fail, upgrade to -all recommended)'
         elif all_mechanism == '?all':
             score += 5  # Neutral
-            details['all_mechanism'] = '?all (neutral)'
+            details['all_mechanism'] = '?all (neutral, no protection)'
         else:
             score += 2
             details['all_mechanism'] = '+all or missing (weak)'
@@ -492,11 +508,39 @@ class EmailSecurityScorer:
                 "🟡 MEDIUM: Add DMARC aggregate reporting (rua) to gain visibility into authentication results"
             )
 
-        # SPF recommendations
+        # Alignment cross-checks
         has_mx = audit_results.get('has_mx', True)
         spf = audit_results.get('spf_results', {})
+        dkim_results = audit_results.get('dkim_results', {})
+        adkim = (dmarc.get('adkim') or 'r').lower()
+        aspf = (dmarc.get('aspf') or 'r').lower()
+        if has_mx and dmarc.get('record'):
+            if adkim == 's' and not dkim_results.get('found_selectors'):
+                recommendations.append(
+                    "🔴 CRITICAL: DMARC requires strict DKIM alignment (adkim=s) but no DKIM keys were found. "
+                    "DKIM authentication will always fail -- publish DKIM keys or switch to adkim=r"
+                )
+            if aspf == 's' and not spf.get('record'):
+                recommendations.append(
+                    "🔴 CRITICAL: DMARC requires strict SPF alignment (aspf=s) but no SPF record exists. "
+                    "SPF authentication will always fail -- publish an SPF record or switch to aspf=r"
+                )
+            spf_all = (spf.get('all') or '').lower()
+            if dmarc.get('policy') in ('reject', 'quarantine') and (dmarc.get('pct') or 100) == 100:
+                if spf.get('record') and spf_all == '~all':
+                    recommendations.append(
+                        "🟡 HIGH: DMARC is enforcing but SPF uses ~all (soft fail). "
+                        "Upgrade to -all (hard fail) for consistent enforcement"
+                    )
+
+        # SPF recommendations
         if not spf.get('record') and has_mx:
             recommendations.append("🔴 CRITICAL: Publish an SPF record listing your authorized sending servers")
+        elif (spf.get('all') or '').lower() == '~all' and has_mx:
+            recommendations.append(
+                "🟡 HIGH: SPF uses ~all (soft fail) -- unauthorized mail is tagged but still delivered. "
+                "Upgrade to -all (hard fail) to reject unauthorized senders"
+            )
         elif spf.get('lookup_count', 0) > 10:
             count = spf['lookup_count']
             recommendations.append(

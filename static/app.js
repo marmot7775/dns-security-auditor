@@ -304,7 +304,6 @@ function renderResults(data) {
     const warnCount = checks.filter(c => c.status === 'warn').length;
     const failCount = checks.filter(c => c.status === 'fail').length;
 
-    document.getElementById('summary-grade').textContent = data.score?.grade || '--';
     document.getElementById('summary-pass').textContent = passCount;
     document.getElementById('summary-warn').textContent = warnCount;
     document.getElementById('summary-fail').textContent = failCount;
@@ -313,18 +312,39 @@ function renderResults(data) {
     const gradeCard = document.querySelector('.grade-card');
     const gradeEl   = document.getElementById('summary-grade');
     const grade = data.score?.grade || '--';
-    const gradeColors = {
-        'A': { bg: '#ecfdf5', border: '#10b981', text: '#065f46' },
-        'B': { bg: '#eff6ff', border: '#3b82f6', text: '#1e40af' },
-        'C': { bg: '#fffbeb', border: '#f59e0b', text: '#92400e' },
-        'D': { bg: '#fff7ed', border: '#f97316', text: '#9a3412' },
-        'F': { bg: '#fef2f2', border: '#ef4444', text: '#991b1b' },
-    };
-    const gc = gradeColors[grade];
-    if (gc && gradeCard) {
-        gradeCard.style.borderTopColor = gc.border;
-        gradeCard.style.background = gc.bg;
-        gradeEl.style.color = gc.text;
+    const isDefensive = data.defensive_dns;
+
+    if (isDefensive) {
+        // Non-mail domains get a shield icon instead of a letter grade
+        gradeEl.textContent = '\u26E8';
+        gradeEl.style.fontSize = '2rem';
+        if (gradeCard) {
+            gradeCard.style.borderTopColor = '#6366f1';
+            gradeCard.style.background = '#eef2ff';
+            gradeEl.style.color = '#4338ca';
+        }
+        // Replace label
+        const label = gradeCard?.querySelector('.summary-label');
+        if (label) label.textContent = 'Defensive DNS';
+    } else {
+        gradeEl.textContent = grade;
+        gradeEl.style.fontSize = '';
+        const gradeColors = {
+            'A': { bg: '#ecfdf5', border: '#10b981', text: '#065f46' },
+            'B': { bg: '#eff6ff', border: '#3b82f6', text: '#1e40af' },
+            'C': { bg: '#fffbeb', border: '#f59e0b', text: '#92400e' },
+            'D': { bg: '#fff7ed', border: '#f97316', text: '#9a3412' },
+            'F': { bg: '#fef2f2', border: '#ef4444', text: '#991b1b' },
+        };
+        const gc = gradeColors[grade];
+        if (gc && gradeCard) {
+            gradeCard.style.borderTopColor = gc.border;
+            gradeCard.style.background = gc.bg;
+            gradeEl.style.color = gc.text;
+        }
+        // Restore label in case previous audit was defensive
+        const label = gradeCard?.querySelector('.summary-label');
+        if (label) label.textContent = 'Security Grade';
     }
     // Score number
     const scoreNum = data.score?.total;
