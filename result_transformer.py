@@ -195,14 +195,14 @@ def transform_dmarc(raw: Dict, tree_walk: Optional[Dict] = None) -> Dict:
         )
     elif policy == "quarantine":
         explanation = (
-            f"The enforcing DMARC policy <strong>p=quarantine</strong> tells mail receivers "
+            f"The enforcing DMARC policy <strong>p=quarantine</strong> requests that mail receivers "
             f"to send messages to spam when neither SPF nor DKIM passes with an aligned domain. "
             f"Only one of SPF or DKIM needs to pass with alignment for the message to be delivered normally. "
             f"DKIM is the more resilient mechanism because it survives mail forwarding."
         )
     elif policy == "reject":
         explanation = (
-            f"The enforcing DMARC policy <strong>p=reject</strong> tells mail receivers "
+            f"The enforcing DMARC policy <strong>p=reject</strong> requests that mail receivers "
             f"to reject messages outright when neither SPF nor DKIM passes with an aligned domain. "
             f"Only one of SPF or DKIM needs to pass with alignment for the message to be delivered. "
             f"DKIM is the more resilient mechanism because it survives mail forwarding."
@@ -237,7 +237,8 @@ def transform_dmarc(raw: Dict, tree_walk: Optional[Dict] = None) -> Dict:
         elif inherited_policy == "none":
             details.append({"type": "warning", "text": f"Effective policy: none (inherited from {inherited_source})"})
 
-        details.append({"type": "info", "text": f"No record at _dmarc.{raw.get('domain', '')}. Policy found via tree walk"})
+        _detail_method = "DNS tree walk" if raw.get("inheritance_method") == "tree_walk" else "organizational domain lookup"
+        details.append({"type": "info", "text": f"No record at _dmarc.{raw.get('domain', '')}. Policy found via {_detail_method}"})
         details.append({"type": "info", "text": f"Applied tag: {applied_tag}= from {inherited_source}"})
 
         if tree_walk.get("org_domain"):
@@ -927,8 +928,8 @@ def transform_mta_sts(raw: Dict, domain: str, has_mx: bool = True) -> Dict:
         sts_id = datetime.now(timezone.utc).strftime('%Y%m%d')
         return {
             "name": "MTA-STS",
-            "status": "fail",
-            "pill_label": "Missing",
+            "status": "warn",
+            "pill_label": "Not configured",
             "verdict": "No MTA-STS record found",
             "record": None,
             "explanation": (
