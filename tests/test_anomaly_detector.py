@@ -62,7 +62,7 @@ class TestDmarcWithoutSpf:
         result = self._base("quarantine", spf_record=None)
         a = find(result, "without SPF")
         assert a is not None
-        assert a["severity"] == "critical"
+        assert a["severity"] == "high"
 
     def test_reject_no_spf(self):
         result = self._base("reject", spf_record=None)

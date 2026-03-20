@@ -521,9 +521,9 @@ class DKIMValidator:
                 self.issues.append(DKIMIssue(
                     Priority.P2_MEDIUM, "t",
                     "Testing mode enabled (t=y)",
-                    "Receivers MUST treat t=y as if DKIM didn't exist. No spoofing protection.",
+                    "Receivers treat t=y signatures as unverified. This DKIM selector cannot contribute to DMARC alignment.",
                     fix="Remove t=y when DKIM signing is confirmed working.",
-                    impact="DKIM is effectively not enforced.",
+                    impact="DKIM from this selector does not count toward DMARC pass.",
                 ))
             if "s" in flags:
                 self.issues.append(DKIMIssue(

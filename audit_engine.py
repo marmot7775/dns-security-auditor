@@ -2594,19 +2594,6 @@ def _raw_check_blacklist(domain: str, raw_results: Dict[str, Any]) -> Dict[str, 
     tier1_listings = []
     tier2_listings = []
 
-    for ip_result in result["ip_results"]:
-        for listing in ip_result["listings"]:
-            if listing.get("listed"):
-                total_listings += 1
-                # Determine tier
-                for list_name, _, tier, delist_url in IP_LISTS:
-                    if list_name == listing["list"]:
-                        if tier == 1:
-                            tier1_listings.append(f"{ip_result['ip']} on {listing['list']}")
-                        else:
-                            tier2_listings.append(f"{ip_result['ip']} on {listing['list']}")
-                        break
-
     for dr in result["domain_results"]:
         if dr.get("listed"):
             total_listings += 1
