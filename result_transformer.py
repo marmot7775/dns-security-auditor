@@ -422,21 +422,22 @@ def transform_spf(raw: Dict, has_mx: bool = True) -> Dict:
 
         if all_mech == "-all":
             explanation = (
-                "SPF record ends with <strong>-all</strong> (hardfail). "
-                "This declares that no other servers are authorized. In practice, most receivers "
-                "use SPF results as an input to DMARC evaluation and spam filtering rather than "
-                "rejecting on SPF alone."
+                "SPF record ends with <strong>-all</strong> (hardfail), declaring that servers "
+                "not listed in this record are not authorized to send mail for your domain. "
+                "SPF results feed into DMARC alignment evaluation -- enforcement decisions "
+                "are made at the DMARC policy layer, not by SPF alone."
             )
         elif all_mech == "~all":
             explanation = (
-                "SPF record ends with <strong>~all</strong> (softfail). "
-                "Email from unlisted servers is accepted but tagged as suspicious. "
-                "Most domains pair this with a DMARC policy that determines the final disposition."
+                "SPF record ends with <strong>~all</strong> (softfail), indicating that servers "
+                "not listed in this record are not authorized but should not be outright rejected. "
+                "Like -all, the SPF result feeds into DMARC alignment evaluation -- "
+                "enforcement decisions are made at the DMARC policy layer."
             )
         elif all_mech == "?all":
             explanation = (
-                "SPF record uses <strong>?all</strong> (neutral), which provides essentially "
-                "no protection. Unauthorized senders are treated the same as authorized ones."
+                "SPF record uses <strong>?all</strong> (neutral). This makes no assertion about "
+                "unlisted servers -- the SPF result is effectively meaningless for DMARC alignment."
             )
         elif all_mech == "+all":
             explanation = (
@@ -489,7 +490,7 @@ def transform_spf(raw: Dict, has_mx: bool = True) -> Dict:
         if all_mech == "-all":
             details.append({"type": "good", "text": "-all (hardfail) -- declares no other servers are authorized"})
         elif all_mech == "~all":
-            details.append({"type": "good", "text": "~all (softfail). Unauthorized senders are flagged but mail is still delivered"})
+            details.append({"type": "good", "text": "~all (softfail) -- unlisted servers are not authorized"})
         elif all_mech == "?all":
             details.append({"type": "warning", "text": "Neutral (?all) provides no protection"})
         elif all_mech == "+all":
