@@ -230,6 +230,28 @@ main {
 .audit-input-section {
     padding-top: 3.5rem;
     padding-bottom: 2.25rem;
+    transition: padding 0.3s ease;
+}
+
+.audit-input-section.compact {
+    padding-top: 1rem;
+    padding-bottom: 0.75rem;
+}
+
+.audit-input-section.compact .audit-title,
+.audit-input-section.compact .audit-subtitle,
+.audit-input-section.compact .audit-trust,
+.audit-input-section.compact .scope-selector,
+.audit-input-section.compact .selector-toggle-row {
+    display: none;
+}
+
+.audit-input-section.compact .audit-input-card {
+    padding: 1rem 1.5rem;
+}
+
+.audit-input-section.compact .audit-input-card::before {
+    display: none;
 }
 
 .audit-input-card {

@@ -265,8 +265,11 @@ function renderResults(data) {
         hideLoading();
         resultsSection.style.display = 'block';
 
-        // Scroll results into view, with offset so grade/resilience is visible
-        const yOffset = -20;
+        // Compact the input section so results are visible above the fold
+        document.querySelector('.audit-input-section')?.classList.add('compact');
+
+        // Scroll to top of results
+        const yOffset = -10;
         const y = resultsSection.getBoundingClientRect().top + window.pageYOffset + yOffset;
         window.scrollTo({ top: y, behavior: 'smooth' });
 

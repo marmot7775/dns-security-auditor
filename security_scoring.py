@@ -312,9 +312,9 @@ class EmailSecurityScorer:
         found_selectors = dkim.get('found_selectors', [])
         if not found_selectors:
             # DKIM selectors are private and cannot be enumerated from the outside.
-            # Not finding keys does not mean they don't exist. Give near-full credit
-            # since we cannot penalize for something we cannot verify.
-            return 12, {'reason': 'DKIM selectors are not publicly enumerable. Cannot determine status.', 'impact': 'UNKNOWN'}
+            # Not finding keys does not mean they don't exist. Full credit given
+            # because we cannot penalize for something we cannot verify.
+            return 15, {'reason': 'DKIM selectors are not publicly enumerable. Cannot determine status.', 'impact': 'UNKNOWN'}
 
         # Has at least one key: +6 points
         score += 6
