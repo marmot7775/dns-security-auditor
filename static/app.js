@@ -1183,19 +1183,30 @@ function renderReportChain(rc) {
 function renderSpfTree(tree) {
     if (!tree || !tree.root) return '';
 
-    const budgetLabel = tree.over_limit
-        ? `${tree.total_lookups} / ${tree.limit} lookups (over limit)`
-        : `${tree.total_lookups} / ${tree.limit} lookups`;
-    const budgetClass = tree.over_limit ? 'se-counter exceeded' : 'se-counter';
+    const used = tree.total_lookups;
+    const limit = tree.limit || 10;
+    const pct = Math.min((used / limit) * 100, 100);
+    const barClass = used > limit ? 'st-bar-over' : used >= 8 ? 'st-bar-warn' : 'st-bar-ok';
+    const statusLabel = used > limit ? 'OVER LIMIT' : used >= 8 ? 'NEAR LIMIT' : '';
 
     let html = `
         <div class="spf-tree st-animated">
             <div class="se-header-row">
-                <div class="se-header">SPF Include Tree</div>
-                <a class="tw-spec-badge" href="https://datatracker.ietf.org/doc/html/rfc7208"
-                   target="_blank" rel="noopener">rfc7208</a>
-                <span class="${budgetClass}">${budgetLabel}</span>
-            </div>`;
+                <div class="se-header">SPF Lookup Budget</div>
+                <a class="tw-spec-badge" href="https://datatracker.ietf.org/doc/html/rfc7208#section-4.6.4"
+                   target="_blank" rel="noopener">RFC 7208 &sect;4.6.4</a>
+            </div>
+            <div class="st-budget">
+                <div class="st-budget-label">
+                    <span><strong>${used}</strong> of <strong>${limit}</strong> DNS lookups used</span>
+                    ${statusLabel ? `<span class="st-budget-status ${barClass}">${statusLabel}</span>` : ''}
+                </div>
+                <div class="st-budget-track">
+                    <div class="st-budget-fill ${barClass}" style="width:${pct}%"></div>
+                </div>
+                <div class="st-budget-note">RFC 7208 limits SPF to 10 DNS-querying mechanisms (include, a, mx, redirect, exists). Exceeding this causes a PermError.</div>
+            </div>
+            <div class="st-tree-label">Include hierarchy -- each include costs 1 lookup plus any nested lookups</div>`;
 
     html += renderTreeNode(tree.root, tree.total_lookups, true);
 
@@ -1218,13 +1229,19 @@ function renderTreeNode(node, totalLookups, isRoot) {
         vendorHtml = `<span class="se-vendor-badge ${catClass}">${escapeHtml(node.vendor)}</span>`;
     }
 
+    // Lookup cost -- prominent, before domain name
     let costHtml = '';
-    if (node.subtree_lookups > 0) {
-        costHtml = `<span class="st-cost ${costClass}">${node.subtree_lookups} lookup${node.subtree_lookups > 1 ? 's' : ''}</span>`;
+    if (isRoot) {
+        // Root shows total
+        costHtml = `<span class="st-cost st-cost-root">${node.lookups_here} direct</span>`;
+    } else if (node.subtree_lookups > 0) {
+        costHtml = `<span class="st-cost ${costClass}">${node.subtree_lookups + 1} lookup${node.subtree_lookups > 0 ? 's' : ''}</span>`;
+    } else {
+        costHtml = '<span class="st-cost st-cost-leaf">1 lookup</span>';
     }
 
     let html = `<details class="st-node"${openAttr}>`;
-    html += `<summary><span class="st-domain">${escapeHtml(node.domain)}</span> ${vendorHtml} ${costHtml}</summary>`;
+    html += `<summary>${costHtml} <span class="st-domain">${escapeHtml(node.domain)}</span> ${vendorHtml}</summary>`;
 
     // Record
     if (node.record) {
