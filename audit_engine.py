@@ -3266,9 +3266,19 @@ def _build_resilience_analysis(
     # -- DKIM mechanism status --
     found_selectors = raw_dkim.get("found_selectors") or []
     dkim_tested = "dkim" in raw_results
+    dkim_timed_out = any(
+        c.get("name") == "DKIM" and "timed out" in (c.get("verdict") or "").lower()
+        for c in checks
+    )
     if not dkim_tested:
         dkim_status = "missing"
         dkim_note = "DKIM check was not run in this audit scope."
+    elif dkim_timed_out:
+        dkim_status = "inconclusive"
+        dkim_note = (
+            "DKIM check timed out before completing. "
+            "DKIM may be configured with custom selectors. Cannot determine status."
+        )
     elif found_selectors:
         dkim_status = "detected"
         sel_names = [s.get("selector", "") for s in found_selectors if s.get("selector")]
@@ -3313,6 +3323,7 @@ def _build_resilience_analysis(
     # -- Derive resilience level and risk text --
     spf_functional = spf_status == "pass"
     dkim_functional = dkim_status == "detected"
+    dkim_inconclusive = dkim_status == "inconclusive"
     dmarc_enforcing = dmarc_status in ("quarantine", "reject")
 
     if dmarc_status == "missing":
@@ -3353,6 +3364,21 @@ def _build_resilience_analysis(
         risk = (
             "SPF is invalid (PermError). Authentication depends entirely on DKIM. "
             "If DKIM fails for any reason, this domain has no path to DMARC pass."
+        )
+    elif dkim_inconclusive and spf_functional and dmarc_enforcing:
+        level = "moderate"
+        summary = "DKIM check was inconclusive (timed out). SPF is functional and DMARC is enforcing."
+        risk = (
+            "DKIM status could not be determined (check timed out). "
+            "If DKIM is configured, resilience is likely high. "
+            "Verify DKIM signing in your mail provider's admin console."
+        )
+    elif dkim_inconclusive and spf_functional:
+        level = "moderate"
+        summary = "DKIM check was inconclusive (timed out). SPF is functional but DMARC is not enforcing."
+        risk = (
+            "DKIM status could not be determined. "
+            "Verify DKIM signing in your mail provider's admin console."
         )
     elif not dkim_functional and spf_functional:
         level = "moderate"

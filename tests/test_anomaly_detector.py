@@ -101,7 +101,7 @@ class TestDmarcWithoutDkim:
         raw = {
             "dmarc": {"policy": policy, "record": "v=DMARC1; p={}".format(policy)},
             "spf": {"record": "v=spf1 -all"},
-            "dkim": {"found_selectors": keys},
+            "dkim": {"found_selectors": keys, "tested_count": 47},
         }
         return detect_anomalies(raw, {}, has_mx=has_mx)
 
