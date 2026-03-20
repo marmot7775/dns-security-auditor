@@ -299,3 +299,344 @@ def build_dmarc_evaluation(raw_dmarc: Dict, raw_spf: Dict,
         "disposition": disposition,
         "explanation": explanation,
     }
+
+
+# ============================================================
+# SPF Include Tree Visualization
+# ============================================================
+
+def _build_tree_node(node: Dict, depth: int, total_lookups: int) -> Optional[Dict]:
+    """Recursively build a tree node for the SPF include tree visualization."""
+    if not node:
+        return None
+
+    domain = node.get("domain", "")
+    record = node.get("record")
+    mechanisms = node.get("mechanisms", [])
+    children = node.get("children", [])
+    lookups_here = node.get("lookups_here", 0)
+    subtree_total = node.get("total", 0)
+
+    # Vendor match (depth 0-1 only)
+    vendor, vendor_category = (None, None)
+    if depth <= 1:
+        vendor, vendor_category = _match_vendor(domain)
+
+    # Collect leaf IPs
+    ips = []
+    for mech in mechanisms:
+        if mech["type"] == "no_lookup":
+            raw = mech.get("raw", "")
+            if raw.startswith(("ip4:", "ip6:", "+ip4:", "+ip6:")):
+                # Strip qualifier
+                clean = raw.lstrip("+-~?")
+                ips.append(clean)
+
+    # Terminal mechanism
+    terminal = None
+    for mech in mechanisms:
+        if mech["type"] == "no_lookup":
+            raw = mech.get("raw", "").lower().lstrip("+-~?")
+            if raw == "all":
+                qualifier = mech.get("raw", "+all")[0] if mech.get("raw", "") and mech["raw"][0] in "+-~?" else "+"
+                terminal = qualifier + "all"
+
+    # Recurse into children
+    child_idx = 0
+    child_nodes = []
+    for mech in mechanisms:
+        if mech["type"] in ("include", "redirect"):
+            if child_idx < len(children):
+                child_node = _build_tree_node(children[child_idx], depth + 1, total_lookups)
+                if child_node:
+                    child_nodes.append(child_node)
+                child_idx += 1
+
+    result = {
+        "domain": domain,
+        "record": record,
+        "lookups_here": lookups_here,
+        "subtree_lookups": subtree_total,
+        "vendor": vendor,
+        "vendor_category": vendor_category,
+        "ips": ips if ips else None,
+        "children": child_nodes,
+        "terminal": terminal,
+        "depth": depth,
+    }
+
+    return result
+
+
+def build_spf_tree_viz(spf_recursive_result: Dict) -> Optional[Dict]:
+    """
+    Build a hierarchical SPF include tree from existing recursive lookup data.
+
+    Args:
+        spf_recursive_result: The full result from count_spf_lookups()
+
+    Returns:
+        Tree viz dict, or None on error
+    """
+    if not spf_recursive_result:
+        return None
+
+    tree = spf_recursive_result.get("tree")
+    if not tree:
+        return None
+
+    total_lookups = spf_recursive_result.get("total_lookups", 0)
+    limit = 10
+
+    root = _build_tree_node(tree, 0, total_lookups)
+    if not root:
+        return None
+
+    return {
+        "domain": spf_recursive_result.get("domain", ""),
+        "record": tree.get("record"),
+        "total_lookups": total_lookups,
+        "limit": limit,
+        "over_limit": total_lookups > limit,
+        "root": root,
+    }
+
+
+# ============================================================
+# DMARC Migration Roadmap
+# ============================================================
+
+def build_dmarc_roadmap(raw_dmarc: Dict, raw_spf: Dict, raw_dkim: Dict,
+                        tree_walk: Optional[Dict], has_mx: bool,
+                        is_defensive: bool,
+                        report_auth: Optional[Dict] = None) -> Optional[Dict]:
+    """
+    Build a personalized DMARC migration roadmap showing the path to p=reject.
+
+    Returns None for defensive DNS domains (no roadmap needed).
+    """
+    if is_defensive:
+        return None
+
+    if not raw_dmarc:
+        return None
+
+    # --- Detect current stage ---
+    record = raw_dmarc.get("record")
+    policy = (raw_dmarc.get("policy") or "").lower()
+    pct = raw_dmarc.get("pct")
+    if pct is None:
+        pct = 100
+    rua = raw_dmarc.get("rua")
+
+    inherited = (
+        not record
+        and tree_walk
+        and tree_walk.get("policy_source")
+        and tree_walk.get("is_subdomain")
+    )
+
+    if inherited:
+        inherited_policy = (tree_walk.get("effective_policy") or "").lower()
+        current_stage = "inherited"
+    elif not record:
+        current_stage = "none"
+    elif policy == "none":
+        current_stage = "monitor"
+    elif policy == "quarantine":
+        if pct < 100:
+            current_stage = "partial_quarantine"
+        else:
+            current_stage = "quarantine"
+    elif policy == "reject":
+        if pct < 100:
+            current_stage = "partial_reject"
+        else:
+            current_stage = "full_reject"
+    else:
+        current_stage = "none"
+
+    stage_labels = {
+        "none": "No DMARC",
+        "inherited": "Inherited policy",
+        "monitor": "Monitoring (p=none)",
+        "partial_quarantine": f"Quarantine (pct={pct}%)",
+        "quarantine": "Quarantine (p=quarantine)",
+        "partial_reject": f"Reject (pct={pct}%)",
+        "full_reject": "Full Reject (p=reject)",
+    }
+
+    # --- Gather prerequisites ---
+    has_spf = bool(raw_spf.get("record"))
+    spf_lookup_count = raw_spf.get("lookup_count", 0)
+    all_mech = (raw_spf.get("all_mechanism") or "").lower()
+    spf_valid = has_spf and spf_lookup_count <= 10 and all_mech != "+all"
+    has_dkim = bool(raw_dkim.get("found_selectors"))
+    has_rua = bool(rua)
+
+    # Check rua authorization from report_auth data
+    rua_authorized = True
+    if report_auth and report_auth.get("report_destinations"):
+        rua_dests = [d for d in report_auth["report_destinations"] if d["type"] == "rua"]
+        if rua_dests:
+            rua_authorized = all(d.get("authorized") is not False for d in rua_dests)
+
+    domain = raw_dmarc.get("domain", "")
+    rua_addr = f"mailto:dmarc-reports@{domain}" if not rua else rua.split(",")[0].strip()
+
+    # --- Build 7 steps ---
+    steps = []
+
+    # Step 1: Publish SPF
+    step1_complete = has_spf and spf_valid
+    steps.append({
+        "stage": 1,
+        "title": "Publish SPF record",
+        "description": "Define which servers are authorized to send email for your domain.",
+        "status": "complete" if step1_complete else "current",
+        "dns_record": f"v=spf1 include:_spf.google.com -all" if not has_spf else None,
+        "prerequisites": None,
+        "warnings": [f"SPF has {spf_lookup_count} lookups (limit 10)"] if has_spf and spf_lookup_count > 10 else None,
+        "estimated_duration": "Immediate",
+    })
+
+    # Step 2: Configure DKIM
+    step2_complete = has_dkim
+    step2_status = "complete" if step2_complete else ("current" if step1_complete else "upcoming")
+    steps.append({
+        "stage": 2,
+        "title": "Configure DKIM signing",
+        "description": "Enable DKIM so outgoing mail carries a cryptographic signature your domain can verify.",
+        "status": step2_status,
+        "dns_record": None,  # Provider-specific
+        "prerequisites": None,
+        "warnings": None,
+        "estimated_duration": "Depends on email provider",
+    })
+
+    # Step 3: Publish DMARC p=none with rua
+    step3_complete = bool(record) and has_rua
+    if inherited:
+        step3_complete = False
+    step3_blocked = not step1_complete
+    step3_status = (
+        "complete" if step3_complete
+        else "blocked" if step3_blocked
+        else "current" if step1_complete
+        else "upcoming"
+    )
+    steps.append({
+        "stage": 3,
+        "title": "Publish DMARC with p=none and reporting",
+        "description": "Start collecting aggregate reports to see who sends email as your domain.",
+        "status": step3_status,
+        "dns_record": f"v=DMARC1; p=none; rua={rua_addr}; fo=1" if not step3_complete else None,
+        "prerequisites": ["Publish SPF record first"] if step3_blocked else None,
+        "warnings": None,
+        "estimated_duration": "Immediate",
+    })
+
+    # Step 4: Monitor reports
+    step4_complete = has_rua and rua_authorized and step3_complete
+    step4_blocked = not step3_complete or not has_rua
+    step4_status = (
+        "complete" if step4_complete
+        else "blocked" if step4_blocked
+        else "current" if step3_complete
+        else "upcoming"
+    )
+    steps.append({
+        "stage": 4,
+        "title": "Monitor aggregate reports (2-4 weeks)",
+        "description": "Review reports to identify all legitimate senders and ensure they pass SPF/DKIM.",
+        "status": step4_status,
+        "dns_record": None,
+        "prerequisites": ["Configure rua reporting first"] if not has_rua and not step4_blocked else (["Publish DMARC record first"] if step4_blocked else None),
+        "warnings": (
+            ["Report destination not authorized -- reports will be dropped"]
+            if has_rua and not rua_authorized else None
+        ),
+        "estimated_duration": "2-4 weeks",
+    })
+
+    # Step 5: p=quarantine pct=25
+    step5_complete = policy in ("quarantine", "reject") or (policy == "quarantine" and pct >= 25)
+    if current_stage in ("quarantine", "partial_reject", "full_reject"):
+        step5_complete = True
+    step5_blocked = not step4_complete or not has_dkim
+    step5_status = (
+        "complete" if step5_complete
+        else "blocked" if step5_blocked
+        else "current" if step4_complete
+        else "upcoming"
+    )
+    blockers_5 = []
+    if not has_dkim and not step5_complete:
+        blockers_5.append("Configure DKIM signing first")
+    if not step4_complete and not step5_complete:
+        blockers_5.append("Complete report monitoring first")
+    steps.append({
+        "stage": 5,
+        "title": "Move to p=quarantine (pct=25)",
+        "description": "Start quarantining 25% of messages that fail authentication.",
+        "status": step5_status,
+        "dns_record": f"v=DMARC1; p=quarantine; pct=25; rua={rua_addr}; fo=1" if not step5_complete else None,
+        "prerequisites": blockers_5 if blockers_5 else None,
+        "warnings": None,
+        "estimated_duration": "1-2 weeks",
+    })
+
+    # Step 6: p=quarantine pct=100
+    step6_complete = (policy == "quarantine" and pct >= 100) or policy == "reject"
+    if current_stage in ("partial_reject", "full_reject"):
+        step6_complete = True
+    step6_status = (
+        "complete" if step6_complete
+        else "current" if step5_complete and not step6_complete
+        else "upcoming"
+    )
+    steps.append({
+        "stage": 6,
+        "title": "Increase to p=quarantine (pct=100)",
+        "description": "Quarantine all messages that fail authentication.",
+        "status": step6_status,
+        "dns_record": f"v=DMARC1; p=quarantine; rua={rua_addr}; fo=1" if not step6_complete else None,
+        "prerequisites": None,
+        "warnings": None,
+        "estimated_duration": "1-2 weeks",
+    })
+
+    # Step 7: p=reject
+    step7_complete = current_stage == "full_reject"
+    step7_status = (
+        "complete" if step7_complete
+        else "current" if step6_complete and not step7_complete
+        else "upcoming"
+    )
+    steps.append({
+        "stage": 7,
+        "title": "Move to p=reject",
+        "description": "Block all messages that fail authentication. This is the gold standard.",
+        "status": step7_status,
+        "dns_record": f"v=DMARC1; p=reject; rua={rua_addr}; fo=1" if not step7_complete else None,
+        "prerequisites": None,
+        "warnings": None,
+        "estimated_duration": "Immediate",
+    })
+
+    # --- Progress percentage ---
+    completed_count = sum(1 for s in steps if s["status"] == "complete")
+    progress_pct = round((completed_count / len(steps)) * 100)
+
+    return {
+        "current_stage": current_stage,
+        "current_stage_label": stage_labels.get(current_stage, current_stage),
+        "progress_pct": progress_pct,
+        "steps": steps,
+        "prerequisites_met": {
+            "spf": step1_complete,
+            "dkim": has_dkim,
+            "rua": has_rua,
+            "rua_authorized": rua_authorized,
+        },
+    }

@@ -131,6 +131,156 @@ def _lookup_txt(name: str) -> List[str]:
 
 
 # ============================================================
+# DMARC Report Service Map
+# ============================================================
+
+DMARC_REPORT_SERVICES = {
+    "dmarcian.com": "dmarcian",
+    "ag.dmarcian.com": "dmarcian",
+    "valimail.com": "Valimail",
+    "agari.com": "Agari",
+    "easydmarc.com": "EasyDMARC",
+    "postmarkapp.com": "Postmark",
+    "dmarc.postmarkapp.com": "Postmark",
+    "report-uri.com": "Report URI",
+    "uriports.com": "URIports",
+    "ondmarc.com": "Red Sift OnDMARC",
+    "dmarc.service.gov.uk": "UK NCSC Mail Check",
+}
+
+
+# ============================================================
+# DMARC Report Authorization Check (RFC 7489 S7.1)
+# ============================================================
+
+def _check_report_authorization(domain: str, raw_dmarc: Dict, tree_walk_result: Optional[Dict] = None) -> Optional[Dict]:
+    """Check whether external DMARC report destinations are authorized.
+
+    RFC 7489 S7.1: When rua/ruf points to an external domain, that domain
+    must publish a TXT record at {audited}._report._dmarc.{dest} containing
+    'v=DMARC1' to authorize report delivery. Without this, reports are
+    silently dropped.
+    """
+    resolver = _get_resolver()
+    destinations = []
+    issues = []
+    ruf_present = False
+
+    # Determine org domain for external check
+    org_domain = None
+    if tree_walk_result and tree_walk_result.get("org_domain"):
+        org_domain = tree_walk_result["org_domain"].lower().rstrip(".")
+    else:
+        # Simple 2-label suffix
+        parts = domain.lower().rstrip(".").split(".")
+        org_domain = ".".join(parts[-2:]) if len(parts) >= 2 else domain.lower()
+
+    for tag_type in ("rua", "ruf"):
+        raw_val = raw_dmarc.get(tag_type)
+        if not raw_val:
+            continue
+        if tag_type == "ruf":
+            ruf_present = True
+
+        addrs = [a.strip() for a in raw_val.split(",") if a.strip()]
+        for addr in addrs:
+            email = addr.removeprefix("mailto:").removeprefix("MAILTO:")
+            if "@" not in email:
+                continue
+            dest_domain = email.split("@", 1)[1].lower().rstrip(".")
+
+            # External?
+            is_external = dest_domain != org_domain and not dest_domain.endswith("." + org_domain)
+
+            dest_info = {
+                "type": tag_type,
+                "address": email,
+                "domain": dest_domain,
+                "is_external": is_external,
+                "authorization_record": None,
+                "authorized": None,
+                "has_mx": None,
+                "service": None,
+            }
+
+            # Match against known services
+            for svc_domain, svc_name in DMARC_REPORT_SERVICES.items():
+                if dest_domain == svc_domain or dest_domain.endswith("." + svc_domain):
+                    dest_info["service"] = svc_name
+                    break
+
+            if is_external:
+                # Check authorization record
+                auth_fqdn = f"{domain}._report._dmarc.{dest_domain}"
+                dest_info["authorization_record"] = auth_fqdn
+                try:
+                    txt_records = _lookup_txt(auth_fqdn)
+                    authorized = any(
+                        r.strip().lower().startswith("v=dmarc")
+                        for r in txt_records
+                    )
+                    dest_info["authorized"] = authorized
+                except Exception:
+                    dest_info["authorized"] = False
+
+                if not dest_info["authorized"]:
+                    issues.append({
+                        "severity": "error",
+                        "issue": f"External report destination not authorized: {email}",
+                        "plain_english": (
+                            f"Reports sent to {email} will be silently dropped. "
+                            f"RFC 7489 S7.1 requires {dest_domain} to publish a TXT record at "
+                            f"{auth_fqdn} containing 'v=DMARC1' to authorize report delivery."
+                        ),
+                        "fix": (
+                            f"Ask the administrator of {dest_domain} to add a TXT record at "
+                            f"{auth_fqdn} with value: v=DMARC1"
+                        ),
+                    })
+            else:
+                dest_info["authorized"] = None  # same domain, no auth needed
+
+            # Check MX for destination domain
+            try:
+                resolver.resolve(dest_domain, "MX")
+                dest_info["has_mx"] = True
+            except Exception:
+                dest_info["has_mx"] = False
+                if is_external:
+                    issues.append({
+                        "severity": "warning",
+                        "issue": f"Report destination has no MX: {dest_domain}",
+                        "plain_english": (
+                            f"The domain {dest_domain} has no MX records, meaning it may not be "
+                            f"able to receive DMARC aggregate reports sent to {email}."
+                        ),
+                        "fix": f"Verify that {dest_domain} can receive email, or use a different report address.",
+                    })
+
+            destinations.append(dest_info)
+
+    if ruf_present:
+        issues.append({
+            "severity": "info",
+            "issue": "Forensic reporting (ruf) configured",
+            "plain_english": (
+                "Forensic reporting (ruf) is configured. Note that most major providers "
+                "(Google, Microsoft, Yahoo) no longer send forensic reports due to privacy concerns."
+            ),
+            "fix": "No action needed. ruf is optional and rarely honored by large providers.",
+        })
+
+    if not destinations:
+        return None
+
+    return {
+        "report_destinations": destinations,
+        "report_auth_issues": issues,
+        "ruf_provider_note": ruf_present,
+    }
+
+
+# ============================================================
 # Individual Raw Checks (DMARC and SPF written fresh here)
 # ============================================================
 
@@ -2549,6 +2699,23 @@ def run_full_audit(domain: str, dkim_selector: Optional[str] = None,
                 checks.append(_error_card("DMARC", e))
         _notify("DMARC")
 
+    # --- DMARC Report Authorization (RFC 7489 S7.1) ---
+    report_auth = None
+    raw_dmarc = raw_results.get("dmarc")
+    if raw_dmarc and raw_dmarc.get("record") and (raw_dmarc.get("rua") or raw_dmarc.get("ruf")):
+        try:
+            report_auth = _run_with_timeout(
+                _check_report_authorization, domain, raw_dmarc,
+                tree_walk_result, timeout=10,
+            )
+            if report_auth:
+                raw_dmarc["report_destinations"] = report_auth["report_destinations"]
+                raw_dmarc["report_auth_issues"] = report_auth.get("report_auth_issues", [])
+                raw_dmarc["ruf_provider_note"] = report_auth.get("ruf_provider_note", False)
+                raw_dmarc["issues"].extend(report_auth.get("report_auth_issues", []))
+        except Exception:
+            pass
+
     # --- 2. MX Records (run before SPF so we know if domain sends mail) ---
     if needs_mx:
         try:
@@ -2598,6 +2765,16 @@ def run_full_audit(domain: str, dkim_selector: Optional[str] = None,
             )
         except Exception:
             pass  # never block audit
+
+    # --- SPF Include Tree (post-processor, zero DNS queries) ---
+    spf_tree_viz = None
+    raw_spf = raw_results.get("spf")
+    if raw_spf and raw_spf.get("spf_recursive"):
+        try:
+            from spf_execution_engine import build_spf_tree_viz
+            spf_tree_viz = build_spf_tree_viz(raw_spf["spf_recursive"])
+        except Exception:
+            pass
 
     # --- 4. MTA-STS ---
     if _should_include("mta_sts", scope_set):
@@ -2742,6 +2919,33 @@ def run_full_audit(domain: str, dkim_selector: Optional[str] = None,
             checks.insert(dkim_pos, _error_card("DKIM", e))
         _notify("DKIM")
 
+    # --- Detect Defensive DNS pattern (moved early -- roadmap needs it) ---
+    defensive_signals = []
+    is_defensive = False
+    if "dmarc" in raw_results and "mx" in raw_results and "spf" in raw_results:
+        _raw_mx = raw_results["mx"]
+        _raw_spf = raw_results["spf"]
+        _raw_dmarc = raw_results["dmarc"]
+
+        _mx_records = _raw_mx.get("records", []) or []
+        _has_null_mx = any("0 ." in r for r in _mx_records) if _mx_records else False
+        _has_no_mx = not _mx_records
+
+        _spf_record = (_raw_spf.get("record") or "").strip().lower()
+        _has_null_spf = _spf_record in ("v=spf1 -all", "v=spf1 ~all")
+
+        _dmarc_policy = (_raw_dmarc.get("policy") or "").lower()
+        _has_dmarc_reject = _dmarc_policy == "reject"
+
+        if _has_null_mx or _has_no_mx:
+            defensive_signals.append("null_mx")
+        if _has_null_spf:
+            defensive_signals.append("null_spf")
+        if _has_dmarc_reject:
+            defensive_signals.append("dmarc_reject")
+
+        is_defensive = len(defensive_signals) >= 2
+
     # --- DMARC Evaluation Summary (post-processor, zero DNS queries) ---
     dmarc_eval = None
     if raw_results.get("dmarc"):
@@ -2862,6 +3066,23 @@ def run_full_audit(domain: str, dkim_selector: Optional[str] = None,
                                 card["status"] = _xc_downgrade
                         break
 
+    # --- DMARC Migration Roadmap (post-processor, zero DNS queries) ---
+    dmarc_roadmap = None
+    if raw_results.get("dmarc"):
+        try:
+            from spf_execution_engine import build_dmarc_roadmap
+            dmarc_roadmap = build_dmarc_roadmap(
+                raw_results.get("dmarc", {}),
+                raw_results.get("spf", {}),
+                raw_results.get("dkim", {}),
+                tree_walk_result,
+                has_mx,
+                is_defensive,
+                report_auth=report_auth,
+            )
+        except Exception:
+            pass
+
     # --- 12. Certificate Transparency ---
     if _should_include("ct", scope_set):
         try:
@@ -2914,34 +3135,6 @@ def run_full_audit(domain: str, dkim_selector: Optional[str] = None,
     priority_fixes = _build_priority_fixes(checks, score_result, has_mx=has_mx)
     _notify("Scoring")
 
-    # --- Detect Defensive DNS pattern ---
-    # Only detect when all three signals are available
-    defensive_signals = []
-    is_defensive = False
-    if "dmarc" in raw_results and "mx" in raw_results and "spf" in raw_results:
-        _raw_mx = raw_results["mx"]
-        _raw_spf = raw_results["spf"]
-        _raw_dmarc = raw_results["dmarc"]
-
-        _mx_records = _raw_mx.get("records", []) or []
-        _has_null_mx = any("0 ." in r for r in _mx_records) if _mx_records else False
-        _has_no_mx = not _mx_records
-
-        _spf_record = (_raw_spf.get("record") or "").strip().lower()
-        _has_null_spf = _spf_record in ("v=spf1 -all", "v=spf1 ~all")
-
-        _dmarc_policy = (_raw_dmarc.get("policy") or "").lower()
-        _has_dmarc_reject = _dmarc_policy == "reject"
-
-        if _has_null_mx or _has_no_mx:
-            defensive_signals.append("null_mx")
-        if _has_null_spf:
-            defensive_signals.append("null_spf")
-        if _has_dmarc_reject:
-            defensive_signals.append("dmarc_reject")
-
-        is_defensive = len(defensive_signals) >= 2
-
     # --- Assemble final response ---
     elapsed = (datetime.now(timezone.utc) - start_time).total_seconds()
 
@@ -2959,6 +3152,9 @@ def run_full_audit(domain: str, dkim_selector: Optional[str] = None,
         "tree_walk": tree_walk_result,
         "spf_execution": spf_execution,
         "dmarc_eval": dmarc_eval,
+        "report_chain": report_auth,
+        "spf_tree": spf_tree_viz,
+        "dmarc_roadmap": dmarc_roadmap,
         "scope": scope or "complete",
         "defensive_dns": is_defensive,
         "defensive_signals": defensive_signals,
