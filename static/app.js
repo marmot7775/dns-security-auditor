@@ -592,19 +592,6 @@ function createResultCard(check, index) {
         });
     });
 
-    // Details toggle (progressive disclosure)
-    card.querySelectorAll('.details-toggle').forEach(btn => {
-        btn.addEventListener('click', (e) => {
-            e.stopPropagation();
-            const expandable = btn.nextElementSibling;
-            const isOpen = expandable.classList.toggle('open');
-            btn.setAttribute('aria-expanded', isOpen ? 'true' : 'false');
-            btn.textContent = isOpen
-                ? btn.textContent.replace('Show', 'Hide')
-                : btn.textContent.replace('Hide', 'Show');
-        });
-    });
-
     return card;
 }
 
@@ -722,35 +709,21 @@ function renderCheckBody(check) {
         });
     }
 
-    // Critical details (always visible)
-    criticalDetails.forEach(d => {
+    // All details -- flat layout, sorted by severity
+    const allDetails = [...criticalDetails, ...infoDetails];
+    allDetails.forEach(d => {
         html += _renderDetailItem(d);
     });
 
-    // Expandable section: info details + raw record
-    const hasExpandable = infoDetails.length > 0 || check.record;
-    if (hasExpandable) {
-        const toggleLabel = check.record ? 'Show raw record & details' : 'Show details';
-        html += `<button class="details-toggle" aria-expanded="false">${toggleLabel}</button>`;
-        html += '<div class="details-expandable">';
-
-        // Info/good details
-        infoDetails.forEach(d => {
-            html += _renderDetailItem(d);
-        });
-
-        // Raw record with syntax highlighting (moved below info details)
-        if (check.record) {
-            const highlighted = highlightRecord(check.record, check.name);
-            html += `
-                <div class="record-block">
-                    <span class="record-text">${highlighted}</span>
-                    <button class="copy-btn">Copy</button>
-                </div>
-            `;
-        }
-
-        html += '</div>';
+    // Raw record with syntax highlighting
+    if (check.record) {
+        const highlighted = highlightRecord(check.record, check.name);
+        html += `
+            <div class="record-block">
+                <span class="record-text">${highlighted}</span>
+                <button class="copy-btn">Copy</button>
+            </div>
+        `;
     }
 
     // SPF execution trace
@@ -841,8 +814,8 @@ function renderTreeWalkSimple(tw) {
         <div class="tree-walk tree-walk-simple tw-animated">
             <div class="tw-header-row">
                 <div class="tree-walk-header">DMARC Policy Discovery (Tree Walk)</div>
-                <a class="tw-spec-badge" href="https://datatracker.ietf.org/doc/draft-ietf-dmarc-dmarcbis/"
-                   target="_blank" rel="noopener">dmarcbis</a>
+                <a class="tw-spec-badge" href="https://datatracker.ietf.org/doc/html/rfc9716"
+                   target="_blank" rel="noopener">RFC 9716</a>
             </div>
             <div class="tw-simple-body">
                 <span class="tw-simple-check">&#10003;</span>
@@ -852,7 +825,7 @@ function renderTreeWalkSimple(tw) {
                 Policy: <span class="tw-pill ${policyClass}">${policy}</span>
             </div>
             <div class="tw-footnote">
-                Under <a href="https://datatracker.ietf.org/doc/draft-ietf-dmarc-dmarcbis/" target="_blank" rel="noopener">dmarcbis</a>,
+                Under <a href="https://datatracker.ietf.org/doc/html/rfc9716" target="_blank" rel="noopener">RFC 9716</a>,
                 receivers walk up the DNS hierarchy to find an applicable DMARC policy when a domain lacks its own record.
                 This domain has a direct record, so the walk is not needed.
             </div>
@@ -860,7 +833,7 @@ function renderTreeWalkSimple(tw) {
 }
 
 function renderTreeWalkFull(tw) {
-    const specUrl = 'https://datatracker.ietf.org/doc/draft-ietf-dmarc-dmarcbis/';
+    const specUrl = 'https://datatracker.ietf.org/doc/html/rfc9716';
     const stepCount = tw.steps.length;
     // Each step lands 150ms after the previous; metadata appears after the last step
     const stepInterval = 0.15;            // seconds between steps
@@ -871,18 +844,18 @@ function renderTreeWalkFull(tw) {
         <div class="tree-walk tw-animated">
             <div class="tw-header-row">
                 <div class="tree-walk-header">DMARC Policy Discovery (Tree Walk)</div>
-                <a class="tw-spec-badge" href="${specUrl}" target="_blank" rel="noopener">dmarcbis</a>
+                <a class="tw-spec-badge" href="${specUrl}" target="_blank" rel="noopener">RFC 9716</a>
             </div>`;
 
     // Educational intro
     if (!tw.policy_source) {
         html += `<div class="tw-intro">This domain does not have its own DMARC record.
-            Under <a href="${specUrl}" target="_blank" rel="noopener">dmarcbis</a>,
+            Under <a href="${specUrl}" target="_blank" rel="noopener">RFC 9716</a>,
             receivers walk up the DNS hierarchy looking for an applicable policy.
             <strong>No policy was found.</strong></div>`;
     } else if (tw.is_subdomain) {
         html += `<div class="tw-intro">This domain does not have its own DMARC record.
-            Under <a href="${specUrl}" target="_blank" rel="noopener">dmarcbis</a>,
+            Under <a href="${specUrl}" target="_blank" rel="noopener">RFC 9716</a>,
             receivers walk up the DNS hierarchy to find an applicable policy.</div>`;
     }
 
@@ -962,7 +935,7 @@ function renderTreeWalkFull(tw) {
         if (tw.is_subdomain) {
             html += `<div class="tw-footnote" style="animation-delay:${metaDelay}s">
                 <strong>Note:</strong> Policy inheritance via tree walk is a
-                <a href="https://datatracker.ietf.org/doc/draft-ietf-dmarc-dmarcbis/" target="_blank" rel="noopener">DMARCbis</a>
+                <a href="https://datatracker.ietf.org/doc/html/rfc9716" target="_blank" rel="noopener">RFC 9716</a>
                 feature. Receivers still using RFC 7489 may not honor the inherited policy.
                 For the strongest protection, publish a dedicated DMARC record for this domain.
             </div>`;

@@ -297,17 +297,9 @@ def transform_dmarc(raw: Dict, tree_walk: Optional[Dict] = None) -> Dict:
             fix = None
     elif not record:
         fix = (
-            f"Publish a TXT record at <strong>_dmarc.{domain_name}</strong> starting with "
-            f"<strong>p=none</strong>.<br><br>"
-            f"The <strong>rua=</strong> tag specifies where aggregate reports are sent. You have two options:<br>"
-            f"<strong>1.</strong> Use a DMARC reporting service (Valimail, dmarcian, Postmark DMARC, Sendmarc, etc.) "
-            f"which provides a dashboard to visualize aggregate report data. The service gives you a "
-            f"<strong>mailto:</strong> address to use in rua.<br>"
-            f"<strong>2.</strong> Send reports to your own mailbox (e.g. <strong>rua=mailto:dmarc@{domain_name}</strong>). "
-            f"Reports arrive as compressed XML and need to be parsed to be useful.<br><br>"
-            f"Aggregate reports show which sources send mail using your domain and whether they "
-            f"pass SPF/DKIM alignment. Move to an enforcement policy only after you understand "
-            f"your sending ecosystem."
+            f"Publish a DMARC TXT record at <strong>_dmarc.{domain_name}</strong> with <strong>p=none</strong>. "
+            f"Requires an <strong>rua=</strong> reporting address -- either your own mailbox "
+            f"(reports arrive as compressed XML) or a DMARC reporting service that provides a dashboard."
         )
     elif raw.get("syntax_errors") or any(i.get("severity") == "error" for i in raw.get("issues", [])):
         # Prioritize syntax/error fixes over generic policy advice
@@ -330,17 +322,9 @@ def transform_dmarc(raw: Dict, tree_walk: Optional[Dict] = None) -> Dict:
                 display_record = step["record"]
                 break
 
-    # Fix records -- copy-paste DNS records for missing records only
-    # Policy upgrades (none -> reject) are intentionally excluded because
-    # they oversimplify a process that depends on mail volume and sender inventory.
-    fix_records = []
-    if not record and not inherited:
-        fix_records.append({
-            "type": "TXT",
-            "host": f"_dmarc.{domain_name}",
-            "value": "v=DMARC1; p=none; rua=mailto:<YOUR_REPORTING_ADDRESS>; fo=1",
-            "comment": "Replace <YOUR_REPORTING_ADDRESS> with your own mailbox or a reporting service address. Start at p=none to collect data before enforcing.",
-        })
+    # No copy-paste fix_records for DMARC -- requires choosing a reporting
+    # address and understanding the enforcement path.
+    fix_records = None
 
     return {
         "name": "DMARC",
@@ -351,7 +335,7 @@ def transform_dmarc(raw: Dict, tree_walk: Optional[Dict] = None) -> Dict:
         "explanation": explanation,
         "details": details,
         "fix": fix,
-        "fix_records": fix_records if fix_records else None,
+        "fix_records": fix_records,
     }
 
 
@@ -535,6 +519,12 @@ def transform_spf(raw: Dict, has_mx: bool = True) -> Dict:
             "Publish a null SPF record (<strong>v=spf1 -all</strong>) to explicitly declare "
             "that no IP addresses are authorized to send email for this domain."
         )
+    elif not record:
+        fix = (
+            "Publish an SPF TXT record listing the IP addresses and services authorized to send "
+            "email for your domain. Requires identifying all legitimate senders (mail server, ESP, "
+            "marketing platforms) and staying within the 10 DNS lookup limit."
+        )
     else:
         fix = _first_fix(raw.get("issues", []))
         if not fix and record:
@@ -567,13 +557,7 @@ def transform_spf(raw: Dict, has_mx: bool = True) -> Dict:
             "value": "v=spf1 -all",
             "comment": "Null SPF -- declares this domain does not send email",
         })
-    elif not record:
-        fix_records.append({
-            "type": "TXT",
-            "host": domain_name,
-            "value": "v=spf1 ~all",
-            "comment": "Placeholder that blocks all senders. Replace ~all with your authorized mail servers and includes before deploying.",
-        })
+    # No copy-paste for starter SPF -- user must identify their authorized senders first
 
     return {
         "name": "SPF",
@@ -772,9 +756,15 @@ def transform_mx(raw: Dict) -> Dict:
             "details": [_issue_to_detail(i) for i in raw.get("issues", [])],
             "fix": (
                 "If this domain should receive email, add an MX record pointing to your "
-                "mail server. If it is not meant to receive email, no action is required."
+                "mail server. If it is not meant to receive email, publish a null MX record "
+                "(RFC 7505) to explicitly declare that."
             ),
-            "fix_records": None,  # MX records depend on the user's mail infrastructure
+            "fix_records": [{
+                "type": "MX",
+                "host": raw.get("domain", ""),
+                "value": "0 .",
+                "comment": "Null MX (RFC 7505) -- declares this domain does not accept email",
+            }],
         }
 
     # Verdict — meaningful at a glance
@@ -892,17 +882,11 @@ def transform_mta_sts(raw: Dict, domain: str, has_mx: bool = True) -> Dict:
             ),
             "details": [_issue_to_detail(i) for i in raw.get("issues", [])],
             "fix": (
-                f"Consider implementing MTA-STS to enforce TLS for inbound email. "
-                f"Add a TXT record at <strong>_mta-sts.{domain}</strong> with value "
-                f"<strong>v=STSv1; id={sts_id}</strong> and host a policy "
-                f"file at <strong>https://mta-sts.{domain}/.well-known/mta-sts.txt</strong>"
+                f"MTA-STS requires a DNS TXT record at <strong>_mta-sts.{domain}</strong> and a "
+                f"policy file hosted at <strong>https://mta-sts.{domain}/.well-known/mta-sts.txt</strong>. "
+                f"The policy file specifies your MX hosts and the TLS enforcement mode."
             ),
-            "fix_records": [{
-                "type": "TXT",
-                "host": f"_mta-sts.{domain}",
-                "value": f"v=STSv1; id={sts_id}",
-                "comment": "Also requires a policy file at https://mta-sts.{domain}/.well-known/mta-sts.txt".format(domain=domain),
-            }],
+            "fix_records": None,
         }
 
     # Has record
@@ -996,16 +980,11 @@ def transform_tls_rpt(raw: Dict, domain: str, has_mx: bool = True) -> Dict:
             ),
             "details": [_issue_to_detail(i) for i in raw.get("issues", [])],
             "fix": (
-                f"Add a TLS-RPT record at <strong>_smtp._tls.{domain}</strong>. "
-                f"The <strong>rua=</strong> address receives JSON reports about TLS delivery failures. "
-                f"Use a mailbox you control or a reporting service that can parse TLS-RPT data."
+                f"Publish a TLS-RPT TXT record at <strong>_smtp._tls.{domain}</strong>. "
+                f"Requires a reporting address (<strong>rua=</strong>) that can receive JSON-formatted "
+                f"TLS failure reports -- either your own mailbox or a reporting service."
             ),
-            "fix_records": [{
-                "type": "TXT",
-                "host": f"_smtp._tls.{domain}",
-                "value": "v=TLSRPTv1; rua=mailto:<YOUR_REPORTING_ADDRESS>",
-                "comment": "Replace <YOUR_REPORTING_ADDRESS> with a mailbox or reporting service that can process TLS-RPT JSON reports.",
-            }],
+            "fix_records": None,
         }
 
     destinations = raw.get("report_destinations", [])
@@ -1089,17 +1068,11 @@ def transform_bimi(raw: Dict, domain: str, has_mx: bool = True) -> Dict:
                 {"type": "info", "text": "Gmail requires a Verified Mark Certificate (VMC); Apple Mail does not"},
             ],
             "fix": (
-                f"To display your brand logo in supporting mail clients, ensure DMARC is at "
-                f"p=quarantine or p=reject (with pct=100), then publish a BIMI record at "
-                f"<strong>default._bimi.{domain}</strong> pointing to an SVG Tiny P/S logo. "
-                f"A VMC is required for Gmail logo display but not for all clients."
+                f"BIMI requires DMARC at p=quarantine or p=reject, an SVG logo in Tiny P/S format "
+                f"hosted at a public URL, and a BIMI TXT record at <strong>default._bimi.{domain}</strong>. "
+                f"Gmail also requires a Verified Mark Certificate (VMC) from DigiCert or Entrust."
             ),
-            "fix_records": [{
-                "type": "TXT",
-                "host": f"default._bimi.{domain}",
-                "value": "v=BIMI1; l=https://example.com/logo.svg;",
-                "comment": "Replace URL with your SVG logo (Tiny P/S profile required). A VMC is required for Gmail display but not all clients.",
-            }],
+            "fix_records": None,
         }
 
     logo_url = raw.get("logo_url")
@@ -1299,25 +1272,12 @@ def transform_caa(raw: Dict, domain: str) -> Dict:
             ),
             "details": details,
             "fix": (
-                f"Add CAA records to restrict which CAs may issue certificates for your domain. "
-                f"Use the <code>issue</code> tag for your CA (for example, <code>letsencrypt.org</code>), "
-                f"<code>issuewild</code> to control wildcard issuance, and "
-                f"<code>iodef</code> to receive violation reports."
+                f"Publish CAA records specifying which Certificate Authorities may issue certificates "
+                f"for your domain. Requires knowing which CA(s) you use. Use <code>issue</code> to "
+                f"authorize your CA, <code>issuewild</code> for wildcard policy, and <code>iodef</code> "
+                f"to receive violation alerts."
             ),
-            "fix_records": [
-                {
-                    "type": "CAA",
-                    "host": domain,
-                    "value": '0 issue "letsencrypt.org"',
-                    "comment": "Replace letsencrypt.org with your Certificate Authority",
-                },
-                {
-                    "type": "CAA",
-                    "host": domain,
-                    "value": f'0 iodef "mailto:security@{domain}"',
-                    "comment": "Alerts you when an unauthorized CA attempts issuance",
-                },
-            ],
+            "fix_records": None,
         }
 
     # Has CAA records
@@ -1513,23 +1473,18 @@ def transform_dane(raw: Dict, domain: str) -> Dict:
 
     # Build example TLSA record using first MX host
     example_host = tlsa_records[0]["mx_host"] if tlsa_records else "mail.example.com"
-    fix = (
-        "Consider publishing DANE TLSA records for your MX hosts to add DNS-based certificate "
-        "verification for inbound email."
-    )
+    fix_parts = [
+        "DANE implementation requires multiple steps:<br>"
+        "<strong>1.</strong> DNSSEC must be enabled and validated for your domain.<br>"
+        "<strong>2.</strong> Generate a TLSA record containing the SHA-256 hash of your mail server's "
+        "TLS certificate (SPKI). The record goes at <strong>_25._tcp.&lt;mx-host&gt;</strong>.<br>"
+        "<strong>3.</strong> TLSA records must be updated every time you rotate your mail server's TLS certificate, "
+        "or use DANE-TA (usage 2) to pin the CA certificate instead."
+    ]
     if not dnssec_ok:
-        fix += " <strong>Note:</strong> DNSSEC must be enabled before DANE can take effect."
+        fix_parts.insert(0, "<strong>Prerequisite:</strong> DNSSEC is not enabled. DANE cannot function without it.<br><br>")
 
-    # Generate example TLSA fix record for the no-TLSA case
-    dane_fix_records = None
-    if tlsa_records:
-        example_host = tlsa_records[0]["mx_host"]
-        dane_fix_records = [{
-            "type": "TLSA",
-            "host": f"_25._tcp.{example_host}",
-            "value": "3 1 1 <SHA-256 hash of your mail server certificate SPKI>",
-            "comment": "Usage 3 (DANE-EE), Selector 1 (SPKI), Matching 1 (SHA-256). Generate hash with: openssl x509 -noout -pubkey -in cert.pem | openssl pkey -pubin -outform DER | openssl dgst -sha256",
-        }]
+    fix = "".join(fix_parts)
 
     return {
         "name": "DANE",
@@ -1545,7 +1500,7 @@ def transform_dane(raw: Dict, domain: str) -> Dict:
         ),
         "details": details,
         "fix": fix,
-        "fix_records": dane_fix_records,
+        "fix_records": None,
     }
 
 
