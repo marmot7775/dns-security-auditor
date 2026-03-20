@@ -571,13 +571,15 @@ class EmailSecurityScorer:
                     "🟢 LOW: Consider implementing MTA-STS and TLS-RPT to enforce TLS encryption for inbound email"
                 )
 
-        # DANE recommendation when MTA-STS exists but DANE doesn't
+        # DANE recommendation: only when DNSSEC is active (DANE requires DNSSEC)
         if has_mx:
             dane = audit_results.get('dane', {})
-            mta_sts = audit_results.get('mta_sts', {})
-            if not dane.get('configured') and (mta_sts.get('configured') or mta_sts.get('txt_record')):
+            dnssec = audit_results.get('dnssec', {})
+            dnssec_active = dnssec.get('has_dnssec') and dnssec.get('chain_valid')
+            if dnssec_active and not dane.get('configured'):
                 recommendations.append(
-                    "🟢 LOW: Consider adding DANE TLSA records to complement MTA-STS with DNS-based certificate verification"
+                    "🟢 LOW: DNSSEC is active, which enables DANE. Adding TLSA records provides "
+                    "DNS-based certificate verification for mail delivery"
                 )
 
         return recommendations[:5]
