@@ -186,7 +186,7 @@ def transform_dmarc(raw: Dict, tree_walk: Optional[Dict] = None) -> Dict:
         explanation = (
             f"Your DMARC policy is set to <strong>p=none</strong> (monitoring mode). "
             f"Your record is technically valid, but it provides no active protection. "
-            f"It tells receivers to deliver all mail normally, even when authentication fails. "
+            f"Receivers deliver all mail normally, even when authentication fails. "
             f"While p=none is a necessary starting point for collecting aggregate report data, "
             f"modern security compliance views this as a pre-deployment state. "
             f"To protect deliverability and prevent spoofing, move toward an enforcement policy "
@@ -624,6 +624,32 @@ def transform_dkim(raw: Dict, domain: str, has_mx: bool = True) -> Dict:
                     {"type": "info", "text": "DKIM is only relevant for domains that send email"},
                 ],
                 "fix": None,
+                "fix_records": None,
+            }
+
+        # User provided a specific selector that wasn't found
+        selector_not_found = raw.get("selector_not_found")
+        if selector_not_found:
+            return {
+                "name": "DKIM",
+                "status": "fail",
+                "pill_label": "Not found",
+                "verdict": f"Selector '{selector_not_found}' not found",
+                "record": None,
+                "explanation": (
+                    f"No DKIM public key was found at "
+                    f"<strong>{selector_not_found}._domainkey.{domain}</strong>. "
+                    f"Verify the selector name is correct. You can find your DKIM "
+                    f"selector in the DKIM-Signature header of a sent message (the s= value)."
+                ),
+                "details": [
+                    {"type": "error", "text": f"No TXT record at {selector_not_found}._domainkey.{domain}"},
+                    {"type": "info", "text": "Check your email provider's admin console for the correct selector name"},
+                ],
+                "fix": (
+                    f"Verify that DKIM is enabled in your email provider's settings and that the public key "
+                    f"TXT record is published at <strong>{selector_not_found}._domainkey.{domain}</strong>."
+                ),
                 "fix_records": None,
             }
 

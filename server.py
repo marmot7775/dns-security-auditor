@@ -90,7 +90,7 @@ app = FastAPI(
     title="DNS Security Auditor",
     description=(
         "Comprehensive DNS and email security auditing API. "
-        "Checks DMARC, SPF, DKIM, MX, MTA-STS, TLS-RPT, BIMI, DNSSEC, CAA, and Nameservers."
+        "Checks DMARC, SPF, DKIM, MX, MTA-STS, TLS-RPT, BIMI, DNSSEC, CAA, DANE, Nameservers, Certificate Transparency, and Blocklist."
     ),
     version="2.0.0",
     docs_url="/docs",
