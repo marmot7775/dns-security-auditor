@@ -496,7 +496,7 @@ def _raw_check_dmarc(domain: str) -> Dict[str, Any]:
             "No DMARC record found",
             f"No DMARC record exists at '_dmarc.{domain}'. "
             "Since February 2024, Google and Yahoo require at least a DMARC record "
-            "(even p=none) from bulk senders, and may reject mail without one. "
+            "(even p=none) from bulk senders, and may throttle or deprioritize mail without one. "
             "You also have no aggregate reporting visibility into who is sending as your domain.",
             f"Publish a DMARC record at _dmarc.{domain} starting with p=none and an rua address for aggregate reporting.",
         )
@@ -1216,7 +1216,7 @@ def _raw_check_spf(domain: str) -> Dict[str, Any]:
                 _add_issue(
                     "warning",
                     f"Deprecated 'ptr' mechanism: {part}",
-                    "The ptr mechanism is deprecated and no longer in use. "
+                    "The ptr mechanism is discouraged by RFC 7208 because it is slow and places a burden on reverse DNS infrastructure. "
                     "Receivers may ignore it.",
                     "Remove the ptr mechanism. Use ip4:/ip6: or include: instead.",
                 )
@@ -1246,7 +1246,7 @@ def _raw_check_spf(domain: str) -> Dict[str, Any]:
                 _add_issue(
                     "warning",
                     "Deprecated 'ptr' mechanism",
-                    "The ptr mechanism is deprecated and no longer in use. "
+                    "The ptr mechanism is discouraged by RFC 7208 because it is slow and places a burden on reverse DNS infrastructure. "
                     "Receivers may ignore it.",
                     "Remove the ptr mechanism. Use ip4:/ip6: or include: instead.",
                 )
@@ -1371,8 +1371,8 @@ def _raw_check_dnssec(domain: str) -> Dict[str, Any]:
         15: "Ed25519 (recommended, modern)",
         16: "Ed448 (strong)",
     }
-    DEPRECATED_ALGORITHMS = {1, 3, 5, 6}
-    LEGACY_ALGORITHMS = {7}
+    DEPRECATED_ALGORITHMS = {1, 3, 6}
+    LEGACY_ALGORITHMS = {5, 7}
 
     result = {
         "has_dnssec": False,
