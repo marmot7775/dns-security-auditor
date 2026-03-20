@@ -12,7 +12,7 @@ from typing import Dict, List
 _SEVERITY_ORDER = {"critical": 0, "high": 1, "medium": 2}
 
 
-def detect_anomalies(raw_results: dict, score_result: dict, has_mx: bool) -> list:
+def detect_anomalies(raw_results: dict, score_result: dict, has_mx: bool, is_defensive: bool = False) -> list:
     """
     Detect cross-check anomalies from raw audit results.
 
@@ -20,12 +20,64 @@ def detect_anomalies(raw_results: dict, score_result: dict, has_mx: bool) -> lis
         raw_results: Raw output dict from the audit engine, keyed by check name.
         score_result: Output from EmailSecurityScorer (grade, score, etc.).
         has_mx: Whether the domain has MX records.
+        is_defensive: Whether the domain is a non-mail domain with defensive DNS.
 
     Returns:
         List of anomaly dicts sorted by severity (critical, high, medium).
         Each dict has keys: title, description, severity, recommendation.
     """
     anomalies: List[dict] = []
+
+    # Defensive DNS domains (SPF -all, DMARC reject, no mail) are intentionally
+    # configured to not send or receive email. Email-related anomalies do not apply.
+    if is_defensive:
+        # Only check non-email anomalies (nameservers, DNSSEC)
+        nameservers_raw = raw_results.get("nameservers") or {}
+        dnssec = raw_results.get("dnssec") or {}
+
+        # Single nameserver
+        if nameservers_raw:
+            ns_count = nameservers_raw.get("ns_count", 0)
+            nameservers = nameservers_raw.get("nameservers") or []
+            if ns_count == 1 or (isinstance(nameservers, list) and len(nameservers) == 1):
+                anomalies.append({
+                    "title": "Single nameserver",
+                    "description": (
+                        "Only one nameserver was found. If it becomes unreachable, "
+                        "the entire domain goes offline, including web and all "
+                        "DNS-dependent services."
+                    ),
+                    "severity": "high",
+                    "recommendation": (
+                        "Add at least one secondary nameserver on a different "
+                        "network and provider to eliminate this single point of "
+                        "failure."
+                    ),
+                })
+
+        # DNSSEC broken chain
+        if dnssec:
+            has_dnskey = bool(dnssec.get("has_dnssec") or dnssec.get("has_dnskey"))
+            chain_valid = dnssec.get("chain_valid")
+            if has_dnskey and chain_valid is False:
+                anomalies.append({
+                    "title": "DNSSEC chain broken",
+                    "description": (
+                        "DNSKEY records are published but the DS record at the "
+                        "parent zone does not match, breaking the DNSSEC chain of "
+                        "trust. DNSSEC-validating resolvers will return SERVFAIL "
+                        "for all queries to this domain."
+                    ),
+                    "severity": "critical",
+                    "recommendation": (
+                        "Update the DS record at your domain registrar to match "
+                        "the current DNSKEY, or disable DNSSEC at the registrar "
+                        "until the mismatch is resolved."
+                    ),
+                })
+
+        anomalies.sort(key=lambda a: _SEVERITY_ORDER.get(a.get("severity") or "medium", 2))
+        return anomalies
 
     dmarc = raw_results.get("dmarc") or {}
     spf = raw_results.get("spf") or {}

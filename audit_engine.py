@@ -3034,13 +3034,13 @@ def run_full_audit(domain: str, dkim_selector: Optional[str] = None,
 
     # --- Anomaly Detection ("What's Unusual") ---
     try:
-        anomalies = detect_anomalies(raw_results, score_result, has_mx)
+        anomalies = detect_anomalies(raw_results, score_result, has_mx, is_defensive)
     except Exception:
         anomalies = []
 
     # --- Remediation Plan ---
     try:
-        remediation_plan = build_remediation_plan(checks, raw_results, has_mx)
+        remediation_plan = build_remediation_plan(checks, raw_results, has_mx, is_defensive)
     except Exception:
         remediation_plan = {"immediate": [], "short_term": [], "long_term": []}
 

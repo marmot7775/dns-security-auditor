@@ -31,6 +31,7 @@ def build_remediation_plan(
     checks: list,
     raw_results: dict,
     has_mx: bool,
+    is_defensive: bool = False,
 ) -> Plan:
     """Build a prioritized, dependency-aware remediation plan.
 
@@ -55,6 +56,35 @@ def build_remediation_plan(
     immediate: List[Step] = []
     short_term: List[Step] = []
     long_term: List[Step] = []
+
+    # Defensive DNS domains intentionally do not send or receive email.
+    # Only DNS infrastructure recommendations apply.
+    if is_defensive:
+        dnssec = raw_results.get("dnssec") or {}
+        caa = raw_results.get("caa") or {}
+        if not bool(dnssec.get("has_dnssec")):
+            long_term.append({
+                "title": "Enable DNSSEC",
+                "description": (
+                    "DNSSEC cryptographically signs your DNS records, protecting against "
+                    "cache poisoning and DNS spoofing attacks."
+                ),
+                "effort": "medium",
+                "impact": "medium",
+                "check": "DNSSEC",
+            })
+        if (caa.get("record_count") or 0) == 0:
+            long_term.append({
+                "title": "Add CAA Records",
+                "description": (
+                    "CAA records restrict which certificate authorities can issue TLS "
+                    "certificates for your domain."
+                ),
+                "effort": "low",
+                "impact": "medium",
+                "check": "CAA",
+            })
+        return {"immediate": immediate, "short_term": short_term, "long_term": long_term}
 
     spf = raw_results.get("spf") or {}
     dmarc = raw_results.get("dmarc") or {}
