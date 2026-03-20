@@ -3623,9 +3623,8 @@ def _build_resilience_analysis(
             "path to DMARC pass. Messages may be rejected or junked depending on the DMARC policy."
         )
         risk = (
-            "Fix SPF first by reducing the record to 10 or fewer DNS lookups (remove unused includes, "
-            "flatten where possible). Then ensure DKIM signing is enabled for all sending services "
-            "so the domain has two independent alignment paths."
+            "Fix SPF first by reducing the record to 10 or fewer DNS lookups "
+            "(remove includes for services you no longer use)."
         )
     elif not spf_functional and not dkim_functional:
         level = "low"
