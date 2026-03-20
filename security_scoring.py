@@ -9,7 +9,7 @@ Scoring categories:
 3. DKIM Configuration (15 points) - important but detection is imperfect
 4. Best Practices (20 points) - MTA-STS, TLS-RPT, DANE
 5. Key Security (10 points) - key hygiene bonus
-6. Vendor Intelligence (10 points) - DNSSEC, CAA, detection bonus
+6. Vendor Intelligence (10 points) - email service provider detection
 
 Total: 100 points with letter grade (A-F)
 """
