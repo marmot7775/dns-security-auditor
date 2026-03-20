@@ -1036,7 +1036,7 @@ def _raw_check_spf(domain: str) -> Dict[str, Any]:
             "It does not protect your domain from spoofing.",
             "Change ?all to -all or ~all.",
         )
-    elif not all_mech:
+    elif not all_mech and not has_redirect:
         _add_issue(
             "warning",
             "No 'all' mechanism found",
