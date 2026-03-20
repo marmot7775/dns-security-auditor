@@ -811,12 +811,7 @@ def transform_mx(raw: Dict) -> Dict:
 
         provider_note = f" [{provider}]" if provider else ""
         if resolved:
-            # Check FCrDNS
-            ptr_ok = all(p.get("fcrdns", False) for p in mx_detail.get("ptr_results", []) if p.get("ptr"))
-            if ptr_ok:
-                details.append({"type": "good", "text": f"Priority {priority}: {hostname}{provider_note} (resolves, FCrDNS valid)"})
-            else:
-                details.append({"type": "good", "text": f"Priority {priority}: {hostname}{provider_note} (resolves)"})
+            details.append({"type": "good", "text": f"Priority {priority}: {hostname}{provider_note} (resolves)"})
         else:
             details.append({"type": "error", "text": f"Priority {priority}: {hostname} does not resolve (dangling MX)"})
 
