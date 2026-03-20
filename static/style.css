@@ -1959,6 +1959,7 @@ main {
 /* Prevent horizontal scroll on all viewports */
 html, body {
     overflow-x: hidden;
+    scroll-behavior: smooth;
 }
 
 /* -- Tablet (768px): banner stacks, tagline hides -- */
