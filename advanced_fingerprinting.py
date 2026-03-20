@@ -22,6 +22,7 @@ Based on analyzing 1000+ enterprise email configurations.
 
 import re
 import dns.resolver
+import dns.exception
 from typing import Dict, List, Optional
 from collections import defaultdict
 import json
@@ -93,7 +94,7 @@ class AdvancedVendorFingerprinter:
                             'evidence': f'{len(mechanisms)} SPF mechanisms',
                             'confidence': 0.70
                         })
-        except Exception:
+        except (dns.resolver.NXDOMAIN, dns.resolver.NoAnswer, dns.resolver.NoNameservers, dns.exception.DNSException):
             if self.verbose:
                 print("  ✗ No SPF record found")
     
@@ -116,7 +117,7 @@ class AdvancedVendorFingerprinter:
                     })
                     if self.verbose:
                         print(f"  ✓ {vendor} (from {mx_host})")
-        except Exception:
+        except (dns.resolver.NXDOMAIN, dns.resolver.NoAnswer, dns.resolver.NoNameservers, dns.exception.DNSException):
             if self.verbose:
                 print("  ✗ No MX records found")
     
@@ -156,7 +157,7 @@ class AdvancedVendorFingerprinter:
                         })
                         if self.verbose:
                             print(f"  ✓ {vendor} (DMARC reports)")
-        except Exception:
+        except (dns.resolver.NXDOMAIN, dns.resolver.NoAnswer, dns.resolver.NoNameservers, dns.exception.DNSException):
             if self.verbose:
                 print("  ✗ No DMARC record found")
     
@@ -182,7 +183,7 @@ class AdvancedVendorFingerprinter:
                         })
                         if self.verbose:
                             print(f"  ✓ {vendor} (TLS-RPT)")
-        except Exception:
+        except (dns.resolver.NXDOMAIN, dns.resolver.NoAnswer, dns.resolver.NoNameservers, dns.exception.DNSException):
             if self.verbose:
                 print("  ✗ No TLS-RPT record")
     
@@ -201,7 +202,7 @@ class AdvancedVendorFingerprinter:
             })
             if self.verbose:
                 print("  ✓ MTA-STS configured")
-        except Exception:
+        except (dns.resolver.NXDOMAIN, dns.resolver.NoAnswer, dns.resolver.NoNameservers, dns.exception.DNSException):
             if self.verbose:
                 print("  ✗ No MTA-STS policy")
     
@@ -223,7 +224,7 @@ class AdvancedVendorFingerprinter:
                     })
                     if self.verbose:
                         print("  ✓ BIMI configured")
-        except Exception:
+        except (dns.resolver.NXDOMAIN, dns.resolver.NoAnswer, dns.resolver.NoNameservers, dns.exception.DNSException):
             if self.verbose:
                 print("  ✗ No BIMI record")
     
@@ -253,7 +254,7 @@ class AdvancedVendorFingerprinter:
             
             if self.verbose:
                 print(f"  ℹ️  DNS TTL: {ttl} seconds")
-        except Exception:
+        except (dns.resolver.NXDOMAIN, dns.resolver.NoAnswer, dns.resolver.NoNameservers, dns.exception.DNSException):
             pass
     
     def _fingerprint_subdomains(self):
@@ -279,7 +280,7 @@ class AdvancedVendorFingerprinter:
                 if self.verbose:
                     print(f"  ✓ {subdomain}.{self.domain}")
                 break
-            except Exception:
+            except (dns.resolver.NXDOMAIN, dns.resolver.NoAnswer, dns.resolver.NoNameservers, dns.exception.DNSException):
                 continue
     
     def _match_spf_vendor(self, include: str) -> Optional[str]:
