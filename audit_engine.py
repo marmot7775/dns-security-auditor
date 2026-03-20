@@ -2827,6 +2827,7 @@ def run_full_audit(domain: str, dkim_selector: Optional[str] = None,
             checks.insert(dkim_pos, transform_dkim(raw_dkim, domain, has_mx=has_mx))
         except FuturesTimeoutError:
             errors.append("DKIM: timed out")
+            raw_results["dkim"] = {"found_selectors": [], "tested_count": 0, "timed_out": True}
             dkim_pos = min(2, len(checks))
             checks.insert(dkim_pos, _timeout_card("DKIM"))
         except Exception as e:
@@ -3266,13 +3267,13 @@ def _build_resilience_analysis(
     # -- DKIM mechanism status --
     found_selectors = raw_dkim.get("found_selectors") or []
     dkim_tested = "dkim" in raw_results
-    dkim_timed_out = any(
+    dkim_timed_out = raw_dkim.get("timed_out", False) or any(
         c.get("name") == "DKIM" and "timed out" in (c.get("verdict") or "").lower()
         for c in checks
     )
     if not dkim_tested:
-        dkim_status = "missing"
-        dkim_note = "DKIM check was not run in this audit scope."
+        dkim_status = "inconclusive"
+        dkim_note = "DKIM check was not included in this audit scope."
     elif dkim_timed_out:
         dkim_status = "inconclusive"
         dkim_note = (
