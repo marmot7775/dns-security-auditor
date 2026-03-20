@@ -238,7 +238,7 @@
                 </button>
                 <div class="edu-content" id="edu-content">
                     <div class="edu-intro">
-                        DMARC is the policy layer for email authentication. It tells receiving servers exactly what to do when a message fails verification. In late 2024, the IETF published <a href="https://datatracker.ietf.org/doc/html/rfc9716" target="_blank" rel="noopener">RFC 9716</a>, officially moving DMARC from an Informational document (<a href="https://datatracker.ietf.org/doc/html/rfc7489" target="_blank" rel="noopener">RFC 7489</a>) to a Proposed Standard. This audit validates your domain against the current standard.
+                        DMARC is the policy layer for email authentication. It tells receiving servers exactly what to do when a message fails verification. The current standard is <a href="https://datatracker.ietf.org/doc/html/rfc7489" target="_blank" rel="noopener">RFC 7489</a>. The IETF has approved an update (<a href="https://datatracker.ietf.org/doc/draft-ietf-dmarc-dmarcbis/" target="_blank" rel="noopener">DMARCbis</a>) that is awaiting final publication. This audit validates against RFC 7489 and incorporates DMARCbis features where applicable.
                     </div>
 
                     <h3 class="edu-heading">How DMARC Works: Three Requirements</h3>
@@ -260,10 +260,10 @@
                         </div>
                     </div>
 
-                    <h3 class="edu-heading">What Changed: RFC 7489 vs. RFC 9716</h3>
+                    <h3 class="edu-heading">What Changed: RFC 7489 vs. DMARCbis</h3>
                     <table class="edu-table">
                         <thead>
-                            <tr><th>Feature</th><th>Legacy (RFC 7489)</th><th>Current (RFC 9716)</th><th>Why It Matters</th></tr>
+                            <tr><th>Feature</th><th>RFC 7489</th><th>DMARCbis (draft)</th><th>Why It Matters</th></tr>
                         </thead>
                         <tbody>
                             <tr>
@@ -293,7 +293,7 @@
                         </tbody>
                     </table>
 
-                    <h3 class="edu-heading">New Tags in RFC 9716</h3>
+                    <h3 class="edu-heading">New Tags in DMARCbis</h3>
                     <div class="edu-changes">
                         <div class="edu-change">
                             <div class="edu-change-title"><code>t=y</code> (Test Mode)</div>
@@ -311,7 +311,7 @@
 
                     <h3 class="edu-heading">Adoption Status</h3>
                     <p class="edu-text">
-                        RFC 9716 is the authoritative standard, but the transition is ongoing. Major providers (Gmail, Outlook, Yahoo) currently prioritize RFC 9716 features where available but maintain backward compatibility with legacy records. The tree walk, <code>np=</code>, and <code>t=</code> tags may not be honored by all receivers yet. Where this matters, the audit results include a note about adoption.
+                        DMARCbis has been approved by the IESG but is awaiting final publication as an RFC. Major providers (Gmail, Outlook, Yahoo) are beginning to support DMARCbis features but maintain backward compatibility with RFC 7489. The tree walk, <code>np=</code>, and <code>t=</code> tags may not be honored by all receivers yet. Where this matters, the audit results note the distinction.
                     </p>
                 </div>
             </div>
