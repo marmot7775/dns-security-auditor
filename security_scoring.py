@@ -4,12 +4,12 @@ COMPREHENSIVE EMAIL SECURITY SCORING SYSTEM
 Gives non-technical users clear, actionable security ratings.
 
 Scoring categories:
-1. DMARC Configuration (30 points) - most critical
-2. SPF Configuration (25 points) - foundational
-3. DKIM Configuration (20 points) - important but detection is imperfect
-4. Best Practices (10 points) - MTA-STS, TLS-RPT, DANE
+1. DMARC Configuration (25 points) - most critical
+2. SPF Configuration (20 points) - foundational
+3. DKIM Configuration (15 points) - important but detection is imperfect
+4. Best Practices (20 points) - MTA-STS, TLS-RPT, DANE
 5. Key Security (10 points) - key hygiene bonus
-6. Vendor Intelligence (5 points) - detection bonus
+6. Vendor Intelligence (10 points) - DNSSEC, CAA, detection bonus
 
 Total: 100 points with letter grade (A-F)
 """
@@ -25,12 +25,12 @@ class EmailSecurityScorer:
     def __init__(self):
         self.max_score = 100
         self.category_weights = {
-            'dmarc': 30,
-            'spf': 25,
-            'dkim': 20,
-            'best_practices': 10,
+            'dmarc': 25,
+            'spf': 20,
+            'dkim': 15,
+            'best_practices': 20,
             'key_security': 10,
-            'vendor_intelligence': 5,
+            'vendor_intelligence': 10,
         }
     
     def calculate_score(self, audit_results: Dict) -> Dict:
@@ -63,7 +63,7 @@ class EmailSecurityScorer:
             # an inherited DMARC reject (domain is protected), partial otherwise.
             inherited = audit_results.get('dmarc_results', {}).get('inherited_policy')
             if inherited in ('reject', 'quarantine'):
-                spf_score, spf_details = 25, {'reason': 'N/A: non-mail subdomain (protected by DMARC)'}
+                spf_score, spf_details = 20, {'reason': 'N/A: non-mail subdomain (protected by DMARC)'}
             else:
                 spf_score, spf_details = self._score_spf(audit_results.get('spf_results', {}))
         scores['spf'] = spf_score
@@ -77,7 +77,7 @@ class EmailSecurityScorer:
         else:
             inherited = audit_results.get('dmarc_results', {}).get('inherited_policy')
             if inherited in ('reject', 'quarantine'):
-                dkim_score, dkim_details = 20, {'reason': 'N/A: non-mail subdomain (protected by DMARC)'}
+                dkim_score, dkim_details = 15, {'reason': 'N/A: non-mail subdomain (protected by DMARC)'}
             else:
                 dkim_score, dkim_details = self._score_dkim(audit_results.get('dkim_results', {}))
         scores['dkim'] = dkim_score
@@ -109,7 +109,7 @@ class EmailSecurityScorer:
         else:
             inherited = audit_results.get('dmarc_results', {}).get('inherited_policy')
             if inherited in ('reject', 'quarantine'):
-                practices_score, practices_details = 10, {'reason': 'N/A: non-mail subdomain (protected by DMARC)'}
+                practices_score, practices_details = 20, {'reason': 'N/A: non-mail subdomain (protected by DMARC)'}
             else:
                 practices_score, practices_details = self._score_best_practices(audit_results)
         scores['best_practices'] = practices_score
@@ -136,7 +136,7 @@ class EmailSecurityScorer:
         }
     
     def _score_dmarc(self, dmarc: Dict) -> Tuple[float, Dict]:
-        """Score DMARC configuration (30 points max).
+        """Score DMARC configuration (25 points max).
 
         Handles both direct records and inherited policies from tree walk.
         """
@@ -153,34 +153,34 @@ class EmailSecurityScorer:
         # Inherited policy (subdomain without own record)
         if not has_record and inherited_policy:
             details['inherited'] = True
-            # Credit the inherited policy — the domain IS protected
+            # Credit the inherited policy -- the domain IS protected
             if inherited_policy == 'reject':
-                score = 26  # Full policy credit, slight deduction for no own record
+                score = 22  # Full policy credit, slight deduction for no own record
                 details['policy'] = 'reject (inherited, excellent)'
             elif inherited_policy == 'quarantine':
-                score = 22
+                score = 18
                 details['policy'] = 'quarantine (inherited, good)'
             elif inherited_policy == 'none':
-                score = 8
+                score = 6
                 details['policy'] = 'none (inherited, monitoring only)'
             else:
-                score = 5
-            return min(score, 30), details
+                score = 4
+            return min(score, 25), details
 
-        # Has own record: +6 points
-        score += 6
+        # Has own record: +5 points
+        score += 5
         details['has_record'] = True
 
         # Policy level
         policy = (dmarc.get('policy') or '').lower()
         if policy == 'reject':
-            score += 12  # Best
+            score += 10  # Best
             details['policy'] = 'reject (excellent)'
         elif policy == 'quarantine':
-            score += 11  # Nearly as strong as reject
+            score += 9  # Nearly as strong as reject
             details['policy'] = 'quarantine (good)'
         elif policy == 'none':
-            score += 3   # Monitoring only
+            score += 2   # Monitoring only
             details['policy'] = 'none (monitoring only)'
 
         # Percentage -- anything below 100 on an enforcement policy is a significant gap
@@ -188,10 +188,10 @@ class EmailSecurityScorer:
         if pct is None:
             pct = 100
         if pct == 100:
-            score += 6
+            score += 5
             details['percentage'] = '100% (full enforcement)'
         elif pct >= 75:
-            score += 3
+            score += 2
             details['percentage'] = f'{pct}% (nearly enforcing -- raise to 100)'
         elif pct >= 50:
             score += 1
@@ -202,7 +202,7 @@ class EmailSecurityScorer:
 
         # Reporting configured
         if dmarc.get('rua') or dmarc.get('ruf'):
-            score += 4
+            score += 3
             details['reporting'] = 'Configured'
         else:
             score += 1
@@ -213,7 +213,7 @@ class EmailSecurityScorer:
             score += 2
             details['subdomain_policy'] = 'Configured'
 
-        # Alignment mode bonus (within the 30-point cap)
+        # Alignment mode bonus (within the 25-point cap)
         adkim = (dmarc.get('adkim') or 'r').lower()
         aspf = (dmarc.get('aspf') or 'r').lower()
         if adkim == 's' and aspf == 's':
@@ -223,57 +223,64 @@ class EmailSecurityScorer:
         else:
             details['alignment'] = 'Relaxed alignment (default -- consider strict for tighter security)'
 
-        return min(score, 30), details
+        return min(score, 25), details
     
     def _score_spf(self, spf: Dict) -> Tuple[float, Dict]:
-        """Score SPF configuration (25 points max)"""
+        """Score SPF configuration (20 points max)"""
         score = 0
         details = {}
 
         if not spf.get('record'):
             return 0, {'reason': 'No SPF record', 'impact': 'CRITICAL'}
 
-        # Has record: +6 points
-        score += 6
+        # Has record: +5 points
+        score += 5
         details['has_record'] = True
 
         # All mechanism (policy)
         all_mechanism = (spf.get('all') or '').lower()
         if all_mechanism == '-all':
-            score += 10  # Hard fail -- unauthorized mail rejected
+            score += 8  # Hard fail -- unauthorized mail rejected
             details['all_mechanism'] = '-all (hard fail, excellent)'
         elif all_mechanism == '~all':
-            score += 7   # Soft fail -- mail tagged but still delivered
+            score += 6   # Soft fail -- mail tagged but still delivered
             details['all_mechanism'] = '~all (soft fail, upgrade to -all recommended)'
         elif all_mechanism == '?all':
-            score += 5  # Neutral
+            score += 4  # Neutral
             details['all_mechanism'] = '?all (neutral, no protection)'
         else:
-            score += 2
+            score += 1
             details['all_mechanism'] = '+all or missing (weak)'
 
-        # Lookup count (max 10)
+        # Lookup count (RFC 7208 hard limit is 10; exactly 10 is at the breaking point)
         lookup_count = spf.get('lookup_count', 0)
-        if lookup_count <= 8:
-            score += 6
+        if lookup_count > 10:
+            # permerror -- SPF is broken for many resolvers; score the entire record 0
+            return 0, {
+                'reason': f'SPF permerror: {lookup_count} DNS lookups exceed the 10-lookup limit (record is broken)',
+                'impact': 'CRITICAL',
+            }
+        elif lookup_count == 10:
+            score += 1
+            details['lookup_count'] = f'{lookup_count} (at the breaking point -- reduce immediately)'
+        elif lookup_count <= 8:
+            score += 5
             details['lookup_count'] = f'{lookup_count} (good)'
-        elif lookup_count <= 10:
-            score += 4
-            details['lookup_count'] = f'{lookup_count} (at limit)'
         else:
-            score += 0
-            details['lookup_count'] = f'{lookup_count} (EXCEEDS LIMIT!)'
+            # 9 lookups
+            score += 3
+            details['lookup_count'] = f'{lookup_count} (close to limit -- reduce)'
 
         # Include count (fewer is better)
         include_count = spf.get('include_count', 0)
         if include_count <= 3:
-            score += 3
+            score += 2
             details['includes'] = f'{include_count} includes (clean)'
         elif include_count <= 5:
             score += 1
             details['includes'] = f'{include_count} includes (acceptable)'
 
-        return min(score, 25), details
+        return min(score, 20), details
     
     def _analyze_key_from_record(self, record: str) -> Dict:
         """Analyze DKIM key strength from record string"""
@@ -298,7 +305,7 @@ class EmailSecurityScorer:
             return {'bits': 4096, 'strength': 'strong'}
     
     def _score_dkim(self, dkim: Dict) -> Tuple[float, Dict]:
-        """Score DKIM configuration (20 points max)"""
+        """Score DKIM configuration (15 points max)"""
         score = 0
         details = {}
 
@@ -306,18 +313,18 @@ class EmailSecurityScorer:
         if not found_selectors:
             # DKIM selectors are private and cannot be enumerated from the outside.
             # Not finding keys does not mean they don't exist. Give neutral credit.
-            return 12, {'reason': 'No DKIM keys detected (selectors are not publicly enumerable)', 'impact': 'UNKNOWN'}
+            return 9, {'reason': 'No DKIM keys detected (selectors are not publicly enumerable)', 'impact': 'UNKNOWN'}
 
-        # Has at least one key: +8 points
-        score += 8
+        # Has at least one key: +6 points
+        score += 6
         details['keys_found'] = len(found_selectors)
 
-        # Multiple keys (redundancy): +4 points
+        # Multiple keys (redundancy): +3 points
         if len(found_selectors) >= 2:
-            score += 4
+            score += 3
             details['redundancy'] = 'Multiple keys (good)'
         else:
-            score += 2
+            score += 1
             details['redundancy'] = 'Single key (acceptable)'
 
         # Key strength analysis
@@ -335,19 +342,19 @@ class EmailSecurityScorer:
 
         # Award points for key strength
         if weak_keys == 0 and strong_keys > 0:
-            score += 8
+            score += 6
             details['key_strength'] = f'All {strong_keys} key(s) use strong cryptography (excellent)'
         elif weak_keys > 0 and strong_keys > 0:
-            score += 5
+            score += 4
             details['key_strength'] = f'{strong_keys} strong key(s), {weak_keys} weak 1024-bit key(s) (upgrade recommended)'
         elif weak_keys > 0 and strong_keys == 0:
-            score += 2
+            score += 1
             details['key_strength'] = f'All {weak_keys} key(s) are weak 1024-bit (UPGRADE REQUIRED)'
         else:
             score += 0
             details['key_strength'] = 'Unable to determine key strength'
 
-        return min(score, 20), details
+        return min(score, 15), details
     
     def _score_key_security(self, dkim: Dict, key_age: Dict) -> Tuple[float, Dict]:
         """Score key security practices (10 points max)"""
@@ -394,59 +401,59 @@ class EmailSecurityScorer:
         return min(score, 10), details
     
     def _score_vendor_intelligence(self, vendors: Dict) -> Tuple[float, Dict]:
-        """Score vendor configuration (5 points max)"""
+        """Score vendor configuration (10 points max)"""
         score = 0
         details = {}
 
         detected_vendors = vendors.get('vendors', [])
 
         if not detected_vendors:
-            return 3, {'reason': 'No vendor detection available'}
+            return 5, {'reason': 'No vendor detection available'}
 
-        # Has vendor intelligence: +2 points
-        score += 2
+        # Has vendor intelligence: +4 points
+        score += 4
         details['vendors_detected'] = len(detected_vendors)
 
-        # High confidence detections: +2 points
+        # High confidence detections: +4 points
         high_conf = sum(1 for v in detected_vendors if v.get('confidence', 0) >= 0.9)
         if high_conf > 0:
-            score += 2
+            score += 4
             details['confidence'] = f'{high_conf} high-confidence'
         else:
-            score += 1
+            score += 2
             details['confidence'] = 'Lower confidence'
 
-        # Multiple vendors: +1 point
+        # Multiple vendors: +2 points
         if len(detected_vendors) >= 2:
-            score += 1
+            score += 2
             details['diversity'] = 'Multiple vendors configured'
 
-        return min(score, 5), details
+        return min(score, 10), details
     
     def _score_best_practices(self, audit_results: Dict) -> Tuple[float, Dict]:
-        """Score adherence to best practices (10 points max)"""
+        """Score adherence to best practices (20 points max)"""
         score = 0
         details = {}
 
-        # MTA-STS configured — check for txt_record or configured flag
+        # MTA-STS configured -- check for txt_record or configured flag
         mta_sts = audit_results.get('mta_sts', {})
         if mta_sts.get('configured') or mta_sts.get('txt_record'):
-            score += 4
+            score += 8
             details['mta_sts'] = 'Configured'
 
-        # TLS-RPT configured — check for record or configured flag
+        # TLS-RPT configured -- check for record or configured flag
         tls_rpt = audit_results.get('tls_rpt', {})
         if tls_rpt.get('configured') or tls_rpt.get('record'):
-            score += 4
+            score += 8
             details['tls_rpt'] = 'Configured'
 
         # DANE configured
         dane = audit_results.get('dane', {})
         if dane.get('configured'):
-            score += 2
+            score += 4
             details['dane'] = 'Configured'
 
-        return min(score, 10), details
+        return min(score, 20), details
     
     def _calculate_grade(self, score: float) -> str:
         """Convert score to letter grade"""
