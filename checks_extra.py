@@ -100,7 +100,7 @@ def _lookup_txt(name: str) -> List[str]:
                 parts.append(s.decode("utf-8") if isinstance(s, bytes) else str(s))
             records.append("".join(parts))
         return records
-    except Exception:
+    except (dns.resolver.NXDOMAIN, dns.resolver.NoAnswer, dns.resolver.NoNameservers, dns.exception.DNSException):
         return []
 
 
@@ -111,7 +111,7 @@ def _lookup_records(name: str, rdtype: str) -> List[str]:
         resolver = _get_resolver()
         answers = resolver.resolve(name, rdtype)
         return [str(rdata).rstrip(".") for rdata in answers]
-    except Exception:
+    except (dns.resolver.NXDOMAIN, dns.resolver.NoAnswer, dns.resolver.NoNameservers, dns.exception.DNSException):
         return []
 
 
@@ -465,7 +465,7 @@ def check_mta_sts(domain: str) -> Dict[str, Any]:
                 "The policy file server took too long.", "",
                 "Ensure the web server responds quickly.",
             ))
-        except Exception as e:
+        except requests.exceptions.RequestException as e:
             result["issues"].append(_make_issue(
                 "warning", f"Error fetching policy: {str(e)[:200]}",
                 "Could not retrieve the MTA-STS policy file.", "",
@@ -901,7 +901,7 @@ def check_bimi(domain: str, dmarc_enforcing_override: bool = None) -> Dict[str, 
                                 "Fix XML syntax errors in the SVG file.",
                             ))
                             result["svg_validated"] = False
-        except Exception:
+        except (requests.exceptions.RequestException, OSError):
             result["issues"].append(_make_issue(
                 "info", "Could not verify BIMI logo URL",
                 "Logo URL could not be reached.", "",
