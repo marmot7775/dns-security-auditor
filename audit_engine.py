@@ -3068,23 +3068,6 @@ def run_full_audit(domain: str, dkim_selector: Optional[str] = None,
                                 card["status"] = _xc_downgrade
                         break
 
-    # --- DMARC Migration Roadmap (post-processor, zero DNS queries) ---
-    dmarc_roadmap = None
-    if raw_results.get("dmarc"):
-        try:
-            from spf_execution_engine import build_dmarc_roadmap
-            dmarc_roadmap = build_dmarc_roadmap(
-                raw_results.get("dmarc", {}),
-                raw_results.get("spf", {}),
-                raw_results.get("dkim", {}),
-                tree_walk_result,
-                has_mx,
-                is_defensive,
-                report_auth=report_auth,
-            )
-        except Exception:
-            pass
-
     # --- 12. Certificate Transparency ---
     if _should_include("ct", scope_set):
         try:
@@ -3174,7 +3157,6 @@ def run_full_audit(domain: str, dkim_selector: Optional[str] = None,
         "dmarc_eval": dmarc_eval,
         "report_chain": report_auth,
         "spf_tree": spf_tree_viz,
-        "dmarc_roadmap": dmarc_roadmap,
         "scope": scope or "complete",
         "defensive_dns": is_defensive,
         "defensive_signals": defensive_signals,
