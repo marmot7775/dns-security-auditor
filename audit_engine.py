@@ -2972,7 +2972,7 @@ def run_full_audit(domain: str, dkim_selector: Optional[str] = None,
         _has_no_mx = not _mx_records
 
         _spf_record = (_raw_spf.get("record") or "").strip().lower()
-        _has_null_spf = _spf_record in ("v=spf1 -all", "v=spf1 ~all")
+        _has_null_spf = _spf_record == "v=spf1 -all"
 
         # Only count DMARC reject from the domain's OWN record, not inherited.
         # A domain that inherits reject from a parent is a normal subdomain,

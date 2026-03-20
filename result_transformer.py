@@ -361,13 +361,13 @@ def transform_dmarc(raw: Dict, tree_walk: Optional[Dict] = None) -> Dict:
 # ============================================================
 
 def _is_null_spf(record: str) -> bool:
-    """Detect a null SPF record: v=spf1 -all or v=spf1 ~all with no senders.
-    This is an intentional signal meaning 'this domain does not send email.'"""
+    """Detect a null SPF record: v=spf1 -all with no senders.
+    Only hardfail (-all) is an explicit declaration that the domain does not send email.
+    Softfail (~all) is ambiguous and should not be treated as null SPF."""
     if not record:
         return False
     parts = record.strip().lower().split()
-    # v=spf1 followed by only an all mechanism, nothing else
-    if len(parts) == 2 and parts[0] == "v=spf1" and parts[1] in ("-all", "~all"):
+    if len(parts) == 2 and parts[0] == "v=spf1" and parts[1] == "-all":
         return True
     return False
 

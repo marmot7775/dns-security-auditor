@@ -25,9 +25,9 @@ class DKIMKeyAgeAnalyzer:
     # Common selector naming patterns that indicate age
     SELECTOR_PATTERNS = {
         'date_based': [
-            r'(\d{4})(\d{2})',  # YYYYMM (e.g., 202401)
-            r'(\d{4})-(\d{2})',  # YYYY-MM
-            r'(\d{2})(\d{2})',   # YYMM (e.g., 2401)
+            r'^(\d{4})(\d{2})$',  # YYYYMM (e.g., 202401) - full match only
+            r'^(\d{4})-(\d{2})$',  # YYYY-MM
+            r'^(\d{2})(\d{2})$',   # YYMM (e.g., 2401) - full match only
         ],
         'versioned': [
             r'v(\d+)',           # v1, v2, v3
@@ -146,10 +146,14 @@ class DKIMKeyAgeAnalyzer:
                         year = int(match.group(1))
                         month = int(match.group(2))
                         
+                        # Validate month
+                        if month < 1 or month > 12:
+                            continue
+
                         # Handle 2-digit years
                         if year < 100:
                             year = 2000 + year if year < 50 else 1900 + year
-                        
+
                         # Create date
                         key_date = datetime(year, month, 1)
                         age_months = (datetime.now() - key_date).days // 30

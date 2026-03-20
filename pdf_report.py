@@ -313,8 +313,8 @@ class AuditPDFReport(FPDF):
             return
 
         weights = {
-            "dmarc": 30, "spf": 25, "dkim": 20,
-            "best_practices": 10, "key_security": 10, "vendor_intelligence": 5,
+            "dmarc": 25, "spf": 20, "dkim": 15,
+            "best_practices": 20, "key_security": 10, "vendor_intelligence": 10,
         }
         labels = {
             "dmarc": "DMARC", "spf": "SPF", "dkim": "DKIM",
