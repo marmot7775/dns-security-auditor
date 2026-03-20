@@ -18,6 +18,7 @@ const SCOPE_CHECKS = {
 // Severity sort order (lower = higher priority = displayed first)
 const SEVERITY_ORDER = { fail: 0, warn: 1, pass: 2 };
 
+const DEFAULT_TITLE = document.title;
 let currentScope = 'complete';
 let lastAuditData = null;
 let auditStartTime = 0;
@@ -90,6 +91,7 @@ function normalizeDomain(input) {
 // -- Main audit runner --
 async function runAudit(domain) {
     auditStartTime = performance.now();
+    document.title = `Scanning ${domain}...`;
     showLoading();
     hideResults();
 
@@ -221,6 +223,7 @@ function hideResults() {
 }
 
 function showError(message) {
+    document.title = DEFAULT_TITLE;
     loadingSection.style.display = 'block';
     const card = loadingSection.querySelector('.loading-card');
     card.innerHTML = `
@@ -307,6 +310,12 @@ function renderResults(data) {
     document.getElementById('summary-pass').textContent = passCount;
     document.getElementById('summary-warn').textContent = warnCount;
     document.getElementById('summary-fail').textContent = failCount;
+
+    // Tab title with issue summary
+    const issues = failCount + warnCount;
+    document.title = issues > 0
+        ? `(${issues} issue${issues > 1 ? 's' : ''}) ${data.domain} -- DNS Audit`
+        : `All clear -- ${data.domain} -- DNS Audit`;
 
     // Grade color-coding
     const gradeCard = document.querySelector('.grade-card');
