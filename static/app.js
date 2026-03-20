@@ -492,7 +492,7 @@ function renderResults(data) {
             card.className = 'vendor-card';
             card.innerHTML = `
                 <div class="vendor-name">${escapeHtml(v.name)}</div>
-                <div class="vendor-confidence">${v.confidence}%</div>
+                <div class="vendor-confidence">Detected via DNS records</div>
             `;
             vendorsGrid.appendChild(card);
         });

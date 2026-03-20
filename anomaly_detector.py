@@ -111,21 +111,27 @@ def detect_anomalies(raw_results: dict, score_result: dict, has_mx: bool, is_def
             })
 
     # 2. DMARC enforcement without DKIM (only for mail-sending domains)
+    # Note: DKIM detection is heuristic (we test common selectors). No keys found
+    # does not definitively mean DKIM is not configured. Severity is "medium" not
+    # "high" to reflect this uncertainty.
     if dmarc_present and dmarc_enforced and has_mx:
         found_selectors = dkim.get("found_selectors") or []
-        if not found_selectors:
+        wildcard_detected = dkim.get("wildcard_detected", False)
+        if not found_selectors and not wildcard_detected:
             anomalies.append({
-                "title": "DMARC enforcement without DKIM",
+                "title": "No DKIM keys detected (DMARC relies on SPF alone)",
                 "description": (
                     "DMARC is set to {} and this domain has MX records, but no "
-                    "DKIM keys were found. Mail delivery depends entirely on SPF "
-                    "alignment, which breaks for forwarded messages."
+                    "DKIM public keys were found in common selectors. If DKIM is "
+                    "not configured, forwarded messages will fail DMARC because "
+                    "SPF breaks on forwarding. Note: custom selectors may exist "
+                    "that this audit did not test."
                 ).format(dmarc_policy),
-                "severity": "high",
+                "severity": "medium",
                 "recommendation": (
-                    "Configure DKIM signing on your mail platform and publish "
-                    "the corresponding DKIM TXT records so that forwarded mail "
-                    "can still pass DMARC via DKIM alignment."
+                    "Verify DKIM signing is enabled on your mail platform. If it is, "
+                    "the selector may not be in our test list. If it is not, configure "
+                    "DKIM so forwarded mail can pass DMARC via DKIM alignment."
                 ),
             })
 

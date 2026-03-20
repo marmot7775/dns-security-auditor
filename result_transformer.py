@@ -172,10 +172,11 @@ def transform_dmarc(raw: Dict, tree_walk: Optional[Dict] = None) -> Dict:
     elif not record:
         explanation = (
             f"No DMARC record exists at <strong>_dmarc.{raw.get('domain', '')}</strong>. "
+            f"Since February 2024, Google and Yahoo require at least a DMARC record from bulk senders "
+            f"and may reject mail without one. "
             f"DMARC (<a href=\"https://datatracker.ietf.org/doc/html/rfc9716\" target=\"_blank\" rel=\"noopener\">RFC 9716</a>) lets you tell receivers how to handle messages where neither "
-            f"SPF nor DKIM passes with a domain that aligns with your From address. "
-            f"Without it, receivers have no policy to act on, "
-            f"and you receive no aggregate reports about who is using your domain to send email."
+            f"SPF nor DKIM passes with an aligned domain. Even at p=none it provides aggregate "
+            f"reporting visibility into who is sending as your domain."
         )
     elif policy == "none":
         explanation = (
@@ -378,7 +379,7 @@ def transform_spf(raw: Dict, has_mx: bool = True) -> Dict:
         if all_mech == "+all":
             verdict = "Authorizes the entire internet to send as you"
         elif lookups > 10:
-            verdict = f"Broken: exceeds lookup limit ({lookups}/10)"
+            verdict = f"SPF is invalid ({lookups}/10 lookups). Fails at most receivers."
         elif not all_mech and raw.get("has_redirect"):
             verdict = "SPF configured (via redirect)"
         elif not all_mech:
@@ -456,7 +457,7 @@ def transform_spf(raw: Dict, has_mx: bool = True) -> Dict:
                 f"({'at' if lookups == 10 else 'exceeding' if lookups > 10 else 'approaching'} the 10-lookup limit). "
                 f"<a href=\"https://datatracker.ietf.org/doc/html/rfc7208\" target=\"_blank\" rel=\"noopener\">RFC 7208</a> Section 4.6.4 limits SPF evaluation to 10 DNS-querying mechanisms "
                 f"(include, a, mx, ptr, exists). Exceeding this limit causes a PermError, "
-                f"which receivers may treat as SPF failure."
+                f"which causes SPF to fail entirely, as if no SPF record existed."
             )
 
     # Details
@@ -477,7 +478,7 @@ def transform_spf(raw: Dict, has_mx: bool = True) -> Dict:
         elif lookups <= 10:
             details.append({"type": "warning", "text": f"{lookups} DNS lookups ({'at' if lookups == 10 else 'near'} the 10-lookup limit)"})
         else:
-            details.append({"type": "error", "text": f"{lookups} DNS lookups (EXCEEDS the 10-lookup limit!)"})
+            details.append({"type": "error", "text": f"{lookups} DNS lookups. SPF is invalid and will fail at most receivers (PermError)."})
 
         all_mech = raw.get("all_mechanism") or ""
         if all_mech == "-all":
@@ -804,14 +805,23 @@ def transform_mx(raw: Dict) -> Dict:
     # Record display (all MX records)
     record = "\n".join(records)
 
+    # Detect major providers with internal redundancy
+    _major_mx_providers = {"google", "microsoft", "outlook", "proofpoint", "mimecast", "barracuda", "cloudflare"}
+    _is_major_provider = any(p.lower() in _major_mx_providers for p in providers) if providers else False
+
     # Explanation
     if count >= 2:
         explanation = f"MX records are configured with <strong>{count} hosts</strong> for redundancy."
+    elif _is_major_provider:
+        explanation = (
+            f"One MX record is configured, hosted by <strong>{providers[0]}</strong>. "
+            f"Major providers like {providers[0]} handle redundancy internally across their infrastructure, "
+            f"so a single MX hostname does not indicate a single point of failure."
+        )
     else:
         explanation = (
             "Only one MX record is configured. If this host becomes unavailable, inbound email "
-            "delivery will fail until it recovers. Some providers handle redundancy internally "
-            "behind a single hostname, but this cannot be verified from DNS alone."
+            "delivery will fail until it recovers."
         )
     if providers:
         explanation += f" Provider: {', '.join(providers)}."
@@ -832,8 +842,10 @@ def transform_mx(raw: Dict) -> Dict:
 
     if count >= 2:
         details.append({"type": "good", "text": "Multiple MX hosts provide failover redundancy"})
+    elif count == 1 and _is_major_provider:
+        details.append({"type": "info", "text": f"Single MX hostname, but {providers[0]} handles redundancy internally"})
     elif count == 1:
-        details.append({"type": "warning", "text": "Single MX host - no failover if it goes down"})
+        details.append({"type": "warning", "text": "Single MX host with no visible failover. If this host is unavailable, inbound email will queue or bounce."})
 
     # Add any issues not already covered
     for issue in raw.get("issues", []):
@@ -1726,21 +1738,21 @@ def transform_ct(raw: Dict, domain: str) -> Dict:
             )
             detail_text = "CT log response too large to analyze automatically"
         else:
-            verdict = "CT log query unavailable"
+            verdict = "CT data unavailable (tool limitation)"
             explanation = (
-                "The Certificate Transparency log could not be queried at this time. "
-                "This may be a temporary issue with the crt.sh service."
+                "The external Certificate Transparency log service (crt.sh) could not be reached. "
+                "This is a limitation of this audit tool, not an issue with your domain."
             )
-            detail_text = issues[0]["plain_english"] if issues else "CT log query failed"
+            detail_text = "External CT log query timed out. This does not reflect your domain's configuration."
         return {
             "name": "Certificate Transparency",
-            "status": "warn",
-            "pill_label": "Unavailable",
+            "status": "pass",
+            "pill_label": "Skipped",
             "verdict": verdict,
             "record": None,
             "explanation": explanation,
             "details": [
-                {"type": "warning", "text": detail_text},
+                {"type": "info", "text": detail_text},
             ],
             "fix": None,
             "fix_records": None,

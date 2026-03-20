@@ -107,9 +107,9 @@ class TestDmarcWithoutDkim:
 
     def test_reject_no_dkim_has_mx(self):
         result = self._base("reject", keys=[], has_mx=True)
-        a = find(result, "without DKIM")
+        a = find(result, "DKIM")
         assert a is not None
-        assert a["severity"] == "high"
+        assert a["severity"] == "medium"
 
     def test_reject_no_dkim_no_mx(self):
         # No MX -- should not fire

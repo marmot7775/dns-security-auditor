@@ -354,10 +354,11 @@ def _raw_check_dmarc(domain: str) -> Dict[str, Any]:
         _add_issue(
             "error",
             "No DMARC record found",
-            f"No DMARC record exists at '_dmarc.{domain}'. Without DMARC, "
-            "anyone can send emails pretending to be from your domain.",
-            f"Add a TXT record at _dmarc.{domain} with: "
-            f"v=DMARC1; p=none; rua=mailto:dmarc-reports@{domain}; fo=1",
+            f"No DMARC record exists at '_dmarc.{domain}'. "
+            "Since February 2024, Google and Yahoo require at least a DMARC record "
+            "(even p=none) from bulk senders, and may reject mail without one. "
+            "You also have no aggregate reporting visibility into who is sending as your domain.",
+            f"Publish a DMARC record at _dmarc.{domain} starting with p=none and an rua address for aggregate reporting.",
         )
         return result
 
@@ -2859,6 +2860,19 @@ def run_full_audit(domain: str, dkim_selector: Optional[str] = None,
             defensive_signals.append("dmarc_reject")
 
         is_defensive = len(defensive_signals) >= 2
+
+    # --- Override email-specific cards for defensive DNS domains ---
+    # Defensive domains intentionally do not send/receive email. Email-specific
+    # checks should not show as failures or warnings.
+    if is_defensive:
+        _defensive_override = {"MTA-STS", "TLS-RPT", "BIMI", "DKIM", "DANE"}
+        for check in checks:
+            if check.get("name") in _defensive_override and check.get("status") != "pass":
+                check["status"] = "pass"
+                check["pill_label"] = "N/A"
+                check["verdict"] = "Not applicable (non-mail domain)"
+                check["fix"] = None
+                check["fix_records"] = None
 
     # --- DMARC Evaluation Summary (post-processor, zero DNS queries) ---
     dmarc_eval = None
