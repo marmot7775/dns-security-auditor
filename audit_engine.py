@@ -55,6 +55,30 @@ from result_transformer import (
 
 
 # ============================================================
+# Scope Configuration
+# ============================================================
+
+SCOPE_CHECKS = {
+    "complete":      None,  # None = run all
+    "email_full":    {"dmarc", "mx", "spf", "dkim", "mta_sts", "tls_rpt", "bimi", "blacklist"},
+    "dmarc":         {"dmarc"},
+    "transport":     {"mx", "mta_sts", "tls_rpt", "dane"},
+    "dns_infra":     {"dnssec", "caa", "dane", "nameservers", "ct"},
+    "security_scan": {"dmarc", "spf", "dkim", "dnssec", "dane", "ct", "blacklist"},
+}
+
+# Checks that depend on MX raw results
+_MX_DEPENDENTS = {"spf", "dkim", "mta_sts", "tls_rpt", "bimi", "dane", "blacklist"}
+# Checks that depend on SPF raw results
+_SPF_DEPENDENTS = {"dkim"}
+
+
+def _should_include(check_key, scope_set):
+    """Return True if this check's card should appear in results."""
+    return scope_set is None or check_key in scope_set
+
+
+# ============================================================
 # DNS Helpers
 # ============================================================
 
@@ -2284,7 +2308,7 @@ def _run_with_timeout(func, *args, timeout=CHECK_TIMEOUT):
     return future.result(timeout=timeout)
 
 
-def run_full_audit(domain: str, dkim_selector: Optional[str] = None) -> Dict[str, Any]:
+def run_full_audit(domain: str, dkim_selector: Optional[str] = None, scope: Optional[str] = None) -> Dict[str, Any]:
     """
     Run all security checks and return the complete audit result
     in the format expected by the frontend.
@@ -2297,210 +2321,246 @@ def run_full_audit(domain: str, dkim_selector: Optional[str] = None) -> Dict[str
     raw_results = {}
     errors = []
 
+    # Resolve scope to a set of check keys (None = run everything)
+    scope_set = SCOPE_CHECKS.get(scope) if scope else None
+
+    # Determine which dependency checks must run even if not in scope
+    needs_dmarc = scope_set is None or "dmarc" in scope_set
+    needs_mx = scope_set is None or bool(scope_set & (_MX_DEPENDENTS | {"mx"}))
+    needs_spf = scope_set is None or bool(scope_set & (_SPF_DEPENDENTS | {"spf"}))
+
     # --- DMARC Tree Walk (dmarcbis-41 Section 4.10) ---
     # Run before DMARC card so inherited policy can inform the card
     tree_walk_result = None
-    try:
-        tree_walk_result = _run_with_timeout(dmarc_tree_walk, domain)
-    except Exception as e:
-        errors.append(f"Tree Walk: {str(e)}")
+    if needs_dmarc:
+        try:
+            tree_walk_result = _run_with_timeout(dmarc_tree_walk, domain)
+        except Exception as e:
+            errors.append(f"Tree Walk: {str(e)}")
 
     # --- 1. DMARC ---
-    try:
-        raw_dmarc = _run_with_timeout(_raw_check_dmarc, domain)
-        raw_results["dmarc"] = raw_dmarc
-        checks.append(transform_dmarc(raw_dmarc, tree_walk=tree_walk_result))
-    except FuturesTimeoutError:
-        errors.append("DMARC: timed out")
-        checks.append(_timeout_card("DMARC"))
-    except Exception as e:
-        errors.append(f"DMARC: {str(e)}")
-        checks.append(_error_card("DMARC", e))
+    if needs_dmarc:
+        try:
+            raw_dmarc = _run_with_timeout(_raw_check_dmarc, domain)
+            raw_results["dmarc"] = raw_dmarc
+            if _should_include("dmarc", scope_set):
+                checks.append(transform_dmarc(raw_dmarc, tree_walk=tree_walk_result))
+        except FuturesTimeoutError:
+            errors.append("DMARC: timed out")
+            if _should_include("dmarc", scope_set):
+                checks.append(_timeout_card("DMARC"))
+        except Exception as e:
+            errors.append(f"DMARC: {str(e)}")
+            if _should_include("dmarc", scope_set):
+                checks.append(_error_card("DMARC", e))
 
     # --- 2. MX Records (run before SPF so we know if domain sends mail) ---
-    try:
-        raw_mx = _run_with_timeout(check_mx, domain)
-        raw_results["mx"] = raw_mx
-        checks.append(transform_mx(raw_mx))
-    except FuturesTimeoutError:
-        errors.append("MX: timed out")
-        checks.append(_timeout_card("MX Records"))
-    except Exception as e:
-        errors.append(f"MX: {str(e)}")
-        checks.append(_error_card("MX Records", e))
+    if needs_mx:
+        try:
+            raw_mx = _run_with_timeout(check_mx, domain)
+            raw_results["mx"] = raw_mx
+            if _should_include("mx", scope_set):
+                checks.append(transform_mx(raw_mx))
+        except FuturesTimeoutError:
+            errors.append("MX: timed out")
+            if _should_include("mx", scope_set):
+                checks.append(_timeout_card("MX Records"))
+        except Exception as e:
+            errors.append(f"MX: {str(e)}")
+            if _should_include("mx", scope_set):
+                checks.append(_error_card("MX Records", e))
 
     has_mx = bool(raw_results.get("mx", {}).get("records")) or bool(raw_results.get("mx", {}).get("mx_details"))
 
     # --- 3. SPF ---
     spf_record = None
-    try:
-        raw_spf = _run_with_timeout(_raw_check_spf, domain)
-        raw_results["spf"] = raw_spf
-        spf_record = raw_spf.get("record")
-        checks.append(transform_spf(raw_spf, has_mx=has_mx))
-    except FuturesTimeoutError:
-        errors.append("SPF: timed out")
-        checks.append(_timeout_card("SPF"))
-    except Exception as e:
-        errors.append(f"SPF: {str(e)}")
-        checks.append(_error_card("SPF", e))
+    if needs_spf:
+        try:
+            raw_spf = _run_with_timeout(_raw_check_spf, domain)
+            raw_results["spf"] = raw_spf
+            spf_record = raw_spf.get("record")
+            if _should_include("spf", scope_set):
+                checks.append(transform_spf(raw_spf, has_mx=has_mx))
+        except FuturesTimeoutError:
+            errors.append("SPF: timed out")
+            if _should_include("spf", scope_set):
+                checks.append(_timeout_card("SPF"))
+        except Exception as e:
+            errors.append(f"SPF: {str(e)}")
+            if _should_include("spf", scope_set):
+                checks.append(_error_card("SPF", e))
 
     # --- 4. MTA-STS ---
-    try:
-        raw_mta_sts = _run_with_timeout(check_mta_sts, domain)
-        raw_results["mta_sts"] = raw_mta_sts
-        checks.append(transform_mta_sts(raw_mta_sts, domain, has_mx=has_mx))
-    except FuturesTimeoutError:
-        errors.append("MTA-STS: timed out")
-        checks.append(_timeout_card("MTA-STS"))
-    except Exception as e:
-        errors.append(f"MTA-STS: {str(e)}")
-        checks.append(_error_card("MTA-STS", e))
+    if _should_include("mta_sts", scope_set):
+        try:
+            raw_mta_sts = _run_with_timeout(check_mta_sts, domain)
+            raw_results["mta_sts"] = raw_mta_sts
+            checks.append(transform_mta_sts(raw_mta_sts, domain, has_mx=has_mx))
+        except FuturesTimeoutError:
+            errors.append("MTA-STS: timed out")
+            checks.append(_timeout_card("MTA-STS"))
+        except Exception as e:
+            errors.append(f"MTA-STS: {str(e)}")
+            checks.append(_error_card("MTA-STS", e))
 
     # --- 5. TLS-RPT ---
-    try:
-        raw_tls_rpt = _run_with_timeout(check_tls_rpt, domain)
-        raw_results["tls_rpt"] = raw_tls_rpt
-        checks.append(transform_tls_rpt(raw_tls_rpt, domain, has_mx=has_mx))
-    except FuturesTimeoutError:
-        errors.append("TLS-RPT: timed out")
-        checks.append(_timeout_card("TLS-RPT"))
-    except Exception as e:
-        errors.append(f"TLS-RPT: {str(e)}")
-        checks.append(_error_card("TLS-RPT", e))
+    if _should_include("tls_rpt", scope_set):
+        try:
+            raw_tls_rpt = _run_with_timeout(check_tls_rpt, domain)
+            raw_results["tls_rpt"] = raw_tls_rpt
+            checks.append(transform_tls_rpt(raw_tls_rpt, domain, has_mx=has_mx))
+        except FuturesTimeoutError:
+            errors.append("TLS-RPT: timed out")
+            checks.append(_timeout_card("TLS-RPT"))
+        except Exception as e:
+            errors.append(f"TLS-RPT: {str(e)}")
+            checks.append(_error_card("TLS-RPT", e))
 
     # --- 6. BIMI ---
-    try:
-        raw_bimi = _run_with_timeout(check_bimi, domain)
-        raw_results["bimi"] = raw_bimi
-        checks.append(transform_bimi(raw_bimi, domain, has_mx=has_mx))
-    except FuturesTimeoutError:
-        errors.append("BIMI: timed out")
-        checks.append(_timeout_card("BIMI"))
-    except Exception as e:
-        errors.append(f"BIMI: {str(e)}")
-        checks.append(_error_card("BIMI", e))
+    if _should_include("bimi", scope_set):
+        try:
+            raw_bimi = _run_with_timeout(check_bimi, domain)
+            raw_results["bimi"] = raw_bimi
+            checks.append(transform_bimi(raw_bimi, domain, has_mx=has_mx))
+        except FuturesTimeoutError:
+            errors.append("BIMI: timed out")
+            checks.append(_timeout_card("BIMI"))
+        except Exception as e:
+            errors.append(f"BIMI: {str(e)}")
+            checks.append(_error_card("BIMI", e))
 
     # --- 7. DNSSEC ---
-    try:
-        raw_dnssec = _run_with_timeout(_raw_check_dnssec, domain)
-        raw_results["dnssec"] = raw_dnssec
-        checks.append(transform_dnssec(raw_dnssec))
-    except FuturesTimeoutError:
-        errors.append("DNSSEC: timed out")
-        checks.append(_timeout_card("DNSSEC"))
-    except Exception as e:
-        errors.append(f"DNSSEC: {str(e)}")
-        checks.append(_error_card("DNSSEC", e))
+    if _should_include("dnssec", scope_set):
+        try:
+            raw_dnssec = _run_with_timeout(_raw_check_dnssec, domain)
+            raw_results["dnssec"] = raw_dnssec
+            checks.append(transform_dnssec(raw_dnssec))
+        except FuturesTimeoutError:
+            errors.append("DNSSEC: timed out")
+            checks.append(_timeout_card("DNSSEC"))
+        except Exception as e:
+            errors.append(f"DNSSEC: {str(e)}")
+            checks.append(_error_card("DNSSEC", e))
 
     # --- 8. CAA ---
-    try:
-        raw_caa = _run_with_timeout(_raw_check_caa, domain)
-        raw_results["caa"] = raw_caa
-        checks.append(transform_caa(raw_caa, domain))
-    except FuturesTimeoutError:
-        errors.append("CAA: timed out")
-        checks.append(_timeout_card("CAA"))
-    except Exception as e:
-        errors.append(f"CAA: {str(e)}")
-        checks.append(_error_card("CAA", e))
+    if _should_include("caa", scope_set):
+        try:
+            raw_caa = _run_with_timeout(_raw_check_caa, domain)
+            raw_results["caa"] = raw_caa
+            checks.append(transform_caa(raw_caa, domain))
+        except FuturesTimeoutError:
+            errors.append("CAA: timed out")
+            checks.append(_timeout_card("CAA"))
+        except Exception as e:
+            errors.append(f"CAA: {str(e)}")
+            checks.append(_error_card("CAA", e))
 
     # --- 9. Nameservers ---
-    try:
-        raw_ns = _run_with_timeout(_raw_check_nameservers, domain)
-        raw_results["nameservers"] = raw_ns
-        checks.append(transform_nameservers(raw_ns, domain))
-    except FuturesTimeoutError:
-        errors.append("Nameservers: timed out")
-        checks.append(_timeout_card("Nameservers"))
-    except Exception as e:
-        errors.append(f"Nameservers: {str(e)}")
-        checks.append(_error_card("Nameservers", e))
+    if _should_include("nameservers", scope_set):
+        try:
+            raw_ns = _run_with_timeout(_raw_check_nameservers, domain)
+            raw_results["nameservers"] = raw_ns
+            checks.append(transform_nameservers(raw_ns, domain))
+        except FuturesTimeoutError:
+            errors.append("Nameservers: timed out")
+            checks.append(_timeout_card("Nameservers"))
+        except Exception as e:
+            errors.append(f"Nameservers: {str(e)}")
+            checks.append(_error_card("Nameservers", e))
 
     # --- 10. DANE ---
-    try:
-        raw_dane = _run_with_timeout(_raw_check_dane, domain, raw_results)
-        raw_results["dane"] = raw_dane
-        checks.append(transform_dane(raw_dane, domain))
-    except FuturesTimeoutError:
-        errors.append("DANE: timed out")
-        checks.append(_timeout_card("DANE"))
-    except Exception as e:
-        errors.append(f"DANE: {str(e)}")
-        checks.append(_error_card("DANE", e))
+    if _should_include("dane", scope_set):
+        try:
+            raw_dane = _run_with_timeout(_raw_check_dane, domain, raw_results)
+            raw_results["dane"] = raw_dane
+            checks.append(transform_dane(raw_dane, domain))
+        except FuturesTimeoutError:
+            errors.append("DANE: timed out")
+            checks.append(_timeout_card("DANE"))
+        except Exception as e:
+            errors.append(f"DANE: {str(e)}")
+            checks.append(_error_card("DANE", e))
 
     # --- 11. DKIM (direct lookup of user-provided selector) ---
-    try:
-        if dkim_selector and dkim_selector.strip():
-            sel = dkim_selector.strip()
-            fqdn = f"{sel}._domainkey.{domain}"
-            raw_dkim = {
-                "domain": domain,
-                "found_selectors": [],
-                "selector_queried": sel,
-            }
-            try:
-                import dns.resolver as _dkim_resolver
-                answers = _run_with_timeout(_dkim_resolver.resolve, fqdn, "TXT")
-                txt = "".join(
-                    s.decode() if isinstance(s, bytes) else s
-                    for rdata in answers for s in rdata.strings
-                )
-                if "p=" in txt:
-                    key_analysis = analyze_dkim_key_strength(txt)
-                    raw_dkim["found_selectors"].append({
-                        "selector": sel,
-                        "record": txt,
-                        "key_size": key_analysis.get("key_bits"),
-                    })
-            except FuturesTimeoutError:
-                raise  # Let outer handler catch it
-            except Exception:
-                pass  # selector not found — found_selectors stays empty
-        else:
-            # No selector provided — fall back to auto-discovery
-            raw_dkim = _run_with_timeout(smart_dkim_check, domain, spf_record)
-        raw_results["dkim"] = raw_dkim
-        checks.insert(2, transform_dkim(raw_dkim, domain, has_mx=has_mx))
-    except FuturesTimeoutError:
-        errors.append("DKIM: timed out")
-        checks.insert(2, _timeout_card("DKIM"))
-    except Exception as e:
-        errors.append(f"DKIM: {str(e)}")
-        checks.insert(2, _error_card("DKIM", e))
+    if _should_include("dkim", scope_set):
+        try:
+            if dkim_selector and dkim_selector.strip():
+                sel = dkim_selector.strip()
+                fqdn = f"{sel}._domainkey.{domain}"
+                raw_dkim = {
+                    "domain": domain,
+                    "found_selectors": [],
+                    "selector_queried": sel,
+                }
+                try:
+                    import dns.resolver as _dkim_resolver
+                    answers = _run_with_timeout(_dkim_resolver.resolve, fqdn, "TXT")
+                    txt = "".join(
+                        s.decode() if isinstance(s, bytes) else s
+                        for rdata in answers for s in rdata.strings
+                    )
+                    if "p=" in txt:
+                        key_analysis = analyze_dkim_key_strength(txt)
+                        raw_dkim["found_selectors"].append({
+                            "selector": sel,
+                            "record": txt,
+                            "key_size": key_analysis.get("key_bits"),
+                        })
+                except FuturesTimeoutError:
+                    raise  # Let outer handler catch it
+                except Exception:
+                    pass  # selector not found -- found_selectors stays empty
+            else:
+                # No selector provided -- fall back to auto-discovery
+                raw_dkim = _run_with_timeout(smart_dkim_check, domain, spf_record)
+            raw_results["dkim"] = raw_dkim
+            dkim_pos = min(2, len(checks))
+            checks.insert(dkim_pos, transform_dkim(raw_dkim, domain, has_mx=has_mx))
+        except FuturesTimeoutError:
+            errors.append("DKIM: timed out")
+            dkim_pos = min(2, len(checks))
+            checks.insert(dkim_pos, _timeout_card("DKIM"))
+        except Exception as e:
+            errors.append(f"DKIM: {str(e)}")
+            dkim_pos = min(2, len(checks))
+            checks.insert(dkim_pos, _error_card("DKIM", e))
 
     # --- 12. Certificate Transparency ---
-    try:
-        raw_ct = _run_with_timeout(_raw_check_ct, domain, raw_results, timeout=15)
-        raw_results["ct"] = raw_ct
-        checks.append(transform_ct(raw_ct, domain))
-    except FuturesTimeoutError:
-        errors.append("Certificate Transparency: timed out")
-        checks.append(_timeout_card("Certificate Transparency"))
-    except Exception as e:
-        errors.append(f"Certificate Transparency: {str(e)}")
-        checks.append(_error_card("Certificate Transparency", e))
+    if _should_include("ct", scope_set):
+        try:
+            raw_ct = _run_with_timeout(_raw_check_ct, domain, raw_results, timeout=15)
+            raw_results["ct"] = raw_ct
+            checks.append(transform_ct(raw_ct, domain))
+        except FuturesTimeoutError:
+            errors.append("Certificate Transparency: timed out")
+            checks.append(_timeout_card("Certificate Transparency"))
+        except Exception as e:
+            errors.append(f"Certificate Transparency: {str(e)}")
+            checks.append(_error_card("Certificate Transparency", e))
 
     # --- 13. Blacklist ---
-    try:
-        raw_blacklist = _run_with_timeout(_raw_check_blacklist, domain, raw_results, timeout=15)
-        raw_results["blacklist"] = raw_blacklist
-        checks.append(transform_blacklist(raw_blacklist, domain))
-    except FuturesTimeoutError:
-        errors.append("Blacklist: timed out")
-        checks.append(_timeout_card("Blacklist"))
-    except Exception as e:
-        errors.append(f"Blacklist: {str(e)}")
-        checks.append(_error_card("Blacklist", e))
+    if _should_include("blacklist", scope_set):
+        try:
+            raw_blacklist = _run_with_timeout(_raw_check_blacklist, domain, raw_results, timeout=15)
+            raw_results["blacklist"] = raw_blacklist
+            checks.append(transform_blacklist(raw_blacklist, domain))
+        except FuturesTimeoutError:
+            errors.append("Blacklist: timed out")
+            checks.append(_timeout_card("Blacklist"))
+        except Exception as e:
+            errors.append(f"Blacklist: {str(e)}")
+            checks.append(_error_card("Blacklist", e))
 
-    # --- Vendor Fingerprinting (run once, shared with scorer) ---
+    # --- Vendor Fingerprinting (only useful for email scopes) ---
     fp_vendors = []
-    try:
-        fp = AdvancedVendorFingerprinter(domain)
-        fp_result = fp.fingerprint_all()
-        fp_vendors = fp_result.get("vendors", [])
-    except Exception:
-        pass
+    _email_checks = {"dmarc", "spf", "dkim", "mx"}
+    if scope_set is None or bool(scope_set & _email_checks):
+        try:
+            fp = AdvancedVendorFingerprinter(domain)
+            fp_result = fp.fingerprint_all()
+            fp_vendors = fp_result.get("vendors", [])
+        except Exception:
+            pass
 
     # --- Security Score ---
     score_result = _calculate_score(raw_results, domain, tree_walk=tree_walk_result, fp_vendors=fp_vendors)
@@ -2514,34 +2574,32 @@ def run_full_audit(domain: str, dkim_selector: Optional[str] = None) -> Dict[str
     priority_fixes = _build_priority_fixes(checks, score_result, has_mx=has_mx)
 
     # --- Detect Defensive DNS pattern ---
-    # A domain intentionally configured to not send or receive email publishes:
-    #   - Null MX (MX 0 . or no MX records at all)
-    #   - Null SPF (v=spf1 -all)
-    #   - DMARC p=reject
-    # Two or more of these signals together indicate deliberate defensive posture.
+    # Only detect when all three signals are available
     defensive_signals = []
-    _raw_mx = raw_results.get("mx", {})
-    _raw_spf = raw_results.get("spf", {})
-    _raw_dmarc = raw_results.get("dmarc", {})
+    is_defensive = False
+    if "dmarc" in raw_results and "mx" in raw_results and "spf" in raw_results:
+        _raw_mx = raw_results["mx"]
+        _raw_spf = raw_results["spf"]
+        _raw_dmarc = raw_results["dmarc"]
 
-    _mx_records = _raw_mx.get("records", []) or []
-    _has_null_mx = any("0 ." in r for r in _mx_records) if _mx_records else False
-    _has_no_mx = not _mx_records
+        _mx_records = _raw_mx.get("records", []) or []
+        _has_null_mx = any("0 ." in r for r in _mx_records) if _mx_records else False
+        _has_no_mx = not _mx_records
 
-    _spf_record = (_raw_spf.get("record") or "").strip().lower()
-    _has_null_spf = _spf_record in ("v=spf1 -all", "v=spf1 ~all")
+        _spf_record = (_raw_spf.get("record") or "").strip().lower()
+        _has_null_spf = _spf_record in ("v=spf1 -all", "v=spf1 ~all")
 
-    _dmarc_policy = (_raw_dmarc.get("policy") or "").lower()
-    _has_dmarc_reject = _dmarc_policy == "reject"
+        _dmarc_policy = (_raw_dmarc.get("policy") or "").lower()
+        _has_dmarc_reject = _dmarc_policy == "reject"
 
-    if _has_null_mx or _has_no_mx:
-        defensive_signals.append("null_mx")
-    if _has_null_spf:
-        defensive_signals.append("null_spf")
-    if _has_dmarc_reject:
-        defensive_signals.append("dmarc_reject")
+        if _has_null_mx or _has_no_mx:
+            defensive_signals.append("null_mx")
+        if _has_null_spf:
+            defensive_signals.append("null_spf")
+        if _has_dmarc_reject:
+            defensive_signals.append("dmarc_reject")
 
-    is_defensive = len(defensive_signals) >= 2
+        is_defensive = len(defensive_signals) >= 2
 
     # --- Assemble final response ---
     elapsed = (datetime.now() - start_time).total_seconds()
