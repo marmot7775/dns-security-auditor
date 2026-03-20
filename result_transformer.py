@@ -21,6 +21,7 @@ Each card looks like:
 
 from typing import Any, Dict, List, Optional
 from datetime import datetime, timezone
+from html import escape as _e
 
 from dkim_formatter import analyze_dkim_key_strength
 
@@ -143,40 +144,40 @@ def transform_dmarc(raw: Dict, tree_walk: Optional[Dict] = None) -> Dict:
         if inherited_policy == "reject":
             explanation = (
                 f"This subdomain has no DMARC record at "
-                f"<strong>_dmarc.{raw.get('domain', '')}</strong>, but inherits "
+                f"<strong>_dmarc.{_e(raw.get('domain', ''))}</strong>, but inherits "
                 f"<strong>p=reject</strong> from the organizational domain "
-                f"<strong>{inherited_source}</strong> via the {tag_label} tag. "
+                f"<strong>{_e(inherited_source)}</strong> via the {tag_label} tag. "
                 f"Messages that fail both SPF and DKIM alignment will be rejected."
                 + _method_note + _best_practice
             )
         elif inherited_policy == "quarantine":
             explanation = (
                 f"This subdomain has no DMARC record at "
-                f"<strong>_dmarc.{raw.get('domain', '')}</strong>, but inherits "
+                f"<strong>_dmarc.{_e(raw.get('domain', ''))}</strong>, but inherits "
                 f"<strong>p=quarantine</strong> from the organizational domain "
-                f"<strong>{inherited_source}</strong> via the {tag_label} tag. "
+                f"<strong>{_e(inherited_source)}</strong> via the {tag_label} tag. "
                 f"Messages that fail authentication will be routed to the spam folder."
                 + _method_note + _best_practice
             )
         elif inherited_policy == "none":
             explanation = (
                 f"This subdomain has no DMARC record at "
-                f"<strong>_dmarc.{raw.get('domain', '')}</strong>, but inherits "
+                f"<strong>_dmarc.{_e(raw.get('domain', ''))}</strong>, but inherits "
                 f"<strong>p=none</strong> from the organizational domain "
-                f"<strong>{inherited_source}</strong> via the {tag_label} tag. "
+                f"<strong>{_e(inherited_source)}</strong> via the {tag_label} tag. "
                 f"This is monitoring only; receivers take no enforcement action, but aggregate reports "
                 f"provide visibility into authentication results."
                 + _method_note + _best_practice
             )
         else:
             explanation = (
-                f"This subdomain inherits DMARC policy <strong>{inherited_policy}</strong> "
-                f"from the organizational domain <strong>{inherited_source}</strong>."
+                f"This subdomain inherits DMARC policy <strong>{_e(inherited_policy)}</strong> "
+                f"from the organizational domain <strong>{_e(inherited_source)}</strong>."
                 + _method_note + _best_practice
             )
     elif not record:
         explanation = (
-            f"No DMARC record was found at <strong>_dmarc.{raw.get('domain', '')}</strong>. "
+            f"No DMARC record was found at <strong>_dmarc.{_e(raw.get('domain', ''))}</strong>. "
             f"Without DMARC, there is no policy telling receivers how to handle messages that fail authentication. "
             f"Google and Yahoo require bulk senders to publish a "
             f"<a href=\"https://datatracker.ietf.org/doc/html/rfc7489\" target=\"_blank\" rel=\"noopener\">DMARC</a> "
@@ -306,7 +307,7 @@ def transform_dmarc(raw: Dict, tree_walk: Optional[Dict] = None) -> Dict:
     if inherited:
         if inherited_policy == "none":
             fix = (
-                f"The inherited policy from <strong>{inherited_source}</strong> is p=none (monitoring only). "
+                f"The inherited policy from <strong>{_e(inherited_source)}</strong> is p=none (monitoring only). "
                 f"This provides no enforcement against spoofing."
             )
         else:
@@ -314,7 +315,7 @@ def transform_dmarc(raw: Dict, tree_walk: Optional[Dict] = None) -> Dict:
             fix = None
     elif not record:
         fix = (
-            f"Publish a DMARC TXT record at <strong>_dmarc.{domain_name}</strong> with <strong>p=none</strong>. "
+            f"Publish a DMARC TXT record at <strong>_dmarc.{_e(domain_name)}</strong> with <strong>p=none</strong>. "
             f"Requires an <strong>rua=</strong> reporting address: either your own mailbox "
             f"(reports arrive as compressed XML) or a DMARC reporting service that provides a dashboard."
         )
@@ -406,7 +407,7 @@ def transform_spf(raw: Dict, has_mx: bool = True) -> Dict:
     if null_spf:
         all_mech = raw.get("all_mechanism") or ""
         explanation = (
-            f"This domain publishes a null SPF record (<strong>v=spf1 {all_mech}</strong>), "
+            f"This domain publishes a null SPF record (<strong>v=spf1 {_e(all_mech)}</strong>), "
             f"which explicitly declares that no servers are authorized to send email for this domain. "
             f"This is correct configuration for domains that do not send email."
         )
@@ -485,7 +486,7 @@ def transform_spf(raw: Dict, has_mx: bool = True) -> Dict:
     details = []
     if null_spf:
         all_mech = raw.get("all_mechanism") or ""
-        details.append({"type": "good", "text": f"Null SPF record (v=spf1 {all_mech})"})
+        details.append({"type": "good", "text": f"Null SPF record (v=spf1 {_e(all_mech)})"})
         details.append({"type": "good", "text": "Explicitly declares this domain does not send email"})
         status = "pass"
     elif not record and not has_mx:
@@ -638,17 +639,17 @@ def transform_dkim(raw: Dict, domain: str, has_mx: bool = True) -> Dict:
                 "record": None,
                 "explanation": (
                     f"No DKIM public key was found at "
-                    f"<strong>{selector_not_found}._domainkey.{domain}</strong>. "
+                    f"<strong>{_e(selector_not_found)}._domainkey.{_e(domain)}</strong>. "
                     f"Verify the selector name is correct. You can find your DKIM "
                     f"selector in the DKIM-Signature header of a sent message (the s= value)."
                 ),
                 "details": [
-                    {"type": "error", "text": f"No TXT record at {selector_not_found}._domainkey.{domain}"},
+                    {"type": "error", "text": f"No TXT record at {_e(selector_not_found)}._domainkey.{_e(domain)}"},
                     {"type": "info", "text": "Check your email provider's admin console for the correct selector name"},
                 ],
                 "fix": (
                     f"Verify that DKIM is enabled in your email provider's settings and that the public key "
-                    f"TXT record is published at <strong>{selector_not_found}._domainkey.{domain}</strong>."
+                    f"TXT record is published at <strong>{_e(selector_not_found)}._domainkey.{_e(domain)}</strong>."
                 ),
                 "fix_records": None,
             }
@@ -762,7 +763,7 @@ def transform_dkim(raw: Dict, domain: str, has_mx: bool = True) -> Dict:
         selectors_str = ", ".join(weak_keys)
         fix = (
             f"The following selectors use 1024-bit keys, which are below current recommendations: "
-            f"<strong>{selectors_str}</strong>. "
+            f"<strong>{_e(selectors_str)}</strong>. "
             f"Key rotation is provider-specific. Check your email provider's documentation "
             f"for how to generate and publish a new 2048-bit or Ed25519 key pair."
         )
@@ -864,8 +865,8 @@ def transform_mx(raw: Dict) -> Dict:
         explanation = f"MX records are configured with <strong>{count} hosts</strong> for redundancy."
     elif _is_major_provider:
         explanation = (
-            f"One MX record is configured, hosted by <strong>{providers[0]}</strong>. "
-            f"Major providers like {providers[0]} handle redundancy internally across their infrastructure, "
+            f"One MX record is configured, hosted by <strong>{_e(providers[0])}</strong>. "
+            f"Major providers like {_e(providers[0])} handle redundancy internally across their infrastructure, "
             f"so a single MX hostname does not indicate a single point of failure."
         )
     else:
@@ -970,8 +971,8 @@ def transform_mta_sts(raw: Dict, domain: str, has_mx: bool = True) -> Dict:
             ),
             "details": [_issue_to_detail(i) for i in raw.get("issues", [])],
             "fix": (
-                f"MTA-STS requires a DNS TXT record at <strong>_mta-sts.{domain}</strong> and a "
-                f"policy file hosted at <strong>https://mta-sts.{domain}/.well-known/mta-sts.txt</strong>. "
+                f"MTA-STS requires a DNS TXT record at <strong>_mta-sts.{_e(domain)}</strong> and a "
+                f"policy file hosted at <strong>https://mta-sts.{_e(domain)}/.well-known/mta-sts.txt</strong>. "
                 f"The policy file specifies your MX hosts and the TLS enforcement mode."
             ),
             "fix_records": None,
@@ -1070,7 +1071,7 @@ def transform_tls_rpt(raw: Dict, domain: str, has_mx: bool = True) -> Dict:
             ),
             "details": [_issue_to_detail(i) for i in raw.get("issues", [])],
             "fix": (
-                f"Publish a TLS-RPT TXT record at <strong>_smtp._tls.{domain}</strong>. "
+                f"Publish a TLS-RPT TXT record at <strong>_smtp._tls.{_e(domain)}</strong>. "
                 f"Requires a reporting address (<strong>rua=</strong>) that can receive JSON-formatted "
                 f"TLS failure reports: either your own mailbox or a reporting service."
             ),
@@ -1159,7 +1160,7 @@ def transform_bimi(raw: Dict, domain: str, has_mx: bool = True) -> Dict:
             ],
             "fix": (
                 f"BIMI requires DMARC at p=quarantine or p=reject, an SVG logo in Tiny P/S format "
-                f"hosted at a public URL, and a BIMI TXT record at <strong>default._bimi.{domain}</strong>. "
+                f"hosted at a public URL, and a BIMI TXT record at <strong>default._bimi.{_e(domain)}</strong>. "
                 f"Gmail requires a VMC (registered trademark) or CMC (domain-validated) certificate."
             ),
             "fix_records": None,
@@ -1908,7 +1909,7 @@ def transform_ct(raw: Dict, domain: str) -> Dict:
     if caa_mismatches:
         mismatched_cas = ", ".join(mm["cert_issuer"] for mm in caa_mismatches[:3])
         fix = (
-            f"Review certificates from <strong>{mismatched_cas}</strong>. "
+            f"Review certificates from <strong>{_e(mismatched_cas)}</strong>. "
             f"If these CAs should be authorized, add them to your CAA record. "
             f"If they should not be, consider requesting revocation. "
             f"Certificates issued before CAA records were in place will expire naturally."
@@ -2017,7 +2018,7 @@ def transform_blacklist(raw: Dict, domain: str) -> Dict:
             url = DELIST_URLS.get(name)
             if url and url not in seen_urls:
                 seen_urls.add(url)
-                delist_parts.append(f"<strong>{name}</strong>: <a href=\"{url}\" target=\"_blank\" rel=\"noopener\">{url}</a>")
+                delist_parts.append(f"<strong>{_e(name)}</strong>: <a href=\"{_e(url)}\" target=\"_blank\" rel=\"noopener\">{_e(url)}</a>")
         if delist_parts:
             fix = "Request delisting from each blocklist:<br>" + "<br>".join(delist_parts)
             fix += (
