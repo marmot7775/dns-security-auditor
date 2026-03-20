@@ -1088,12 +1088,12 @@ def transform_bimi(raw: Dict, domain: str, has_mx: bool = True) -> Dict:
             "details": [
                 {"type": "info", "text": "BIMI is about brand recognition, not security"},
                 {"type": "info", "text": "Requires DMARC policy of p=quarantine or p=reject at pct=100"},
-                {"type": "info", "text": "Gmail requires a Verified Mark Certificate (VMC); Apple Mail does not"},
+                {"type": "info", "text": "Gmail accepts a VMC (Verified Mark Certificate) or CMC (Common Mark Certificate). Apple Mail does not require either."},
             ],
             "fix": (
                 f"BIMI requires DMARC at p=quarantine or p=reject, an SVG logo in Tiny P/S format "
                 f"hosted at a public URL, and a BIMI TXT record at <strong>default._bimi.{domain}</strong>. "
-                f"Gmail also requires a Verified Mark Certificate (VMC) from DigiCert or Entrust."
+                f"Gmail requires a VMC (registered trademark) or CMC (domain-validated) certificate."
             ),
             "fix_records": None,
         }
@@ -1101,7 +1101,7 @@ def transform_bimi(raw: Dict, domain: str, has_mx: bool = True) -> Dict:
     logo_url = raw.get("logo_url")
     vmc_url = raw.get("vmc_url")
     if vmc_url:
-        verdict = "VMC verified"
+        verdict = "Certificate referenced (VMC or CMC)"
     elif logo_url:
         verdict = "Logo configured"
     else:
@@ -1111,11 +1111,12 @@ def transform_bimi(raw: Dict, domain: str, has_mx: bool = True) -> Dict:
     if logo_url:
         explanation += " Your brand logo URL is configured."
     if vmc_url:
-        explanation += " A Verified Mark Certificate (VMC) is referenced."
+        explanation += " A certificate (VMC or CMC) is referenced in the <strong>a=</strong> tag."
     elif not vmc_url:
         explanation += (
-            " <strong>Note:</strong> No VMC (Verified Mark Certificate) is referenced. "
-            "Gmail requires a VMC for BIMI logo display; other clients (e.g. Apple Mail) do not."
+            " <strong>Note:</strong> No certificate is referenced in the <strong>a=</strong> tag. "
+            "Gmail requires either a VMC (registered trademark required) or CMC (domain validation only) "
+            "for logo display. Other clients like Apple Mail do not require a certificate."
         )
 
     details = [_issue_to_detail(i) for i in raw.get("issues", [])]
