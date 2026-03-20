@@ -2846,7 +2846,13 @@ def run_full_audit(domain: str, dkim_selector: Optional[str] = None,
     # --- 6. BIMI ---
     if _should_include("bimi", scope_set):
         try:
-            raw_bimi = _run_with_timeout(check_bimi, domain)
+            # Pass resolved DMARC enforcement (including inherited) to BIMI check
+            _bimi_dmarc = raw_results.get("dmarc") or {}
+            _bimi_dmarc_enforcing = (
+                (_bimi_dmarc.get("policy") or "").lower() in ("quarantine", "reject")
+                or (_bimi_dmarc.get("inherited_policy") or "").lower() in ("quarantine", "reject")
+            )
+            raw_bimi = _run_with_timeout(check_bimi, domain, dmarc_enforcing_override=_bimi_dmarc_enforcing)
             raw_results["bimi"] = raw_bimi
             checks.append(transform_bimi(raw_bimi, domain, has_mx=has_mx))
         except FuturesTimeoutError:
@@ -3057,7 +3063,7 @@ def run_full_audit(domain: str, dkim_selector: Optional[str] = None,
         _xc_spf_rec = (_xc_spf.get("record") or "").strip().lower()
         _xc_is_defensive = (
             (not has_mx)
-            or (_xc_spf_rec in ("v=spf1 -all", "v=spf1 ~all") and not _xc_has_dkim)
+            or (_xc_spf_rec == "v=spf1 -all" and not _xc_has_dkim)
         )
 
         if not _xc_is_defensive:
