@@ -117,8 +117,8 @@ app.add_middleware(
 class SecurityHeadersMiddleware(BaseHTTPMiddleware):
     CSP = (
         "default-src 'self'; "
-        "font-src 'self' https://fonts.googleapis.com https://fonts.gstatic.com; "
-        "style-src 'self' https://fonts.googleapis.com; "
+        "font-src 'self'; "
+        "style-src 'self'; "
         "img-src 'self' data:; "
         "script-src 'self'; "
         "connect-src 'self'; "
