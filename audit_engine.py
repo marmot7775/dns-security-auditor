@@ -2733,6 +2733,8 @@ def _calculate_score(raw_results: Dict, domain: str, tree_walk: Optional[Dict] =
             "rua": raw_dmarc.get("rua"),
             "ruf": raw_dmarc.get("ruf"),
             "sp": raw_dmarc.get("sp"),
+            "adkim": raw_dmarc.get("adkim"),
+            "aspf": raw_dmarc.get("aspf"),
             "domain": domain,
             "inherited_policy": inherited_policy,
         }
