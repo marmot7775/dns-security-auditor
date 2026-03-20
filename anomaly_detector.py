@@ -89,15 +89,10 @@ def detect_anomalies(raw_results: dict, score_result: dict, has_mx: bool, is_def
     nameservers_raw = raw_results.get("nameservers") or {}
     dnssec = raw_results.get("dnssec") or {}
 
-    # Determine effective DMARC policy, including inherited via tree walk
-    _dmarc_inherited = (
-        not dmarc.get("record")
-        and tree_walk
-        and tree_walk.get("policy_source")
-        and tree_walk.get("is_subdomain")
-    )
+    # Determine effective DMARC policy, including inherited from org domain
+    _dmarc_inherited = not dmarc.get("record") and dmarc.get("is_subdomain") and dmarc.get("inherited_policy")
     if _dmarc_inherited:
-        dmarc_policy = (tree_walk.get("effective_policy") or "").lower()
+        dmarc_policy = dmarc["inherited_policy"].lower()
     else:
         dmarc_policy = (dmarc.get("policy") or "").lower()
     dmarc_enforced = dmarc_policy in ("quarantine", "reject")

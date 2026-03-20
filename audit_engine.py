@@ -39,6 +39,7 @@ from remediation_planner import build_remediation_plan
 from dkim_key_age import DKIMKeyAgeAnalyzer
 from dkim_tag_analyzer import DKIMTagAnalyzer
 from dmarc_tree_walk import dmarc_tree_walk
+import tldextract
 from spf_intelligence import smart_dkim_check
 
 from result_transformer import (
@@ -280,6 +281,95 @@ def _check_report_authorization(domain: str, raw_dmarc: Dict, tree_walk_result: 
         "report_auth_issues": issues,
         "ruf_provider_note": ruf_present,
     }
+
+
+# ============================================================
+# Classic DMARC Inheritance (RFC 7489 Section 6.6.3)
+# ============================================================
+
+def _get_org_domain(domain: str) -> Optional[str]:
+    """Determine the Organizational Domain using the Public Suffix List.
+
+    Per RFC 7489 Section 3.2, the Organizational Domain is the domain
+    at one level below the Public Suffix. For example:
+      mail.yahoo.com -> yahoo.com
+      sub.example.co.uk -> example.co.uk
+      yahoo.com -> yahoo.com (already the org domain)
+
+    Returns None if the domain cannot be parsed.
+    """
+    ext = tldextract.extract(domain)
+    if not ext.domain or not ext.suffix:
+        return None
+    return f"{ext.domain}.{ext.suffix}"
+
+
+def _enrich_dmarc_inheritance(
+    raw_dmarc: Dict,
+    domain: str,
+    tree_walk_result: Optional[Dict] = None,
+) -> None:
+    """Enrich raw DMARC result with inherited policy for subdomains.
+
+    Implements RFC 7489 Section 6.6.3: if no DMARC record exists at the
+    Author Domain, check the Organizational Domain (determined via PSL).
+
+    Uses tree walk result first (if available), falls back to PSL-based
+    org domain lookup. Modifies raw_dmarc in place, adding:
+      - inherited_from: the domain that provided the policy
+      - inherited_policy: the effective policy (sp= or p=)
+      - inherited_record: the full DMARC record from the org domain
+      - is_subdomain: True
+      - inheritance_method: "tree_walk" or "psl" (for transparency)
+    """
+    if raw_dmarc.get("record"):
+        return  # Has its own record, no inheritance needed
+
+    # -- Try tree walk first (RFC 9716) --
+    if (tree_walk_result
+        and tree_walk_result.get("policy_source")
+        and tree_walk_result.get("is_subdomain")):
+        eff_policy = (tree_walk_result.get("effective_policy") or "").lower()
+        if eff_policy:
+            raw_dmarc["inherited_from"] = tree_walk_result["policy_source"]
+            raw_dmarc["inherited_policy"] = eff_policy
+            raw_dmarc["inherited_record"] = tree_walk_result.get("effective_record")
+            raw_dmarc["is_subdomain"] = True
+            raw_dmarc["applied_tag"] = tree_walk_result.get("applied_tag", "p")
+            raw_dmarc["inheritance_method"] = "tree_walk"
+            return
+
+    # -- Fallback: classic RFC 7489 PSL-based org domain lookup --
+    org_domain = _get_org_domain(domain)
+    if not org_domain or org_domain.lower() == domain.lower():
+        return  # Already the org domain, no inheritance possible
+
+    org_recs = _lookup_txt(f"_dmarc.{org_domain}")
+    org_dmarc = [r for r in org_recs if r.strip().lower().startswith("v=dmarc")]
+    if len(org_dmarc) != 1:
+        return  # No valid record (zero or multiple)
+
+    org_record = org_dmarc[0].strip()
+    # Parse tags from org domain record
+    org_tags = {}
+    for part in org_record.split(";"):
+        part = part.strip()
+        if "=" in part:
+            key, _, val = part.partition("=")
+            org_tags[key.strip().lower()] = val.strip()
+
+    # Determine effective policy: sp= overrides p= for subdomains
+    sp = org_tags.get("sp", "").lower()
+    p = org_tags.get("p", "").lower()
+    effective_policy = sp if sp else p
+
+    if effective_policy:
+        raw_dmarc["inherited_from"] = org_domain
+        raw_dmarc["inherited_policy"] = effective_policy
+        raw_dmarc["inherited_record"] = org_record
+        raw_dmarc["is_subdomain"] = True
+        raw_dmarc["applied_tag"] = "sp" if sp else "p"
+        raw_dmarc["inheritance_method"] = "psl"
 
 
 # ============================================================
@@ -2602,6 +2692,8 @@ def run_full_audit(domain: str, dkim_selector: Optional[str] = None,
     if needs_dmarc:
         try:
             raw_dmarc = _run_with_timeout(_raw_check_dmarc, domain)
+            # Enrich with inherited policy (tree walk first, PSL fallback)
+            _enrich_dmarc_inheritance(raw_dmarc, domain, tree_walk_result)
             raw_results["dmarc"] = raw_dmarc
             if _should_include("dmarc", scope_set):
                 checks.append(transform_dmarc(raw_dmarc, tree_walk=tree_walk_result))
@@ -3127,9 +3219,8 @@ def _calculate_score(raw_results: Dict, domain: str, tree_walk: Optional[Dict] =
     try:
         # DMARC results — include inherited policy info
         raw_dmarc = raw_results.get("dmarc", {})
-        inherited_policy = None
-        if not raw_dmarc.get("record") and tree_walk and tree_walk.get("policy_source") and tree_walk.get("is_subdomain"):
-            inherited_policy = tree_walk.get("effective_policy")
+        # Use inherited policy from raw_dmarc (set by _enrich_dmarc_inheritance)
+        inherited_policy = raw_dmarc.get("inherited_policy")
 
         dmarc_for_scorer = {
             "record": raw_dmarc.get("record"),
@@ -3343,18 +3434,15 @@ def _build_resilience_analysis(
         )
 
     # -- DMARC mechanism status --
-    # Check for inherited policy via tree walk when no direct record exists
-    _inherited = (
-        not raw_dmarc.get("record")
-        and tree_walk
-        and tree_walk.get("policy_source")
-        and tree_walk.get("is_subdomain")
-    )
+    # Check for inherited policy (set by _enrich_dmarc_inheritance)
+    _inherited = not raw_dmarc.get("record") and raw_dmarc.get("is_subdomain") and raw_dmarc.get("inherited_policy")
     if _inherited:
-        _inh_policy = (tree_walk.get("effective_policy") or "none").lower()
-        _inh_source = tree_walk.get("policy_source", "parent domain")
-        _inh_tag = tree_walk.get("applied_tag", "p")
+        _inh_policy = raw_dmarc["inherited_policy"].lower()
+        _inh_source = raw_dmarc.get("inherited_from", "organizational domain")
+        _inh_tag = raw_dmarc.get("applied_tag", "p")
         _tag_label = {"sp": "sp=", "np": "np=", "p": "p="}.get(_inh_tag, f"{_inh_tag}=")
+        _inh_method = raw_dmarc.get("inheritance_method", "psl")
+        _method_label = "RFC 9716 tree walk" if _inh_method == "tree_walk" else "RFC 7489 organizational domain fallback (Public Suffix List)"
         dmarc_policy = _inh_policy
     else:
         dmarc_policy = (raw_dmarc.get("policy") or "").lower().strip()
@@ -3363,27 +3451,28 @@ def _build_resilience_analysis(
         dmarc_status = _inh_policy
         dmarc_note = (
             f"No DMARC record at this subdomain, but it inherits {_tag_label}{_inh_policy} "
-            f"from {_inh_source} via the DNS tree walk. "
+            f"from the organizational domain {_inh_source}. "
         )
         if _inh_policy == "reject":
             dmarc_note += (
-                "Receivers that honor this inheritance will block messages that fail "
+                "Receivers are requested to block messages that fail "
                 "both SPF and DKIM alignment."
             )
         else:
             dmarc_note += (
-                "Receivers that honor this inheritance will route failing messages "
+                "Receivers are requested to route failing messages "
                 "to the spam or junk folder."
             )
         dmarc_note += (
-            " Note: tree walk inheritance is an RFC 9716 feature. For the strongest "
-            "protection, publish a dedicated DMARC record for this subdomain."
+            f" Discovery method: {_method_label}. "
+            "Best practice: publish a dedicated DMARC record for this subdomain."
         )
     elif _inherited and _inh_policy == "none":
         dmarc_status = "none"
         dmarc_note = (
             f"No DMARC record at this subdomain. It inherits {_tag_label}none "
             f"from {_inh_source} (monitoring only, no enforcement). "
+            f"Discovery method: {_method_label}. "
             "Publishing a dedicated record with p=quarantine or p=reject would provide "
             "direct protection for this subdomain."
         )

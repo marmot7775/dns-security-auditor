@@ -105,15 +105,10 @@ def build_remediation_plan(
     spf_lookups = spf.get("lookup_count") or 0
 
     dmarc_record = dmarc.get("record") or ""
-    # Determine effective DMARC policy, including inherited via tree walk
-    _dmarc_inherited = (
-        not dmarc_record
-        and tree_walk
-        and tree_walk.get("policy_source")
-        and tree_walk.get("is_subdomain")
-    )
+    # Determine effective DMARC policy, including inherited from org domain
+    _dmarc_inherited = not dmarc_record and dmarc.get("is_subdomain") and dmarc.get("inherited_policy")
     if _dmarc_inherited:
-        dmarc_policy = (tree_walk.get("effective_policy") or "").lower()
+        dmarc_policy = dmarc["inherited_policy"].lower()
     else:
         dmarc_policy = (dmarc.get("policy") or "").lower()
     dmarc_enforced = dmarc_policy in ("quarantine", "reject")
@@ -210,14 +205,13 @@ def build_remediation_plan(
             "check": "DMARC",
         })
     elif not dmarc_record and _dmarc_inherited:
-        _inh_source = tree_walk.get("policy_source", "parent domain")
+        _inh_source = dmarc.get("inherited_from", "organizational domain")
         short_term.append({
             "title": "Publish Dedicated DMARC Record",
             "description": (
                 f"This subdomain inherits DMARC p={dmarc_policy} from {_inh_source}. "
                 "While this provides policy coverage, publishing a dedicated record "
-                "ensures coverage even with receivers that do not implement tree walk "
-                "inheritance (RFC 9716)."
+                "is best practice for any subdomain that sends email."
             ),
             "effort": "low",
             "impact": "medium",
