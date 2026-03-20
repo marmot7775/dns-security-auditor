@@ -13,7 +13,7 @@
 - `static/app.js` -- frontend logic, SSE client, result rendering
 - `static/style.css` -- all styles, 5 responsive breakpoints
 - `static/index.html` -- single-page app shell
-- `config.py` -- DKIM selectors list
+- `comprehensive_selectors.py` -- DKIM selector list for auto-discovery
 - `dns_tools.py` -- domain normalization, audit entry point
 
 ## Rules
