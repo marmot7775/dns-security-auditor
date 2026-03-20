@@ -98,7 +98,7 @@ class SecurityHeadersMiddleware(BaseHTTPMiddleware):
         if request.url.path.startswith("/api/"):
             response.headers["Cache-Control"] = "no-store"
         elif request.url.path in ("/", "/index.html"):
-            # Don't let Cloudflare cache the HTML — cache-bust params need to reach the browser
+            # Don't let Cloudflare cache the HTML -- cache-bust params need to reach the browser
             response.headers["Cache-Control"] = "no-cache, must-revalidate"
         return response
 
@@ -162,20 +162,20 @@ CACHE_TTL = 300  # 5 minutes
 CACHE_MAX_SIZE = 500
 
 
-def _get_cached(domain: str) -> Optional[dict]:
+def _get_cached(cache_key: str) -> Optional[dict]:
     with _cache_lock:
-        entry = _cache.get(domain)
+        entry = _cache.get(cache_key)
         if entry and (time.time() - entry["ts"]) < CACHE_TTL:
             return entry["data"]
-        # Expired — clean up
+        # Expired -- clean up
         if entry:
-            del _cache[domain]
+            del _cache[cache_key]
     return None
 
 
-def _set_cached(domain: str, data: dict):
+def _set_cached(cache_key: str, data: dict):
     with _cache_lock:
-        _cache[domain] = {"data": data, "ts": time.time()}
+        _cache[cache_key] = {"data": data, "ts": time.time()}
         # Evict oldest entries if cache grows too large
         if len(_cache) > CACHE_MAX_SIZE:
             oldest = sorted(_cache.items(), key=lambda x: x[1]["ts"])[:100]
@@ -254,9 +254,11 @@ async def audit_domain(
         raise HTTPException(status_code=400, detail="Invalid DKIM selector")
     log.info("Audit requested: %s (scope=%s, ip=%s)", domain, scope or "complete", client_ip)
 
+    cache_key = f"{domain}:{selector or ''}"
+
     # Check cache
     if not nocache:
-        cached = _get_cached(domain)
+        cached = _get_cached(cache_key)
         if cached:
             log.info("Cache hit: %s", domain)
             return JSONResponse(content=cached)
@@ -279,10 +281,10 @@ async def audit_domain(
         }
 
     elapsed = round(time.time() - start, 2)
-    log.info("Audit complete: %s — %.2fs, grade=%s", domain, elapsed, result.get("score", {}).get("grade", "?"))
+    log.info("Audit complete: %s -- %.2fs, grade=%s", domain, elapsed, result.get("score", {}).get("grade", "?"))
 
     # Cache result
-    _set_cached(domain, result)
+    _set_cached(cache_key, result)
 
     return JSONResponse(content=result)
 
@@ -314,8 +316,10 @@ async def audit_pdf(
     domain = _validate_domain(domain)
     log.info("PDF requested: %s (ip=%s)", domain, client_ip)
 
+    cache_key = f"{domain}:{selector or ''}"
+
     # Reuse cached audit data if available
-    cached = _get_cached(domain)
+    cached = _get_cached(cache_key)
     if cached:
         data = cached
         log.info("PDF using cached data: %s", domain)
@@ -326,10 +330,10 @@ async def audit_pdf(
             data = run_full_audit(domain, dkim_selector=selector)
         except Exception as e:
             log.error("PDF audit failed for %s: %s", domain, str(e)[:200], exc_info=True)
-            raise HTTPException(status_code=500, detail="Audit failed — cannot generate PDF")
+            raise HTTPException(status_code=500, detail="Audit failed -- cannot generate PDF")
         elapsed = round(time.time() - start, 2)
-        log.info("PDF audit complete: %s — %.2fs", domain, elapsed)
-        _set_cached(domain, data)
+        log.info("PDF audit complete: %s -- %.2fs", domain, elapsed)
+        _set_cached(cache_key, data)
 
     # Generate PDF
     try:
@@ -402,6 +406,22 @@ async def sitemap_xml():
         "</urlset>\n"
     )
     return Response(content=xml, media_type="application/xml")
+
+
+# ============================================================
+# 404 handler
+# ============================================================
+
+@app.exception_handler(404)
+async def not_found(request: Request, exc):
+    """Redirect unknown non-API routes to homepage."""
+    if request.url.path.startswith("/api/"):
+        return JSONResponse(
+            status_code=404,
+            content={"detail": "Endpoint not found"},
+        )
+    from starlette.responses import RedirectResponse
+    return RedirectResponse(url="/")
 
 
 # ============================================================

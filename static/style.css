@@ -29,9 +29,9 @@
     --warn: #6b5b1e;
     --warn-bg: #f9f7ec;
     --warn-border: #ddd6a0;
-    --fail: #3d5568;
-    --fail-bg: #eef2f6;
-    --fail-border: #b8c8d8;
+    --fail: #8b4654;
+    --fail-bg: #fdf2f4;
+    --fail-border: #dbb8c0;
 
     /* Fix/recommendation block */
     --fix-bg: #edf4f0;
@@ -706,7 +706,7 @@ main {
     gap: 0.55rem;
 }
 
-/* Result card — left border accent for status at-a-glance */
+/* Result card  --  left border accent for status at-a-glance */
 .result-card {
     background: var(--surface);
     border-radius: var(--radius-lg);
@@ -755,7 +755,7 @@ main {
     background: rgba(0, 0, 0, 0.015);
 }
 
-/* Status dot — subtle glow on fail/warn */
+/* Status dot  --  subtle glow on fail/warn */
 .status-dot {
     width: 9px;
     height: 9px;
@@ -816,23 +816,31 @@ main {
 }
 
 .result-body {
-    max-height: 0;
+    display: grid;
+    grid-template-rows: 0fr;
+    transition: grid-template-rows var(--duration-slow) var(--ease);
     overflow: hidden;
-    transition: max-height var(--duration-slow) var(--ease);
 }
 
 .result-card.expanded .result-body {
-    max-height: 5000px;
-    transition: max-height 0.5s var(--ease-out);
+    grid-template-rows: 1fr;
 }
 
 .result-body-inner {
+    min-height: 0;
+    overflow: hidden;
+    padding: 0 1.3rem 0;
+    border-top: 1px solid transparent;
+    transition: padding var(--duration-slow) var(--ease), border-color var(--duration-slow) var(--ease);
+}
+
+.result-card.expanded .result-body-inner {
     padding: 0 1.3rem 1.35rem;
-    border-top: 1px solid var(--border-light);
+    border-top-color: var(--border-light);
     padding-top: 1.1rem;
 }
 
-/* Record block (DNS records) — dark terminal, professional */
+/* Record block (DNS records)  --  dark terminal, professional */
 .record-block {
     font-family: var(--font-mono);
     font-size: 0.78rem;
@@ -1073,7 +1081,7 @@ main {
     box-shadow: 0 0 0 3px var(--pass-bg);
 }
 
-/* Vertical line connecting dots — runs from bottom of this dot
+/* Vertical line connecting dots  --  runs from bottom of this dot
    to the top of the next dot.  We position it on the .tw-step
    (not .tw-connector) so it can span the full step height. */
 .tw-step:not(.tw-last)::before {
@@ -1104,7 +1112,7 @@ main {
     animation: twStepIn 0.35s var(--ease-out) backwards;
 }
 
-/* Stagger delays — set via inline style in JS for flexibility,
+/* Stagger delays  --  set via inline style in JS for flexibility,
    but provide a sensible fallback for the first few */
 .tw-animated .tw-step:nth-child(1) { animation-delay: 0.05s; }
 .tw-animated .tw-step:nth-child(2) { animation-delay: 0.2s; }
@@ -1138,7 +1146,7 @@ main {
 .tw-animated .tw-policy-source .tw-dot {
     animation: twStepIn 0.35s var(--ease-out) backwards,
                twPulse 0.6s var(--ease-out) backwards;
-    /* Pulse starts after the step has appeared — delay set via
+    /* Pulse starts after the step has appeared  --  delay set via
        the same nth-child as the step, so it inherits timing */
 }
 
@@ -1152,7 +1160,7 @@ main {
 .tw-animated .tw-meta,
 .tw-animated .tw-summary {
     animation: twMetaIn 0.4s var(--ease-out) backwards;
-    /* Default delay — overridden by JS with exact timing based
+    /* Default delay  --  overridden by JS with exact timing based
        on step count, but this works for ≤3 steps */
     animation-delay: 0.65s;
 }
@@ -1367,7 +1375,7 @@ main {
     font-weight: 600;
 }
 
-/* Fix/recommendation block — expert advice callout */
+/* Fix/recommendation block  --  expert advice callout */
 .fix-block {
     background: var(--fix-bg);
     border-left: 3px solid var(--fix-border);
@@ -1396,7 +1404,7 @@ main {
 }
 
 /* ==========================================================================
-   FIX RECORDS — copy-paste-ready DNS records to add
+   FIX RECORDS  --  copy-paste-ready DNS records to add
    ========================================================================== */
 .fix-records {
     margin-top: 0.85rem;
@@ -1674,6 +1682,17 @@ main {
     flex-shrink: 0;
 }
 
+/* Run another audit */
+.run-another {
+    text-align: center;
+    padding: 2rem 0 0.5rem;
+}
+
+.run-another-btn {
+    display: inline-flex;
+    margin: 0 auto;
+}
+
 /* ==========================================================================
    RESPONSIVE
    ========================================================================== */
@@ -1681,6 +1700,18 @@ main {
 @media (max-width: 820px) {
     .summary-grid {
         grid-template-columns: repeat(2, 1fr);
+    }
+}
+
+/* iPad portrait */
+@media (max-width: 768px) {
+    .audit-input-card {
+        padding: 2.25rem 2rem 2rem;
+    }
+
+    .scope-btn {
+        font-size: 0.75rem;
+        padding: 0.4rem 0.7rem;
     }
 }
 
@@ -1786,7 +1817,7 @@ main {
         display: none;
     }
 
-    .result-body-inner {
+    .result-card.expanded .result-body-inner {
         padding: 0 1rem 1.15rem;
     }
 
@@ -1830,9 +1861,9 @@ main {
     }
 
     .scope-btn {
-        font-size: 0.72rem;
+        font-size: 0.76rem;
         padding: 0.5rem 0.7rem;
-        min-height: 36px;
+        min-height: 40px;
     }
 
     .scope-btn svg {
