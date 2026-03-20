@@ -17,20 +17,60 @@ except ImportError:
     REQUESTS_AVAILABLE = False
 
 
-def _is_safe_url(url: str) -> bool:
-    """Check that a URL does not resolve to a private/loopback/link-local IP."""
+_BLOCKED_NETWORKS = [
+    ipaddress.ip_network('127.0.0.0/8'),
+    ipaddress.ip_network('10.0.0.0/8'),
+    ipaddress.ip_network('172.16.0.0/12'),
+    ipaddress.ip_network('192.168.0.0/16'),
+    ipaddress.ip_network('169.254.0.0/16'),
+    ipaddress.ip_network('::1/128'),
+    ipaddress.ip_network('fc00::/7'),
+    ipaddress.ip_network('fe80::/10'),
+]
+
+
+def _resolve_and_validate(hostname: str) -> str:
+    """Resolve hostname to IP, reject private/internal addresses.
+    Returns the validated IP string.
+    Raises ValueError if the IP is blocked or resolution fails."""
     try:
-        host = urlparse(url).hostname
-        if not host:
-            return False
-        addrs = socket.getaddrinfo(host, None, socket.AF_UNSPEC, socket.SOCK_STREAM)
-        for _, _, _, _, sockaddr in addrs:
-            ip = ipaddress.ip_address(sockaddr[0])
-            if ip.is_private or ip.is_loopback or ip.is_link_local or ip.is_reserved:
-                return False
-        return True
-    except Exception:
-        return False
+        results = socket.getaddrinfo(hostname, 443, socket.AF_UNSPEC, socket.SOCK_STREAM)
+        if not results:
+            raise ValueError(f"DNS resolution failed for {hostname}")
+        ip_str = results[0][4][0]
+        ip = ipaddress.ip_address(ip_str)
+        for network in _BLOCKED_NETWORKS:
+            if ip in network:
+                raise ValueError(f"Resolved IP {ip_str} is in blocked range {network}")
+        return ip_str
+    except socket.gaierror as e:
+        raise ValueError(f"DNS resolution failed for {hostname}: {e}")
+
+
+def _safe_fetch(url: str, timeout: float = 10.0, **kwargs) -> "requests.Response":
+    """Fetch a URL with SSRF protection. Resolves hostname once,
+    validates the IP, then connects directly to the pinned IP.
+    Raises ValueError if the target is a private/internal address."""
+    parsed = urlparse(url)
+    hostname = parsed.hostname
+    if not hostname:
+        raise ValueError(f"No hostname in URL: {url}")
+
+    ip = _resolve_and_validate(hostname)
+
+    # Rewrite URL to connect to pinned IP, set Host header
+    pinned_url = url.replace(f"://{hostname}", f"://{ip}", 1)
+    headers = kwargs.pop("headers", {})
+    headers["Host"] = hostname
+
+    return requests.get(
+        pinned_url,
+        headers=headers,
+        timeout=timeout,
+        allow_redirects=False,
+        verify=False,  # Can't verify cert when connecting to IP directly
+        **kwargs,
+    )
 
 try:
     import dns.resolver
@@ -365,16 +405,17 @@ def check_mta_sts(domain: str) -> Dict[str, Any]:
 
     if REQUESTS_AVAILABLE:
         try:
-            if not _is_safe_url(policy_url):
+            try:
+                resp = _safe_fetch(policy_url, timeout=10)
+            except ValueError as e:
                 result["issues"].append(_make_issue(
                     "warning", "MTA-STS host resolves to a private/reserved IP",
-                    f"mta-sts.{domain} resolves to a non-public address.",
+                    f"mta-sts.{domain}: {e}",
                     "Cannot verify MTA-STS policy.",
                     f"Ensure mta-sts.{domain} points to a public IP address.",
                 ))
                 result["status"] = "warning"
                 return result
-            resp = requests.get(policy_url, timeout=10, allow_redirects=False)
             if resp.status_code == 200:
                 content_type = resp.headers.get("Content-Type", "")
                 if "text/plain" not in content_type and content_type:
@@ -723,17 +764,21 @@ def check_bimi(domain: str, dmarc_enforcing_override: bool = None) -> Dict[str, 
 
     if REQUESTS_AVAILABLE and result["logo_url"]:
         try:
-            if not _is_safe_url(result["logo_url"]):
+            try:
+                resp = _safe_fetch(
+                    result["logo_url"], timeout=10,
+                    stream=True,
+                    headers={"Accept": "image/svg+xml, */*"},
+                )
+            except ValueError as e:
                 result["issues"].append(_make_issue(
                     "warning", "BIMI logo URL resolves to a private/reserved IP",
-                    "The logo URL points to a non-public address.", "",
+                    f"The logo URL points to a non-public address: {e}", "",
                     "Ensure the logo URL points to a public server.",
                 ))
-            else:
-                resp = requests.get(
-                    result["logo_url"], timeout=10, allow_redirects=True,
-                    stream=True, headers={"Accept": "image/svg+xml, */*"},
-                )
+                resp = None
+
+            if resp is not None:
                 if resp.status_code != 200:
                     result["issues"].append(_make_issue(
                         "warning", f"Logo URL returned HTTP {resp.status_code}",

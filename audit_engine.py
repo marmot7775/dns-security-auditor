@@ -3212,6 +3212,12 @@ def run_full_audit(domain: str, dkim_selector: Optional[str] = None,
     except Exception:
         resilience_result = None
 
+    # --- Ensure every check has pill_label ---
+    _DEFAULT_PILLS = {"pass": "Pass", "warn": "Warning", "fail": "Fail"}
+    for check in checks:
+        if not check.get("pill_label"):
+            check["pill_label"] = _DEFAULT_PILLS.get(check.get("status"), check.get("status", ""))
+
     # --- Assemble final response ---
     elapsed = (datetime.now(timezone.utc) - start_time).total_seconds()
 

@@ -840,7 +840,7 @@ def transform_mx(raw: Dict) -> Dict:
             }],
         }
 
-    # Verdict — meaningful at a glance
+    # Verdict: meaningful at a glance
     provider_str = ", ".join(providers) if providers else ""
     if count == 1:
         verdict = f"Single MX host{' (' + provider_str + ')' if provider_str else ''}"
