@@ -628,29 +628,28 @@ def transform_dkim(raw: Dict, domain: str, has_mx: bool = True) -> Dict:
 
         return {
             "name": "DKIM",
-            "status": "warn",
-            "pill_label": "Not detected",
-            "verdict": f"No common selectors detected ({tested} tested)",
+            "status": "pass",
+            "pill_label": "Unknown",
+            "verdict": "DKIM status cannot be determined externally",
             "record": None,
             "explanation": (
-                "Our scan checked {tested} common "
-                "<a href=\"https://datatracker.ietf.org/doc/html/rfc6376\" target=\"_blank\" rel=\"noopener\">DKIM</a> "
-                "selectors (such as google, default, s1, mail) but did not detect an active public key. "
-                "DKIM records require a specific selector to look up and cannot be discovered without one. If you are sending mail through a third-party service, "
-                "you likely have a DKIM record active under a custom selector. "
-                "Verify your specific selector in your mail provider's settings "
-                "(e.g. Google Workspace, Microsoft 365, or your CRM)."
+                "DKIM (<a href=\"https://datatracker.ietf.org/doc/html/rfc6376\" "
+                "target=\"_blank\" rel=\"noopener\">RFC 6376</a>) is a critical part "
+                "of email authentication. It attaches a cryptographic signature to "
+                "each outgoing message, allowing receivers to verify the message has "
+                "not been altered and that it came from an authorized sender. "
+                "However, DKIM public keys are published under provider-specific "
+                "selectors that cannot be discovered without knowing the selector name. "
+                "This audit checked {tested} common selectors and did not find a match, "
+                "but that does not mean DKIM is not configured. "
+                "To verify, enter your selector in the field above for a direct lookup."
             ).format(tested=tested),
             "details": [
-                {"type": "info", "text": f"Checked {tested} common selectors. No public keys found."},
-                {"type": "info", "text": "DKIM selectors are provider-specific and cannot be discovered without knowing the selector name"},
-                {"type": "info", "text": f"To check a specific selector, re-run this audit with your selector entered at the top of the page"},
+                {"type": "info", "text": f"Checked {tested} common selectors, no public keys found"},
+                {"type": "info", "text": "DKIM selectors are private and cannot be enumerated from outside"},
+                {"type": "info", "text": "Enter your specific selector above for a definitive check"},
             ],
-            "fix": (
-                "Verify your specific DKIM selector in your mail provider's admin console, then confirm "
-                "the public key TXT record is published at <strong>selector._domainkey.{domain}</strong>. "
-                "A missing or misconfigured DKIM signature is a leading cause of DMARC failure."
-            ).format(domain=domain),
+            "fix": None,
             "fix_records": None,
         }
 
