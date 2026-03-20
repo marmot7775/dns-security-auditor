@@ -171,19 +171,24 @@ def transform_dmarc(raw: Dict, tree_walk: Optional[Dict] = None) -> Dict:
             )
     elif not record:
         explanation = (
-            f"No DMARC record exists at <strong>_dmarc.{raw.get('domain', '')}</strong>. "
-            f"Since February 2024, Google and Yahoo require at least a DMARC record from bulk senders "
-            f"and may reject mail without one. "
-            f"DMARC (<a href=\"https://datatracker.ietf.org/doc/html/rfc9716\" target=\"_blank\" rel=\"noopener\">RFC 9716</a>) lets you tell receivers how to handle messages where neither "
-            f"SPF nor DKIM passes with an aligned domain. Even at p=none it provides aggregate "
-            f"reporting visibility into who is sending as your domain."
+            f"No DMARC record was found at <strong>_dmarc.{raw.get('domain', '')}</strong>. "
+            f"This is the highest-priority gap for a professional domain. "
+            f"As of late 2024, Google and Yahoo made "
+            f"<a href=\"https://datatracker.ietf.org/doc/html/rfc9716\" target=\"_blank\" rel=\"noopener\">DMARC</a> "
+            f"a mandatory requirement for senders. Without it, your emails are more likely to be "
+            f"throttled or sent to spam. Anyone can also send email using your exact domain name, "
+            f"enabling brand impersonation and phishing attacks, with no policy for receivers to act on."
         )
     elif policy == "none":
         explanation = (
-            f"Your DMARC policy is <strong>p=none</strong> (monitoring only). "
-            f"Receivers take no enforcement action on messages that fail alignment, but "
-            f"aggregate reports (rua) give you visibility into authentication results. "
-            f"This is the right starting point for understanding your email ecosystem before enforcing."
+            f"Your DMARC policy is set to <strong>p=none</strong> (monitoring mode). "
+            f"Your record is technically valid, but it provides no active protection. "
+            f"It tells receivers to deliver all mail normally, even when authentication fails. "
+            f"While p=none is a necessary starting point for collecting aggregate report data, "
+            f"modern security compliance views this as a pre-deployment state. "
+            f"To protect deliverability and prevent spoofing, move toward an enforcement policy "
+            f"(<strong>p=quarantine</strong> or <strong>p=reject</strong>) once your legitimate "
+            f"mail streams are aligned."
         )
     elif policy == "quarantine":
         explanation = (
@@ -451,13 +456,19 @@ def transform_spf(raw: Dict, has_mx: bool = True) -> Dict:
         else:
             explanation = "SPF record found."
 
-        if lookups and lookups > 8:
+        if lookups and lookups > 10:
             explanation += (
-                f" <strong>Note:</strong> SPF requires {lookups} DNS lookups "
-                f"({'at' if lookups == 10 else 'exceeding' if lookups > 10 else 'approaching'} the 10-lookup limit). "
-                f"<a href=\"https://datatracker.ietf.org/doc/html/rfc7208\" target=\"_blank\" rel=\"noopener\">RFC 7208</a> Section 4.6.4 limits SPF evaluation to 10 DNS-querying mechanisms "
-                f"(include, a, mx, ptr, exists). Exceeding this limit causes a PermError, "
-                f"which causes SPF to fail entirely, as if no SPF record existed."
+                f" <strong>Critical:</strong> This SPF record has a PermError because it requires "
+                f"{lookups} DNS lookups, exceeding the 10-lookup limit "
+                f"(<a href=\"https://datatracker.ietf.org/doc/html/rfc7208#section-4.6.4\" target=\"_blank\" rel=\"noopener\">RFC 7208 Section 4.6.4</a>). "
+                f"Receiving servers treat a broken SPF record as if it does not exist, which "
+                f"damages sender reputation. Audit your includes and remove services you no longer use."
+            )
+        elif lookups and lookups > 8:
+            explanation += (
+                f" <strong>Note:</strong> SPF uses {lookups} of the allowed 10 DNS lookups "
+                f"(<a href=\"https://datatracker.ietf.org/doc/html/rfc7208#section-4.6.4\" target=\"_blank\" rel=\"noopener\">RFC 7208 Section 4.6.4</a>). "
+                f"{'At the limit. Any addition will cause a PermError.' if lookups == 10 else 'Approaching the limit. Plan for headroom before adding new services.'}"
             )
 
     # Details
@@ -542,9 +553,9 @@ def transform_spf(raw: Dict, has_mx: bool = True) -> Dict:
                 fix = "Change the all mechanism to <strong>-all</strong> (hardfail) or <strong>~all</strong> (softfail)."
             elif lookups and lookups > 10:
                 fix = (
-                    "SPF is broken at this lookup count. Reduce to 10 or fewer by auditing your includes: "
-                    "remove services you no longer use, consolidate senders where possible, "
-                    "and verify each include is still needed."
+                    "Your SPF record has a PermError and is not functional. Reduce to 10 or fewer "
+                    "DNS lookups by auditing your includes: remove services you no longer use, "
+                    "consolidate senders where possible, and verify each include is still needed."
                 )
 
     # Fix records -- copy-paste DNS records for missing records only
@@ -610,27 +621,29 @@ def transform_dkim(raw: Dict, domain: str, has_mx: bool = True) -> Dict:
             "name": "DKIM",
             "status": "warn",
             "pill_label": "Not detected",
-            "verdict": f"No DKIM keys detected ({tested} selectors tested)",
+            "verdict": f"No common selectors detected ({tested} tested)",
             "record": None,
             "explanation": (
-                "No DKIM signing keys were found after checking {tested} common selectors. "
-                "This does not necessarily mean DKIM is not configured. Your provider may use "
-                "custom or non-standard selectors that weren't in our test list. "
-                "DKIM (<a href=\"https://datatracker.ietf.org/doc/html/rfc6376\" target=\"_blank\" rel=\"noopener\">RFC 6376</a>) adds a cryptographic signature to outgoing email covering "
-                "specified headers and the message body. Receivers verify this signature using "
-                "the public key published in DNS to confirm the message was not altered in transit."
+                "Our scan checked {tested} common "
+                "<a href=\"https://datatracker.ietf.org/doc/html/rfc6376\" target=\"_blank\" rel=\"noopener\">DKIM</a> "
+                "selectors (such as google, default, s1, mail) but did not detect an active public key. "
+                "Unlike SPF, DKIM records are not visible to a general search; they require a specific "
+                "selector prefix to be found. If you are sending mail through a third-party service, "
+                "you likely have a DKIM record active under a custom selector. "
+                "Verify your specific selector in your mail provider's settings "
+                "(e.g. Google Workspace, Microsoft 365, or your CRM)."
             ).format(tested=tested),
             "details": [
-                {"type": "warning", "text": f"Tested {tested} common selectors, but no public keys found in DNS"},
-                {"type": "info", "text": "DKIM selectors are provider-specific and not publicly enumerable"},
-                {"type": "info", "text": "The DKIM public key is a TXT record in DNS at selector._domainkey.{domain}".format(domain=domain)},
+                {"type": "info", "text": f"Checked {tested} common selectors. No public keys found."},
+                {"type": "info", "text": "DKIM selectors are provider-specific and cannot be discovered without knowing the selector name"},
+                {"type": "info", "text": f"To check a specific selector, re-run this audit with your selector entered at the top of the page"},
             ],
             "fix": (
-                "Verify DKIM signing is enabled and confirm the public key TXT record is published in DNS at "
-                "<strong>selector._domainkey.{domain}</strong>. "
-                "Your email provider can tell you which selector name to use."
+                "Verify your specific DKIM selector in your mail provider's admin console, then confirm "
+                "the public key TXT record is published at <strong>selector._domainkey.{domain}</strong>. "
+                "A missing or misconfigured DKIM signature is a leading cause of DMARC failure."
             ).format(domain=domain),
-            "fix_records": None,  # DKIM keys must be generated by the email provider
+            "fix_records": None,
         }
 
     # Build details for each found key
