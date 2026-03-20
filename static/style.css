@@ -29,9 +29,9 @@
     --warn: #6b5b1e;
     --warn-bg: #f9f7ec;
     --warn-border: #ddd6a0;
-    --fail: #8b4654;
-    --fail-bg: #fdf2f4;
-    --fail-border: #dbb8c0;
+    --fail: #9b4040;
+    --fail-bg: #fdf3f3;
+    --fail-border: #d4a0a0;
 
     /* Fix/recommendation block */
     --fix-bg: #edf4f0;
