@@ -308,8 +308,8 @@ def build_remediation_plan(
             "check": "SPF",
         })
 
-    # DKIM key rotation (always a good practice if DKIM is deployed)
-    if has_any_dkim and not has_weak_dkim:
+    # DKIM key rotation (only for mail-sending domains with DKIM)
+    if has_any_dkim and not has_weak_dkim and has_mx:
         long_term.append({
             "title": "Schedule Regular DKIM Key Rotation",
             "description": (
@@ -337,7 +337,7 @@ def build_remediation_plan(
             })
 
     # DANE -- requires DNSSEC to be working first
-    if dnssec_enabled and dnssec_chain_valid and not dane_has_tlsa:
+    if dnssec_enabled and dnssec_chain_valid and not dane_has_tlsa and has_mx:
         long_term.append({
             "title": "Implement DANE (TLSA Records)",
             "description": (
@@ -350,8 +350,10 @@ def build_remediation_plan(
         })
 
     # BIMI -- requires DMARC enforcement (quarantine or reject) and DKIM
-    bimi_eligible = dmarc_policy in ("quarantine", "reject") and has_any_dkim
-    if bimi_eligible:
+    bimi_raw = raw_results.get("bimi") or {}
+    bimi_has_record = bool(bimi_raw.get("record") or bimi_raw.get("records_found"))
+    bimi_eligible = dmarc_policy in ("quarantine", "reject") and has_any_dkim and not bimi_has_record
+    if bimi_eligible and has_mx:
         long_term.append({
             "title": "Add BIMI Record",
             "description": (
