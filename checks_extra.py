@@ -6,6 +6,7 @@ DNS Security Auditor
 import ipaddress
 import re
 import socket
+import xml.etree.ElementTree as ET
 from typing import Any, Dict, List, Optional, Tuple
 from urllib.parse import urlparse
 
@@ -713,7 +714,10 @@ def check_bimi(domain: str) -> Dict[str, Any]:
             "Move DMARC to p=quarantine or p=reject.",
         ))
 
-    # Logo accessibility check
+    # Logo accessibility and SVG validation
+    result["svg_validated"] = None
+    result["svg_profile"] = None
+
     if REQUESTS_AVAILABLE and result["logo_url"]:
         try:
             if not _is_safe_url(result["logo_url"]):
@@ -723,7 +727,10 @@ def check_bimi(domain: str) -> Dict[str, Any]:
                     "Ensure the logo URL points to a public server.",
                 ))
             else:
-                resp = requests.head(result["logo_url"], timeout=10, allow_redirects=True)
+                resp = requests.get(
+                    result["logo_url"], timeout=10, allow_redirects=True,
+                    stream=True, headers={"Accept": "image/svg+xml, */*"},
+                )
                 if resp.status_code != 200:
                     result["issues"].append(_make_issue(
                         "warning", f"Logo URL returned HTTP {resp.status_code}",
@@ -738,6 +745,114 @@ def check_bimi(domain: str) -> Dict[str, Any]:
                             "Should be served as image/svg+xml.", "",
                             "Configure server to serve .svg as image/svg+xml.",
                         ))
+
+                    # Read up to 1MB for SVG validation
+                    svg_bytes = b""
+                    for chunk in resp.iter_content(chunk_size=8192):
+                        svg_bytes += chunk
+                        if len(svg_bytes) > 1_048_576:
+                            result["issues"].append(_make_issue(
+                                "warning", "BIMI logo exceeds 1MB",
+                                "The SVG file is larger than 1MB, which may cause delivery issues.",
+                                "Large logos slow down email rendering.",
+                                "Optimize the SVG to reduce file size below 1MB.",
+                            ))
+                            break
+                    resp.close()
+
+                    # Parse and validate SVG
+                    if svg_bytes:
+                        try:
+                            svg_text = svg_bytes.decode("utf-8", errors="replace")
+                            root = ET.fromstring(svg_text)
+                            svg_ns = "http://www.w3.org/2000/svg"
+                            tag_local = root.tag.split("}")[-1] if "}" in root.tag else root.tag
+
+                            if tag_local.lower() != "svg":
+                                result["issues"].append(_make_issue(
+                                    "error", "BIMI logo is not a valid SVG (root element is not <svg>)",
+                                    "The file does not appear to be an SVG image.",
+                                    "BIMI logos must be SVG format.",
+                                    "Replace with a valid SVG file.",
+                                ))
+                                result["svg_validated"] = False
+                            else:
+                                result["svg_validated"] = True
+
+                                # Check baseProfile
+                                base_profile = root.get("baseProfile", "").lower()
+                                result["svg_profile"] = base_profile or None
+                                if base_profile in ("tiny-ps", "tiny"):
+                                    result["issues"].append(_make_issue(
+                                        "good", f"SVG baseProfile is '{root.get('baseProfile')}'",
+                                        "The SVG declares the correct profile for BIMI.",
+                                        "", "",
+                                    ))
+                                else:
+                                    result["issues"].append(_make_issue(
+                                        "warning",
+                                        f"SVG baseProfile is '{root.get('baseProfile') or 'missing'}' (expected 'tiny-ps')",
+                                        "Gmail requires SVG Tiny PS profile. Without the correct baseProfile, "
+                                        "the logo may not display in email clients.",
+                                        "Logo may be rejected by Gmail and other strict BIMI implementations.",
+                                        "Set baseProfile=\"tiny-ps\" on the root <svg> element.",
+                                    ))
+
+                                # Check viewBox
+                                if not root.get("viewBox"):
+                                    result["issues"].append(_make_issue(
+                                        "warning", "SVG missing viewBox attribute",
+                                        "The viewBox attribute is needed for proper scaling.",
+                                        "Logo may not render correctly at different sizes.",
+                                        "Add a viewBox attribute to the root <svg> element.",
+                                    ))
+
+                                # Check for <script> elements (security risk)
+                                script_tags = root.iter(f"{{{svg_ns}}}script")
+                                script_tags_no_ns = root.iter("script")
+                                has_script = False
+                                for _ in script_tags:
+                                    has_script = True
+                                    break
+                                if not has_script:
+                                    for _ in script_tags_no_ns:
+                                        has_script = True
+                                        break
+                                if has_script:
+                                    result["issues"].append(_make_issue(
+                                        "error", "SVG contains <script> elements",
+                                        "BIMI SVGs must not contain scripts. Email clients will reject this.",
+                                        "Logo will be rejected by all BIMI implementations.",
+                                        "Remove all <script> elements from the SVG.",
+                                    ))
+                                    result["svg_validated"] = False
+
+                                # Check for external references
+                                has_external_ref = False
+                                for elem in root.iter():
+                                    for attr in ("href", "{http://www.w3.org/1999/xlink}href"):
+                                        val = elem.get(attr, "")
+                                        if val and (val.startswith("http://") or val.startswith("https://")):
+                                            has_external_ref = True
+                                            break
+                                    if has_external_ref:
+                                        break
+                                if has_external_ref:
+                                    result["issues"].append(_make_issue(
+                                        "warning", "SVG contains external href references",
+                                        "External references in BIMI SVGs may cause the logo to be rejected.",
+                                        "Email clients may block external resource loading.",
+                                        "Embed all resources directly in the SVG (inline images, fonts, etc.).",
+                                    ))
+
+                        except ET.ParseError:
+                            result["issues"].append(_make_issue(
+                                "warning", "BIMI logo is not valid XML",
+                                "The SVG file could not be parsed as XML.",
+                                "Logo will not display in email clients.",
+                                "Fix XML syntax errors in the SVG file.",
+                            ))
+                            result["svg_validated"] = False
         except Exception:
             result["issues"].append(_make_issue(
                 "info", "Could not verify BIMI logo URL",
