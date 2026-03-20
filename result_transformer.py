@@ -177,12 +177,10 @@ def transform_dmarc(raw: Dict, tree_walk: Optional[Dict] = None) -> Dict:
     elif not record:
         explanation = (
             f"No DMARC record was found at <strong>_dmarc.{raw.get('domain', '')}</strong>. "
-            f"This is the highest-priority gap for a professional domain. "
-            f"As of late 2024, Google and Yahoo made "
-            f"<a href=\"https://datatracker.ietf.org/doc/draft-ietf-dmarc-dmarcbis/\" target=\"_blank\" rel=\"noopener\">DMARC</a> "
-            f"a mandatory requirement for senders. Without it, your emails are more likely to be "
-            f"throttled or sent to spam. There is also no policy telling receivers how to handle "
-            f"messages that fail authentication, leaving the domain exposed to impersonation."
+            f"Without DMARC, there is no policy telling receivers how to handle messages that fail authentication. "
+            f"Google and Yahoo require bulk senders to publish a "
+            f"<a href=\"https://datatracker.ietf.org/doc/html/rfc7489\" target=\"_blank\" rel=\"noopener\">DMARC</a> "
+            f"record, and messages without one are more likely to be throttled or sent to spam."
         )
     elif policy == "none":
         explanation = (
@@ -445,8 +443,8 @@ def transform_spf(raw: Dict, has_mx: bool = True) -> Dict:
         elif all_mech == "?all":
             explanation = (
                 "SPF record uses <strong>?all</strong> (neutral). Per <a href=\"https://datatracker.ietf.org/doc/html/rfc7208\" target=\"_blank\" rel=\"noopener\">RFC 7208</a>, this means the domain "
-                "makes no assertion about unlisted servers. A neutral result does not pass SPF, "
-                "so it cannot contribute to DMARC alignment."
+                "makes no assertion about unlisted servers. A neutral result is not an SPF pass. "
+                "Only an SPF pass can satisfy DMARC's SPF alignment requirement."
             )
         elif all_mech == "+all":
             explanation = (
@@ -638,8 +636,7 @@ def transform_dkim(raw: Dict, domain: str, has_mx: bool = True) -> Dict:
                 "Our scan checked {tested} common "
                 "<a href=\"https://datatracker.ietf.org/doc/html/rfc6376\" target=\"_blank\" rel=\"noopener\">DKIM</a> "
                 "selectors (such as google, default, s1, mail) but did not detect an active public key. "
-                "Unlike SPF, DKIM records are not visible to a general search; they require a specific "
-                "selector prefix to be found. If you are sending mail through a third-party service, "
+                "DKIM records require a specific selector to look up and cannot be discovered without one. If you are sending mail through a third-party service, "
                 "you likely have a DKIM record active under a custom selector. "
                 "Verify your specific selector in your mail provider's settings "
                 "(e.g. Google Workspace, Microsoft 365, or your CRM)."
@@ -696,7 +693,7 @@ def transform_dkim(raw: Dict, domain: str, has_mx: bool = True) -> Dict:
     details.append({"type": "info", "text": f"Tested {tested} selectors"})
 
     # ARC informational note (RFC 8617)
-    details.append({"type": "info", "text": "DKIM is a prerequisite for ARC (RFC 8617), which preserves authentication across mail forwarding"})
+    details.append({"type": "info", "text": "ARC (RFC 8617) extends the DKIM signing mechanism to preserve authentication across mail forwarding"})
 
     # Append any issues from the audit engine
     for issue in raw.get("issues", []):
@@ -1128,7 +1125,7 @@ def transform_bimi(raw: Dict, domain: str, has_mx: bool = True) -> Dict:
             ),
             "details": [
                 {"type": "info", "text": "BIMI is about brand recognition, not security"},
-                {"type": "info", "text": "Requires DMARC policy of p=quarantine or p=reject at pct=100"},
+                {"type": "info", "text": "Requires DMARC policy of p=quarantine or p=reject"},
                 {"type": "info", "text": "Gmail accepts a VMC (Verified Mark Certificate) or CMC (Common Mark Certificate). Apple Mail does not require either."},
             ],
             "fix": (
@@ -1931,12 +1928,9 @@ def transform_blacklist(raw: Dict, domain: str) -> Dict:
 
     for dr in domain_results:
         if dr.get("listed"):
+            listed = True
             list_name = dr["list"]
             listed_names.append(list_name)
-            if list_name == "Spamhaus DBL":
-                tier1_listed = True
-            else:
-                tier2_only = True
 
     if listed:
         status = "fail"
