@@ -10,7 +10,7 @@ into the frontend's expected format.
 import logging
 import re
 import traceback
-from concurrent.futures import ThreadPoolExecutor, TimeoutError as FuturesTimeoutError
+from concurrent.futures import ThreadPoolExecutor, TimeoutError as FuturesTimeoutError, as_completed
 from datetime import datetime
 from typing import Any, Dict, List, Optional
 
@@ -2206,7 +2206,7 @@ def _raw_check_blacklist(domain: str, raw_results: Dict[str, Any]) -> Dict[str, 
                     future = executor.submit(_check_ip_against_list, ip, list_name, list_host)
                     futures[future] = (ip, list_name, tier, delist_url)
 
-            for future in futures:
+            for future in as_completed(futures, timeout=30):
                 ip, list_name, tier, delist_url = futures[future]
                 try:
                     check_result = future.result(timeout=5)

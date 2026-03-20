@@ -320,7 +320,7 @@ class EmailSecurityScorer:
         # Award points for key strength
         if weak_keys == 0 and strong_keys > 0:
             score += 8
-            details['key_strength'] = f'All {strong_keys} key(s) are 2048-bit or stronger (excellent)'
+            details['key_strength'] = f'All {strong_keys} key(s) use strong cryptography (excellent)'
         elif weak_keys > 0 and strong_keys > 0:
             score += 5
             details['key_strength'] = f'{strong_keys} strong key(s), {weak_keys} weak 1024-bit key(s) (upgrade recommended)'
@@ -507,7 +507,8 @@ class EmailSecurityScorer:
         # DKIM recommendations (only for mail-sending domains)
         if has_mx:
             dkim_score = scores['dkim']
-            if dkim_score == 0:
+            dkim_details = details.get('dkim', {})
+            if dkim_details.get('impact') == 'UNKNOWN':
                 recommendations.append(
                     "🟡 HIGH: No DKIM keys were detected. If this domain sends email, verify DKIM signing is enabled "
                     "with your email provider and confirm the public key is published in DNS"

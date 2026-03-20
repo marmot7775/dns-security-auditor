@@ -141,12 +141,12 @@ def _count_recursive(domain: str, visited: Set[str], depth: int = 0,
 
         elif mtype == "include":
             local_lookups += 1
-            child = _count_recursive(mech["value"], visited, depth + 1, max_depth)
+            child = _count_recursive(mech["value"], set(visited), depth + 1, max_depth)
             node["children"].append(child)
 
         elif mtype == "redirect":
             local_lookups += 1
-            child = _count_recursive(mech["value"], visited, depth + 1, max_depth)
+            child = _count_recursive(mech["value"], set(visited), depth + 1, max_depth)
             node["children"].append(child)
 
     node["lookups_here"] = local_lookups

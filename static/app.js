@@ -247,6 +247,7 @@ function renderResults(data) {
     if (bar) bar.style.width = '100%';
     if (status) status.textContent = 'Complete';
 
+    const scopeAtRender = currentScope;
     setTimeout(() => {
         hideLoading();
         resultsSection.style.display = 'block';
@@ -257,7 +258,7 @@ function renderResults(data) {
         // Update URL for sharing
         const url = new URL(window.location);
         url.searchParams.set('d', data.domain);
-        url.searchParams.set('scope', currentScope);
+        url.searchParams.set('scope', scopeAtRender);
         window.history.replaceState({}, '', url);
     }, 300);
 
@@ -327,8 +328,8 @@ function renderResults(data) {
     }
     // Score number
     const scoreNum = data.score?.total;
+    let scoreEl = document.getElementById('summary-score');
     if (scoreNum !== undefined && gradeCard) {
-        let scoreEl = document.getElementById('summary-score');
         if (!scoreEl) {
             scoreEl = document.createElement('div');
             scoreEl.id = 'summary-score';
@@ -336,6 +337,8 @@ function renderResults(data) {
             gradeEl.parentNode.insertBefore(scoreEl, gradeEl.nextSibling);
         }
         scoreEl.textContent = Math.round(scoreNum) + ' / 100';
+    } else if (scoreEl) {
+        scoreEl.remove();
     }
 
     // -- Priority fixes (always at top, before detailed results) --
@@ -969,8 +972,12 @@ document.getElementById('pdf-btn').addEventListener('click', () => {
     let allExpanded = false;
 
     toggleBtn.addEventListener('click', () => {
+        // Sync state with actual DOM before toggling
+        const cards = document.querySelectorAll('.result-card');
+        const expandedCount = document.querySelectorAll('.result-card.expanded').length;
+        allExpanded = expandedCount > cards.length / 2;
         allExpanded = !allExpanded;
-        document.querySelectorAll('.result-card').forEach(card => {
+        cards.forEach(card => {
             card.classList.toggle('expanded', allExpanded);
         });
         toggleBtn.querySelector('span').textContent = allExpanded ? 'Collapse All' : 'Expand All';
