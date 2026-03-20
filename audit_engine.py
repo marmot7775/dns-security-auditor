@@ -2756,6 +2756,112 @@ def run_full_audit(domain: str, dkim_selector: Optional[str] = None,
         except Exception:
             pass  # never block audit
 
+    # --- DMARC Alignment Cross-Check ---
+    # Flag misconfigurations where DMARC alignment settings conflict with
+    # actual SPF/DKIM deployment. Requires all three checks to have run.
+    _xc_dmarc = raw_results.get("dmarc")
+    _xc_can_crosscheck = (
+        _xc_dmarc
+        and _xc_dmarc.get("record")
+        and "spf" in raw_results
+        and "dkim" in raw_results
+        and _should_include("dmarc", scope_set)
+    )
+
+    if _xc_can_crosscheck:
+        _xc_spf = raw_results["spf"]
+        _xc_dkim = raw_results["dkim"]
+
+        _xc_policy = (_xc_dmarc.get("policy") or "").lower()
+        _xc_adkim = (_xc_dmarc.get("adkim") or "r").lower()
+        _xc_aspf = (_xc_dmarc.get("aspf") or "r").lower()
+
+        _xc_has_spf = bool(_xc_spf.get("record"))
+        _xc_has_dkim = bool(_xc_dkim.get("found_selectors"))
+        _xc_enforcing = _xc_policy in ("quarantine", "reject")
+
+        # Skip for non-mail / defensive DNS (null SPF + no DKIM = intentional)
+        _xc_spf_rec = (_xc_spf.get("record") or "").strip().lower()
+        _xc_is_defensive = (
+            (not has_mx)
+            or (_xc_spf_rec in ("v=spf1 -all", "v=spf1 ~all") and not _xc_has_dkim)
+        )
+
+        if not _xc_is_defensive:
+            _XC_RANK = {"pass": 0, "warn": 1, "fail": 2}
+            _xc_details = []
+            _xc_downgrade = None
+
+            # 1. Enforcement with neither auth method -- all mail will fail DMARC
+            if _xc_enforcing and not _xc_has_spf and not _xc_has_dkim:
+                _xc_details.append({
+                    "type": "error",
+                    "text": (
+                        f"DMARC policy is {_xc_policy} but neither SPF nor DKIM is configured. "
+                        f"All legitimate email will fail DMARC and be "
+                        f"{'rejected' if _xc_policy == 'reject' else 'sent to spam'}"
+                    ),
+                })
+                _xc_downgrade = "fail"
+            else:
+                # 2. Strict DKIM alignment but no DKIM keys detected
+                if _xc_adkim == "s" and not _xc_has_dkim:
+                    _xc_details.append({
+                        "type": "warning",
+                        "text": (
+                            "Strict DKIM alignment (adkim=s) is set but no DKIM keys were detected. "
+                            "DMARC can only pass via SPF alignment. "
+                            "If mail forwarding breaks SPF, messages will fail DMARC"
+                        ),
+                    })
+                    if not _xc_downgrade:
+                        _xc_downgrade = "warn"
+
+                # 3. Strict SPF alignment but no SPF record
+                if _xc_aspf == "s" and not _xc_has_spf:
+                    _xc_details.append({
+                        "type": "warning",
+                        "text": (
+                            "Strict SPF alignment (aspf=s) is set but no SPF record found. "
+                            "DMARC can only pass via DKIM alignment"
+                        ),
+                    })
+                    if not _xc_downgrade:
+                        _xc_downgrade = "warn"
+
+                # 4. Enforcement with single auth method
+                #    (skip if strict alignment already flagged the missing method above)
+                if _xc_enforcing and _xc_has_spf and not _xc_has_dkim and _xc_adkim != "s":
+                    _xc_details.append({
+                        "type": "info",
+                        "text": (
+                            "DMARC enforcement relies solely on SPF (no DKIM detected). "
+                            "Adding DKIM provides a second authentication path that survives mail forwarding"
+                        ),
+                    })
+                elif _xc_enforcing and _xc_has_dkim and not _xc_has_spf and _xc_aspf != "s":
+                    _xc_details.append({
+                        "type": "warning",
+                        "text": (
+                            "DMARC enforcement relies solely on DKIM (no SPF record). "
+                            "Adding SPF provides defense-in-depth and is expected by receivers"
+                        ),
+                    })
+                    if not _xc_downgrade:
+                        _xc_downgrade = "warn"
+
+            # Inject cross-check results into the DMARC card
+            if _xc_details:
+                for card in checks:
+                    if card.get("name") == "DMARC":
+                        card["details"].extend(_xc_details)
+                        if _xc_downgrade:
+                            cur = _XC_RANK.get(card.get("status", "pass"), 0)
+                            new = _XC_RANK.get(_xc_downgrade, 0)
+                            if new > cur:
+                                card["status"] = _xc_downgrade
+                        break
+
     # --- 12. Certificate Transparency ---
     if _should_include("ct", scope_set):
         try:
