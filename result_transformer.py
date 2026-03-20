@@ -1862,50 +1862,30 @@ def transform_ct(raw: Dict, domain: str) -> Dict:
 # ============================================================
 
 def transform_blacklist(raw: Dict, domain: str) -> Dict:
-    ips_checked = raw.get("ips_checked", [])
-    ip_results = raw.get("ip_results", [])
     domain_results = raw.get("domain_results", [])
-    total_listings = raw.get("total_listings", 0)
     issues = raw.get("issues", [])
 
     DELIST_URLS = {
-        "Spamhaus ZEN": "https://check.spamhaus.org/",
         "Spamhaus DBL": "https://check.spamhaus.org/",
-        "Barracuda BRBL": "https://www.barracudacentral.org/lookups",
-        "SpamCop": "https://www.spamcop.net/bl.shtml",
     }
 
-    # No MX IPs to check
-    if not ips_checked and not domain_results:
+    # No domain results available
+    if not domain_results:
         return {
             "name": "Blocklist",
             "status": "pass",
             "pill_label": "N/A",
-            "verdict": "No MX servers to check",
+            "verdict": "No blocklist data available",
             "record": None,
-            "explanation": (
-                "No MX server IPs were available to check against DNS-based blocklists. "
-                "This domain may not have MX records configured."
-            ),
-            "details": [{"type": "info", "text": "No MX servers to check against blocklists"}],
+            "explanation": "Domain blocklist check could not be completed.",
+            "details": [{"type": "info", "text": "No blocklist results available"}],
             "fix_records": None,
             "fix": None,
         }
 
-    # Determine status and collect listings
-    tier1_listed = False
-    tier2_only = False
+    # Determine status from domain-based results only
+    listed = False
     listed_names = []
-
-    for ip_result in ip_results:
-        for listing in ip_result.get("listings", []):
-            if listing.get("listed"):
-                list_name = listing["list"]
-                listed_names.append(list_name)
-                if list_name in ("Spamhaus ZEN", "Barracuda BRBL"):
-                    tier1_listed = True
-                else:
-                    tier2_only = True
 
     for dr in domain_results:
         if dr.get("listed"):
@@ -1916,74 +1896,40 @@ def transform_blacklist(raw: Dict, domain: str) -> Dict:
             else:
                 tier2_only = True
 
-    if tier1_listed:
+    if listed:
         status = "fail"
-        pill_label = "Listed"
-    elif tier2_only:
-        status = "warn"
         pill_label = "Listed"
     else:
         status = "pass"
         pill_label = "Clean"
 
-    # Total lists checked
-    total_lists = len(ip_results[0].get("listings", [])) if ip_results else 0
-    total_lists += len(domain_results)
+    total_lists = len(domain_results)
+    total_listings = len(listed_names)
 
     # Verdict
     if total_listings > 0:
-        verdict = f"Listed on {total_listings} blocklist{'s' if total_listings != 1 else ''}"
+        verdict = f"Listed on {total_listings} domain blocklist{'s' if total_listings != 1 else ''}"
     else:
-        verdict = f"Clean on all {total_lists} blocklists checked"
+        verdict = f"Clean on {total_lists} domain blocklist{'s' if total_lists != 1 else ''}"
 
     # Explanation
     if total_listings > 0:
-        if tier1_listed:
-            explanation = (
-                f"This domain's mail servers are listed on {total_listings} "
-                f"blocklist{'s' if total_listings != 1 else ''}. "
-                "Major blocklists (Spamhaus, Barracuda) are widely used by receiving servers and "
-                "listings can significantly affect deliverability. Listings can result from spam "
-                "activity, compromised accounts, or false positives -- investigate before requesting removal."
-            )
-        else:
-            explanation = (
-                f"This domain's mail servers appear on {total_listings} secondary "
-                f"blocklist{'s' if total_listings != 1 else ''}. "
-                "Secondary listings have less industry-wide impact than major lists but may still "
-                "affect deliverability with some receivers. Verify the listing reason before acting."
-            )
+        explanation = (
+            f"This domain is listed on {total_listings} domain-based "
+            f"blocklist{'s' if total_listings != 1 else ''}. "
+            "Domain blocklists (like Spamhaus DBL) list domains directly associated with spam, "
+            "phishing, or malware. A listing can affect deliverability. "
+            "Investigate the cause before requesting removal."
+        )
     else:
         explanation = (
-            f"Checked {len(ips_checked)} IP{'s' if len(ips_checked) != 1 else ''} and the domain "
-            f"against {total_lists} DNS-based blocklists. No listings found."
+            f"Checked the domain against {total_lists} domain-based "
+            f"blocklist{'s' if total_lists != 1 else ''}. No listings found."
         )
 
     # Details
     details = []
 
-    # Per-IP results
-    for ip_result in ip_results:
-        ip = ip_result["ip"]
-        mx_host = ip_result.get("mx_host", "")
-        host_label = f"{mx_host} ({ip})" if mx_host else ip
-
-        any_listed = False
-        for listing in ip_result.get("listings", []):
-            if listing.get("listed"):
-                any_listed = True
-                meaning = listing.get("meaning", "Listed")
-                details.append({
-                    "type": "error" if listing["list"] in ("Spamhaus ZEN", "Barracuda BRBL") else "warning",
-                    "text": f"{host_label}: {listing['list']}: {meaning}",
-                })
-            elif listing.get("error"):
-                details.append({"type": "info", "text": f"{host_label}: {listing['list']}: lookup failed"})
-
-        if not any_listed:
-            details.append({"type": "good", "text": f"{host_label}: clean on all IP blocklists"})
-
-    # Domain results
     for dr in domain_results:
         if dr.get("listed"):
             meaning = dr.get("meaning", "Listed")
