@@ -46,14 +46,14 @@ class EmailSecurityScorer:
         details = {}
         has_mx = audit_results.get('has_mx', True)  # default True for backward compat
 
-        # 1. DMARC Score (30 points)
+        # 1. DMARC Score (25 points)
         dmarc_score, dmarc_details = self._score_dmarc(
             audit_results.get('dmarc_results', {})
         )
         scores['dmarc'] = dmarc_score
         details['dmarc'] = dmarc_details
 
-        # 2. SPF Score (25 points)
+        # 2. SPF Score (20 points)
         if has_mx:
             spf_score, spf_details = self._score_spf(
                 audit_results.get('spf_results', {})
@@ -94,14 +94,14 @@ class EmailSecurityScorer:
         scores['key_security'] = key_score
         details['key_security'] = key_details
 
-        # 5. Vendor Intelligence Score (5 points)
+        # 5. Vendor Intelligence Score (10 points)
         vendor_score, vendor_details = self._score_vendor_intelligence(
             audit_results.get('vendor_fingerprint', {})
         )
         scores['vendor_intelligence'] = vendor_score
         details['vendor_intelligence'] = vendor_details
 
-        # 6. Best Practices Score (10 points)
+        # 6. Best Practices Score (20 points)
         if has_mx:
             practices_score, practices_details = self._score_best_practices(
                 audit_results
@@ -248,6 +248,9 @@ class EmailSecurityScorer:
         elif all_mechanism == '?all':
             score += 4  # Neutral
             details['all_mechanism'] = '?all (neutral, no protection)'
+        elif spf.get('has_redirect'):
+            score += 6  # redirect delegates to another domain's all mechanism
+            details['all_mechanism'] = 'redirect= (terminal mechanism delegated)'
         else:
             score += 1
             details['all_mechanism'] = '+all or missing (weak)'
