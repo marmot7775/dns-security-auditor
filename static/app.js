@@ -575,14 +575,14 @@ function createResultCard(check, index) {
         }
     });
 
-    // Copy buttons (DNS record blocks + fix preview blocks)
+    // Copy buttons (DNS record blocks + fix record blocks)
     card.querySelectorAll('.copy-btn').forEach(btn => {
         btn.addEventListener('click', (e) => {
             e.stopPropagation();
             let record = '';
-            const fixDiff = btn.closest('.fix-diff-after');
-            if (fixDiff) {
-                record = fixDiff.querySelector('.fix-diff-record')?.textContent || '';
+            const fixBlock = btn.closest('.fix-record-block');
+            if (fixBlock) {
+                record = fixBlock.querySelector('.fix-record-value')?.textContent || '';
             } else {
                 const block = btn.closest('.record-block');
                 record = block?.querySelector('.record-text')?.textContent
@@ -796,48 +796,21 @@ function renderCheckBody(check) {
 
 function renderFixPreview(fixRecords) {
     let html = '<div class="fix-preview">';
-    html += '<div class="fix-preview-label">Fix Preview</div>';
+    html += '<div class="fix-preview-label">Suggested Record</div>';
 
     for (const fr of fixRecords) {
+        const value = fr.value || fr.suggested || '';
+        if (!value) continue;
+
         html += '<div class="fix-preview-item">';
-
-        // Record type + host header
         html += `<div class="fix-preview-host">${escapeHtml(fr.type)} record at <strong>${escapeHtml(fr.host)}</strong></div>`;
-
-        // Before/after diff
-        html += '<div class="fix-diff">';
-        if (fr.current) {
-            html += `<div class="fix-diff-panel fix-diff-before">
-                <div class="fix-diff-tag">Current</div>
-                <div class="fix-diff-record">${escapeHtml(fr.current)}</div>
-            </div>`;
-        } else {
-            html += `<div class="fix-diff-panel fix-diff-before fix-diff-missing">
-                <div class="fix-diff-tag">Current</div>
-                <div class="fix-diff-record">Not configured</div>
-            </div>`;
-        }
-        html += `<div class="fix-diff-arrow">&rarr;</div>`;
-        html += `<div class="fix-diff-panel fix-diff-after">
-            <div class="fix-diff-tag">Suggested</div>
-            <div class="fix-diff-record">${escapeHtml(fr.suggested)}</div>
+        html += `<div class="fix-record-block">
+            <span class="fix-record-value">${escapeHtml(value)}</span>
             <button class="copy-btn">Copy</button>
         </div>`;
-        html += '</div>';
-
-        // Impact + side effects
-        if (fr.impact) {
-            html += `<div class="fix-impact"><span class="fix-impact-icon">&#9650;</span> ${escapeHtml(fr.impact)}</div>`;
-        }
-        if (fr.side_effects) {
-            html += `<div class="fix-side-effects"><span class="fix-side-icon">&#9888;</span> ${escapeHtml(fr.side_effects)}</div>`;
-        }
-
-        // Comment
         if (fr.comment) {
             html += `<div class="fix-comment">${escapeHtml(fr.comment)}</div>`;
         }
-
         html += '</div>';
     }
 
