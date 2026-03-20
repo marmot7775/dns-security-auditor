@@ -239,9 +239,8 @@ def count_spf_lookups(domain: str) -> Dict[str, Any]:
             ),
             "impact": "Email authentication fails entirely for strict receivers.",
             "fix": (
-                f"Reduce lookups by {total - limit}. Options: "
-                "flatten includes to ip4/ip6 ranges, remove unused services, "
-                "or consolidate includes."
+                f"Reduce lookups by {total - limit}. Audit your includes: "
+                "remove services you no longer use and consolidate senders where possible."
             ),
         })
     elif total == limit:
@@ -257,8 +256,8 @@ def count_spf_lookups(domain: str) -> Dict[str, Any]:
                 "You are using exactly 10 DNS lookups. Adding any new email "
                 "service will push you over the limit and break SPF entirely."
             ),
-            "impact": "No room for new services without SPF flattening.",
-            "fix": "Consider SPF flattening to free up lookup slots.",
+            "impact": "No room for new services. Any addition will break SPF.",
+            "fix": "Audit your includes and remove any services you no longer use to free up lookup slots.",
         })
     elif total >= 8:
         result["status"] = "warn"

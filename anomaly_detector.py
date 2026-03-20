@@ -148,7 +148,7 @@ def detect_anomalies(raw_results: dict, score_result: dict, has_mx: bool, is_def
                 "severity": "medium",
                 "recommendation": (
                     "Flatten SPF by replacing include chains with their resolved "
-                    "IP ranges, or use an SPF flattening service to stay under "
+                    "remove unused includes, or consolidate senders to stay under "
                     "the 10-lookup limit."
                 ),
             })

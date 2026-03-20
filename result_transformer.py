@@ -534,14 +534,16 @@ def transform_spf(raw: Dict, has_mx: bool = True) -> Dict:
             if all_mech in ("?all", "+all") and lookups and lookups > 10:
                 fix = (
                     "Change the all mechanism to <strong>-all</strong> (hardfail) or <strong>~all</strong> (softfail). "
-                    "Also reduce SPF lookups to 10 or fewer by flattening includes or removing unused services."
+                    "Also reduce SPF lookups to 10 or fewer by removing includes for services you no longer use "
+                    "or consolidating senders."
                 )
             elif all_mech in ("?all", "+all"):
                 fix = "Change the all mechanism to <strong>-all</strong> (hardfail) or <strong>~all</strong> (softfail)."
             elif lookups and lookups > 10:
                 fix = (
-                    "Reduce SPF lookups to 10 or fewer. Options: flatten includes to direct IP addresses, "
-                    "remove unused services, or use an SPF flattening tool."
+                    "SPF is broken at this lookup count. Reduce to 10 or fewer by auditing your includes: "
+                    "remove services you no longer use, consolidate senders where possible, "
+                    "and verify each include is still needed."
                 )
 
     # Fix records -- copy-paste DNS records for missing records only

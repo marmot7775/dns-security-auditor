@@ -1162,7 +1162,7 @@ def _raw_check_spf(domain: str) -> Dict[str, Any]:
             "RFC 7208 limits SPF to 10 DNS lookups. Exceeding this causes "
             "SPF to return a permanent error (permerror). It fails entirely, "
             "as if no SPF record existed.",
-            "Reduce lookups by flattening includes to IP addresses or removing unused services.",
+            "Audit your includes and remove services you no longer use. Consolidate senders where possible.",
         )
     elif lookup_count == 10:
         _add_issue(
@@ -1170,7 +1170,7 @@ def _raw_check_spf(domain: str) -> Dict[str, Any]:
             "SPF is at the 10-lookup limit",
             "Adding any more includes or mechanisms that require DNS lookups "
             "will push SPF over the limit, causing it to fail entirely.",
-            "Consider SPF flattening to free up lookup slots.",
+            "Audit your includes and remove any services you no longer use to free up lookup slots.",
         )
 
     # ── Step 7: 'all' mechanism checks ──────────────────────────
