@@ -129,8 +129,9 @@ def transform_dmarc(raw: Dict, tree_walk: Optional[Dict] = None) -> Dict:
         applied_tag = tree_walk.get("applied_tag", "p")
         tag_label = {"sp": "subdomain policy (sp=)", "np": "non-existent subdomain policy (np=)", "p": "domain policy (p=)"}.get(applied_tag, f"{applied_tag}=")
         _adoption_note = (
-            " However, policy inheritance via tree walk is an RFC 9716 feature. "
-            "Receivers still using RFC 7489 may not honor it. For the strongest protection, "
+            " However, policy inheritance via tree walk is an "
+            "<a href=\"https://datatracker.ietf.org/doc/html/rfc9716\" target=\"_blank\" rel=\"noopener\">RFC 9716</a> feature. "
+            "Receivers still using <a href=\"https://datatracker.ietf.org/doc/html/rfc7489\" target=\"_blank\" rel=\"noopener\">RFC 7489</a> may not honor it. For the strongest protection, "
             "publish a dedicated DMARC record for this subdomain."
         )
         if inherited_policy == "reject":
@@ -140,7 +141,7 @@ def transform_dmarc(raw: Dict, tree_walk: Optional[Dict] = None) -> Dict:
                 f"<strong>p=reject</strong> from <strong>{inherited_source}</strong> "
                 f"via the {tag_label} tag. "
                 f"Receivers that honor DMARC are requested to reject messages where neither "
-                f"SPF nor DKIM passes with aligned domains (RFC 7489 Section 6.3)."
+                f"SPF nor DKIM passes with aligned domains (<a href=\"https://datatracker.ietf.org/doc/html/rfc7489\" target=\"_blank\" rel=\"noopener\">RFC 7489</a> Section 6.3)."
                 + _adoption_note
             )
         elif inherited_policy == "quarantine":
@@ -171,7 +172,7 @@ def transform_dmarc(raw: Dict, tree_walk: Optional[Dict] = None) -> Dict:
     elif not record:
         explanation = (
             f"No DMARC record exists at <strong>_dmarc.{raw.get('domain', '')}</strong>. "
-            f"DMARC (RFC 7489) lets you tell receivers how to handle messages where neither "
+            f"DMARC (<a href=\"https://datatracker.ietf.org/doc/html/rfc9716\" target=\"_blank\" rel=\"noopener\">RFC 9716</a>) lets you tell receivers how to handle messages where neither "
             f"SPF nor DKIM passes with a domain that aligns with your From address. "
             f"Without it, receivers have no policy to act on, "
             f"and you receive no aggregate reports about who is using your domain to send email."
@@ -402,7 +403,7 @@ def transform_spf(raw: Dict, has_mx: bool = True) -> Dict:
         )
     elif not record:
         explanation = (
-            "No SPF record found. SPF (RFC 7208) specifies which IP addresses are authorized "
+            "No SPF record found. SPF (<a href=\"https://datatracker.ietf.org/doc/html/rfc7208\" target=\"_blank\" rel=\"noopener\">RFC 7208</a>) specifies which IP addresses are authorized "
             "to send email for your domain. Without it, receiving servers cannot use SPF to "
             "validate whether a message originated from your mail infrastructure."
         )
@@ -426,7 +427,7 @@ def transform_spf(raw: Dict, has_mx: bool = True) -> Dict:
             )
         elif all_mech == "?all":
             explanation = (
-                "SPF record uses <strong>?all</strong> (neutral). Per RFC 7208, this means the domain "
+                "SPF record uses <strong>?all</strong> (neutral). Per <a href=\"https://datatracker.ietf.org/doc/html/rfc7208\" target=\"_blank\" rel=\"noopener\">RFC 7208</a>, this means the domain "
                 "makes no assertion about unlisted servers. A neutral result does not pass SPF, "
                 "so it cannot contribute to DMARC alignment."
             )
@@ -442,7 +443,7 @@ def transform_spf(raw: Dict, has_mx: bool = True) -> Dict:
             )
         elif not all_mech:
             explanation = (
-                "SPF record is missing an <strong>all</strong> mechanism. Per RFC 7208 Section 4.7, "
+                "SPF record is missing an <strong>all</strong> mechanism. Per <a href=\"https://datatracker.ietf.org/doc/html/rfc7208\" target=\"_blank\" rel=\"noopener\">RFC 7208</a> Section 4.7, "
                 "if processing reaches the end of the record without a match, the result is neutral. "
                 "This means unlisted servers produce no SPF pass and cannot contribute to DMARC alignment."
             )
@@ -453,7 +454,7 @@ def transform_spf(raw: Dict, has_mx: bool = True) -> Dict:
             explanation += (
                 f" <strong>Note:</strong> SPF requires {lookups} DNS lookups "
                 f"({'at' if lookups == 10 else 'exceeding' if lookups > 10 else 'approaching'} the 10-lookup limit). "
-                f"RFC 7208 Section 4.6.4 limits SPF evaluation to 10 DNS-querying mechanisms "
+                f"<a href=\"https://datatracker.ietf.org/doc/html/rfc7208\" target=\"_blank\" rel=\"noopener\">RFC 7208</a> Section 4.6.4 limits SPF evaluation to 10 DNS-querying mechanisms "
                 f"(include, a, mx, ptr, exists). Exceeding this limit causes a PermError, "
                 f"which receivers may treat as SPF failure."
             )
@@ -612,7 +613,7 @@ def transform_dkim(raw: Dict, domain: str, has_mx: bool = True) -> Dict:
                 "No DKIM signing keys were found after checking {tested} common selectors. "
                 "This does not necessarily mean DKIM is not configured. Your provider may use "
                 "custom or non-standard selectors that weren't in our test list. "
-                "DKIM (RFC 6376) adds a cryptographic signature to outgoing email covering "
+                "DKIM (<a href=\"https://datatracker.ietf.org/doc/html/rfc6376\" target=\"_blank\" rel=\"noopener\">RFC 6376</a>) adds a cryptographic signature to outgoing email covering "
                 "specified headers and the message body. Receivers verify this signature using "
                 "the public key published in DNS to confirm the message was not altered in transit."
             ).format(tested=tested),
@@ -697,7 +698,7 @@ def transform_dkim(raw: Dict, domain: str, has_mx: bool = True) -> Dict:
     explanation += (
         " Each key is a TXT record at <strong>selector._domainkey.{domain}</strong>. "
         "Receiving servers retrieve this key to verify the DKIM signature on incoming messages "
-        "(RFC 6376). Note: this audit confirms the public key exists in DNS -- "
+        "(<a href=\"https://datatracker.ietf.org/doc/html/rfc6376\" target=\"_blank\" rel=\"noopener\">RFC 6376</a>). Note: this audit confirms the public key exists in DNS -- "
         "it does not test live message signatures."
     ).format(domain=domain)
     if raw.get("discovery_method") == "spf_intelligent":
@@ -897,7 +898,7 @@ def transform_mta_sts(raw: Dict, domain: str, has_mx: bool = True) -> Dict:
             "verdict": "No MTA-STS record found",
             "record": None,
             "explanation": (
-                "MTA-STS (RFC 8461) lets you declare that SMTP connections to your domain's MX hosts "
+                "MTA-STS (<a href=\"https://datatracker.ietf.org/doc/html/rfc8461\" target=\"_blank\" rel=\"noopener\">RFC 8461</a>) lets you declare that SMTP connections to your domain's MX hosts "
                 "must use authenticated TLS. Without it, SMTP's opportunistic TLS (STARTTLS) is "
                 "vulnerable to downgrade attacks where a network attacker strips the TLS negotiation, "
                 "causing email to be delivered in plaintext."
@@ -924,7 +925,7 @@ def transform_mta_sts(raw: Dict, domain: str, has_mx: bool = True) -> Dict:
     explanation = ""
     if policy_mode == "enforce":
         explanation = (
-            "MTA-STS is in <strong>enforce</strong> mode (RFC 8461). Sending servers that "
+            "MTA-STS is in <strong>enforce</strong> mode (<a href=\"https://datatracker.ietf.org/doc/html/rfc8461\" target=\"_blank\" rel=\"noopener\">RFC 8461</a>). Sending servers that "
             "support MTA-STS are required to use authenticated TLS when delivering to your domain. "
             "If TLS cannot be established, delivery fails rather than falling back to plaintext."
         )
@@ -995,7 +996,7 @@ def transform_tls_rpt(raw: Dict, domain: str, has_mx: bool = True) -> Dict:
             "verdict": "No TLS-RPT record found",
             "record": None,
             "explanation": (
-                "TLS-RPT (RFC 8460) enables receiving servers to report SMTP TLS delivery failures "
+                "TLS-RPT (<a href=\"https://datatracker.ietf.org/doc/html/rfc8460\" target=\"_blank\" rel=\"noopener\">RFC 8460</a>) enables receiving servers to report SMTP TLS delivery failures "
                 "back to you. Without it, you have no visibility into whether inbound email is "
                 "encountering TLS negotiation problems. TLS-RPT complements MTA-STS and DANE by "
                 "surfacing delivery issues that those policies may be causing or encountering."
@@ -1013,7 +1014,7 @@ def transform_tls_rpt(raw: Dict, domain: str, has_mx: bool = True) -> Dict:
     verdict = f"Reports to {len(destinations)} destination{'s' if len(destinations) != 1 else ''}"
 
     explanation = (
-        "TLS-RPT (RFC 8460) is configured. Sending mail servers that support the protocol "
+        "TLS-RPT (<a href=\"https://datatracker.ietf.org/doc/html/rfc8460\" target=\"_blank\" rel=\"noopener\">RFC 8460</a>) is configured. Sending mail servers that support the protocol "
         "will report SMTP TLS failures to your specified destinations, giving you visibility "
         "into encryption issues on inbound delivery. This is particularly useful alongside "
         "MTA-STS or DANE to detect delivery problems caused by TLS policy enforcement."
@@ -1174,7 +1175,7 @@ def transform_dnssec(raw: Dict) -> Dict:
             "verdict": "DNSSEC not configured",
             "record": None,
             "explanation": (
-                "DNSSEC (RFC 4033/4034/4035) cryptographically signs DNS records so that "
+                "DNSSEC (<a href=\"https://datatracker.ietf.org/doc/html/rfc4033\" target=\"_blank\" rel=\"noopener\">RFC 4033</a>/4034/4035) cryptographically signs DNS records so that "
                 "resolvers can verify responses have not been tampered with, preventing cache "
                 "poisoning and DNS spoofing. It is also a prerequisite for DANE. "
                 "Enabling DNSSEC requires coordination between your registrar (for the DS record) "
@@ -1247,7 +1248,7 @@ def transform_dnssec(raw: Dict) -> Dict:
         "record": None,
         "explanation": (
             "DNSSEC is enabled. Your DNS records are cryptographically signed per "
-            "RFC 4033/4034/4035, allowing validating resolvers to confirm that responses "
+            "<a href=\"https://datatracker.ietf.org/doc/html/rfc4033\" target=\"_blank\" rel=\"noopener\">RFC 4033</a>/4034/4035, allowing validating resolvers to confirm that responses "
             "have not been tampered with. This prevents cache poisoning and DNS spoofing, "
             "and is required for DANE to function."
         ),
@@ -1287,7 +1288,7 @@ def transform_caa(raw: Dict, domain: str) -> Dict:
             "verdict": "No CAA records found",
             "record": None,
             "explanation": (
-                "CAA records (RFC 8659) specify which Certificate Authorities are authorized "
+                "CAA records (<a href=\"https://datatracker.ietf.org/doc/html/rfc8659\" target=\"_blank\" rel=\"noopener\">RFC 8659</a>) specify which Certificate Authorities are authorized "
                 "to issue TLS certificates for your domain. Compliant CAs must check CAA records "
                 "before issuance. Without CAA records, any compliant CA may issue certificates "
                 "for your domain -- there is no restriction to enforce."
@@ -1354,7 +1355,7 @@ def transform_caa(raw: Dict, domain: str) -> Dict:
         "verdict": verdict,
         "record": record_display,
         "explanation": (
-            "CAA records (RFC 8659) restrict which Certificate Authorities may issue TLS certificates "
+            "CAA records (<a href=\"https://datatracker.ietf.org/doc/html/rfc8659\" target=\"_blank\" rel=\"noopener\">RFC 8659</a>) restrict which Certificate Authorities may issue TLS certificates "
             "for your domain. Compliant CAs check these records before issuance and must not issue "
             "if they are not listed. Certificate Transparency logs can be used to detect issuance "
             "by CAs not authorized in your CAA records."
@@ -1386,7 +1387,7 @@ def transform_dane(raw: Dict, domain: str) -> Dict:
             "verdict": "No MX hosts to check",
             "record": None,
             "explanation": (
-                "DANE (RFC 7672) publishes TLSA records that allow sending servers to verify "
+                "DANE (<a href=\"https://datatracker.ietf.org/doc/html/rfc7672\" target=\"_blank\" rel=\"noopener\">RFC 7672</a>) publishes TLSA records that allow sending servers to verify "
                 "your mail server's TLS certificate directly via DNS, without relying on a CA. "
                 "This domain has no MX records, so DANE is not applicable."
             ),
@@ -1420,7 +1421,7 @@ def transform_dane(raw: Dict, domain: str) -> Dict:
             "record": None,
             "explanation": (
                 "DANE TLSA records are published for your MX hosts, but DNSSEC is not enabled. "
-                "DANE requires DNSSEC (RFC 7672 Section 2.2) -- without it, an attacker can forge "
+                "DANE requires DNSSEC (<a href=\"https://datatracker.ietf.org/doc/html/rfc7672\" target=\"_blank\" rel=\"noopener\">RFC 7672</a> Section 2.2) -- without it, an attacker can forge "
                 "or strip TLSA records, completely defeating the authentication. "
                 "Senders that implement RFC 7672 will ignore TLSA records that are not DNSSEC-validated."
             ),
@@ -1470,7 +1471,7 @@ def transform_dane(raw: Dict, domain: str) -> Dict:
             "verdict": verdict,
             "record": None,
             "explanation": (
-                "DANE (RFC 7672) is configured and backed by DNSSEC. Sending mail servers that "
+                "DANE (<a href=\"https://datatracker.ietf.org/doc/html/rfc7672\" target=\"_blank\" rel=\"noopener\">RFC 7672</a>) is configured and backed by DNSSEC. Sending mail servers that "
                 "implement RFC 7672 can verify your mail server's TLS certificate through DNS-based "
                 "TLSA records, independent of the Certificate Authority infrastructure. "
                 "This allows senders to authenticate the TLS certificate without relying on the "
@@ -1515,7 +1516,7 @@ def transform_dane(raw: Dict, domain: str) -> Dict:
         "verdict": "No DANE TLSA records",
         "record": None,
         "explanation": (
-            "DANE (RFC 7672) uses TLSA records to let sending mail servers verify your mail "
+            "DANE (<a href=\"https://datatracker.ietf.org/doc/html/rfc7672\" target=\"_blank\" rel=\"noopener\">RFC 7672</a>) uses TLSA records to let sending mail servers verify your mail "
             "server's TLS certificate through DNS, without depending on the CA infrastructure. "
             "DANE requires DNSSEC to be effective -- without it, TLSA records cannot be trusted. "
             "DANE and MTA-STS serve complementary roles for enforcing SMTP TLS."
@@ -1782,7 +1783,7 @@ def transform_ct(raw: Dict, domain: str) -> Dict:
     # Explanation
     explanation = (
         f"Found <strong>{total}</strong> certificate{'s' if total != 1 else ''} in Certificate Transparency logs "
-        f"(RFC 6962), of which <strong>{active}</strong> {'are' if active != 1 else 'is'} currently active. "
+        f"(<a href=\"https://datatracker.ietf.org/doc/html/rfc6962\" target=\"_blank\" rel=\"noopener\">RFC 6962</a>), of which <strong>{active}</strong> {'are' if active != 1 else 'is'} currently active. "
         f"CT logs provide a publicly auditable record of all certificates issued for your domain."
     )
     if caa_mismatches:
