@@ -997,6 +997,7 @@ def _raw_check_spf(domain: str) -> Dict[str, Any]:
     result["ip4_count"] = ip4_count
     result["ip6_count"] = ip6_count
     result["all_mechanism"] = all_mech
+    result["has_redirect"] = has_redirect
     result["spf_chain"] = spf_recursive_result.get("chain", [])
     result["spf_recursive"] = spf_recursive_result
 
