@@ -2460,6 +2460,12 @@ def _raw_check_blacklist(domain: str, raw_results: Dict[str, Any]) -> Dict[str, 
         if listed:
             if "spamhaus" in list_host:
                 meaning = SPAMHAUS_CODES.get(return_code)
+                # PBL (127.0.0.10, 127.0.0.11) is a policy list, not a spam list.
+                # It indicates the IP owner declared this range as "not for direct mail sending."
+                # This is normal for MX host IPs (which receive, not send) and should not be
+                # flagged as a blocklist listing.
+                if return_code in ("127.0.0.10", "127.0.0.11"):
+                    return {"list": list_name, "listed": False, "return_code": return_code, "meaning": None}
             if not meaning:
                 meaning = f"Listed (response: {return_code})"
 

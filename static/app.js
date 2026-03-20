@@ -70,6 +70,16 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 });
 
+// -- Educational section toggle --
+const eduToggle = document.getElementById('edu-toggle');
+const eduContent = document.getElementById('edu-content');
+if (eduToggle && eduContent) {
+    eduToggle.addEventListener('click', () => {
+        eduToggle.classList.toggle('open');
+        eduContent.classList.toggle('open');
+    });
+}
+
 // -- Form submission --
 auditForm.addEventListener('submit', (e) => {
     e.preventDefault();
@@ -1127,18 +1137,18 @@ function renderReportChain(rc) {
 
         let authHtml = '';
         if (dest.authorized === true) {
-            authHtml = '<span class="rc-auth rc-authorized">&#10003; authorized</span>';
+            authHtml = '<span class="rc-auth rc-authorized">&#10003; External authorization verified</span>';
         } else if (dest.authorized === false) {
-            authHtml = '<span class="rc-auth rc-unauthorized">&#10005; not authorized</span>';
+            authHtml = '<span class="rc-auth rc-unauthorized">&#10005; Not authorized -- reports will be dropped</span>';
         } else {
-            authHtml = '<span class="rc-auth rc-same-domain">same domain</span>';
+            authHtml = '<span class="rc-auth rc-same-domain">&#10003; Same domain -- no external authorization needed</span>';
         }
 
         let mxHtml = '';
         if (dest.has_mx === true) {
-            mxHtml = '<span class="rc-mx-ok">MX &#10003;</span>';
+            mxHtml = '<span class="rc-mx-ok">Can receive mail &#10003;</span>';
         } else if (dest.has_mx === false && dest.is_external) {
-            mxHtml = '<span class="rc-mx-fail">no MX</span>';
+            mxHtml = '<span class="rc-mx-fail">Cannot receive mail -- no MX</span>';
         }
 
         let serviceHtml = '';
@@ -1148,7 +1158,7 @@ function renderReportChain(rc) {
 
         html += `
             <div class="rc-dest" style="animation-delay:${delay}s">
-                <span class="rc-type ${typeClass}">${dest.type}</span>
+                <span class="rc-type ${typeClass}">${dest.type === 'rua' ? 'Aggregate reports' : 'Failure reports'}</span>
                 <span class="rc-address">${escapeHtml(dest.address)}</span>
                 ${serviceHtml}
                 ${authHtml}
@@ -1159,7 +1169,7 @@ function renderReportChain(rc) {
     html += '</div>';
 
     if (rc.ruf_provider_note) {
-        html += `<div class="rc-footnote">Note: Most major providers (Google, Microsoft, Yahoo) no longer send forensic (ruf) reports due to privacy concerns.</div>`;
+        html += `<div class="rc-footnote">Note: Most major mailbox providers (Google, Microsoft, Yahoo) no longer send failure reports (ruf) because they can contain PII (message headers, recipient addresses).</div>`;
     }
 
     html += '</div>';
