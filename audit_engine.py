@@ -3256,13 +3256,25 @@ def _build_resilience_analysis(
     spf_lookup_count = raw_spf.get("lookup_count") or 0
     if spf_record and spf_lookup_count > 10:
         spf_status = "broken"
-        spf_note = f"SPF record exceeds the 10-lookup limit ({spf_lookup_count} lookups). Receivers may return PermError."
+        spf_note = (
+            f"SPF record exceeds the 10-lookup limit ({spf_lookup_count} lookups). "
+            "Receivers will return PermError, which means SPF is effectively non-functional. "
+            "This leaves DKIM as the only viable authentication path."
+        )
     elif spf_record:
         spf_status = "pass"
-        spf_note = "SPF record exists and is within the lookup limit."
+        spf_note = (
+            f"SPF record is valid ({spf_lookup_count}/10 lookups used). "
+            "SPF verifies that the sending server's IP address is authorized by the domain owner. "
+            "However, SPF breaks when mail is forwarded because the forwarding server's IP "
+            "is not in the original domain's SPF record."
+        )
     else:
         spf_status = "missing"
-        spf_note = "No SPF record found."
+        spf_note = (
+            "No SPF record found. Without SPF, receivers cannot verify "
+            "whether a sending server is authorized to send mail for this domain."
+        )
 
     # -- DKIM mechanism status --
     found_selectors = raw_dkim.get("found_selectors") or []
@@ -3283,22 +3295,62 @@ def _build_resilience_analysis(
     elif found_selectors:
         dkim_status = "detected"
         sel_names = [s.get("selector", "") for s in found_selectors if s.get("selector")]
-        dkim_note = f"DKIM key detected for selector(s): {', '.join(sel_names)}." if sel_names else "DKIM key detected."
+        sel_count = len(sel_names)
+        sel_list = f"Selectors found: {', '.join(sel_names)}." if sel_names else ""
+        if sel_count >= 5:
+            coverage = (
+                f"{sel_count} DKIM selectors detected, indicating broad coverage across multiple email services. "
+            )
+        elif sel_count >= 2:
+            coverage = (
+                f"{sel_count} DKIM selectors detected across multiple services. "
+            )
+        else:
+            coverage = "DKIM key detected. "
+        dkim_note = (
+            f"{coverage}"
+            "DKIM signs each message with a cryptographic signature that travels with the email. "
+            "Unlike SPF, DKIM survives forwarding because the signature is attached to the message itself, "
+            f"not tied to the sending server's IP. {sel_list}"
+        )
     else:
         dkim_status = "not_detected"
         dkim_note = (
             "No DKIM key was found with the tested selectors. "
-            "This is a heuristic check. Custom selectors not in the test list may still be active."
+            "DKIM uses custom selector names chosen by each mail service, so keys may exist under "
+            "selectors not in the test list. Without DKIM, forwarded messages have no way to pass DMARC."
         )
 
     # -- DMARC mechanism status --
     dmarc_policy = (raw_dmarc.get("policy") or "").lower().strip()
     if not raw_dmarc.get("record"):
         dmarc_status = "missing"
-        dmarc_note = "No DMARC record found."
-    elif dmarc_policy in ("reject", "quarantine", "none"):
-        dmarc_status = dmarc_policy
-        dmarc_note = f"DMARC policy is p={dmarc_policy}."
+        dmarc_note = (
+            "No DMARC record found. Without DMARC, there is no policy telling receivers "
+            "what to do with messages that fail SPF and DKIM. Anyone can send email that "
+            "appears to come from this domain."
+        )
+    elif dmarc_policy == "reject":
+        dmarc_status = "reject"
+        dmarc_note = (
+            "DMARC policy is p=reject, the strongest enforcement level. "
+            "Receivers will block messages that fail both SPF and DKIM alignment. "
+            "Spoofed mail from this domain should not reach inboxes."
+        )
+    elif dmarc_policy == "quarantine":
+        dmarc_status = "quarantine"
+        dmarc_note = (
+            "DMARC policy is p=quarantine. Receivers will route messages that fail authentication "
+            "to the spam or junk folder instead of the inbox. This is one step below p=reject, "
+            "which blocks failing messages entirely."
+        )
+    elif dmarc_policy == "none":
+        dmarc_status = "none"
+        dmarc_note = (
+            "DMARC policy is p=none (monitoring only). Receivers will deliver messages "
+            "even if they fail authentication. This is useful for collecting aggregate reports "
+            "before enforcing, but provides no protection against spoofing."
+        )
     else:
         dmarc_status = "none"
         dmarc_note = "DMARC record exists but policy could not be determined."
@@ -3327,78 +3379,148 @@ def _build_resilience_analysis(
     dkim_inconclusive = dkim_status == "inconclusive"
     dmarc_enforcing = dmarc_status in ("quarantine", "reject")
 
+    # Alignment explainer fragments (used in several branches)
+    _alignment_how = (
+        "DMARC requires identifier alignment: the domain authenticated by SPF or DKIM "
+        "must match the domain in the visible From address. For SPF, the Return-Path domain "
+        "must align with the From domain. For DKIM, the d= domain in the signature must align "
+        "with the From domain. In relaxed mode (the default), subdomains of the same "
+        "organizational domain satisfy alignment (e.g. mail.example.com aligns with example.com)."
+    )
+
     if dmarc_status == "missing":
         level = "none"
-        summary = "No DMARC record found. Receivers have no policy to apply."
+        summary = (
+            "No DMARC record found. Without a DMARC policy, receivers have no instructions "
+            "for handling messages that fail authentication. SPF and DKIM results alone "
+            "do not protect against spoofing without DMARC tying them together."
+        )
         risk = (
-            "No DMARC record exists. Receivers have no policy to enforce, "
-            "regardless of SPF or DKIM status."
+            "Publishing a DMARC record is the single most impactful step this domain can take. "
+            "Start with p=none and a rua= address to collect aggregate reports showing who is "
+            "sending mail as this domain. Once legitimate sources are identified and authenticated, "
+            "move to p=quarantine and then p=reject."
         )
     elif spf_status == "broken" and not dkim_functional:
         level = "low"
-        summary = "SPF is invalid (PermError) and no DKIM was detected. No reliable authentication path exists."
+        summary = (
+            "SPF is broken (PermError) and no DKIM was detected. This domain has no reliable "
+            "path to DMARC pass. Messages may be rejected or junked depending on the DMARC policy."
+        )
         risk = (
-            "SPF is broken and no DKIM was detected. "
-            "This domain has no reliable authentication mechanism."
+            "Fix SPF first by reducing the record to 10 or fewer DNS lookups (remove unused includes, "
+            "flatten where possible). Then ensure DKIM signing is enabled for all sending services "
+            "so the domain has two independent alignment paths."
         )
     elif not spf_functional and not dkim_functional:
         level = "low"
-        summary = "Neither SPF nor DKIM is providing a working authentication path."
+        summary = (
+            "Neither SPF nor DKIM is providing a working authentication path. Even with a DMARC record, "
+            "there is no mechanism that can pass and satisfy alignment."
+        )
         risk = (
-            "SPF is missing and no DKIM was detected. "
-            "This domain has no reliable authentication mechanism."
+            "Publish an SPF record listing authorized sending IPs and enable DKIM signing "
+            "for all mail services. Both should be configured so the domain has redundant "
+            "alignment paths. DKIM is especially important because it survives mail forwarding."
         )
     elif spf_functional and dkim_functional and dmarc_enforcing:
         level = "high"
         summary = (
-            "SPF and DKIM are both active, and DMARC is enforcing. "
-            "Either mechanism can independently satisfy DMARC alignment."
+            "SPF and DKIM both provide independent paths to DMARC alignment, and DMARC is enforcing. "
+            "This is the strongest configuration. If one mechanism fails for a given message, "
+            "the other can still satisfy DMARC on its own."
         )
+        if dmarc_status == "quarantine":
+            policy_note = (
+                "The current policy is p=quarantine, which sends failing messages to the spam or junk folder. "
+                "This is effective but not the strongest option. With p=reject, receivers block "
+                "failing messages entirely rather than delivering them to spam. If all legitimate mail sources "
+                "are properly authenticated with SPF and DKIM, upgrading to p=reject "
+                "provides the strongest protection against spoofing."
+            )
+        else:
+            policy_note = (
+                "The current policy is p=reject, the strongest enforcement level. Receivers will "
+                "block messages that fail both SPF and DKIM alignment outright."
+            )
         risk = (
-            "Both SPF and DKIM provide DMARC alignment paths. "
-            "If one fails (e.g. SPF breaks on forwarding), "
-            "the other can still pass DMARC."
+            f"{policy_note} "
+            "Having both mechanisms active matters because SPF and DKIM fail in different scenarios. "
+            "SPF checks the sending server's IP against the domain's authorized list, which means it breaks "
+            "when mail is forwarded through mailing lists, forwarding rules, or relay services. "
+            "DKIM attaches a cryptographic signature to the message itself, so it survives forwarding. "
+            "Of the two, DKIM is the more reliable alignment mechanism for this reason. "
+            f"{_alignment_how}"
         )
     elif spf_status == "broken" and dkim_functional:
         level = "moderate"
-        summary = "SPF is invalid (PermError). Authentication depends entirely on DKIM."
+        summary = (
+            "SPF is broken (PermError), leaving DKIM as the only authentication path. "
+            "This is a single point of failure: if DKIM fails for any message, there is no fallback."
+        )
         risk = (
-            "SPF is invalid (PermError). Authentication depends entirely on DKIM. "
-            "If DKIM fails for any reason, this domain has no path to DMARC pass."
+            "Fix the SPF record by reducing it to 10 or fewer DNS lookups to restore the second "
+            "alignment path. With only DKIM available, the domain depends entirely on every sending "
+            "service signing messages correctly. SPF provides a useful safety net even though DKIM is "
+            "the more resilient mechanism."
         )
     elif dkim_inconclusive and spf_functional and dmarc_enforcing:
         level = "moderate"
-        summary = "DKIM check was inconclusive (timed out). SPF is functional and DMARC is enforcing."
+        summary = (
+            "SPF is functional and DMARC is enforcing, but DKIM status could not be determined (the check timed out). "
+            "If DKIM is configured, resilience is likely high."
+        )
         risk = (
-            "DKIM status could not be determined (check timed out). "
-            "If DKIM is configured, resilience is likely high. "
-            "Verify DKIM signing in your mail provider's admin console."
+            "Verify DKIM signing is enabled in each mail provider's admin console. "
+            "SPF alone provides alignment, but it breaks when mail is forwarded because the forwarding "
+            "server's IP is not in the original SPF record. DKIM survives forwarding and is the "
+            "more reliable alignment path. Without confirmed DKIM, forwarded messages will fail DMARC."
         )
     elif dkim_inconclusive and spf_functional:
         level = "moderate"
-        summary = "DKIM check was inconclusive (timed out). SPF is functional but DMARC is not enforcing."
+        summary = (
+            "SPF is functional but DKIM status could not be determined (the check timed out), "
+            "and DMARC is not enforcing."
+        )
         risk = (
-            "DKIM status could not be determined. "
-            "Verify DKIM signing in your mail provider's admin console."
+            "Two steps will improve this posture: verify DKIM signing is enabled for all sending services, "
+            "and move the DMARC policy from p=none to p=quarantine or p=reject. "
+            "Without enforcement, DMARC reports authentication failures but takes no action to prevent spoofing."
         )
     elif not dkim_functional and spf_functional:
         level = "moderate"
-        summary = "No DKIM keys were detected. SPF alone is providing authentication."
+        summary = (
+            "No DKIM keys were detected. SPF is the only mechanism providing DMARC alignment. "
+            "This is a single point of failure, and SPF is the weaker of the two mechanisms."
+        )
         risk = (
-            "No DKIM keys were detected (custom selectors may exist). "
-            "If only SPF is providing alignment, forwarded messages will fail DMARC."
+            "SPF checks the sending server's IP, which means it breaks when mail is forwarded "
+            "through mailing lists, auto-forwarding rules, or relay services. Forwarded messages "
+            "will fail SPF because the forwarding server's IP is not in the original SPF record. "
+            "Without DKIM as a second alignment path, those forwarded messages will fail DMARC. "
+            "Enable DKIM signing for all mail services to provide the more resilient alignment mechanism. "
+            "Custom selectors not in the test list may already be active; check your provider's DNS setup instructions."
         )
     elif not dmarc_enforcing:
         level = "moderate"
-        summary = f"DMARC is p={dmarc_status}. Authentication mechanisms are present but not enforced."
+        summary = (
+            f"DMARC is p={dmarc_status} (monitoring only). SPF and DKIM may be present, but "
+            "receivers will not act on authentication failures. Spoofed messages will still be delivered."
+        )
         risk = (
-            "DMARC is not enforcing (p=none). Receivers will not reject or quarantine "
-            "unauthenticated mail, even if SPF or DKIM fail."
+            "p=none is the right starting point for collecting data, but it provides no protection. "
+            "Review DMARC aggregate reports (rua=) to identify all legitimate mail sources, ensure each "
+            "one passes SPF or DKIM with alignment, and then move to p=quarantine. After confirming no "
+            "legitimate mail is being caught, upgrade to p=reject."
         )
     else:
         level = "moderate"
         summary = "Authentication is partially configured. At least one mechanism is missing or inactive."
-        risk = "Authentication coverage is incomplete. A failure in any active mechanism leaves no fallback."
+        risk = (
+            "A complete email authentication setup requires three layers: SPF to authorize sending IPs, "
+            "DKIM to cryptographically sign messages, and DMARC to enforce a policy when both fail. "
+            "DKIM is especially important because it is the only mechanism that survives mail forwarding."
+        )
 
     return {
         "level": level,
