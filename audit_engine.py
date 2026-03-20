@@ -130,7 +130,11 @@ def _lookup_txt(name: str) -> List[str]:
             parts = []
             for s in rdata.strings:
                 parts.append(s.decode("utf-8") if isinstance(s, bytes) else str(s))
-            records.append("".join(parts))
+            txt = "".join(parts)
+            # Some resolvers escape semicolons in TXT records (\;).
+            # Normalize so downstream parsers split correctly.
+            txt = txt.replace("\\;", ";")
+            records.append(txt)
         return records
     except Exception:
         return []
@@ -558,14 +562,8 @@ def _raw_check_dmarc(domain: str) -> Dict[str, Any]:
             "Remove all forward-slash characters from the record.",
         )
 
-    # Check for backslash-escaped semicolons (v=DMARC1\;p=none\;)
-    if "\\;" in record:
-        _add_syntax(
-            "Backslash-escaped semicolons in record",
-            "Semicolons should not be escaped with backslashes in DMARC records. "
-            "Some DNS software adds these, but they break DMARC parsing.",
-            "Remove backslash characters. Use plain semicolons as separators.",
-        )
+    # Note: backslash-escaped semicolons (\;) are normalized in _lookup_txt
+    # since they are a resolver artifact, not a real record issue.
 
     # Check for no separators at all (v=DMARC1 p=none pct=100)
     if ";" not in record and " p=" in record.lower():

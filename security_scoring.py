@@ -244,7 +244,7 @@ class EmailSecurityScorer:
             details['all_mechanism'] = '-all (hard fail, excellent)'
         elif all_mechanism == '~all':
             score += 6   # Soft fail -- mail tagged but still delivered
-            details['all_mechanism'] = '~all (soft fail, upgrade to -all recommended)'
+            details['all_mechanism'] = '~all (soft fail, standard with DMARC)'
         elif all_mechanism == '?all':
             score += 4  # Neutral
             details['all_mechanism'] = '?all (neutral, no protection)'
@@ -535,21 +535,11 @@ class EmailSecurityScorer:
                     "SPF authentication will always fail. Publish an SPF record or switch to aspf=r"
                 )
             spf_all = (spf.get('all') or '').lower()
-            if dmarc.get('policy') in ('reject', 'quarantine') and (dmarc.get('pct') or 100) == 100:
-                if spf.get('record') and spf_all == '~all':
-                    recommendations.append(
-                        "🟡 HIGH: DMARC is enforcing but SPF uses ~all (softfail). "
-                        "Consider -all (hardfail) for a stronger authorization declaration"
-                    )
+            # ~all is fine with DMARC; -all can cause issues with legacy receivers
 
         # SPF recommendations
         if not spf.get('record') and has_mx:
             recommendations.append("🔴 CRITICAL: Publish an SPF record listing your authorized sending servers")
-        elif (spf.get('all') or '').lower() == '~all' and has_mx:
-            recommendations.append(
-                "🟡 HIGH: SPF uses ~all (softfail). "
-                "Consider -all (hardfail) for a stronger authorization declaration"
-            )
         elif spf.get('lookup_count', 0) > 10:
             count = spf['lookup_count']
             recommendations.append(
