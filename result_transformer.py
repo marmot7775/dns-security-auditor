@@ -925,10 +925,11 @@ def transform_mta_sts(raw: Dict, domain: str, has_mx: bool = True) -> Dict:
             "verdict": "No MTA-STS record found",
             "record": None,
             "explanation": (
-                "MTA-STS (<a href=\"https://datatracker.ietf.org/doc/html/rfc8461\" target=\"_blank\" rel=\"noopener\">RFC 8461</a>) lets you declare that SMTP connections to your domain's MX hosts "
-                "must use authenticated TLS. Without it, SMTP's opportunistic TLS (STARTTLS) is "
-                "vulnerable to downgrade attacks where a network attacker strips the TLS negotiation, "
-                "causing email to be delivered in plaintext."
+                "While DMARC protects the <em>identity</em> of the sender, "
+                "MTA-STS (<a href=\"https://datatracker.ietf.org/doc/html/rfc8461\" target=\"_blank\" rel=\"noopener\">RFC 8461</a>) "
+                "protects the <em>connection</em>. It prevents downgrade attacks where a network attacker "
+                "forces email to be delivered without encryption. Without MTA-STS, SMTP's opportunistic "
+                "TLS (STARTTLS) can be silently stripped, allowing email content to be intercepted in transit."
             ),
             "details": [_issue_to_detail(i) for i in raw.get("issues", [])],
             "fix": (
@@ -1023,10 +1024,12 @@ def transform_tls_rpt(raw: Dict, domain: str, has_mx: bool = True) -> Dict:
             "verdict": "No TLS-RPT record found",
             "record": None,
             "explanation": (
-                "TLS-RPT (<a href=\"https://datatracker.ietf.org/doc/html/rfc8460\" target=\"_blank\" rel=\"noopener\">RFC 8460</a>) enables receiving servers to report SMTP TLS delivery failures "
-                "back to you. Without it, you have no visibility into whether inbound email is "
-                "encountering TLS negotiation problems. TLS-RPT complements MTA-STS and DANE by "
-                "surfacing delivery issues that those policies may be causing or encountering."
+                "Without TLS-RPT (<a href=\"https://datatracker.ietf.org/doc/html/rfc8460\" target=\"_blank\" rel=\"noopener\">RFC 8460</a>), "
+                "you have no visibility into encryption failures on inbound email delivery. "
+                "If a sending server cannot establish a secure connection with your mail server, "
+                "it may fall back to plaintext delivery or fail silently. TLS-RPT provides daily reports "
+                "on these failures, allowing you to identify certificate issues or misconfigurations "
+                "before they affect delivery."
             ),
             "details": [_issue_to_detail(i) for i in raw.get("issues", [])],
             "fix": (
