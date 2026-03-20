@@ -7,7 +7,7 @@
     <meta name="description" content="Privacy policy and terms of use for dns-audit.com. We explain exactly what data we process, how long we keep it, and what third parties are involved.">
     <link rel="canonical" href="https://dns-audit.com/privacy">
     <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><rect width='100' height='100' rx='18' fill='%231a1b1e'/><rect y='0' width='100' height='30' rx='18' fill='%232a2a2e'/><rect y='22' width='100' height='8' fill='%232a2a2e'/><circle cx='18' cy='15' r='5' fill='%23ff5f57'/><circle cx='33' cy='15' r='5' fill='%23febc2e'/><circle cx='48' cy='15' r='5' fill='%2328c840'/><text x='12' y='62' font-family='monospace' font-size='22' font-weight='700'><tspan fill='%235DCAA5'>$ </tspan><tspan fill='%2397C459'>dig</tspan></text><text x='12' y='84' font-family='monospace' font-size='18' font-weight='600' fill='%2385B7EB'>+secure</text></svg>">
-    <link rel="stylesheet" href="/static/style.css?v=fonts1">
+    <link rel="stylesheet" href="/static/style.css?v=fonts2">
     <style>
         .privacy-section {
             padding-top: 3.5rem;
@@ -147,7 +147,7 @@
                 <h1>Privacy &amp; Terms</h1>
                 <div class="last-updated">Last updated: March 2026</div>
 
-                <p>dns-audit.com is a security tool, and we built it with privacy as a core principle, not an afterthought. There are no accounts, no cookies, no analytics, and no tracking. We do not store your data in a database. We designed the platform to collect as little as possible and keep it for as short as possible.</p>
+                <p>dns-audit.com is a security tool built with privacy as a core principle, not an afterthought. There are no accounts, no cookies, no analytics, and no tracking. We do not store your data in a database. We designed the platform to collect as little as possible and keep it for as short as possible.</p>
 
                 <p>This page explains exactly what we process, how long we keep it, and who else is involved.</p>
 
@@ -155,8 +155,8 @@
                 <p>When you run an audit, here is what we process:</p>
                 <ul>
                     <li><strong>Domain name.</strong> The domain you enter in the search box. We use it to query public DNS records on your behalf. This is not personal data; DNS records are public by design.</li>
-                    <li><strong>IP address.</strong> Your IP address is logged for rate limiting and abuse prevention. On our server, we see the IP provided by Cloudflare (see Third Parties below). We do not use it for tracking or identification.</li>
-                    <li><strong>Timestamp and request metadata.</strong> We log when each audit runs, how long it takes, and the resulting grade. This helps us monitor service health and detect abuse.</li>
+                    <li><strong>IP address.</strong> Your IP address is held in memory for rate limiting only and is cleared when the server restarts. It is not written to our audit log or stored in any database.</li>
+                    <li><strong>Timestamp and request metadata.</strong> We log when each audit runs, how long it takes, the resulting grade, and a truncated browser identifier (user-agent). This helps us monitor service health and detect abuse.</li>
                     <li><strong>DKIM selector (optional).</strong> If you provide a custom DKIM selector, we use it for that audit only.</li>
                 </ul>
 
@@ -171,14 +171,13 @@
 
                 <h2>Data Retention</h2>
                 <p><strong>Audit results</strong> are cached in server memory for 5 minutes to reduce redundant DNS queries. After that, they are discarded. We do not store audit results in any database.</p>
-                <p><strong>Server logs</strong> (IP address, domain queried, timestamp) are retained in standard application logs. These rotate automatically and are not retained beyond what the operating system manages.</p>
+                <p><strong>Server logs</strong> (domain queried, grade, duration, browser identifier) are retained in a local audit log file. IP addresses are not included. Log files rotate automatically and are not retained beyond what the operating system manages.</p>
                 <p><strong>Rate limit data</strong> (IP address and request timestamps) is held in memory only and cleared when the service restarts.</p>
 
                 <h2>Third Parties</h2>
-                <p>We use two external services:</p>
+                <p>We use one external service:</p>
                 <ul>
                     <li><strong>Cloudflare.</strong> All traffic to dns-audit.com passes through Cloudflare, which provides CDN and DDoS protection. Cloudflare processes your IP address and request headers as part of its service. Their privacy policy is at <a href="https://www.cloudflare.com/privacypolicy/" target="_blank" rel="noopener">cloudflare.com/privacypolicy</a>.</li>
-                    <li><strong>Google Fonts.</strong> We load the DM Sans and JetBrains Mono typefaces from Google Fonts. Google may log your IP address when serving these files. Their privacy policy is at <a href="https://policies.google.com/privacy" target="_blank" rel="noopener">policies.google.com/privacy</a>.</li>
                 </ul>
                 <p>We do not share, sell, or transfer any data to anyone else.</p>
 
@@ -193,9 +192,6 @@
                     <li><strong>No warranty.</strong> dns-audit.com is provided as-is, free of charge. There is no SLA, no uptime guarantee, and no warranty of any kind.</li>
                     <li><strong>Your responsibility.</strong> You are responsible for how you use the audit results. We provide findings, but acting on them is your decision.</li>
                 </ul>
-
-                <h2>Your Rights</h2>
-                <p>Since we do not collect personal data or maintain user accounts, there is very little to exercise rights over. That said, if you believe your IP address has been logged and you want to discuss it, you are welcome to reach out.</p>
 
                 <h2>Contact</h2>
                 <p>dns-audit.com is operated by Neil Anuskiewicz, an email security and deliverability consultant. You can reach me on <a href="https://www.linkedin.com/in/neilanuskiewicz/" target="_blank" rel="noopener">LinkedIn</a>.</p>
