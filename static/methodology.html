@@ -163,8 +163,8 @@
                 <tbody>
                     <tr>
                         <td>DMARC</td>
-                        <td>Query <code>_dmarc.domain</code> TXT record. Parse policy, reporting, alignment, and subdomain tags. Perform RFC 9716 tree walk for subdomains. Validate syntax, detect deprecated tags (pct, ri, rf).</td>
-                        <td><a href="https://datatracker.ietf.org/doc/html/rfc9716" target="_blank" rel="noopener">RFC 9716</a></td>
+                        <td>Query <code>_dmarc.domain</code> TXT record. Parse policy, reporting, alignment, and subdomain tags. Perform DMARCbis tree walk for subdomains. Validate syntax, detect deprecated tags (pct, ri, rf).</td>
+                        <td><a href="https://datatracker.ietf.org/doc/draft-ietf-dmarc-dmarcbis/" target="_blank" rel="noopener">DMARCbis</a></td>
                     </tr>
                     <tr>
                         <td>SPF</td>
@@ -270,7 +270,7 @@
 
             <h2 class="method-h2">Standards Reference</h2>
             <p class="method-p">
-                This tool validates against <a href="https://datatracker.ietf.org/doc/html/rfc9716" target="_blank" rel="noopener">RFC 9716</a> (DMARC, November 2024), which supersedes RFC 7489. RFC 9716 introduces the DNS tree walk for policy discovery, removes the pct/ri/rf tags, and adds the t= (test mode), np= (non-existent subdomain policy), and psd= (public suffix domain) tags. Where RFC 9716 behavior differs from RFC 7489, the audit results note the distinction.
+                This tool validates against <a href="https://datatracker.ietf.org/doc/html/rfc7489" target="_blank" rel="noopener">RFC 7489</a> (the current DMARC standard) and incorporates features from <a href="https://datatracker.ietf.org/doc/draft-ietf-dmarc-dmarcbis/" target="_blank" rel="noopener">draft-ietf-dmarc-dmarcbis</a>, the forthcoming update approved by the IESG and awaiting final publication. DMARCbis introduces the DNS tree walk for policy discovery, removes the pct/ri/rf tags, and adds the t= (test mode), np= (non-existent subdomain policy), and psd= (public suffix domain) tags. Where DMARCbis behavior differs from RFC 7489, the audit results note the distinction.
             </p>
 
             <h2 class="method-h2">Open Source</h2>

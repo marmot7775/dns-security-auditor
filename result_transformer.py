@@ -128,7 +128,7 @@ def transform_dmarc(raw: Dict, tree_walk: Optional[Dict] = None) -> Dict:
         if _method == "tree_walk":
             _method_note = (
                 " Policy was discovered via the "
-                "<a href=\"https://datatracker.ietf.org/doc/html/rfc9716\" target=\"_blank\" rel=\"noopener\">RFC 9716</a> "
+                "<a href=\"https://datatracker.ietf.org/doc/draft-ietf-dmarc-dmarcbis/\" target=\"_blank\" rel=\"noopener\">DMARCbis</a> "
                 "DNS tree walk."
             )
         else:
@@ -180,7 +180,7 @@ def transform_dmarc(raw: Dict, tree_walk: Optional[Dict] = None) -> Dict:
             f"No DMARC record was found at <strong>_dmarc.{raw.get('domain', '')}</strong>. "
             f"This is the highest-priority gap for a professional domain. "
             f"As of late 2024, Google and Yahoo made "
-            f"<a href=\"https://datatracker.ietf.org/doc/html/rfc9716\" target=\"_blank\" rel=\"noopener\">DMARC</a> "
+            f"<a href=\"https://datatracker.ietf.org/doc/draft-ietf-dmarc-dmarcbis/\" target=\"_blank\" rel=\"noopener\">DMARC</a> "
             f"a mandatory requirement for senders. Without it, your emails are more likely to be "
             f"throttled or sent to spam. There is also no policy telling receivers how to handle "
             f"messages that fail authentication, leaving the domain exposed to impersonation."
@@ -295,7 +295,7 @@ def transform_dmarc(raw: Dict, tree_walk: Optional[Dict] = None) -> Dict:
 
         pct = raw.get("pct")
         if pct is not None and pct < 100:
-            details.append({"type": "warning", "text": f"pct={pct}: policy applied to only {pct}% of failing messages (pct is removed in RFC 9716)"})
+            details.append({"type": "warning", "text": f"pct={pct}: policy applied to only {pct}% of failing messages (pct is removed in DMARCbis)"})
 
         # Append all issues from the audit engine (syntax_errors already merged into issues)
         for issue in raw.get("issues", []):

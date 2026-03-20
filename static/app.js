@@ -868,8 +868,8 @@ function renderTreeWalkSimple(tw) {
         <div class="tree-walk tree-walk-simple tw-animated">
             <div class="tw-header-row">
                 <div class="tree-walk-header">DMARC Policy Discovery (Tree Walk)</div>
-                <a class="tw-spec-badge" href="https://datatracker.ietf.org/doc/html/rfc9716"
-                   target="_blank" rel="noopener">RFC 9716</a>
+                <a class="tw-spec-badge" href="https://datatracker.ietf.org/doc/draft-ietf-dmarc-dmarcbis/"
+                   target="_blank" rel="noopener">DMARCbis</a>
             </div>
             <div class="tw-simple-body">
                 <span class="tw-simple-check">&#10003;</span>
@@ -879,7 +879,7 @@ function renderTreeWalkSimple(tw) {
                 Policy: <span class="tw-pill ${policyClass}">${policy}</span>
             </div>
             <div class="tw-footnote">
-                Under <a href="https://datatracker.ietf.org/doc/html/rfc9716" target="_blank" rel="noopener">RFC 9716</a>,
+                Under <a href="https://datatracker.ietf.org/doc/draft-ietf-dmarc-dmarcbis/" target="_blank" rel="noopener">DMARCbis</a>,
                 receivers walk up the DNS hierarchy to find an applicable DMARC policy when a domain lacks its own record.
                 This domain has a direct record, so the walk is not needed.
             </div>
@@ -887,7 +887,7 @@ function renderTreeWalkSimple(tw) {
 }
 
 function renderTreeWalkFull(tw) {
-    const specUrl = 'https://datatracker.ietf.org/doc/html/rfc9716';
+    const specUrl = 'https://datatracker.ietf.org/doc/draft-ietf-dmarc-dmarcbis/';
     const stepCount = tw.steps.length;
     // Each step lands 150ms after the previous; metadata appears after the last step
     const stepInterval = 0.15;            // seconds between steps
@@ -898,18 +898,18 @@ function renderTreeWalkFull(tw) {
         <div class="tree-walk tw-animated">
             <div class="tw-header-row">
                 <div class="tree-walk-header">DMARC Policy Discovery (Tree Walk)</div>
-                <a class="tw-spec-badge" href="${specUrl}" target="_blank" rel="noopener">RFC 9716</a>
+                <a class="tw-spec-badge" href="${specUrl}" target="_blank" rel="noopener">DMARCbis</a>
             </div>`;
 
     // Educational intro
     if (!tw.policy_source) {
         html += `<div class="tw-intro">This domain does not have its own DMARC record.
-            Under <a href="${specUrl}" target="_blank" rel="noopener">RFC 9716</a>,
+            Under <a href="${specUrl}" target="_blank" rel="noopener">DMARCbis</a>,
             receivers walk up the DNS hierarchy looking for an applicable policy.
             <strong>No policy was found.</strong></div>`;
     } else if (tw.is_subdomain) {
         html += `<div class="tw-intro">This domain does not have its own DMARC record.
-            Under <a href="${specUrl}" target="_blank" rel="noopener">RFC 9716</a>,
+            Under <a href="${specUrl}" target="_blank" rel="noopener">DMARCbis</a>,
             receivers walk up the DNS hierarchy to find an applicable policy.</div>`;
     }
 
@@ -989,7 +989,7 @@ function renderTreeWalkFull(tw) {
         if (tw.is_subdomain) {
             html += `<div class="tw-footnote" style="animation-delay:${metaDelay}s">
                 <strong>Note:</strong> Policy inheritance via tree walk is a
-                <a href="https://datatracker.ietf.org/doc/html/rfc9716" target="_blank" rel="noopener">RFC 9716</a>
+                <a href="https://datatracker.ietf.org/doc/draft-ietf-dmarc-dmarcbis/" target="_blank" rel="noopener">DMARCbis</a>
                 feature. Receivers still using RFC 7489 may not honor the inherited policy.
                 For the strongest protection, publish a dedicated DMARC record for this domain.
             </div>`;
