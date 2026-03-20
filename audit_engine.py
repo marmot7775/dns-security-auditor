@@ -3585,7 +3585,27 @@ def _build_resilience_analysis(
         "organizational domain satisfy alignment (e.g. mail.example.com aligns with example.com)."
     )
 
-    if dmarc_status == "missing":
+    # Check if this is a non-sending subdomain with inherited DMARC
+    _is_inherited_dmarc = _inherited and dmarc_enforcing
+    _is_non_sending_sub = _is_inherited_dmarc and not has_mx and not spf_functional
+
+    if _is_non_sending_sub:
+        _inh_source = raw_dmarc.get("inherited_from", "organizational domain")
+        level = "high" if dmarc_status == "reject" else "moderate"
+        summary = (
+            f"This subdomain does not send email (no MX records, no SPF). "
+            f"It inherits DMARC {dmarc_status} from {_inh_source}, which instructs receivers to "
+            + ("reject" if dmarc_status == "reject" else "quarantine")
+            + " any message claiming to be from this subdomain. "
+            "This is the expected configuration for a non-sending subdomain."
+        )
+        risk = (
+            "No action needed for email authentication. The inherited DMARC policy protects "
+            "this subdomain against spoofing. SPF and DKIM are not required because this subdomain "
+            "does not send email. If this subdomain does send email, publish an SPF record and "
+            "configure DKIM signing."
+        )
+    elif dmarc_status == "missing":
         level = "none"
         summary = (
             "No DMARC record found. Without a DMARC policy, receivers have no instructions "
