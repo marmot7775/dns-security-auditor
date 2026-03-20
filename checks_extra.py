@@ -284,8 +284,10 @@ def _validate_mta_sts_policy(policy_text: str, domain: str) -> Tuple[Dict[str, A
             matched = False
             for mx_host in actual_mx_hosts:
                 if pattern_lower.startswith("*."):
-                    suffix = pattern_lower[2:]
-                    if mx_host.endswith(suffix) or mx_host == suffix.lstrip("."):
+                    suffix = pattern_lower[1:]  # e.g. ".example.com"
+                    if mx_host == suffix.lstrip(".") or (
+                        mx_host.endswith(suffix) and "." not in mx_host[:-len(suffix)]
+                    ):
                         matched = True
                         break
                 else:
