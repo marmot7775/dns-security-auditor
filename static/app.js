@@ -484,7 +484,7 @@ function renderResults(data) {
         anomaliesSection.style.display = 'block';
         data.anomalies.forEach(a => {
             const sevClass = {critical: 'fail', high: 'warn', medium: 'info'}[a.severity] || 'info';
-            const sevLabel = {critical: 'Critical', high: 'High', medium: 'Medium'}[a.severity] || a.severity;
+            const sevLabel = {critical: 'Critical', high: 'High', medium: 'Medium'}[a.severity] || escapeHtml(a.severity);
             const item = document.createElement('div');
             item.className = `anomaly-card anomaly-${sevClass}`;
             item.innerHTML = `
@@ -598,7 +598,7 @@ function createResultCard(check, index) {
         <div class="result-header">
             <div class="status-dot ${check.status}"></div>
             <div class="result-title">${escapeHtml(check.name)}</div>
-            <span class="status-pill ${check.status}">${statusLabel}</span>
+            <span class="status-pill ${check.status}">${escapeHtml(statusLabel)}</span>
             <div class="result-verdict">${escapeHtml(check.verdict || '')}</div>
             <div class="result-chevron">&#9662;</div>
         </div>
@@ -1067,9 +1067,10 @@ function renderSpfExecution(exec) {
         // Lookup counter pill
         if (step.lookup_range) {
             const counterClass = step.status === 'exceeded' ? 'se-counter exceeded' : 'se-counter';
+            const safeRange = escapeHtml(step.lookup_range);
             const label = step.lookup_range.includes('-')
-                ? `lookups ${step.lookup_range}`
-                : `lookup ${step.lookup_range}`;
+                ? `lookups ${safeRange}`
+                : `lookup ${safeRange}`;
             html += ` <span class="${counterClass}">${label}</span>`;
         }
 
@@ -1113,7 +1114,7 @@ function renderDmarcEvaluation(ev) {
     const dispLabel = ev.disposition === 'none' ? 'delivered'
                     : ev.disposition === 'quarantine' ? 'quarantined'
                     : ev.disposition === 'reject' ? 'rejected'
-                    : ev.disposition;
+                    : escapeHtml(ev.disposition);
 
     return `
         <div class="dmarc-eval de-animated">
@@ -1126,19 +1127,19 @@ function renderDmarcEvaluation(ev) {
             <div class="de-rows">
                 <div class="de-row">
                     <span class="de-protocol">SPF</span>
-                    <span class="de-pill ${spfPillClass}">${ev.spf_result}</span>
-                    <span class="de-align-mode">${ev.spf_alignment_mode}</span>
+                    <span class="de-pill ${spfPillClass}">${escapeHtml(ev.spf_result)}</span>
+                    <span class="de-align-mode">${escapeHtml(ev.spf_alignment_mode)}</span>
                     <span class="de-align-result ${spfAlignClass}">${spfAlignIcon}</span>
                 </div>
                 <div class="de-row">
                     <span class="de-protocol">DKIM</span>
-                    <span class="de-pill ${dkimPillClass}">${ev.dkim_result}</span>
-                    <span class="de-align-mode">${ev.dkim_alignment_mode}</span>
+                    <span class="de-pill ${dkimPillClass}">${escapeHtml(ev.dkim_result)}</span>
+                    <span class="de-align-mode">${escapeHtml(ev.dkim_alignment_mode)}</span>
                     <span class="de-align-result ${dkimAlignClass}">${dkimAlignIcon}</span>
                 </div>
                 <div class="de-row de-final">
                     <span class="de-protocol">DMARC</span>
-                    <span class="de-pill ${dmarcPillClass}">${ev.dmarc_result}</span>
+                    <span class="de-pill ${dmarcPillClass}">${escapeHtml(ev.dmarc_result)}</span>
                     <span class="de-policy-group">
                         policy: <span class="de-pill ${policyPillClass}">${escapeHtml(ev.policy)}</span>
                     </span>
