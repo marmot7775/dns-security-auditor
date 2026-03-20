@@ -2690,7 +2690,7 @@ def run_full_audit(domain: str, dkim_selector: Optional[str] = None,
         is_defensive = len(defensive_signals) >= 2
 
     # --- Assemble final response ---
-    elapsed = (datetime.now() - start_time).total_seconds()
+    elapsed = (datetime.now(timezone.utc) - start_time).total_seconds()
 
     return {
         "domain": domain,
