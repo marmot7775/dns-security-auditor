@@ -3279,6 +3279,7 @@ def _calculate_score(raw_results: Dict, domain: str, tree_walk: Optional[Dict] =
         spf_for_scorer = {
             "record": raw_spf.get("record"),
             "all": raw_spf.get("all_mechanism", ""),
+            "has_redirect": raw_spf.get("has_redirect", False),
             "lookup_count": raw_spf.get("lookup_count", 0),
             "include_count": raw_spf.get("include_count", 0),
         }

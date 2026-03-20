@@ -626,7 +626,7 @@ def _validate_bimi_record(record: str) -> Tuple[Dict[str, str], List[Dict]]:
                 "Must use HTTPS.", "", "Change to HTTPS."))
         if not logo_url.lower().endswith(".svg"):
             issues.append(_make_issue("warning", "Logo URL does not end in .svg",
-                "BIMI logos must be SVG Tiny 1.2.", "", "Use SVG format."))
+                "BIMI logos must be SVG Tiny PS format.", "", "Use an SVG file with baseProfile='tiny-ps'."))
 
     if "a" in tags and tags["a"]:
         vmc_url = tags["a"]
