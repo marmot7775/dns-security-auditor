@@ -595,51 +595,165 @@ function createResultCard(check, index) {
         });
     });
 
+    // Details toggle (progressive disclosure)
+    card.querySelectorAll('.details-toggle').forEach(btn => {
+        btn.addEventListener('click', (e) => {
+            e.stopPropagation();
+            const expandable = btn.nextElementSibling;
+            const isOpen = expandable.classList.toggle('open');
+            btn.setAttribute('aria-expanded', isOpen ? 'true' : 'false');
+            btn.textContent = isOpen
+                ? btn.textContent.replace('Show', 'Hide')
+                : btn.textContent.replace('Hide', 'Show');
+        });
+    });
+
     return card;
+}
+
+// ============================================================
+// Record syntax highlighting
+// ============================================================
+
+function highlightRecord(record, checkName) {
+    // Escape first, then wrap known tokens in spans
+    const escaped = escapeHtml(record);
+    const name = (checkName || '').toUpperCase();
+
+    if (name === 'SPF' || escaped.startsWith('v=spf1')) {
+        return highlightSpf(escaped);
+    }
+    if (name === 'DMARC' || escaped.startsWith('v=DMARC1')) {
+        return highlightDmarc(escaped);
+    }
+    if (name === 'DKIM' || escaped.includes('v=DKIM1')) {
+        return highlightDkim(escaped);
+    }
+    // MX records: highlight priority numbers
+    if (name.includes('MX')) {
+        return escaped.replace(/^(\d+)\s+/gm, '<span class="rec-muted">$1</span> ');
+    }
+    return escaped;
+}
+
+function highlightSpf(text) {
+    return text
+        // Dangerous: +all, ?all
+        .replace(/\+all\b/g, '<span class="rec-danger">+all</span>')
+        .replace(/\?all\b/g, '<span class="rec-warn">?all</span>')
+        // Safe: -all, ~all
+        .replace(/-all\b/g, '<span class="rec-safe">-all</span>')
+        .replace(/~all\b/g, '<span class="rec-neutral">~all</span>')
+        // Mechanisms
+        .replace(/\b(include:)([^\s]+)/g, '<span class="rec-keyword">$1</span><span class="rec-value">$2</span>')
+        .replace(/\b(redirect=)([^\s]+)/g, '<span class="rec-keyword">$1</span><span class="rec-value">$2</span>')
+        .replace(/\b(ip4:)([^\s]+)/g, '<span class="rec-keyword">$1</span><span class="rec-muted">$2</span>')
+        .replace(/\b(ip6:)([^\s]+)/g, '<span class="rec-keyword">$1</span><span class="rec-muted">$2</span>')
+        .replace(/\b(a|mx)\b(?![\w=:-])/g, '<span class="rec-keyword">$1</span>')
+        // Version tag
+        .replace(/^(v=spf1)\b/, '<span class="rec-muted">$1</span>');
+}
+
+function highlightDmarc(text) {
+    return text
+        // Policy tags -- color by strength
+        .replace(/\bp=reject\b/g, '<span class="rec-safe">p=reject</span>')
+        .replace(/\bp=quarantine\b/g, '<span class="rec-neutral">p=quarantine</span>')
+        .replace(/\bp=none\b/g, '<span class="rec-warn">p=none</span>')
+        // Subdomain policy
+        .replace(/\bsp=(reject|quarantine|none)\b/g, '<span class="rec-keyword">sp=$1</span>')
+        // Reporting
+        .replace(/\b(rua=)(mailto:[^\s;]+)/g, '<span class="rec-keyword">$1</span><span class="rec-value">$2</span>')
+        .replace(/\b(ruf=)(mailto:[^\s;]+)/g, '<span class="rec-keyword">$1</span><span class="rec-value">$2</span>')
+        // Percentage
+        .replace(/\b(pct=)(\d+)\b/g, '<span class="rec-keyword">$1</span><span class="rec-value">$2</span>')
+        // Alignment
+        .replace(/\b(adkim=|aspf=)([rs])\b/g, '<span class="rec-keyword">$1</span><span class="rec-value">$2</span>')
+        // Version + fo
+        .replace(/^(v=DMARC1)\b/, '<span class="rec-muted">$1</span>')
+        .replace(/\b(fo=)([^\s;]+)/g, '<span class="rec-keyword">$1</span><span class="rec-muted">$2</span>');
+}
+
+function highlightDkim(text) {
+    return text
+        .replace(/\b(v=DKIM1)\b/g, '<span class="rec-muted">$1</span>')
+        .replace(/\b(k=)(rsa|ed25519)/g, '<span class="rec-keyword">$1</span><span class="rec-value">$2</span>')
+        .replace(/\b(p=)([A-Za-z0-9+/=]+)/g, '<span class="rec-keyword">$1</span><span class="rec-muted">$2</span>')
+        .replace(/\b(h=)([^\s;]+)/g, '<span class="rec-keyword">$1</span><span class="rec-value">$2</span>')
+        .replace(/\b(t=)([^\s;]+)/g, '<span class="rec-keyword">$1</span><span class="rec-value">$2</span>');
+}
+
+function _renderDetailItem(d) {
+    const typeClass = {
+        error: 'fail-item', warning: 'warn-item',
+        info: 'info-item', good: 'pass-item'
+    }[d.type] || 'info-item';
+    const icon = {
+        error: '&#10005;', warning: '&#9888;',
+        info: '&#8250;', good: '&#10003;'
+    }[d.type] || '&#8250;';
+    return `
+        <div class="detail-item ${typeClass}">
+            <span class="detail-icon">${icon}</span>
+            <span>${escapeHtml(d.text || '')}</span>
+        </div>
+    `;
 }
 
 function renderCheckBody(check) {
     let html = '';
 
-    // Record (dark-themed monospace block)
-    if (check.record) {
-        html += `
-            <div class="record-block">
-                <span class="record-text">${escapeHtml(check.record)}</span>
-                <button class="copy-btn">Copy</button>
-            </div>
-        `;
-    }
-
-    // Explanation
+    // Explanation (always visible -- the impact statement)
     if (check.explanation) {
         html += `<div class="explanation">${sanitizeHtml(check.explanation)}</div>`;
     }
 
-    // Detail items  --  sorted by severity within each card
+    // Split details into critical (error/warning) vs informational (info/good)
+    const criticalDetails = [];
+    const infoDetails = [];
     if (check.details && check.details.length > 0) {
         const detailOrder = { error: 0, warning: 1, info: 2, good: 3 };
         const sorted = [...check.details].sort((a, b) =>
             (detailOrder[a.type] ?? 4) - (detailOrder[b.type] ?? 4)
         );
-
         sorted.forEach(d => {
-            const typeClass = {
-                error: 'fail-item', warning: 'warn-item',
-                info: 'info-item', good: 'pass-item'
-            }[d.type] || 'info-item';
-            const icon = {
-                error: '&#10005;', warning: '&#9888;',
-                info: '&#8250;', good: '&#10003;'
-            }[d.type] || '&#8250;';
+            if (d.type === 'error' || d.type === 'warning') {
+                criticalDetails.push(d);
+            } else {
+                infoDetails.push(d);
+            }
+        });
+    }
 
+    // Critical details (always visible)
+    criticalDetails.forEach(d => {
+        html += _renderDetailItem(d);
+    });
+
+    // Expandable section: info details + raw record
+    const hasExpandable = infoDetails.length > 0 || check.record;
+    if (hasExpandable) {
+        const toggleLabel = check.record ? 'Show raw record & details' : 'Show details';
+        html += `<button class="details-toggle" aria-expanded="false">${toggleLabel}</button>`;
+        html += '<div class="details-expandable">';
+
+        // Info/good details
+        infoDetails.forEach(d => {
+            html += _renderDetailItem(d);
+        });
+
+        // Raw record with syntax highlighting (moved below info details)
+        if (check.record) {
+            const highlighted = highlightRecord(check.record, check.name);
             html += `
-                <div class="detail-item ${typeClass}">
-                    <span class="detail-icon">${icon}</span>
-                    <span>${escapeHtml(d.text || '')}</span>
+                <div class="record-block">
+                    <span class="record-text">${highlighted}</span>
+                    <button class="copy-btn">Copy</button>
                 </div>
             `;
-        });
+        }
+
+        html += '</div>';
     }
 
     // SPF execution trace

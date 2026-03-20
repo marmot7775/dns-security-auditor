@@ -103,23 +103,23 @@ def transform_dmarc(raw: Dict, tree_walk: Optional[Dict] = None) -> Dict:
             status = "warn"
         pill_label = "Inherited"
     elif not record:
-        verdict = "No DMARC record found"
+        verdict = "No protection against email spoofing"
         status = "fail"
         pill_label = "Missing"
     elif policy == "reject":
-        verdict = "Policy: reject (strongest)"
+        verdict = "Fully enforced -- spoofed email is blocked"
         # p=reject is always a pass regardless of what the audit engine returned
         # (the engine may flag "warning" for missing rua, but the policy itself is correct)
         status = "pass"
     elif policy == "quarantine":
         pct = raw.get("pct", 100)
-        verdict = "Policy: quarantine"
+        verdict = "Spoofed email goes to spam"
         if pct is not None and pct < 100:
-            verdict += f" ({pct}%)"
+            verdict += f" ({pct}% enforced)"
         # p=quarantine is enforcing; treat as pass even if rua is absent
         status = "pass"
     elif policy == "none":
-        verdict = "Policy: none (monitoring only)"
+        verdict = "Monitoring only -- no spoofing protection yet"
         status = "warn"
     else:
         verdict = f"Policy: {policy}" if policy else "Invalid record"
@@ -395,21 +395,21 @@ def transform_spf(raw: Dict, has_mx: bool = True) -> Dict:
         verdict = "No SPF record (no mail)"
         pill_label = "No mail"
     elif not record:
-        verdict = "No SPF record found"
+        verdict = "No sender authorization in place"
         pill_label = "Missing"
     else:
         all_mech = raw.get("all_mechanism") or ""
         lookups = raw.get("lookup_count", 0)
         if all_mech == "+all":
-            verdict = "SPF misconfigured (+all)"
+            verdict = "Authorizes the entire internet to send as you"
         elif lookups > 10:
-            verdict = f"SPF over lookup limit ({lookups}/10)"
+            verdict = f"Broken -- exceeds lookup limit ({lookups}/10)"
         elif not all_mech and raw.get("has_redirect"):
-            verdict = "SPF record configured (via redirect)"
+            verdict = "Sender authorization via redirect"
         elif not all_mech:
-            verdict = "SPF record configured (no all mechanism)"
+            verdict = "Configured but missing an all mechanism"
         else:
-            verdict = "SPF record configured"
+            verdict = "Sender authorization configured"
 
     # Explanation
     if null_spf:
@@ -721,8 +721,8 @@ def transform_dkim(raw: Dict, domain: str, has_mx: bool = True) -> Dict:
     for issue in raw.get("issues", []):
         details.append(_issue_to_detail(issue))
 
-    # Verdict — one piece of data only
-    verdict = f"{len(found)} key{'s' if len(found) != 1 else ''} found"
+    # Verdict
+    verdict = f"{len(found)} signing key{'s' if len(found) != 1 else ''} verified"
 
     # Status
     status = "pass"
@@ -937,11 +937,11 @@ def transform_mta_sts(raw: Dict, domain: str, has_mx: bool = True) -> Dict:
 
     # Has record
     if policy_mode == "enforce":
-        verdict = "Mode: enforce (TLS required)"
+        verdict = "Inbound email must use encryption"
     elif policy_mode == "testing":
-        verdict = "Mode: testing (monitoring)"
+        verdict = "Monitoring TLS -- not yet enforcing"
     elif policy_mode == "none":
-        verdict = "Mode: none (disabled)"
+        verdict = "Configured but disabled"
     else:
         verdict = f"Mode: {policy_mode}" if policy_mode else "Record found"
 
@@ -1256,9 +1256,9 @@ def transform_dnssec(raw: Dict) -> Dict:
     # Verdict
     if algorithms:
         algo_names = [a["name"].split(" (")[0] for a in algorithms]
-        verdict = f"DNSSEC enabled ({', '.join(algo_names)})"
+        verdict = f"DNS records cryptographically signed ({', '.join(algo_names)})"
     else:
-        verdict = "DNSSEC enabled"
+        verdict = "DNS records cryptographically signed"
 
     # Downgrade status if issues exist
     if any(a.get("deprecated") for a in algorithms):
