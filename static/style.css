@@ -1952,7 +1952,7 @@ main {
 }
 
 /* ==========================================================================
-   RESPONSIVE FIXES -- additional coverage
+   RESPONSIVE FIXES -- comprehensive coverage
    ========================================================================== */
 
 /* Prevent horizontal scroll on all viewports */
@@ -1960,8 +1960,12 @@ html, body {
     overflow-x: hidden;
 }
 
-/* Domain banner stacks earlier (tablets) */
+/* -- Tablet (768px): banner stacks, tagline hides -- */
 @media (max-width: 768px) {
+    .site-tagline {
+        display: none;
+    }
+
     .domain-banner {
         flex-direction: column;
         align-items: flex-start;
@@ -1977,13 +1981,55 @@ html, body {
         flex: 1;
         min-width: 0;
         justify-content: center;
+        min-height: 40px;
     }
 }
 
-/* Loading card + tree walk on small phones */
+/* -- Phone (640px): additional mobile refinements -- */
+@media (max-width: 640px) {
+    .loading-card {
+        padding: 1.35rem 1.15rem;
+    }
+
+    .tw-domain {
+        word-break: break-all;
+    }
+
+    .tw-record {
+        font-size: 0.7rem;
+    }
+
+    .tw-footnote {
+        font-size: 0.7rem;
+    }
+
+    .defensive-dns-card {
+        padding: 1rem 1.15rem;
+    }
+
+    .selector-input {
+        max-width: 100%;
+    }
+
+    .footer-role {
+        display: block;
+        text-align: center;
+    }
+
+    .run-another-btn {
+        width: 100%;
+        justify-content: center;
+    }
+
+    .error-message {
+        font-size: 0.84rem;
+    }
+}
+
+/* -- Small phone (400px): maximum compression -- */
 @media (max-width: 400px) {
     .loading-card {
-        padding: 1.25rem 1.15rem;
+        padding: 1.15rem 1rem;
     }
 
     .tree-walk {
@@ -1991,7 +2037,6 @@ html, body {
     }
 
     .tw-domain {
-        word-break: break-all;
         font-size: 0.75rem;
     }
 
@@ -2000,15 +2045,70 @@ html, body {
     }
 
     .defensive-dns-card {
-        padding: 1rem 1.1rem;
+        padding: 0.85rem 1rem;
     }
 
     .priority-section {
         padding: 1rem 1.1rem;
     }
 
-    .run-another-btn {
-        width: 100%;
+    .scope-btn {
+        flex: 1 1 calc(50% - 0.2rem);
         justify-content: center;
+        text-align: center;
+    }
+
+    .audit-input-card {
+        padding: 1.5rem 1.15rem 1.4rem;
+    }
+
+    .audit-title {
+        font-size: 1.2rem;
+    }
+
+    .audit-subtitle {
+        font-size: 0.82rem;
+    }
+
+    .audit-trust {
+        font-size: 0.78rem;
+    }
+
+    .result-header {
+        padding: 0.75rem 0.85rem;
+    }
+}
+
+/* -- Tiny phone (320px): emergency overrides -- */
+@media (max-width: 320px) {
+    .container {
+        padding: 0 0.75rem;
+    }
+
+    .logo-terminal {
+        width: 80px;
+    }
+
+    .logo-text {
+        font-size: 0.82rem;
+    }
+
+    .scope-btn span {
+        font-size: 0.65rem;
+    }
+
+    .summary-value {
+        font-size: 1.2rem;
+    }
+
+    .record-block {
+        font-size: 0.68rem;
+        padding: 0.65rem 0.75rem;
+        padding-right: 2.5rem;
+    }
+
+    .copy-btn {
+        font-size: 0.6rem;
+        padding: 0.18rem 0.45rem;
     }
 }
