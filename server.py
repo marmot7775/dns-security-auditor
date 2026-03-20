@@ -257,6 +257,22 @@ def _validate_domain(domain: str) -> str:
     return d
 
 
+_VALID_SCOPES = {"complete", "email_full", "dmarc", "transport", "dns_infra", "security_scan"}
+
+
+def _validate_scope(scope: Optional[str]) -> Optional[str]:
+    """Validate scope parameter. Returns None for default (complete)."""
+    if not scope:
+        return None
+    s = scope.strip().lower()
+    if s not in _VALID_SCOPES:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Invalid scope '{scope}'. Valid scopes: {', '.join(sorted(_VALID_SCOPES))}",
+        )
+    return s
+
+
 # ============================================================
 # API Endpoint
 # ============================================================
@@ -288,6 +304,7 @@ async def audit_domain(
         )
 
     domain = _validate_domain(domain)
+    scope = _validate_scope(scope)
     if selector and not SELECTOR_PATTERN.match(selector.strip()):
         raise HTTPException(status_code=400, detail="Invalid DKIM selector")
     log.info("Audit requested: %s (scope=%s, ip=%s)", domain, scope or "complete", client_ip)
@@ -354,6 +371,7 @@ async def audit_stream(
         return StreamingResponse(_rate_error(), media_type="text/event-stream")
 
     domain = _validate_domain(domain)
+    scope = _validate_scope(scope)
     if selector and not SELECTOR_PATTERN.match(selector.strip()):
         raise HTTPException(status_code=400, detail="Invalid DKIM selector")
     log.info("SSE audit requested: %s (scope=%s, ip=%s)", domain, scope or "complete", client_ip)
