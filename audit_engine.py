@@ -941,9 +941,10 @@ def _raw_check_spf(domain: str) -> Dict[str, Any]:
             "error",
             f"Multiple SPF records ({len(spf_records)})",
             "RFC 7208 requires exactly one SPF record per domain. "
-            "When multiple records exist, SPF returns a permanent error (permerror). "
-            "None of them are valid. This is the same as having no SPF at all.",
-            "Merge into a single SPF record.",
+            "When multiple records exist, receiving servers return a PermError and "
+            "ignore both records. Your legitimate mail will fail SPF authentication. "
+            "Merge all authorized IP addresses and includes into a single v=spf1 record.",
+            "Merge all SPF records into one. Combine all authorized IPs and includes into a single v=spf1 string.",
         )
         return result
 
