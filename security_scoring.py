@@ -69,7 +69,7 @@ class EmailSecurityScorer:
         scores['spf'] = spf_score
         details['spf'] = spf_details
 
-        # 3. DKIM Score (20 points)
+        # 3. DKIM Score (15 points)
         if has_mx:
             dkim_score, dkim_details = self._score_dkim(
                 audit_results.get('dkim_results', {})

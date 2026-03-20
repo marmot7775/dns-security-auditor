@@ -256,16 +256,22 @@
                     <tr><td>DKIM</td><td>15 points</td><td>Key presence, key strength, redundancy</td></tr>
                     <tr><td>Best Practices</td><td>20 points</td><td>MTA-STS, TLS-RPT, DANE</td></tr>
                     <tr><td>Key Security</td><td>10 points</td><td>Key hygiene, rotation, testing mode</td></tr>
-                    <tr><td>Infrastructure</td><td>10 points</td><td>DNSSEC, CAA, vendor detection</td></tr>
+                    <tr><td>Vendor Intelligence</td><td>10 points</td><td>Email service provider detection and configuration</td></tr>
                 </tbody>
             </table>
             <div class="method-note">
-                DKIM scoring does not penalize domains where selectors were not detected, because selectors are private and cannot be verified from outside. A domain with undetectable DKIM receives near-full credit in this category.
+                DKIM scoring does not penalize domains where selectors were not detected, because selectors are private and cannot be verified from outside. A domain with undetectable DKIM receives full credit in this category.
+            </div>
+            <div class="method-note">
+                DNSSEC, CAA, Nameservers, Certificate Transparency, and Blocklist checks are evaluated and reported in the audit results but do not currently contribute to the numeric score.
+            </div>
+            <div class="method-note">
+                A broken SPF record (PermError from exceeding the 10-lookup limit) receives zero points in the SPF category regardless of other mechanisms.
             </div>
 
             <h2 class="method-h2">Authentication Resilience</h2>
             <p class="method-p">
-                Beyond pass/fail, we assess how resilient your authentication is to real-world failure scenarios. A domain where both SPF and DKIM are functional has <strong>high</strong> resilience because either can independently satisfy DMARC. A domain relying on SPF alone has <strong>moderate</strong> resilience because forwarded mail will fail. A domain with broken SPF and no detected DKIM has <strong>low</strong> resilience.
+                Beyond pass/fail, we assess how resilient your authentication is to real-world failure scenarios. A domain where both SPF and DKIM are functional has <strong>high</strong> resilience because either can independently satisfy DMARC. A domain relying on SPF alone has <strong>moderate</strong> resilience because forwarded mail will fail. A domain with broken SPF and no detected DKIM has <strong>low</strong> resilience. Authentication Resilience is an informational assessment and does not contribute to the numeric score.
             </p>
 
             <h2 class="method-h2">Standards Reference</h2>
