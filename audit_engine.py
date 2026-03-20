@@ -11,7 +11,7 @@ import logging
 import re
 import traceback
 from concurrent.futures import ThreadPoolExecutor, TimeoutError as FuturesTimeoutError, as_completed
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import Any, Dict, List, Optional
 
 log = logging.getLogger(__name__)
@@ -1825,7 +1825,6 @@ def _raw_check_ct(domain: str, raw_results: Dict[str, Any]) -> Dict[str, Any]:
       - Certificate sprawl (too many CAs)
     """
     import requests
-    from datetime import timezone
 
     result = {
         "check": "Certificate Transparency",
@@ -2353,7 +2352,7 @@ def run_full_audit(domain: str, dkim_selector: Optional[str] = None,
     If progress_callback is provided, it is called after each check with:
         progress_callback(step_name: str, completed: int, total: int)
     """
-    start_time = datetime.now()
+    start_time = datetime.now(timezone.utc)
     checks = []
     raw_results = {}
     errors = []
