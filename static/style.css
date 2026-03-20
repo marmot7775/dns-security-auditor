@@ -2354,6 +2354,7 @@ details.st-node > summary:hover {
     border-top: 1px solid var(--border);
     padding: 2rem 0;
     margin-top: auto;
+    flex-shrink: 0;
     background: var(--surface);
 }
 
@@ -3145,15 +3146,11 @@ details.st-node > summary:hover {
    RESPONSIVE FIXES -- comprehensive coverage
    ========================================================================== */
 
-/* Prevent horizontal scroll on all viewports.
-   overflow-x: clip on html avoids the double-scroll-context browser quirk
-   where overflow-x: hidden on BOTH html and body causes body to become its
-   own scroll container, which clips the footer out of the visible area. */
-html {
+/* Prevent horizontal scroll without creating a scroll container.
+   overflow-x: clip does NOT trigger overflow-y: auto, so the normal
+   document scroll remains on html and the flex-column footer is reachable. */
+html, body {
     overflow-x: clip;
-}
-body {
-    overflow-x: hidden;
 }
 
 /* -- Tablet (768px): banner stacks, tagline hides -- */
