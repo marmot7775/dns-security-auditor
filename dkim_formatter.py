@@ -25,40 +25,42 @@ def analyze_dkim_key_strength(dkim_record: str) -> Dict:
         'warning': None
     }
     
+    # Check Ed25519 FIRST (before RSA, since all records have p=)
+    if 'k=ed25519' in dkim_record.lower():
+        result['key_type'] = 'Ed25519'
+        result['key_bits'] = 256
+        result['status'] = 'strong'
+        return result
+
     # Extract public key
     key_match = re.search(r'p=([A-Za-z0-9+/=]+)', dkim_record)
     if not key_match:
         result['status'] = 'invalid'
         result['warning'] = 'No public key found'
         return result
-    
+
     key_data = key_match.group(1)
-    
-    # Determine key type (RSA is most common)
-    if 'k=rsa' in dkim_record or 'p=' in dkim_record:
-        result['key_type'] = 'RSA'
-        
-        # Estimate key size from base64 length
-        # RSA 1024-bit ≈ 172 base64 chars
-        # RSA 2048-bit ≈ 344 base64 chars
-        # RSA 4096-bit ≈ 684 base64 chars
-        key_len = len(key_data)
-        
-        if key_len < 200:
-            result['key_bits'] = 1024
-            result['status'] = 'weak'
-            result['warning'] = '⚠️  Weak - 1024-bit keys deprecated'
-        elif key_len < 500:
-            result['key_bits'] = 2048
-            result['status'] = 'strong'
-        else:
-            result['key_bits'] = 4096
-            result['status'] = 'strong'
-    elif 'k=ed25519' in dkim_record:
-        result['key_type'] = 'Ed25519'
-        result['key_bits'] = 256  # Ed25519 is always 256-bit
+
+    # RSA (default key type per RFC 6376)
+    result['key_type'] = 'RSA'
+
+    # Estimate key size from base64 length
+    # RSA 1024-bit ~ 172 base64 chars
+    # RSA 2048-bit ~ 344 base64 chars
+    # RSA 4096-bit ~ 684 base64 chars
+    key_len = len(key_data)
+
+    if key_len < 200:
+        result['key_bits'] = 1024
+        result['status'] = 'weak'
+        result['warning'] = '1024-bit RSA key, upgrade to 2048-bit'
+    elif key_len < 500:
+        result['key_bits'] = 2048
         result['status'] = 'strong'
-    
+    else:
+        result['key_bits'] = 4096
+        result['status'] = 'strong'
+
     return result
 
 def format_dkim_summary(domain: str, dkim_results: Dict, show_intelligence: bool = True) -> str:

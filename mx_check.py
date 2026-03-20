@@ -253,8 +253,8 @@ def check_mx(domain: str, deep_scan: bool = False) -> Dict[str, Any]:
         result["status"] = "warning"
         result["issues"].append(_make_issue(
             "warning", "No MX records found",
-            f"No MX records for '{domain}'. Senders will fall back to A record.",
-            "Email delivery is unreliable.",
+            f"No MX records for '{domain}'. Most modern mail servers require MX records and will not attempt delivery without them.",
+            "Email delivery will fail for most senders.",
             "Add at least one MX record."))
         return result
 
