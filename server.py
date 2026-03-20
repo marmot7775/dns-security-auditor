@@ -20,7 +20,7 @@ import re
 import threading
 import time
 from collections import defaultdict
-from datetime import datetime
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Optional
 from urllib.parse import quote
@@ -65,7 +65,7 @@ def _log_audit(request: Request, domain: str, scope: str, grade: str,
     """
     ua = request.headers.get("User-Agent", "unknown")
     entry = {
-        "ts": datetime.utcnow().strftime("%Y-%m-%dT%H:%M:%SZ"),
+        "ts": datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"),
         "domain": domain,
         "scope": scope or "complete",
         "grade": grade,
