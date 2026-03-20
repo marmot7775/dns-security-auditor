@@ -3505,7 +3505,7 @@ def _build_resilience_analysis(
             )
         dmarc_note += (
             f" Discovery method: {_method_label}. "
-            "Best practice: publish a dedicated DMARC record for this subdomain."
+            ""
         )
     elif _inherited and _inh_policy == "none":
         dmarc_status = "none"
