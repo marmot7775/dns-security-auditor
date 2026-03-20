@@ -24,7 +24,7 @@
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link rel="preload" href="https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,400;0,9..40,500;0,9..40,600;0,9..40,700;1,9..40,400&family=JetBrains+Mono:wght@400;500&display=swap" as="style" onload="this.onload=null;this.rel='stylesheet'">
     <noscript><link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,400;0,9..40,500;0,9..40,600;0,9..40,700;1,9..40,400&family=JetBrains+Mono:wght@400;500&display=swap"></noscript>
-    <link rel="stylesheet" href="/static/style.css?v=bugfix1">
+    <link rel="stylesheet" href="/static/style.css?v=edu1">
     <script type="application/ld+json">
     {
         "@context": "https://schema.org",
@@ -227,6 +227,63 @@
             </div>
         </section>
 
+        <!-- DMARC Educational Section -->
+        <section class="edu-section" id="edu-section">
+            <div class="container">
+                <button class="edu-toggle" id="edu-toggle">
+                    <span>About DMARC Standards</span>
+                    <span class="edu-chevron">&#9662;</span>
+                </button>
+                <div class="edu-content" id="edu-content">
+                    <div class="edu-intro">
+                        DMARC is the policy layer that ties SPF and DKIM together. Understanding how it works -- and what changed in the latest standard -- is essential for interpreting your audit results.
+                    </div>
+
+                    <h3 class="edu-heading">What DMARC Does</h3>
+                    <p class="edu-text">
+                        DMARC lets a domain owner publish a policy telling receivers what to do when a message fails both SPF and DKIM alignment. A message passes DMARC if <strong>at least one</strong> of SPF or DKIM passes <strong>and</strong> the authenticated domain aligns with the From address. DKIM alignment is more resilient because DKIM signatures survive mail forwarding, while SPF breaks when a message is relayed through an intermediary.
+                    </p>
+
+                    <h3 class="edu-heading">RFC 9716 Replaces RFC 7489</h3>
+                    <p class="edu-text">
+                        <a href="https://datatracker.ietf.org/doc/html/rfc9716" target="_blank" rel="noopener">RFC 9716</a> was published in November 2024 as a Proposed Standard, officially superseding <a href="https://datatracker.ietf.org/doc/html/rfc7489" target="_blank" rel="noopener">RFC 7489</a> (March 2015). This app checks against RFC 9716. Key changes:
+                    </p>
+
+                    <div class="edu-changes">
+                        <div class="edu-change">
+                            <div class="edu-change-title">Tree Walk Replaces Public Suffix List</div>
+                            <div class="edu-change-desc">
+                                RFC 7489 used the Public Suffix List (PSL) to find the Organizational Domain, then checked for a DMARC record there. RFC 9716 replaces this with a <strong>tree walk</strong> -- receivers walk up the DNS hierarchy level by level until they find a DMARC record. The tree walk is more accurate and doesn't depend on an external list.
+                            </div>
+                        </div>
+                        <div class="edu-change">
+                            <div class="edu-change-title">pct Tag Removed</div>
+                            <div class="edu-change-desc">
+                                The <code>pct=</code> tag (which applied policy to only a percentage of failing messages) is removed with no replacement. The intended deployment path is: use <strong>p=none</strong> for monitoring, then move directly to enforcement.
+                            </div>
+                        </div>
+                        <div class="edu-change">
+                            <div class="edu-change-title">ri and rf Tags Removed</div>
+                            <div class="edu-change-desc">
+                                The <code>ri=</code> (report interval) and <code>rf=</code> (report format) tags are removed. Receivers always sent reports on their own schedule and only used one format (AFRF), making both tags effectively unused.
+                            </div>
+                        </div>
+                        <div class="edu-change">
+                            <div class="edu-change-title">New Tags: np, t, psd</div>
+                            <div class="edu-change-desc">
+                                <code>np=</code> sets policy for non-existent subdomains. <code>t=y</code> enables test mode, which drops the effective policy one level (reject becomes quarantine, quarantine becomes none) for cautious deployment. <code>psd=</code> signals whether a domain is a Public Suffix Domain.
+                            </div>
+                        </div>
+                    </div>
+
+                    <h3 class="edu-heading">Adoption Status</h3>
+                    <p class="edu-text">
+                        RFC 9716 is the authoritative standard, but most receivers (Gmail, Outlook, Yahoo) still implement RFC 7489 behavior as of early 2025. This means tree walk inheritance, the <code>np=</code> tag, and the <code>t=</code> tag may not be honored by all receivers yet. Where this matters, the audit results include a note about receiver adoption.
+                    </p>
+                </div>
+            </div>
+        </section>
+
     </main>
 
     <footer class="site-footer">
@@ -247,7 +304,7 @@
         </div>
     </footer>
 
-    <script src="/static/app.js?v=bugfix1"></script>
+    <script src="/static/app.js?v=edu1"></script>
 </body>
 </html>
 

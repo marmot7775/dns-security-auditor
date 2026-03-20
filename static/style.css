@@ -2868,6 +2868,124 @@ details.st-node > summary:hover {
 }
 
 /* ==========================================================================
+   Educational Section -- DMARC Standards
+   ========================================================================== */
+
+.edu-section {
+    margin-top: 2rem;
+    padding: 0;
+}
+
+.edu-toggle {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    width: 100%;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    padding: 0.85rem 1.15rem;
+    font-family: var(--font-body);
+    font-size: 0.88rem;
+    font-weight: 600;
+    color: var(--primary);
+    cursor: pointer;
+    transition: all var(--duration) var(--ease);
+}
+
+.edu-toggle:hover {
+    background: var(--primary-subtle);
+    border-color: var(--primary-border);
+}
+
+.edu-chevron {
+    transition: transform 0.2s var(--ease);
+    font-size: 0.8rem;
+}
+
+.edu-toggle.open .edu-chevron {
+    transform: rotate(180deg);
+}
+
+.edu-content {
+    display: none;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-top: none;
+    border-radius: 0 0 var(--radius) var(--radius);
+    padding: 1.25rem 1.35rem;
+}
+
+.edu-content.open {
+    display: block;
+}
+
+.edu-intro {
+    font-size: 0.84rem;
+    color: var(--text-secondary);
+    line-height: 1.7;
+    margin-bottom: 1.25rem;
+}
+
+.edu-heading {
+    font-size: 0.82rem;
+    font-weight: 700;
+    color: var(--text-primary);
+    margin: 1.15rem 0 0.4rem;
+}
+
+.edu-heading:first-of-type {
+    margin-top: 0;
+}
+
+.edu-text {
+    font-size: 0.8rem;
+    color: var(--text-secondary);
+    line-height: 1.7;
+    margin: 0 0 0.75rem;
+}
+
+.edu-text a {
+    color: var(--primary-light);
+    text-decoration: underline;
+}
+
+.edu-changes {
+    display: flex;
+    flex-direction: column;
+    gap: 0.65rem;
+    margin: 0.5rem 0 1rem;
+}
+
+.edu-change {
+    padding: 0.65rem 0.85rem;
+    border-left: 3px solid var(--primary-border);
+    background: var(--bg);
+    border-radius: 0 var(--radius) var(--radius) 0;
+}
+
+.edu-change-title {
+    font-size: 0.78rem;
+    font-weight: 700;
+    color: var(--text-primary);
+    margin-bottom: 0.25rem;
+}
+
+.edu-change-desc {
+    font-size: 0.76rem;
+    color: var(--text-secondary);
+    line-height: 1.65;
+}
+
+.edu-change-desc code {
+    font-family: var(--font-mono);
+    font-size: 0.72rem;
+    background: rgba(0, 0, 0, 0.04);
+    padding: 0.1rem 0.3rem;
+    border-radius: 3px;
+}
+
+/* ==========================================================================
    RESPONSIVE FIXES -- comprehensive coverage
    ========================================================================== */
 
