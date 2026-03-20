@@ -3062,7 +3062,7 @@ def run_full_audit(domain: str, dkim_selector: Optional[str] = None,
 
     # --- Authentication Resilience Analysis ---
     try:
-        resilience_result = _build_resilience_analysis(raw_results, checks, has_mx, is_defensive)
+        resilience_result = _build_resilience_analysis(raw_results, checks, has_mx, is_defensive, tree_walk=tree_walk_result)
     except Exception:
         resilience_result = None
 
@@ -3231,6 +3231,7 @@ def _build_resilience_analysis(
     checks: List[Dict],
     has_mx: bool,
     is_defensive: bool,
+    tree_walk: Optional[Dict] = None,
 ) -> Dict:
     """Analyze authentication resilience posture.
 
@@ -3243,6 +3244,7 @@ def _build_resilience_analysis(
         checks: Transformed frontend-ready check cards.
         has_mx: True if the domain has MX records.
         is_defensive: True if the domain is a non-mail defensive DNS domain.
+        tree_walk: Tree walk result for inherited DMARC policy detection.
 
     Returns:
         Dict with keys: level, summary, mechanisms, risk.
@@ -3322,8 +3324,51 @@ def _build_resilience_analysis(
         )
 
     # -- DMARC mechanism status --
-    dmarc_policy = (raw_dmarc.get("policy") or "").lower().strip()
-    if not raw_dmarc.get("record"):
+    # Check for inherited policy via tree walk when no direct record exists
+    _inherited = (
+        not raw_dmarc.get("record")
+        and tree_walk
+        and tree_walk.get("policy_source")
+        and tree_walk.get("is_subdomain")
+    )
+    if _inherited:
+        _inh_policy = (tree_walk.get("effective_policy") or "none").lower()
+        _inh_source = tree_walk.get("policy_source", "parent domain")
+        _inh_tag = tree_walk.get("applied_tag", "p")
+        _tag_label = {"sp": "sp=", "np": "np=", "p": "p="}.get(_inh_tag, f"{_inh_tag}=")
+        dmarc_policy = _inh_policy
+    else:
+        dmarc_policy = (raw_dmarc.get("policy") or "").lower().strip()
+
+    if _inherited and _inh_policy in ("reject", "quarantine"):
+        dmarc_status = _inh_policy
+        dmarc_note = (
+            f"No DMARC record at this subdomain, but it inherits {_tag_label}{_inh_policy} "
+            f"from {_inh_source} via the DNS tree walk. "
+        )
+        if _inh_policy == "reject":
+            dmarc_note += (
+                "Receivers that honor this inheritance will block messages that fail "
+                "both SPF and DKIM alignment."
+            )
+        else:
+            dmarc_note += (
+                "Receivers that honor this inheritance will route failing messages "
+                "to the spam or junk folder."
+            )
+        dmarc_note += (
+            " Note: tree walk inheritance is an RFC 9716 feature. For the strongest "
+            "protection, publish a dedicated DMARC record for this subdomain."
+        )
+    elif _inherited and _inh_policy == "none":
+        dmarc_status = "none"
+        dmarc_note = (
+            f"No DMARC record at this subdomain. It inherits {_tag_label}none "
+            f"from {_inh_source} (monitoring only, no enforcement). "
+            "Publishing a dedicated record with p=quarantine or p=reject would provide "
+            "direct protection for this subdomain."
+        )
+    elif not raw_dmarc.get("record"):
         dmarc_status = "missing"
         dmarc_note = (
             "No DMARC record found. Without DMARC, there is no policy telling receivers "
