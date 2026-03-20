@@ -828,7 +828,10 @@ def transform_mx(raw: Dict) -> Dict:
 
     # Detect major providers with internal redundancy
     _major_mx_providers = {"google", "microsoft", "outlook", "proofpoint", "mimecast", "barracuda", "cloudflare"}
-    _is_major_provider = any(p.lower() in _major_mx_providers for p in providers) if providers else False
+    _is_major_provider = any(
+        any(major in p.lower() for major in _major_mx_providers)
+        for p in providers
+    ) if providers else False
 
     # Explanation
     if count >= 2:
