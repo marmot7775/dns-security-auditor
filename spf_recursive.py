@@ -303,10 +303,10 @@ def count_spf_lookups(domain: str) -> Dict[str, Any]:
                     "severity": "warning",
                     "issue": "Deprecated 'ptr' mechanism found",
                     "plain_english": (
-                        "The ptr mechanism is deprecated in RFC 7208 due to "
-                        "performance issues and unreliability."
+                        "The ptr mechanism is discouraged by RFC 7208 because it is slow and "
+                        "places a burden on reverse DNS infrastructure."
                     ),
-                    "impact": "Slow SPF evaluation, some receivers skip it.",
+                    "impact": "Slow SPF evaluation, unreliable in practice.",
                     "fix": "Replace ptr with explicit ip4/ip6 or a mechanisms.",
                 })
                 break

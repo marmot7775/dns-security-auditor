@@ -1216,8 +1216,9 @@ def _raw_check_spf(domain: str) -> Dict[str, Any]:
                 _add_issue(
                     "warning",
                     f"Deprecated 'ptr' mechanism: {part}",
-                    "The ptr mechanism is discouraged by RFC 7208 because it is slow and places a burden on reverse DNS infrastructure. "
-                    "Receivers may ignore it.",
+                    "The ptr mechanism is discouraged by RFC 7208 because it is slow and places "
+                    "a burden on reverse DNS infrastructure. Receivers must still process it, but "
+                    "its use is unreliable in practice.",
                     "Remove the ptr mechanism. Use ip4:/ip6: or include: instead.",
                 )
                 seen_mechanisms.append(part)
@@ -1246,8 +1247,9 @@ def _raw_check_spf(domain: str) -> Dict[str, Any]:
                 _add_issue(
                     "warning",
                     "Deprecated 'ptr' mechanism",
-                    "The ptr mechanism is discouraged by RFC 7208 because it is slow and places a burden on reverse DNS infrastructure. "
-                    "Receivers may ignore it.",
+                    "The ptr mechanism is discouraged by RFC 7208 because it is slow and places "
+                    "a burden on reverse DNS infrastructure. Receivers must still process it, but "
+                    "its use is unreliable in practice.",
                     "Remove the ptr mechanism. Use ip4:/ip6: or include: instead.",
                 )
                 seen_mechanisms.append(part)
@@ -2021,14 +2023,7 @@ def _raw_check_nameservers(domain: str) -> Dict[str, Any]:
             "RFC 1034 requires at least two nameservers.",
             "Add at least one secondary nameserver, preferably on a different network.",
         )
-    elif result["ns_count"] == 2:
-        _add_issue(
-            "info",
-            "Two nameservers configured (minimum redundancy)",
-            "Two nameservers meets the minimum requirement. Three or four provides "
-            "better redundancy for production domains.",
-            "Consider adding a third nameserver for improved resilience.",
-        )
+    # Two nameservers is standard and fine. No need to flag it.
 
     # 2. Unresolvable nameservers (lame delegation)
     lame_ns = [ns for ns in ns_details if not ns["resolves"]]

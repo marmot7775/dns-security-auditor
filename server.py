@@ -291,7 +291,7 @@ async def audit_domain(
 
     Returns:
     - Security grade (A-F) with numeric score
-    - Individual check results (DMARC, SPF, DKIM, MX, MTA-STS, TLS-RPT, BIMI, DNSSEC)
+    - Individual check results (DMARC, SPF, DKIM, MX, MTA-STS, TLS-RPT, BIMI, DNSSEC, CAA, DANE, Nameservers, CT, Blocklist)
     - Priority fixes
     - Detected email vendors
     """
@@ -541,7 +541,8 @@ async def health():
         "cache_size": len(_cache),
         "checks": [
             "DMARC", "SPF", "DKIM", "MX", "MTA-STS",
-            "TLS-RPT", "BIMI", "DNSSEC", "CAA", "Nameservers",
+            "TLS-RPT", "BIMI", "DNSSEC", "CAA", "DANE",
+            "Nameservers", "Certificate Transparency", "Blocklist",
         ],
     }
 
