@@ -82,15 +82,11 @@ def transform_dmarc(raw: Dict, tree_walk: Optional[Dict] = None) -> Dict:
     record = raw.get("record")
     pill_label = None
 
-    # Check if this domain inherits policy via tree walk
-    inherited = (
-        not record
-        and tree_walk
-        and tree_walk.get("policy_source")
-        and tree_walk.get("is_subdomain")
-    )
-    inherited_policy = tree_walk.get("effective_policy") if inherited else None
-    inherited_source = tree_walk.get("policy_source") if inherited else None
+    # Check if this domain inherits policy (raw_dmarc fields set by
+    # _enrich_dmarc_inheritance using tree walk first, PSL fallback)
+    inherited = not record and raw.get("is_subdomain") and raw.get("inherited_policy")
+    inherited_policy = raw.get("inherited_policy") if inherited else None
+    inherited_source = raw.get("inherited_from") if inherited else None
 
     # Build verdict and override status based on policy
     if inherited:
@@ -126,48 +122,58 @@ def transform_dmarc(raw: Dict, tree_walk: Optional[Dict] = None) -> Dict:
 
     # Build explanation
     if inherited:
-        applied_tag = tree_walk.get("applied_tag", "p")
+        applied_tag = raw.get("applied_tag", "p")
         tag_label = {"sp": "subdomain policy (sp=)", "np": "non-existent subdomain policy (np=)", "p": "domain policy (p=)"}.get(applied_tag, f"{applied_tag}=")
-        _adoption_note = (
-            " However, policy inheritance via tree walk is an "
-            "<a href=\"https://datatracker.ietf.org/doc/html/rfc9716\" target=\"_blank\" rel=\"noopener\">RFC 9716</a> feature. "
-            "Receivers still using <a href=\"https://datatracker.ietf.org/doc/html/rfc7489\" target=\"_blank\" rel=\"noopener\">RFC 7489</a> may not honor it. For the strongest protection, "
-            "publish a dedicated DMARC record for this subdomain."
+        _method = raw.get("inheritance_method", "psl")
+        if _method == "tree_walk":
+            _method_note = (
+                " Policy was discovered via the "
+                "<a href=\"https://datatracker.ietf.org/doc/html/rfc9716\" target=\"_blank\" rel=\"noopener\">RFC 9716</a> "
+                "DNS tree walk."
+            )
+        else:
+            _method_note = (
+                " Policy was discovered via the organizational domain fallback defined in "
+                "<a href=\"https://datatracker.ietf.org/doc/html/rfc7489#section-6.6.3\" target=\"_blank\" rel=\"noopener\">RFC 7489 Section 6.6.3</a> "
+                "using the Public Suffix List."
+            )
+        _best_practice = (
+            " For the strongest protection, publish a dedicated DMARC record for this subdomain."
         )
         if inherited_policy == "reject":
             explanation = (
                 f"This subdomain has no DMARC record at "
                 f"<strong>_dmarc.{raw.get('domain', '')}</strong>, but inherits "
-                f"<strong>p=reject</strong> from <strong>{inherited_source}</strong> "
-                f"via the {tag_label} tag. "
-                f"Receivers that honor DMARC are requested to reject messages where neither "
-                f"SPF nor DKIM passes with aligned domains (<a href=\"https://datatracker.ietf.org/doc/html/rfc7489\" target=\"_blank\" rel=\"noopener\">RFC 7489</a> Section 6.3)."
-                + _adoption_note
+                f"<strong>p=reject</strong> from the organizational domain "
+                f"<strong>{inherited_source}</strong> via the {tag_label} tag. "
+                f"Receivers are requested to reject messages where neither "
+                f"SPF nor DKIM passes with aligned domains."
+                + _method_note + _best_practice
             )
         elif inherited_policy == "quarantine":
             explanation = (
                 f"This subdomain has no DMARC record at "
                 f"<strong>_dmarc.{raw.get('domain', '')}</strong>, but inherits "
-                f"<strong>p=quarantine</strong> from <strong>{inherited_source}</strong> "
-                f"via the {tag_label} tag. "
-                f"Receivers that honor DMARC are requested to route failures to the spam folder."
-                + _adoption_note
+                f"<strong>p=quarantine</strong> from the organizational domain "
+                f"<strong>{inherited_source}</strong> via the {tag_label} tag. "
+                f"Receivers are requested to route failing messages to the spam folder."
+                + _method_note + _best_practice
             )
         elif inherited_policy == "none":
             explanation = (
                 f"This subdomain has no DMARC record at "
                 f"<strong>_dmarc.{raw.get('domain', '')}</strong>, but inherits "
-                f"<strong>p=none</strong> from <strong>{inherited_source}</strong> "
-                f"via the {tag_label} tag. "
+                f"<strong>p=none</strong> from the organizational domain "
+                f"<strong>{inherited_source}</strong> via the {tag_label} tag. "
                 f"This is monitoring only; receivers take no enforcement action, but aggregate reports "
                 f"provide visibility into authentication results."
-                + _adoption_note
+                + _method_note + _best_practice
             )
         else:
             explanation = (
                 f"This subdomain inherits DMARC policy <strong>{inherited_policy}</strong> "
-                f"from <strong>{inherited_source}</strong>."
-                + _adoption_note
+                f"from the organizational domain <strong>{inherited_source}</strong>."
+                + _method_note + _best_practice
             )
     elif not record:
         explanation = (
