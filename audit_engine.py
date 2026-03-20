@@ -2851,7 +2851,13 @@ def run_full_audit(domain: str, dkim_selector: Optional[str] = None,
         _spf_record = (_raw_spf.get("record") or "").strip().lower()
         _has_null_spf = _spf_record in ("v=spf1 -all", "v=spf1 ~all")
 
-        _dmarc_policy = (_raw_dmarc.get("policy") or "").lower()
+        # Check direct policy first, then inherited via tree walk
+        if _raw_dmarc.get("policy"):
+            _dmarc_policy = _raw_dmarc["policy"].lower()
+        elif tree_walk_result and tree_walk_result.get("policy_source") and tree_walk_result.get("is_subdomain"):
+            _dmarc_policy = (tree_walk_result.get("effective_policy") or "").lower()
+        else:
+            _dmarc_policy = ""
         _has_dmarc_reject = _dmarc_policy == "reject"
 
         if _has_null_mx or _has_no_mx:
@@ -2894,9 +2900,16 @@ def run_full_audit(domain: str, dkim_selector: Optional[str] = None,
     # Flag misconfigurations where DMARC alignment settings conflict with
     # actual SPF/DKIM deployment. Requires all three checks to have run.
     _xc_dmarc = raw_results.get("dmarc")
+    _xc_inherited = (
+        _xc_dmarc
+        and not _xc_dmarc.get("record")
+        and tree_walk_result
+        and tree_walk_result.get("policy_source")
+        and tree_walk_result.get("is_subdomain")
+    )
     _xc_can_crosscheck = (
         _xc_dmarc
-        and _xc_dmarc.get("record")
+        and (_xc_dmarc.get("record") or _xc_inherited)
         and "spf" in raw_results
         and "dkim" in raw_results
         and _should_include("dmarc", scope_set)
@@ -2906,9 +2919,15 @@ def run_full_audit(domain: str, dkim_selector: Optional[str] = None,
         _xc_spf = raw_results["spf"]
         _xc_dkim = raw_results["dkim"]
 
-        _xc_policy = (_xc_dmarc.get("policy") or "").lower()
-        _xc_adkim = (_xc_dmarc.get("adkim") or "r").lower()
-        _xc_aspf = (_xc_dmarc.get("aspf") or "r").lower()
+        if _xc_inherited:
+            _xc_policy = (tree_walk_result.get("effective_policy") or "").lower()
+            # Alignment tags are NOT inherited per spec; defaults apply (relaxed)
+            _xc_adkim = "r"
+            _xc_aspf = "r"
+        else:
+            _xc_policy = (_xc_dmarc.get("policy") or "").lower()
+            _xc_adkim = (_xc_dmarc.get("adkim") or "r").lower()
+            _xc_aspf = (_xc_dmarc.get("aspf") or "r").lower()
 
         _xc_has_spf = bool(_xc_spf.get("record"))
         _xc_has_dkim = bool(_xc_dkim.get("found_selectors"))
@@ -3050,13 +3069,13 @@ def run_full_audit(domain: str, dkim_selector: Optional[str] = None,
 
     # --- Anomaly Detection ("What's Unusual") ---
     try:
-        anomalies = detect_anomalies(raw_results, score_result, has_mx, is_defensive)
+        anomalies = detect_anomalies(raw_results, score_result, has_mx, is_defensive, tree_walk=tree_walk_result)
     except Exception:
         anomalies = []
 
     # --- Remediation Plan ---
     try:
-        remediation_plan = build_remediation_plan(checks, raw_results, has_mx, is_defensive)
+        remediation_plan = build_remediation_plan(checks, raw_results, has_mx, is_defensive, tree_walk=tree_walk_result)
     except Exception:
         remediation_plan = {"immediate": [], "short_term": [], "long_term": []}
 

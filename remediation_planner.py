@@ -32,6 +32,7 @@ def build_remediation_plan(
     raw_results: dict,
     has_mx: bool,
     is_defensive: bool = False,
+    tree_walk: dict = None,
 ) -> Plan:
     """Build a prioritized, dependency-aware remediation plan.
 
@@ -46,6 +47,8 @@ def build_remediation_plan(
     has_mx:
         True when the domain publishes at least one MX record.  Email-only
         recommendations are suppressed when this is False.
+    tree_walk:
+        Tree walk result for inherited DMARC policy detection.
 
     Returns
     -------
@@ -102,7 +105,18 @@ def build_remediation_plan(
     spf_lookups = spf.get("lookup_count") or 0
 
     dmarc_record = dmarc.get("record") or ""
-    dmarc_policy = (dmarc.get("policy") or "").lower()
+    # Determine effective DMARC policy, including inherited via tree walk
+    _dmarc_inherited = (
+        not dmarc_record
+        and tree_walk
+        and tree_walk.get("policy_source")
+        and tree_walk.get("is_subdomain")
+    )
+    if _dmarc_inherited:
+        dmarc_policy = (tree_walk.get("effective_policy") or "").lower()
+    else:
+        dmarc_policy = (dmarc.get("policy") or "").lower()
+    dmarc_enforced = dmarc_policy in ("quarantine", "reject")
 
     dnssec_enabled = bool(dnssec.get("has_dnssec"))
     dnssec_chain_valid = dnssec.get("chain_valid")
@@ -183,8 +197,8 @@ def build_remediation_plan(
             "check": "SPF",
         })
 
-    # Missing DMARC
-    if not dmarc_record:
+    # Missing DMARC (no direct record AND no inherited policy)
+    if not dmarc_record and not _dmarc_inherited:
         immediate.append({
             "title": "Publish DMARC Record",
             "description": (
@@ -193,6 +207,20 @@ def build_remediation_plan(
             ),
             "effort": "low",
             "impact": "high",
+            "check": "DMARC",
+        })
+    elif not dmarc_record and _dmarc_inherited:
+        _inh_source = tree_walk.get("policy_source", "parent domain")
+        short_term.append({
+            "title": "Publish Dedicated DMARC Record",
+            "description": (
+                f"This subdomain inherits DMARC p={dmarc_policy} from {_inh_source}. "
+                "While this provides policy coverage, publishing a dedicated record "
+                "ensures coverage even with receivers that do not implement tree walk "
+                "inheritance (RFC 9716)."
+            ),
+            "effort": "low",
+            "impact": "medium",
             "check": "DMARC",
         })
 
@@ -214,8 +242,8 @@ def build_remediation_plan(
     # --------------------------------------------------------
 
     # DMARC p=none -- need to step up to quarantine
-    # Only applicable when DMARC exists but policy is none
-    if dmarc_record and dmarc_policy == "none":
+    # Applies to both direct record and inherited policy
+    if (dmarc_record or _dmarc_inherited) and dmarc_policy == "none":
         short_term.append({
             "title": "Upgrade DMARC to p=quarantine",
             "description": (
@@ -310,8 +338,8 @@ def build_remediation_plan(
     # --------------------------------------------------------
 
     # DMARC p=quarantine -- step up to reject
-    # SPF and DKIM should exist before suggesting p=reject
-    if dmarc_record and dmarc_policy == "quarantine":
+    # Applies to both direct record and inherited policy
+    if (dmarc_record or _dmarc_inherited) and dmarc_policy == "quarantine":
         long_term.append({
             "title": "Advance DMARC to p=reject",
             "description": (
@@ -382,7 +410,7 @@ def build_remediation_plan(
     # BIMI -- requires DMARC enforcement (quarantine or reject) and DKIM
     bimi_raw = raw_results.get("bimi") or {}
     bimi_has_record = bool(bimi_raw.get("record") or bimi_raw.get("records_found"))
-    bimi_eligible = dmarc_policy in ("quarantine", "reject") and has_any_dkim and not bimi_has_record
+    bimi_eligible = dmarc_enforced and has_any_dkim and not bimi_has_record
     if bimi_eligible and has_mx:
         long_term.append({
             "title": "Add BIMI Record",
