@@ -3058,6 +3058,12 @@ def run_full_audit(domain: str, dkim_selector: Optional[str] = None,
     except Exception:
         remediation_plan = {"immediate": [], "short_term": [], "long_term": []}
 
+    # --- Authentication Resilience Analysis ---
+    try:
+        resilience_result = _build_resilience_analysis(raw_results, checks, has_mx, is_defensive)
+    except Exception:
+        resilience_result = None
+
     # --- Assemble final response ---
     elapsed = (datetime.now(timezone.utc) - start_time).total_seconds()
 
@@ -3086,6 +3092,7 @@ def run_full_audit(domain: str, dkim_selector: Optional[str] = None,
         "scope": scope or "complete",
         "defensive_dns": is_defensive,
         "defensive_signals": defensive_signals,
+        "resilience": resilience_result,
         "errors": errors if errors else None,
     }
 
@@ -3211,6 +3218,166 @@ def _format_vendors(fp_vendors: List) -> List[Dict]:
         if name not in seen or v["confidence"] > seen[name]["confidence"]:
             seen[name] = v
     return sorted(seen.values(), key=lambda x: x["confidence"], reverse=True)
+
+
+# ============================================================
+# Authentication Resilience Analysis
+# ============================================================
+
+def _build_resilience_analysis(
+    raw_results: Dict,
+    checks: List[Dict],
+    has_mx: bool,
+    is_defensive: bool,
+) -> Dict:
+    """Analyze authentication resilience posture.
+
+    Evaluates how well the domain can survive the failure of any single
+    authentication mechanism (SPF, DKIM, DMARC) and returns a structured
+    summary suitable for frontend display.
+
+    Args:
+        raw_results: Raw check outputs keyed by check name.
+        checks: Transformed frontend-ready check cards.
+        has_mx: True if the domain has MX records.
+        is_defensive: True if the domain is a non-mail defensive DNS domain.
+
+    Returns:
+        Dict with keys: level, summary, mechanisms, risk.
+    """
+    raw_spf = raw_results.get("spf") or {}
+    raw_dkim = raw_results.get("dkim") or {}
+    raw_dmarc = raw_results.get("dmarc") or {}
+
+    # -- SPF mechanism status --
+    spf_record = raw_spf.get("record")
+    spf_lookup_count = raw_spf.get("lookup_count") or 0
+    if spf_record and spf_lookup_count > 10:
+        spf_status = "broken"
+        spf_note = f"SPF record exceeds the 10-lookup limit ({spf_lookup_count} lookups). Receivers may return PermError."
+    elif spf_record:
+        spf_status = "pass"
+        spf_note = "SPF record exists and is within the lookup limit."
+    else:
+        spf_status = "missing"
+        spf_note = "No SPF record found."
+
+    # -- DKIM mechanism status --
+    found_selectors = raw_dkim.get("found_selectors") or []
+    dkim_tested = "dkim" in raw_results
+    if not dkim_tested:
+        dkim_status = "missing"
+        dkim_note = "DKIM check was not run in this audit scope."
+    elif found_selectors:
+        dkim_status = "detected"
+        sel_names = [s.get("selector", "") for s in found_selectors if s.get("selector")]
+        dkim_note = f"DKIM key detected for selector(s): {', '.join(sel_names)}." if sel_names else "DKIM key detected."
+    else:
+        dkim_status = "not_detected"
+        dkim_note = (
+            "No DKIM key was found with the tested selectors. "
+            "This is a heuristic check. Custom selectors not in the test list may still be active."
+        )
+
+    # -- DMARC mechanism status --
+    dmarc_policy = (raw_dmarc.get("policy") or "").lower().strip()
+    if not raw_dmarc.get("record"):
+        dmarc_status = "missing"
+        dmarc_note = "No DMARC record found."
+    elif dmarc_policy in ("reject", "quarantine", "none"):
+        dmarc_status = dmarc_policy
+        dmarc_note = f"DMARC policy is p={dmarc_policy}."
+    else:
+        dmarc_status = "none"
+        dmarc_note = "DMARC record exists but policy could not be determined."
+
+    mechanisms = {
+        "spf": {"status": spf_status, "note": spf_note},
+        "dkim": {"status": dkim_status, "note": dkim_note},
+        "dmarc": {"status": dmarc_status, "note": dmarc_note},
+    }
+
+    # -- Defensive DNS: short-circuit --
+    if is_defensive:
+        return {
+            "level": "high",
+            "summary": (
+                "Non-mail domain with defensive DNS. "
+                "SPF -all and DMARC reject correctly block all email."
+            ),
+            "mechanisms": mechanisms,
+            "risk": "Low. Domain is configured to reject all email.",
+        }
+
+    # -- Derive resilience level and risk text --
+    spf_functional = spf_status == "pass"
+    dkim_functional = dkim_status == "detected"
+    dmarc_enforcing = dmarc_status in ("quarantine", "reject")
+
+    if dmarc_status == "missing":
+        level = "none"
+        summary = "No DMARC record found. Receivers have no policy to apply."
+        risk = (
+            "No DMARC record exists. Receivers have no policy to enforce, "
+            "regardless of SPF or DKIM status."
+        )
+    elif spf_status == "broken" and not dkim_functional:
+        level = "low"
+        summary = "SPF is invalid (PermError) and no DKIM was detected. No reliable authentication path exists."
+        risk = (
+            "SPF is broken and no DKIM was detected. "
+            "This domain has no reliable authentication mechanism."
+        )
+    elif not spf_functional and not dkim_functional:
+        level = "low"
+        summary = "Neither SPF nor DKIM is providing a working authentication path."
+        risk = (
+            "SPF is missing and no DKIM was detected. "
+            "This domain has no reliable authentication mechanism."
+        )
+    elif spf_functional and dkim_functional and dmarc_enforcing:
+        level = "high"
+        summary = (
+            "SPF and DKIM are both active, and DMARC is enforcing. "
+            "Either mechanism can independently satisfy DMARC alignment."
+        )
+        risk = (
+            "Both SPF and DKIM provide DMARC alignment paths. "
+            "If one fails (e.g. SPF breaks on forwarding), "
+            "the other can still pass DMARC."
+        )
+    elif spf_status == "broken" and dkim_functional:
+        level = "moderate"
+        summary = "SPF is invalid (PermError). Authentication depends entirely on DKIM."
+        risk = (
+            "SPF is invalid (PermError). Authentication depends entirely on DKIM. "
+            "If DKIM fails for any reason, this domain has no path to DMARC pass."
+        )
+    elif not dkim_functional and spf_functional:
+        level = "moderate"
+        summary = "No DKIM keys were detected. SPF alone is providing authentication."
+        risk = (
+            "No DKIM keys were detected (custom selectors may exist). "
+            "If only SPF is providing alignment, forwarded messages will fail DMARC."
+        )
+    elif not dmarc_enforcing:
+        level = "moderate"
+        summary = f"DMARC is p={dmarc_status}. Authentication mechanisms are present but not enforced."
+        risk = (
+            "DMARC is not enforcing (p=none). Receivers will not reject or quarantine "
+            "unauthenticated mail, even if SPF or DKIM fail."
+        )
+    else:
+        level = "moderate"
+        summary = "Authentication is partially configured. At least one mechanism is missing or inactive."
+        risk = "Authentication coverage is incomplete. A failure in any active mechanism leaves no fallback."
+
+    return {
+        "level": level,
+        "summary": summary,
+        "mechanisms": mechanisms,
+        "risk": risk,
+    }
 
 
 # ============================================================
