@@ -117,7 +117,9 @@ def detect_anomalies(raw_results: dict, score_result: dict, has_mx: bool, is_def
     if dmarc_present and dmarc_enforced and has_mx:
         found_selectors = dkim.get("found_selectors") or []
         wildcard_detected = dkim.get("wildcard_detected", False)
-        if not found_selectors and not wildcard_detected:
+        # Skip if DKIM check didn't complete (timeout or not run)
+        dkim_tested_count = dkim.get("tested_count", 0)
+        if not found_selectors and not wildcard_detected and dkim_tested_count > 0:
             anomalies.append({
                 "title": "No DKIM keys detected (DMARC relies on SPF alone)",
                 "description": (
