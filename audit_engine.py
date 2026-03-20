@@ -37,7 +37,7 @@ from dkim_formatter import analyze_dkim_key_strength
 from anomaly_detector import detect_anomalies
 from remediation_planner import build_remediation_plan
 from dkim_key_age import DKIMKeyAgeAnalyzer
-from dkim_tag_analyzer import DKIMTagAnalyzer
+
 from dmarc_tree_walk import dmarc_tree_walk
 try:
     import tldextract
@@ -2142,7 +2142,11 @@ def _raw_check_dane(domain: str, raw_results: Dict[str, Any]) -> Dict[str, Any]:
 
     # DNSSEC status from earlier check
     raw_dnssec = raw_results.get("dnssec", {})
-    dnssec_ok = raw_dnssec.get("has_dnssec", False) and raw_dnssec.get("has_ds", False)
+    dnssec_ok = (
+        raw_dnssec.get("has_dnssec", False)
+        and raw_dnssec.get("has_ds", False)
+        and raw_dnssec.get("chain_valid") is not False
+    )
     result["dnssec_validated"] = dnssec_ok
 
     resolver = _get_dnssec_resolver()
@@ -2947,7 +2951,9 @@ def run_full_audit(domain: str, dkim_selector: Optional[str] = None,
                 except FuturesTimeoutError:
                     raise  # Let outer handler catch it
                 except Exception:
-                    pass  # selector not found -- found_selectors stays empty
+                    # User-provided selector not found
+                    raw_dkim["selector_not_found"] = sel
+                    raw_dkim["tested_count"] = 1
             else:
                 # No selector provided -- fall back to auto-discovery
                 raw_dkim = _run_with_timeout(smart_dkim_check, domain, spf_record)
