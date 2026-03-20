@@ -380,6 +380,39 @@ function renderResults(data) {
         scoreEl.remove();
     }
 
+    // -- Authentication Resilience --
+    const resSection = document.getElementById('resilience-section');
+    const res = data.resilience;
+    if (res) {
+        resSection.style.display = 'block';
+        const levelColors = {high: 'pass', moderate: 'warn', low: 'fail', none: 'fail'};
+        const levelClass = levelColors[res.level] || 'info';
+
+        document.getElementById('resilience-summary').innerHTML = `
+            <span class="resilience-level resilience-${levelClass}">${res.level.toUpperCase()}</span>
+            <span class="resilience-text">${escapeHtml(res.summary)}</span>
+        `;
+
+        const mechs = res.mechanisms || {};
+        let mechHtml = '';
+        for (const [name, info] of Object.entries(mechs)) {
+            const sClass = info.status === 'missing' || info.status === 'broken' ? 'fail'
+                         : info.status === 'not_detected' || info.status === 'none' ? 'warn' : 'pass';
+            mechHtml += `<div class="resilience-mech">
+                <span class="resilience-mech-name">${escapeHtml(name.toUpperCase())}</span>
+                <span class="resilience-mech-status resilience-${sClass}">${escapeHtml(info.status)}</span>
+                ${info.note ? `<span class="resilience-mech-note">${escapeHtml(info.note)}</span>` : ''}
+            </div>`;
+        }
+        document.getElementById('resilience-mechanisms').innerHTML = mechHtml;
+
+        if (res.risk) {
+            document.getElementById('resilience-risk').innerHTML = `<div class="resilience-risk-text">${escapeHtml(res.risk)}</div>`;
+        }
+    } else {
+        resSection.style.display = 'none';
+    }
+
     // -- Priority fixes (always at top, before detailed results) --
     const prioritySection = document.getElementById('priority-section');
     const priorityList    = document.getElementById('priority-list');
