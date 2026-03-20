@@ -462,12 +462,9 @@ function renderResults(data) {
         if ((check.name || '').toUpperCase() === 'SPF' && data.spf_tree) {
             check._spf_tree = data.spf_tree;
         }
-        // Attach report chain and roadmap to DMARC check
+        // Attach report chain to DMARC check
         if ((check.name || '').toUpperCase().includes('DMARC') && data.report_chain) {
             check._report_chain = data.report_chain;
-        }
-        if ((check.name || '').toUpperCase().includes('DMARC') && data.dmarc_roadmap) {
-            check._dmarc_roadmap = data.dmarc_roadmap;
         }
         const card = createResultCard(check, i);
         resultsList.appendChild(card);
@@ -774,11 +771,6 @@ function renderCheckBody(check) {
     // DMARC report delivery chain
     if (check._report_chain) {
         html += renderReportChain(check._report_chain);
-    }
-
-    // DMARC migration roadmap
-    if (check._dmarc_roadmap) {
-        html += renderDmarcRoadmap(check._dmarc_roadmap);
     }
 
     // SPF include tree
@@ -1226,106 +1218,6 @@ function renderReportChain(rc) {
 
     html += '</div>';
     return html;
-}
-
-// ============================================================
-// DMARC Migration Roadmap
-// ============================================================
-
-function renderDmarcRoadmap(rm) {
-    if (!rm) return '';
-    if (rm.current_stage === 'full_reject') return renderRoadmapComplete();
-
-    let html = `
-        <div class="dmarc-roadmap rm-animated">
-            <div class="se-header-row">
-                <div class="se-header">DMARC Migration Roadmap</div>
-                <a class="tw-spec-badge" href="https://datatracker.ietf.org/doc/html/rfc7489"
-                   target="_blank" rel="noopener">rfc7489</a>
-            </div>
-            <div class="rm-progress-track">
-                <div class="rm-progress-fill" style="width:${rm.progress_pct}%"></div>
-            </div>
-            <div class="rm-stage-label">${escapeHtml(rm.current_stage_label)} &middot; ${rm.progress_pct}% complete</div>
-            <div class="rm-steps">`;
-
-    rm.steps.forEach((step, i) => {
-        const isLast = i === rm.steps.length - 1;
-        const statusClass = `rm-${step.status}`;
-        const lastClass = isLast ? 'rm-last' : '';
-        const delay = (0.08 + i * 0.1).toFixed(2);
-
-        let dotContent = '';
-        if (step.status === 'complete') dotContent = '&#10003;';
-        else if (step.status === 'current') dotContent = '&#9654;';
-        else if (step.status === 'blocked') dotContent = '&#10005;';
-        else dotContent = `${step.stage}`;
-
-        let dnsHtml = '';
-        if (step.dns_record && step.status !== 'complete') {
-            dnsHtml = `
-                <div class="record-block rm-record-block">
-                    <span class="record-text">${escapeHtml(step.dns_record)}</span>
-                    <button class="copy-btn">Copy</button>
-                </div>`;
-        }
-
-        let blockersHtml = '';
-        if (step.prerequisites && step.prerequisites.length > 0 && step.status === 'blocked') {
-            blockersHtml = '<div class="rm-blockers">' +
-                step.prerequisites.map(b => `<div>${escapeHtml(b)}</div>`).join('') +
-                '</div>';
-        }
-
-        let warningsHtml = '';
-        if (step.warnings && step.warnings.length > 0 && step.status !== 'complete') {
-            warningsHtml = '<div class="rm-warnings">' +
-                step.warnings.map(w => `<div>${escapeHtml(w)}</div>`).join('') +
-                '</div>';
-        }
-
-        let durationHtml = '';
-        if (step.estimated_duration && step.status !== 'complete') {
-            durationHtml = `<div class="rm-duration">${escapeHtml(step.estimated_duration)}</div>`;
-        }
-
-        html += `
-            <div class="rm-step ${statusClass} ${lastClass}" style="animation-delay:${delay}s">
-                <div class="rm-connector">
-                    <div class="rm-dot">${dotContent}</div>
-                </div>
-                <div class="rm-content">
-                    <div class="rm-title">${escapeHtml(step.title)}</div>
-                    <div class="rm-desc">${escapeHtml(step.description)}</div>
-                    ${dnsHtml}
-                    ${blockersHtml}
-                    ${warningsHtml}
-                    ${durationHtml}
-                </div>
-            </div>`;
-    });
-
-    html += '</div></div>';
-    return html;
-}
-
-function renderRoadmapComplete() {
-    return `
-        <div class="dmarc-roadmap rm-animated">
-            <div class="se-header-row">
-                <div class="se-header">DMARC Migration Roadmap</div>
-                <a class="tw-spec-badge" href="https://datatracker.ietf.org/doc/html/rfc7489"
-                   target="_blank" rel="noopener">rfc7489</a>
-            </div>
-            <div class="rm-progress-track">
-                <div class="rm-progress-fill" style="width:100%"></div>
-            </div>
-            <div class="rm-complete-body">
-                <div class="rm-complete-check">&#10003;</div>
-                <div class="rm-complete-title">DMARC deployment complete</div>
-                <div class="rm-complete-text">This domain is at p=reject -- the gold standard for email authentication. All messages that fail DMARC are blocked entirely.</div>
-            </div>
-        </div>`;
 }
 
 // ============================================================
