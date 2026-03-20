@@ -1363,6 +1363,388 @@ main {
     }
 }
 
+/* ==========================================================================
+   SPF EXECUTION TRACE
+   ========================================================================== */
+.spf-execution {
+    margin: 1rem 0;
+    padding: 1.35rem 1.5rem;
+    background: var(--bg);
+    border: 1px solid var(--border-light);
+    border-radius: var(--radius);
+}
+
+.se-header-row {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    margin-bottom: 0.85rem;
+}
+
+.se-header {
+    font-size: 0.68rem;
+    font-weight: 700;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: var(--text-tertiary);
+}
+
+.se-intro {
+    font-size: 0.82rem;
+    color: var(--text-secondary);
+    line-height: 1.65;
+    margin-bottom: 1rem;
+}
+
+.se-intro strong {
+    color: var(--fail);
+    font-weight: 600;
+}
+
+/* -- Timeline -- */
+.se-steps {
+    position: relative;
+    padding-left: 0.25rem;
+}
+
+.se-step {
+    display: flex;
+    gap: 0.75rem;
+    position: relative;
+    padding-bottom: 0.65rem;
+}
+
+.se-step.se-last {
+    padding-bottom: 0;
+}
+
+/* Depth indentation */
+.se-depth-1 { padding-left: 1.25rem; }
+.se-depth-2 { padding-left: 2.5rem; }
+.se-depth-3 { padding-left: 3.75rem; }
+
+.se-connector {
+    position: relative;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    flex-shrink: 0;
+    width: 14px;
+    padding-top: 0.15rem;
+}
+
+.se-dot {
+    width: 10px;
+    height: 10px;
+    border-radius: 50%;
+    border: 2px solid var(--pass);
+    background: var(--pass);
+    flex-shrink: 0;
+    z-index: 1;
+}
+
+.se-exceeded .se-dot {
+    border-color: var(--fail);
+    background: var(--fail);
+}
+
+/* Vertical connector line */
+.se-step:not(.se-last)::before {
+    content: '';
+    position: absolute;
+    left: calc(0.25rem + 7px - 1px);
+    top: calc(0.15rem + 10px);
+    bottom: 0;
+    width: 2px;
+    background: var(--border);
+    z-index: 0;
+}
+
+/* Adjust line position for indented steps */
+.se-depth-1:not(.se-last)::before { left: calc(1.25rem + 0.25rem + 7px - 1px); }
+.se-depth-2:not(.se-last)::before { left: calc(2.5rem + 0.25rem + 7px - 1px); }
+.se-depth-3:not(.se-last)::before { left: calc(3.75rem + 0.25rem + 7px - 1px); }
+
+.se-content {
+    flex: 1;
+    min-width: 0;
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 0.4rem;
+}
+
+.se-mechanism {
+    font-family: var(--font-mono);
+    font-size: 0.78rem;
+    font-weight: 600;
+    color: var(--text-primary);
+}
+
+.se-vendor-badge {
+    display: inline-block;
+    font-size: 0.6rem;
+    font-weight: 600;
+    padding: 0.1rem 0.4rem;
+    border-radius: 4px;
+    letter-spacing: 0.02em;
+    white-space: nowrap;
+}
+
+/* Vendor category colors */
+.se-vendor-email_provider {
+    color: var(--primary);
+    background: var(--primary-subtle);
+    border: 1px solid var(--primary-border);
+}
+
+.se-vendor-email_security {
+    color: #5b4a8a;
+    background: #f0ecf8;
+    border: 1px solid #c9bde6;
+}
+
+.se-vendor-marketing_esp,
+.se-vendor-transactional_esp {
+    color: #6b5b1e;
+    background: var(--warn-bg);
+    border: 1px solid var(--warn-border);
+}
+
+.se-vendor-support_platform {
+    color: var(--text-secondary);
+    background: #f0f2f4;
+    border: 1px solid var(--border);
+}
+
+/* Lookup counter pill */
+.se-counter {
+    display: inline-block;
+    font-size: 0.6rem;
+    font-weight: 600;
+    padding: 0.1rem 0.4rem;
+    border-radius: 4px;
+    letter-spacing: 0.02em;
+    color: var(--pass);
+    background: var(--pass-bg);
+    border: 1px solid var(--pass-border);
+    white-space: nowrap;
+}
+
+.se-counter.exceeded {
+    color: var(--fail);
+    background: var(--fail-bg);
+    border-color: var(--fail-border);
+}
+
+/* Footer summary */
+.se-footer {
+    margin-top: 0.85rem;
+    padding-top: 0.75rem;
+    border-top: 1px solid var(--border-light);
+    font-size: 0.78rem;
+    color: var(--text-secondary);
+}
+
+/* ── SPF Execution Animations ─────────────────────────────── */
+.se-animated .se-step {
+    animation: twStepIn 0.35s var(--ease-out) backwards;
+}
+
+.se-animated .se-step:not(.se-last)::before {
+    transform-origin: top;
+    animation: twLineGrow 0.25s var(--ease-out) backwards;
+    animation-delay: var(--line-delay, 0.18s);
+}
+
+.se-animated .se-footer {
+    animation: twMetaIn 0.4s var(--ease-out) backwards;
+    animation-delay: 0.65s;
+}
+
+.se-animated .se-intro {
+    animation: twMetaIn 0.35s var(--ease-out) backwards;
+    animation-delay: 0.02s;
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .se-animated .se-step,
+    .se-animated .se-footer,
+    .se-animated .se-intro {
+        animation: none;
+        opacity: 1;
+        transform: none;
+    }
+    .se-animated .se-step:not(.se-last)::before {
+        animation: none;
+    }
+}
+
+/* ── SPF Execution responsive ─────────────────────────────── */
+@media (max-width: 640px) {
+    .spf-execution {
+        padding: 1.1rem 1rem;
+    }
+    .se-mechanism {
+        font-size: 0.72rem;
+    }
+    .se-depth-1 { padding-left: 0.75rem; }
+    .se-depth-2 { padding-left: 1.5rem; }
+    .se-depth-3 { padding-left: 2.25rem; }
+}
+
+
+/* ==========================================================================
+   DMARC EVALUATION SUMMARY
+   ========================================================================== */
+.dmarc-eval {
+    margin: 1rem 0;
+    padding: 1.35rem 1.5rem;
+    background: var(--bg);
+    border: 1px solid var(--border-light);
+    border-radius: var(--radius);
+}
+
+.de-intro {
+    font-size: 0.82rem;
+    color: var(--text-secondary);
+    line-height: 1.65;
+    margin-bottom: 1rem;
+}
+
+.de-rows {
+    display: flex;
+    flex-direction: column;
+    gap: 0.5rem;
+}
+
+.de-row {
+    display: flex;
+    align-items: center;
+    gap: 0.6rem;
+    padding: 0.45rem 0.65rem;
+    background: var(--surface);
+    border: 1px solid var(--border-light);
+    border-radius: 6px;
+    font-size: 0.82rem;
+}
+
+.de-row.de-final {
+    border-width: 2px;
+    font-weight: 600;
+}
+
+.de-protocol {
+    font-family: var(--font-mono);
+    font-size: 0.72rem;
+    font-weight: 700;
+    color: var(--text-primary);
+    min-width: 3.2rem;
+}
+
+.de-pill {
+    display: inline-block;
+    font-size: 0.6rem;
+    font-weight: 600;
+    padding: 0.1rem 0.45rem;
+    border-radius: 4px;
+    letter-spacing: 0.02em;
+    text-transform: uppercase;
+}
+
+.de-pill-pass {
+    color: var(--pass);
+    background: var(--pass-bg);
+    border: 1px solid var(--pass-border);
+}
+
+.de-pill-fail {
+    color: var(--fail);
+    background: var(--fail-bg);
+    border: 1px solid var(--fail-border);
+}
+
+.de-pill-warn {
+    color: var(--warn);
+    background: var(--warn-bg);
+    border: 1px solid var(--warn-border);
+}
+
+.de-pill-muted {
+    color: var(--text-tertiary);
+    background: #f0f2f4;
+    border: 1px solid var(--border);
+}
+
+.de-align-mode {
+    font-size: 0.72rem;
+    color: var(--text-tertiary);
+}
+
+.de-align-result {
+    font-size: 0.72rem;
+    font-weight: 600;
+}
+
+.de-aligned {
+    color: var(--pass);
+}
+
+.de-not-aligned {
+    color: var(--fail);
+}
+
+.de-policy-group {
+    font-size: 0.72rem;
+    color: var(--text-secondary);
+    font-weight: 400;
+}
+
+.de-disposition {
+    font-size: 0.72rem;
+    color: var(--text-secondary);
+    margin-left: auto;
+    font-style: italic;
+}
+
+/* ── DMARC Eval Animations ────────────────────────────────── */
+.de-animated .de-row {
+    animation: twStepIn 0.35s var(--ease-out) backwards;
+}
+
+.de-animated .de-row:nth-child(1) { animation-delay: 0.05s; }
+.de-animated .de-row:nth-child(2) { animation-delay: 0.2s; }
+.de-animated .de-row:nth-child(3) { animation-delay: 0.35s; }
+
+.de-animated .de-intro {
+    animation: twMetaIn 0.35s var(--ease-out) backwards;
+    animation-delay: 0.02s;
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .de-animated .de-row,
+    .de-animated .de-intro {
+        animation: none;
+        opacity: 1;
+        transform: none;
+    }
+}
+
+@media (max-width: 640px) {
+    .dmarc-eval {
+        padding: 1.1rem 1rem;
+    }
+    .de-row {
+        flex-wrap: wrap;
+        gap: 0.35rem;
+    }
+    .de-disposition {
+        margin-left: 0;
+        width: 100%;
+    }
+}
+
+
 /* Explanation text */
 .explanation {
     font-size: 0.88rem;

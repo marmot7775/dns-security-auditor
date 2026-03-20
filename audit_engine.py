@@ -2438,6 +2438,18 @@ def run_full_audit(domain: str, dkim_selector: Optional[str] = None,
                 checks.append(_error_card("SPF", e))
         _notify("SPF")
 
+    # --- SPF Execution Trace (post-processor, zero DNS queries) ---
+    spf_execution = None
+    raw_spf = raw_results.get("spf")
+    if raw_spf and raw_spf.get("spf_recursive"):
+        try:
+            from spf_execution_engine import build_spf_execution_trace
+            spf_execution = build_spf_execution_trace(
+                raw_spf["spf_recursive"], raw_spf.get("record")
+            )
+        except Exception:
+            pass  # never block audit
+
     # --- 4. MTA-STS ---
     if _should_include("mta_sts", scope_set):
         try:
@@ -2581,6 +2593,20 @@ def run_full_audit(domain: str, dkim_selector: Optional[str] = None,
             checks.insert(dkim_pos, _error_card("DKIM", e))
         _notify("DKIM")
 
+    # --- DMARC Evaluation Summary (post-processor, zero DNS queries) ---
+    dmarc_eval = None
+    if raw_results.get("dmarc"):
+        try:
+            from spf_execution_engine import build_dmarc_evaluation
+            dmarc_eval = build_dmarc_evaluation(
+                raw_results.get("dmarc", {}),
+                raw_results.get("spf", {}),
+                raw_results.get("dkim", {}),
+                tree_walk_result,
+            )
+        except Exception:
+            pass  # never block audit
+
     # --- 12. Certificate Transparency ---
     if _should_include("ct", scope_set):
         try:
@@ -2676,6 +2702,8 @@ def run_full_audit(domain: str, dkim_selector: Optional[str] = None,
         "priority_fixes": priority_fixes,
         "vendors": vendors,
         "tree_walk": tree_walk_result,
+        "spf_execution": spf_execution,
+        "dmarc_eval": dmarc_eval,
         "defensive_dns": is_defensive,
         "defensive_signals": defensive_signals,
         "errors": errors if errors else None,

@@ -390,9 +390,16 @@ function renderResults(data) {
     }
 
     checks.forEach((check, i) => {
-        // Attach tree walk data to the DMARC check
+        // Attach tree walk + DMARC eval data to the DMARC check
         if ((check.name || '').toUpperCase().includes('DMARC') && data.tree_walk) {
             check._tree_walk = data.tree_walk;
+        }
+        if ((check.name || '').toUpperCase().includes('DMARC') && data.dmarc_eval) {
+            check._dmarc_eval = data.dmarc_eval;
+        }
+        // Attach SPF execution trace to the SPF check
+        if ((check.name || '').toUpperCase() === 'SPF' && data.spf_execution) {
+            check._spf_execution = data.spf_execution;
         }
         const card = createResultCard(check, i);
         resultsList.appendChild(card);
@@ -567,9 +574,19 @@ function renderCheckBody(check) {
         });
     }
 
+    // SPF execution trace
+    if (check._spf_execution) {
+        html += renderSpfExecution(check._spf_execution);
+    }
+
     // Tree walk visualization (DMARC only)
     if (check._tree_walk) {
         html += renderTreeWalk(check._tree_walk);
+    }
+
+    // DMARC evaluation summary (after tree walk)
+    if (check._dmarc_eval) {
+        html += renderDmarcEvaluation(check._dmarc_eval);
     }
 
     // Fix records and recommended actions removed from web UI.
@@ -753,6 +770,139 @@ function getTagExplanation(tag, tw) {
         default:
             return `<code>${escapeHtml(tag)}</code>`;
     }
+}
+
+// ============================================================
+// SPF Execution Trace
+// ============================================================
+
+function renderSpfExecution(exec) {
+    if (!exec || !exec.flat_steps || exec.flat_steps.length === 0) return '';
+
+    const stepInterval = 0.15;
+    const stepCount = exec.flat_steps.length;
+    const lastStepLands = 0.05 + (stepCount - 1) * stepInterval + 0.35;
+    const metaDelay = (lastStepLands + 0.1).toFixed(2);
+
+    let html = `
+        <div class="spf-execution se-animated">
+            <div class="se-header-row">
+                <div class="se-header">SPF Evaluation Trace</div>
+                <a class="tw-spec-badge" href="https://datatracker.ietf.org/doc/html/rfc7208"
+                   target="_blank" rel="noopener">rfc7208</a>
+            </div>`;
+
+    // Intro
+    if (exec.over_limit) {
+        html += `<div class="se-intro">This domain's SPF record requires <strong>${exec.total_lookups} DNS lookups</strong>,
+            exceeding the RFC 7208 limit of 10. Receivers that enforce this limit will return a permanent error.</div>`;
+    }
+
+    // Timeline steps
+    html += '<div class="se-steps">';
+    exec.flat_steps.forEach((step, i) => {
+        const isLast = i === exec.flat_steps.length - 1;
+        const statusClass = step.status === 'exceeded' ? 'se-exceeded' : 'se-ok';
+        const connector = isLast ? 'se-last' : '';
+        const depthClass = `se-depth-${Math.min(step.depth, 3)}`;
+        const stepDelay = (0.05 + i * stepInterval).toFixed(2);
+        const lineDelay = (0.05 + i * stepInterval + 0.13).toFixed(2);
+
+        html += `<div class="se-step ${statusClass} ${connector} ${depthClass}" style="animation-delay:${stepDelay}s">`;
+        html += `<div class="se-connector" style="--line-delay:${lineDelay}s"><div class="se-dot"></div></div>`;
+        html += `<div class="se-content">`;
+
+        // Mechanism name
+        html += `<span class="se-mechanism">${escapeHtml(step.mechanism)}</span>`;
+
+        // Vendor badge (only for top-level includes with a match)
+        if (step.vendor) {
+            const catClass = step.vendor_category ? `se-vendor-${step.vendor_category}` : '';
+            html += ` <span class="se-vendor-badge ${catClass}">${escapeHtml(step.vendor)}</span>`;
+        }
+
+        // Lookup counter pill
+        if (step.lookup_range) {
+            const counterClass = step.status === 'exceeded' ? 'se-counter exceeded' : 'se-counter';
+            const label = step.lookup_range.includes('-')
+                ? `lookups ${step.lookup_range}`
+                : `lookup ${step.lookup_range}`;
+            html += ` <span class="${counterClass}">${label}</span>`;
+        }
+
+        html += `</div></div>`;
+    });
+    html += '</div>';
+
+    // Summary footer
+    const totalClass = exec.over_limit ? 'se-counter exceeded' : 'se-counter';
+    html += `<div class="se-footer" style="animation-delay:${metaDelay}s">
+        Total: <span class="${totalClass}">${exec.total_lookups} / ${exec.limit} lookups</span>
+    </div>`;
+
+    html += '</div>';
+    return html;
+}
+
+// ============================================================
+// DMARC Evaluation Summary
+// ============================================================
+
+function renderDmarcEvaluation(ev) {
+    if (!ev) return '';
+
+    const spfPillClass = ev.spf_result === 'pass' ? 'de-pill-pass'
+                       : ev.spf_result === 'none' ? 'de-pill-muted'
+                       : 'de-pill-fail';
+    const dkimPillClass = ev.dkim_result === 'pass' ? 'de-pill-pass'
+                        : ev.dkim_result === 'none' ? 'de-pill-muted'
+                        : 'de-pill-fail';
+    const dmarcPillClass = ev.dmarc_result === 'pass' ? 'de-pill-pass' : 'de-pill-fail';
+    const policyPillClass = ev.policy === 'reject' ? 'de-pill-pass'
+                          : ev.policy === 'quarantine' ? 'de-pill-warn'
+                          : 'de-pill-muted';
+
+    const spfAlignIcon = ev.spf_aligned ? '&#10003; aligned' : '&#10005; not aligned';
+    const spfAlignClass = ev.spf_aligned ? 'de-aligned' : 'de-not-aligned';
+    const dkimAlignIcon = ev.dkim_aligned ? '&#10003; aligned' : '&#10005; not aligned';
+    const dkimAlignClass = ev.dkim_aligned ? 'de-aligned' : 'de-not-aligned';
+
+    const dispLabel = ev.disposition === 'none' ? 'delivered'
+                    : ev.disposition === 'quarantine' ? 'quarantined'
+                    : ev.disposition === 'reject' ? 'rejected'
+                    : ev.disposition;
+
+    return `
+        <div class="dmarc-eval de-animated">
+            <div class="se-header-row">
+                <div class="se-header">DMARC Evaluation</div>
+                <a class="tw-spec-badge" href="https://datatracker.ietf.org/doc/html/rfc7489"
+                   target="_blank" rel="noopener">rfc7489</a>
+            </div>
+            <div class="de-intro">${escapeHtml(ev.explanation)}</div>
+            <div class="de-rows">
+                <div class="de-row">
+                    <span class="de-protocol">SPF</span>
+                    <span class="de-pill ${spfPillClass}">${ev.spf_result}</span>
+                    <span class="de-align-mode">${ev.spf_alignment_mode}</span>
+                    <span class="de-align-result ${spfAlignClass}">${spfAlignIcon}</span>
+                </div>
+                <div class="de-row">
+                    <span class="de-protocol">DKIM</span>
+                    <span class="de-pill ${dkimPillClass}">${ev.dkim_result}</span>
+                    <span class="de-align-mode">${ev.dkim_alignment_mode}</span>
+                    <span class="de-align-result ${dkimAlignClass}">${dkimAlignIcon}</span>
+                </div>
+                <div class="de-row de-final">
+                    <span class="de-protocol">DMARC</span>
+                    <span class="de-pill ${dmarcPillClass}">${ev.dmarc_result}</span>
+                    <span class="de-policy-group">
+                        policy: <span class="de-pill ${policyPillClass}">${escapeHtml(ev.policy)}</span>
+                    </span>
+                    <span class="de-disposition">${escapeHtml(dispLabel)}</span>
+                </div>
+            </div>
+        </div>`;
 }
 
 // ============================================================
