@@ -2359,6 +2359,8 @@ def run_full_audit(domain: str, dkim_selector: Optional[str] = None,
     errors = []
 
     # Resolve scope to a set of check keys (None = run everything)
+    if scope and scope not in SCOPE_CHECKS:
+        raise ValueError(f"Invalid scope '{scope}'. Valid scopes: {', '.join(sorted(SCOPE_CHECKS))}")
     scope_set = SCOPE_CHECKS.get(scope) if scope else None
     total_checks = _count_checks_for_scope(scope_set)
     completed = 0
@@ -2705,6 +2707,7 @@ def run_full_audit(domain: str, dkim_selector: Optional[str] = None,
         "tree_walk": tree_walk_result,
         "spf_execution": spf_execution,
         "dmarc_eval": dmarc_eval,
+        "scope": scope or "complete",
         "defensive_dns": is_defensive,
         "defensive_signals": defensive_signals,
         "errors": errors if errors else None,

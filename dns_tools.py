@@ -28,6 +28,7 @@ def audit_dns_security(
     domain: str,
     *,
     dkim_selector: Optional[str] = None,
+    scope: Optional[str] = None,
 ) -> Dict[str, Any]:
     """Run a full audit via audit_engine.
 
@@ -37,6 +38,8 @@ def audit_dns_security(
         The domain to audit (will be normalized).
     dkim_selector : str | None
         A specific DKIM selector to test.
+    scope : str | None
+        Audit scope (e.g. "email_full", "dmarc"). None = complete.
     """
     domain = normalize_domain(domain)
     if not domain:
@@ -48,4 +51,4 @@ def audit_dns_security(
             "score": {"total": 0, "grade": "?"},
         }
 
-    return run_full_audit(domain, dkim_selector=dkim_selector)
+    return run_full_audit(domain, dkim_selector=dkim_selector, scope=scope)
