@@ -24,7 +24,7 @@
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link rel="preload" href="https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,400;0,9..40,500;0,9..40,600;0,9..40,700;1,9..40,400&family=JetBrains+Mono:wght@400;500&display=swap" as="style" onload="this.onload=null;this.rel='stylesheet'">
     <noscript><link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,400;0,9..40,500;0,9..40,600;0,9..40,700;1,9..40,400&family=JetBrains+Mono:wght@400;500&display=swap"></noscript>
-    <link rel="stylesheet" href="/static/style.css?v=dkimfix2">
+    <link rel="stylesheet" href="/static/style.css?v=compact1">
     <script type="application/ld+json">
     {
         "@context": "https://schema.org",
@@ -115,7 +115,7 @@
                             <svg class="input-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
                                 <circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/>
                             </svg>
-                            <input type="text" id="domain-input" class="domain-input" placeholder="example.com" autocomplete="off" spellcheck="false" autofocus required aria-label="Domain name to audit" />
+                            <input type="text" id="domain-input" class="domain-input" placeholder="Enter a domain or subdomain" autocomplete="off" spellcheck="false" autofocus required aria-label="Domain or subdomain to audit" />
                         </div>
                         <button type="submit" id="audit-btn" class="audit-btn">
                             <span class="btn-text">Run Audit</span>
@@ -245,19 +245,22 @@
                         DMARC is the policy layer for email authentication. It tells receiving servers exactly what to do when a message fails verification. In late 2024, the IETF published <a href="https://datatracker.ietf.org/doc/html/rfc9716" target="_blank" rel="noopener">RFC 9716</a>, officially moving DMARC from an Informational document (<a href="https://datatracker.ietf.org/doc/html/rfc7489" target="_blank" rel="noopener">RFC 7489</a>) to a Proposed Standard. This audit validates your domain against the current standard.
                     </div>
 
-                    <h3 class="edu-heading">The Three Pillars of DMARC</h3>
+                    <h3 class="edu-heading">How DMARC Works: Three Requirements</h3>
+                    <p class="edu-text">
+                        For a message to pass DMARC, it must satisfy all three of these requirements. If any one fails, the DMARC policy determines what happens to the message.
+                    </p>
                     <div class="edu-changes">
                         <div class="edu-change">
-                            <div class="edu-change-title">1. Authentication</div>
-                            <div class="edu-change-desc">Does the email pass SPF or DKIM? At least one must succeed.</div>
+                            <div class="edu-change-title">1. Authentication: Does SPF or DKIM pass?</div>
+                            <div class="edu-change-desc">The message must pass at least one of SPF (sender IP is authorized) or DKIM (cryptographic signature is valid). Both can pass, but only one is required. DKIM is the more reliable mechanism because SPF breaks when email is forwarded through intermediaries (mailing lists, forwarding rules, etc.).</div>
                         </div>
                         <div class="edu-change">
-                            <div class="edu-change-title">2. Alignment</div>
-                            <div class="edu-change-desc">Does the domain in the SPF or DKIM check match the "From" address the recipient sees? DKIM alignment is more resilient because it survives mail forwarding. SPF alignment breaks when messages are relayed.</div>
+                            <div class="edu-change-title">2. Alignment: Does the authenticated domain match the From address?</div>
+                            <div class="edu-change-desc">Passing SPF or DKIM is not enough on its own. The domain that passed the check must also <strong>align</strong> with the domain in the message's visible "From" address. For example, if a message is sent from <code>user@example.com</code> but SPF passes for <code>esp-provider.com</code>, that is an SPF pass without alignment. The message would need DKIM signed by <code>example.com</code> to achieve alignment.</div>
                         </div>
                         <div class="edu-change">
-                            <div class="edu-change-title">3. Policy</div>
-                            <div class="edu-change-desc">If authentication and alignment fail, what should the receiver do? <strong>p=none</strong> (monitor and report), <strong>p=quarantine</strong> (route to spam), or <strong>p=reject</strong> (block the message).</div>
+                            <div class="edu-change-title">3. Policy: What happens when authentication or alignment fails?</div>
+                            <div class="edu-change-desc">The domain owner publishes a policy telling receivers what to do with failures. <strong>p=none</strong> requests no action (monitoring only, useful for collecting aggregate report data). <strong>p=quarantine</strong> requests that failures be routed to the spam folder. <strong>p=reject</strong> requests that failures be rejected outright. The policy is a request, not a guarantee. Most mailbox providers honor it.</div>
                         </div>
                     </div>
 
@@ -340,7 +343,7 @@
         </div>
     </footer>
 
-    <script src="/static/app.js?v=dkimfix2"></script>
+    <script src="/static/app.js?v=compact1"></script>
 </body>
 </html>
 
