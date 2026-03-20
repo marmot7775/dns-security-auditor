@@ -2742,111 +2742,31 @@ details.st-node > summary:hover {
     font-size: 0.76rem;
 }
 
-.fix-diff {
-    display: flex;
-    align-items: stretch;
-    gap: 0;
-    border-radius: var(--radius);
-    overflow: hidden;
-    border: 1px solid var(--border);
-}
-
-.fix-diff-panel {
-    flex: 1;
-    padding: 0.65rem 0.85rem;
-    position: relative;
-    min-width: 0;
-}
-
-.fix-diff-before {
-    background: #2a1c1c;
-}
-
-.fix-diff-before.fix-diff-missing {
-    background: #1e1e24;
-}
-
-.fix-diff-after {
-    background: #1c2a1c;
-    padding-right: 3.75rem;
-}
-
-.fix-diff-tag {
-    font-size: 0.62rem;
-    font-weight: 700;
-    text-transform: uppercase;
-    letter-spacing: 0.06em;
-    margin-bottom: 0.3rem;
-}
-
-.fix-diff-before .fix-diff-tag {
-    color: #d4a0a0;
-}
-
-.fix-diff-missing .fix-diff-tag {
-    color: #8b92a0;
-}
-
-.fix-diff-after .fix-diff-tag {
-    color: #a0d4a0;
-}
-
-.fix-diff-record {
+.fix-record-block {
     font-family: var(--font-mono);
-    font-size: 0.74rem;
-    line-height: 1.65;
+    font-size: 0.78rem;
+    line-height: 1.75;
+    background: var(--fix-bg);
+    border: 1px solid var(--pass-border);
+    border-left: 3px solid var(--fix-border);
+    border-radius: var(--radius);
+    padding: 0.75rem 1rem;
+    padding-right: 3.75rem;
+    margin: 0.4rem 0;
     word-break: break-all;
-    color: #dfe3eb;
+    position: relative;
+    color: var(--text-primary);
 }
 
-.fix-diff-missing .fix-diff-record {
-    color: #6b7080;
-    font-style: italic;
-}
-
-.fix-diff-arrow {
-    display: flex;
-    align-items: center;
-    padding: 0 0.35rem;
-    background: #1b1e24;
-    color: #5b6170;
-    font-size: 1rem;
-}
-
-.fix-diff-after .copy-btn {
-    top: 0.5rem;
-    right: 0.5rem;
-}
-
-.fix-impact {
-    font-size: 0.76rem;
-    color: var(--pass);
-    margin-top: 0.45rem;
-    line-height: 1.5;
-}
-
-.fix-impact-icon {
-    font-size: 0.6rem;
-    margin-right: 0.25rem;
-}
-
-.fix-side-effects {
-    font-size: 0.74rem;
-    color: var(--warn);
-    margin-top: 0.2rem;
-    line-height: 1.5;
-}
-
-.fix-side-icon {
-    font-size: 0.7rem;
-    margin-right: 0.2rem;
+.fix-record-value {
+    color: var(--text-primary);
 }
 
 .fix-comment {
-    font-size: 0.72rem;
+    font-size: 0.74rem;
     color: var(--text-tertiary);
-    margin-top: 0.25rem;
-    font-style: italic;
+    margin-top: 0.3rem;
+    line-height: 1.5;
 }
 
 /* ==========================================================================
@@ -2984,17 +2904,6 @@ html, body {
 
 /* -- Phone (640px): additional mobile refinements -- */
 @media (max-width: 640px) {
-    .fix-diff {
-        flex-direction: column;
-    }
-
-    .fix-diff-arrow {
-        padding: 0.15rem 0;
-        justify-content: center;
-        font-size: 0.85rem;
-        transform: rotate(90deg);
-    }
-
     .loading-card {
         padding: 1.35rem 1.15rem;
     }

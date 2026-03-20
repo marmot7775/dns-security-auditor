@@ -317,39 +317,16 @@ def transform_dmarc(raw: Dict, tree_walk: Optional[Dict] = None) -> Dict:
                 display_record = step["record"]
                 break
 
-    # Fix records -- before/after DNS records for fix preview
+    # Fix records -- copy-paste DNS records for missing records only
+    # Policy upgrades (none -> reject) are intentionally excluded because
+    # they oversimplify a process that depends on mail volume and sender inventory.
     fix_records = []
     if not record and not inherited:
         fix_records.append({
             "type": "TXT",
             "host": f"_dmarc.{domain_name}",
-            "current": None,
-            "suggested": f"v=DMARC1; p=none; rua=mailto:dmarc-reports@{domain_name}; fo=1",
-            "comment": "Start with p=none to monitor, then upgrade to p=quarantine, then p=reject",
-            "impact": "Gives you visibility into who is sending email as your domain",
-            "side_effects": None,
-        })
-    elif record and policy == "none":
-        # Preserve existing rua if present
-        rua_part = f"rua=mailto:{raw.get('rua', '').replace('mailto:', '')}" if raw.get("rua") else f"rua=mailto:dmarc-reports@{domain_name}"
-        fix_records.append({
-            "type": "TXT",
-            "host": f"_dmarc.{domain_name}",
-            "current": record,
-            "suggested": f"v=DMARC1; p=reject; {rua_part}; fo=1",
-            "comment": "Upgrade to p=reject only after confirming all legitimate senders pass SPF/DKIM",
-            "impact": "Blocks all spoofed email that fails authentication",
-            "side_effects": "Misconfigured legitimate senders will have their email rejected",
-        })
-    elif inherited and inherited_policy == "none":
-        fix_records.append({
-            "type": "TXT",
-            "host": f"_dmarc.{domain_name}",
-            "current": None,
-            "suggested": f"v=DMARC1; p=reject; rua=mailto:dmarc-reports@{domain_name}; fo=1",
-            "comment": "Publish a dedicated record with stronger enforcement than the inherited p=none",
-            "impact": "Overrides the weak inherited policy with full enforcement",
-            "side_effects": None,
+            "value": f"v=DMARC1; p=none; rua=mailto:dmarc-reports@{domain_name}; fo=1",
+            "comment": "Start with p=none to monitor. Upgrade to enforcement only after reviewing aggregate reports.",
         })
 
     return {
@@ -556,56 +533,27 @@ def transform_spf(raw: Dict, has_mx: bool = True) -> Dict:
                     "remove unused services, or use an SPF flattening tool."
                 )
 
-    # Fix records -- before/after for fix preview
+    # Fix records -- copy-paste DNS records for missing records only
+    # SPF mechanism changes (+all -> ~all) are excluded because they require
+    # verifying all legitimate senders first.
     fix_records = []
     domain_name = raw.get("domain", "")
     if null_spf:
-        # Already correct, no fix records
         pass
     elif not record and not has_mx:
         fix_records.append({
             "type": "TXT",
             "host": domain_name,
-            "current": None,
-            "suggested": "v=spf1 -all",
-            "comment": "Null SPF record. Declares this domain does not send email",
-            "impact": "Explicitly tells receivers this domain never sends email",
-            "side_effects": None,
+            "value": "v=spf1 -all",
+            "comment": "Null SPF -- declares this domain does not send email",
         })
     elif not record:
         fix_records.append({
             "type": "TXT",
             "host": domain_name,
-            "current": None,
-            "suggested": "v=spf1 ~all",
-            "comment": "Starter record. Add your mail server IPs and include mechanisms before tightening to -all",
-            "impact": "Establishes sender authorization -- receivers can verify your email",
-            "side_effects": "You must add all legitimate senders before tightening to -all",
+            "value": "v=spf1 ~all",
+            "comment": "Starter record. Add your mail server IPs and includes before tightening to -all.",
         })
-    elif record:
-        all_mech = raw.get("all_mechanism") or ""
-        if all_mech == "+all":
-            fixed_record = record.replace("+all", "~all")
-            fix_records.append({
-                "type": "TXT",
-                "host": domain_name,
-                "current": record,
-                "suggested": fixed_record,
-                "comment": "Replaced dangerous +all with ~all (softfail)",
-                "impact": "Stops authorizing the entire internet to send as your domain",
-                "side_effects": "Unauthorized senders will be flagged as suspicious",
-            })
-        elif all_mech == "?all":
-            fixed_record = record.replace("?all", "~all")
-            fix_records.append({
-                "type": "TXT",
-                "host": domain_name,
-                "current": record,
-                "suggested": fixed_record,
-                "comment": "Replaced neutral ?all with ~all (softfail)",
-                "impact": "Unauthorized senders are now flagged instead of silently accepted",
-                "side_effects": None,
-            })
 
     return {
         "name": "SPF",
@@ -927,11 +875,8 @@ def transform_mta_sts(raw: Dict, domain: str, has_mx: bool = True) -> Dict:
             "fix_records": [{
                 "type": "TXT",
                 "host": f"_mta-sts.{domain}",
-                "current": None,
-                "suggested": f"v=STSv1; id={sts_id}",
-                "comment": "Also host a policy file at https://mta-sts.{domain}/.well-known/mta-sts.txt".format(domain=domain),
-                "impact": "Prevents TLS downgrade attacks on inbound email delivery",
-                "side_effects": "Requires hosting a policy file on a web server at mta-sts.{domain}".format(domain=domain),
+                "value": f"v=STSv1; id={sts_id}",
+                "comment": "Also requires a policy file at https://mta-sts.{domain}/.well-known/mta-sts.txt".format(domain=domain),
             }],
         }
 
@@ -1029,11 +974,8 @@ def transform_tls_rpt(raw: Dict, domain: str, has_mx: bool = True) -> Dict:
             "fix_records": [{
                 "type": "TXT",
                 "host": f"_smtp._tls.{domain}",
-                "current": None,
-                "suggested": f"v=TLSRPTv1; rua=mailto:tls-reports@{domain}",
+                "value": f"v=TLSRPTv1; rua=mailto:tls-reports@{domain}",
                 "comment": "Replace tls-reports@{domain} with your preferred reporting address".format(domain=domain),
-                "impact": "Gives visibility into TLS delivery failures to your domain",
-                "side_effects": None,
             }],
         }
 
@@ -1123,11 +1065,8 @@ def transform_bimi(raw: Dict, domain: str, has_mx: bool = True) -> Dict:
             "fix_records": [{
                 "type": "TXT",
                 "host": f"default._bimi.{domain}",
-                "current": None,
-                "suggested": "v=BIMI1; l=https://example.com/logo.svg;",
-                "comment": "Replace URL with your brand's SVG logo (must be a Tiny P/S SVG). Add a= for VMC if using Gmail",
-                "impact": "Displays your brand logo in supporting email clients (Gmail, Apple Mail)",
-                "side_effects": "Requires DMARC enforcement (p=quarantine or p=reject) as a prerequisite",
+                "value": "v=BIMI1; l=https://example.com/logo.svg;",
+                "comment": "Replace URL with your brand's SVG logo (Tiny P/S). Gmail requires a VMC certificate.",
             }],
         }
 
@@ -1332,20 +1271,14 @@ def transform_caa(raw: Dict, domain: str) -> Dict:
                 {
                     "type": "CAA",
                     "host": domain,
-                    "current": None,
-                    "suggested": '0 issue "letsencrypt.org"',
+                    "value": '0 issue "letsencrypt.org"',
                     "comment": "Replace letsencrypt.org with your Certificate Authority",
-                    "impact": "Restricts which CAs can issue certificates for your domain",
-                    "side_effects": "Certificates from non-listed CAs will be refused",
                 },
                 {
                     "type": "CAA",
                     "host": domain,
-                    "current": None,
-                    "suggested": f'0 iodef "mailto:security@{domain}"',
-                    "comment": "Receive alerts when an unauthorized CA attempts to issue a certificate",
-                    "impact": "Alerts you to potential certificate fraud attempts",
-                    "side_effects": None,
+                    "value": f'0 iodef "mailto:security@{domain}"',
+                    "comment": "Alerts you when an unauthorized CA attempts issuance",
                 },
             ],
         }
