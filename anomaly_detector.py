@@ -91,7 +91,7 @@ def detect_anomalies(raw_results: dict, score_result: dict, has_mx: bool) -> lis
                 "description": (
                     "SPF is using 9 of the allowed 10 DNS lookups. "
                     "Adding one more include, a, or mx mechanism will push it "
-                    "over the limit and cause a permerror for all recipients."
+                    "over the limit and cause a PermError, which most receivers treat as an SPF failure."
                 ),
                 "severity": "medium",
                 "recommendation": (

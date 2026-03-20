@@ -529,8 +529,8 @@ class EmailSecurityScorer:
             if dmarc.get('policy') in ('reject', 'quarantine') and (dmarc.get('pct') or 100) == 100:
                 if spf.get('record') and spf_all == '~all':
                     recommendations.append(
-                        "🟡 HIGH: DMARC is enforcing but SPF uses ~all (soft fail). "
-                        "Upgrade to -all (hard fail) for consistent enforcement"
+                        "🟡 HIGH: DMARC is enforcing but SPF uses ~all (softfail). "
+                        "Consider -all (hardfail) for a stronger authorization declaration"
                     )
 
         # SPF recommendations
@@ -538,8 +538,8 @@ class EmailSecurityScorer:
             recommendations.append("🔴 CRITICAL: Publish an SPF record listing your authorized sending servers")
         elif (spf.get('all') or '').lower() == '~all' and has_mx:
             recommendations.append(
-                "🟡 HIGH: SPF uses ~all (soft fail) -- unauthorized mail is tagged but still delivered. "
-                "Upgrade to -all (hard fail) to reject unauthorized senders"
+                "🟡 HIGH: SPF uses ~all (softfail). "
+                "Consider -all (hardfail) for a stronger authorization declaration"
             )
         elif spf.get('lookup_count', 0) > 10:
             count = spf['lookup_count']
