@@ -2989,13 +2989,10 @@ def run_full_audit(domain: str, dkim_selector: Optional[str] = None,
         _spf_record = (_raw_spf.get("record") or "").strip().lower()
         _has_null_spf = _spf_record in ("v=spf1 -all", "v=spf1 ~all")
 
-        # Check direct policy first, then inherited via tree walk
-        if _raw_dmarc.get("policy"):
-            _dmarc_policy = _raw_dmarc["policy"].lower()
-        elif tree_walk_result and tree_walk_result.get("policy_source") and tree_walk_result.get("is_subdomain"):
-            _dmarc_policy = (tree_walk_result.get("effective_policy") or "").lower()
-        else:
-            _dmarc_policy = ""
+        # Only count DMARC reject from the domain's OWN record, not inherited.
+        # A domain that inherits reject from a parent is a normal subdomain,
+        # not a deliberately parked/defensive domain.
+        _dmarc_policy = (_raw_dmarc.get("policy") or "").lower()
         _has_dmarc_reject = _dmarc_policy == "reject"
 
         if _has_null_mx or _has_no_mx:
@@ -3560,16 +3557,17 @@ def _build_resilience_analysis(
         "dmarc": {"status": dmarc_status, "note": dmarc_note},
     }
 
-    # -- Defensive DNS: short-circuit --
+    # -- Non-mail domain: short-circuit --
     if is_defensive:
         return {
             "level": "high",
             "summary": (
-                "Non-mail domain with defensive DNS. "
-                "SPF -all and DMARC reject correctly block all email."
+                "This domain is configured to not send email. "
+                "SPF rejects all senders and DMARC policy instructs receivers to reject "
+                "any message claiming to be from this domain."
             ),
             "mechanisms": mechanisms,
-            "risk": "Low. Domain is configured to reject all email.",
+            "risk": "Low risk. All email from this domain will be rejected by compliant receivers.",
         }
 
     # -- Derive resilience level and risk text --
