@@ -174,19 +174,20 @@ def _check_rate_limit(client_ip: str) -> bool:
     now = time.time()
     with _rate_lock:
         # Prune old timestamps
-        _rate_limits[client_ip] = [
+        timestamps = [
             ts for ts in _rate_limits[client_ip]
             if now - ts < RATE_LIMIT_WINDOW
         ]
-        if len(_rate_limits[client_ip]) >= RATE_LIMIT_MAX:
+        if not timestamps:
+            # Clean up empty entries instead of keeping them
+            _rate_limits.pop(client_ip, None)
+            _rate_limits[client_ip] = [now]
+            return True
+        if len(timestamps) >= RATE_LIMIT_MAX:
+            _rate_limits[client_ip] = timestamps
             return False
-        _rate_limits[client_ip].append(now)
-        # Prevent unbounded memory growth: prune stale IPs periodically
-        if len(_rate_limits) > 10000:
-            cutoff = now - RATE_LIMIT_WINDOW
-            stale = [ip for ip, ts in _rate_limits.items() if not ts or ts[-1] < cutoff]
-            for ip in stale:
-                del _rate_limits[ip]
+        timestamps.append(now)
+        _rate_limits[client_ip] = timestamps
     return True
 
 
