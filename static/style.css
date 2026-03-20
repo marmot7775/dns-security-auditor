@@ -1863,7 +1863,7 @@ main {
     .scope-btn {
         font-size: 0.76rem;
         padding: 0.5rem 0.7rem;
-        min-height: 40px;
+        min-height: 44px;
     }
 
     .scope-btn svg {
@@ -1871,11 +1871,11 @@ main {
     }
 
     .toggle-all-btn {
-        min-height: 36px;
+        min-height: 44px;
     }
 
     .banner-actions .share-btn {
-        min-height: 40px;
+        min-height: 44px;
     }
 
     .explanation {
@@ -1981,7 +1981,7 @@ html, body {
         flex: 1;
         min-width: 0;
         justify-content: center;
-        min-height: 40px;
+        min-height: 44px;
     }
 }
 
