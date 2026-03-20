@@ -115,7 +115,7 @@ def transform_dmarc(raw: Dict, tree_walk: Optional[Dict] = None) -> Dict:
         pct = raw.get("pct", 100)
         verdict = "p=quarantine -- failures sent to spam"
         if pct is not None and pct < 100:
-            verdict += f" ({pct}% applied)"
+            verdict += f" (pct={pct})"
         # p=quarantine is enforcing; treat as pass even if rua is absent
         status = "pass"
     elif policy == "none":
@@ -268,7 +268,7 @@ def transform_dmarc(raw: Dict, tree_walk: Optional[Dict] = None) -> Dict:
 
         pct = raw.get("pct")
         if pct is not None and pct < 100:
-            details.append({"type": "warning", "text": f"Only {pct}% of failing emails are enforced"})
+            details.append({"type": "warning", "text": f"pct={pct} -- policy applied to only {pct}% of failing messages (note: pct is deprecated in DMARCbis)"})
 
         # Append all issues from the audit engine (syntax_errors already merged into issues)
         for issue in raw.get("issues", []):
@@ -436,8 +436,9 @@ def transform_spf(raw: Dict, has_mx: bool = True) -> Dict:
             )
         elif all_mech == "?all":
             explanation = (
-                "SPF record uses <strong>?all</strong> (neutral). This makes no assertion about "
-                "unlisted servers -- the SPF result is effectively meaningless for DMARC alignment."
+                "SPF record uses <strong>?all</strong> (neutral). Per RFC 7208, this means the domain "
+                "makes no assertion about unlisted servers. A neutral result does not pass SPF, "
+                "so it cannot contribute to DMARC alignment."
             )
         elif all_mech == "+all":
             explanation = (
@@ -451,8 +452,9 @@ def transform_spf(raw: Dict, has_mx: bool = True) -> Dict:
             )
         elif not all_mech:
             explanation = (
-                "SPF record is missing an <strong>all</strong> mechanism. Without it, the default behavior "
-                "is neutral (?all), providing no protection against unauthorized senders."
+                "SPF record is missing an <strong>all</strong> mechanism. Per RFC 7208 Section 4.7, "
+                "if processing reaches the end of the record without a match, the result is neutral. "
+                "This means unlisted servers produce no SPF pass and cannot contribute to DMARC alignment."
             )
         else:
             explanation = "SPF record found."
@@ -620,8 +622,9 @@ def transform_dkim(raw: Dict, domain: str, has_mx: bool = True) -> Dict:
                 "No DKIM signing keys were found after checking {tested} common selectors. "
                 "This does not necessarily mean DKIM is not configured. Your provider may use "
                 "custom or non-standard selectors that weren't in our test list. "
-                "DKIM adds a cryptographic signature to outgoing emails that proves the message "
-                "hasn't been tampered with and verifies the sending domain."
+                "DKIM (RFC 6376) adds a cryptographic signature to outgoing email covering "
+                "specified headers and the message body. Receivers verify this signature using "
+                "the public key published in DNS to confirm the message was not altered in transit."
             ).format(tested=tested),
             "details": [
                 {"type": "warning", "text": f"Tested {tested} common selectors, but no public keys found in DNS"},
@@ -674,8 +677,8 @@ def transform_dkim(raw: Dict, domain: str, has_mx: bool = True) -> Dict:
 
     details.append({"type": "info", "text": f"Tested {tested} selectors"})
 
-    # ARC informational note -- DKIM keys enable ARC signing (RFC 8617)
-    details.append({"type": "info", "text": "These DKIM keys also enable ARC (Authenticated Received Chain) signing for mail forwarding"})
+    # ARC informational note (RFC 8617)
+    details.append({"type": "info", "text": "DKIM is a prerequisite for ARC (RFC 8617), which preserves authentication across mail forwarding"})
 
     # Append any issues from the audit engine
     for issue in raw.get("issues", []):
@@ -881,9 +884,10 @@ def transform_mta_sts(raw: Dict, domain: str, has_mx: bool = True) -> Dict:
             "verdict": "No MTA-STS record found",
             "record": None,
             "explanation": (
-                "MTA-STS (RFC 8461) lets you declare that email to your domain must be delivered "
-                "over authenticated TLS. Without it, a network attacker can force a TLS downgrade "
-                "or perform a man-in-the-middle attack on SMTP delivery to your mail servers."
+                "MTA-STS (RFC 8461) lets you declare that SMTP connections to your domain's MX hosts "
+                "must use authenticated TLS. Without it, SMTP's opportunistic TLS (STARTTLS) is "
+                "vulnerable to downgrade attacks where a network attacker strips the TLS negotiation, "
+                "causing email to be delivered in plaintext."
             ),
             "details": [_issue_to_detail(i) for i in raw.get("issues", [])],
             "fix": (
@@ -1106,7 +1110,7 @@ def transform_bimi(raw: Dict, domain: str, has_mx: bool = True) -> Dict:
     else:
         verdict = "Record found"
 
-    explanation = "BIMI record is published. BIMI is a brand trust and recognition feature, not a security protocol."
+    explanation = "BIMI record is published. BIMI is a brand recognition feature, not a security protocol."
     if logo_url:
         explanation += " Your brand logo URL is configured."
     if vmc_url:
@@ -1486,7 +1490,8 @@ def transform_dane(raw: Dict, domain: str) -> Dict:
                 "DANE (RFC 7672) is configured and backed by DNSSEC. Sending mail servers that "
                 "implement RFC 7672 can verify your mail server's TLS certificate through DNS-based "
                 "TLSA records, independent of the Certificate Authority infrastructure. "
-                "This prevents TLS certificate substitution attacks on SMTP delivery."
+                "This allows senders to authenticate the TLS certificate without relying on the "
+                "public CA trust model."
             ),
             "details": details,
             "fix": fix,

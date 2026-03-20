@@ -118,8 +118,8 @@ def build_remediation_plan(
         immediate.append({
             "title": "Publish SPF Record",
             "description": (
-                "Your domain has no SPF record, so any server can send email claiming "
-                "to be from your domain without being rejected by receivers."
+                "Your domain has no SPF record. Without SPF, receivers cannot use IP-based "
+                "authentication as part of DMARC alignment evaluation."
             ),
             "effort": "low",
             "impact": "high",
@@ -132,7 +132,7 @@ def build_remediation_plan(
             "title": "Remove +all From SPF",
             "description": (
                 "Your SPF record ends with +all, which authorizes every server on the "
-                "internet to send mail as your domain -- this is equivalent to no protection."
+                "internet to send mail as your domain -- SPF provides no value in this state."
             ),
             "effort": "low",
             "impact": "high",
@@ -286,8 +286,8 @@ def build_remediation_plan(
             "title": "Advance DMARC to p=reject",
             "description": (
                 "Once you have confirmed that legitimate mail is passing SPF and DKIM, "
-                "move DMARC to p=reject so unauthenticated mail is discarded rather than "
-                "quarantined."
+                "move DMARC to p=reject to request that receivers reject unauthenticated mail "
+                "rather than routing it to spam."
             ),
             "effort": "low",
             "impact": "high",
@@ -299,8 +299,9 @@ def build_remediation_plan(
         long_term.append({
             "title": "Tighten SPF to -all",
             "description": (
-                "Switching from ~all (soft fail) to -all (hard fail) instructs receivers "
-                "to reject mail that does not match your SPF record rather than just flagging it."
+                "Switching from ~all (softfail) to -all (hardfail) makes a stronger authorization "
+                "declaration. In practice, the difference matters mainly for DMARC alignment -- "
+                "few receivers reject on SPF result alone."
             ),
             "effort": "low",
             "impact": "medium",
@@ -340,8 +341,8 @@ def build_remediation_plan(
         long_term.append({
             "title": "Implement DANE (TLSA Records)",
             "description": (
-                "DANE pins your mail server's TLS certificate in DNS, preventing "
-                "downgrade attacks and certificate substitution by malicious intermediaries."
+                "DANE publishes your mail server's TLS certificate fingerprint in DNS (via TLSA "
+                "records), allowing senders to verify the certificate without relying on the CA system."
             ),
             "effort": "high",
             "impact": "medium",
