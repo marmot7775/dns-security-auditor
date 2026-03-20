@@ -640,7 +640,7 @@ def _raw_check_dmarc(domain: str) -> Dict[str, Any]:
                     _add_issue(
                         "warning",
                         "Deprecated tag: 'pct' (removed in DMARCbis)",
-                        "The pct tag is removed in DMARCbis (DMARCbis) with no replacement. "
+                        "The pct tag is removed in DMARCbis with no replacement. "
                         "The intended approach is to use p=none for monitoring, then move "
                         "directly to p=quarantine or p=reject. Current receivers still honor "
                         "pct, but DMARCbis-compliant receivers will ignore it.",
@@ -3527,20 +3527,20 @@ def _build_resilience_analysis(
         dmarc_status = "reject"
         dmarc_note = (
             "DMARC policy is p=reject, the strongest enforcement level. "
-            "Receivers will block messages that fail both SPF and DKIM alignment. "
+            "Messages that fail both SPF and DKIM alignment will be rejected. "
             "Spoofed mail from this domain should not reach inboxes."
         )
     elif dmarc_policy == "quarantine":
         dmarc_status = "quarantine"
         dmarc_note = (
-            "DMARC policy is p=quarantine. Receivers will route messages that fail authentication "
+            "DMARC policy is p=quarantine. Messages that fail authentication are routed "
             "to the spam or junk folder instead of the inbox. This is one step below p=reject, "
             "which blocks failing messages entirely."
         )
     elif dmarc_policy == "none":
         dmarc_status = "none"
         dmarc_note = (
-            "DMARC policy is p=none (monitoring only). Receivers will deliver messages "
+            "DMARC policy is p=none (monitoring only). Messages are delivered "
             "even if they fail authentication. This is useful for collecting aggregate reports "
             "before enforcing, but provides no protection against spoofing."
         )
@@ -3655,8 +3655,8 @@ def _build_resilience_analysis(
             )
         else:
             policy_note = (
-                "The current policy is p=reject, the strongest enforcement level. Receivers will "
-                "block messages that fail both SPF and DKIM alignment outright."
+                "The current policy is p=reject, the strongest enforcement level. "
+                "Messages that fail both SPF and DKIM alignment are rejected outright."
             )
         risk = (
             f"{policy_note} "
