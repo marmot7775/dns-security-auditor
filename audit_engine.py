@@ -3600,10 +3600,8 @@ def _build_resilience_analysis(
             "This is the expected configuration for a non-sending subdomain."
         )
         risk = (
-            "No action needed for email authentication. The inherited DMARC policy protects "
-            "this subdomain against spoofing. SPF and DKIM are not required because this subdomain "
-            "does not send email. If this subdomain does send email, publish an SPF record and "
-            "configure DKIM signing."
+            "No action needed. The inherited DMARC policy protects this subdomain against spoofing. "
+            "SPF and DKIM are not required because this subdomain does not send email."
         )
     elif dmarc_status == "missing":
         level = "none"
