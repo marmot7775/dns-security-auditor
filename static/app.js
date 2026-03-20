@@ -199,6 +199,9 @@ const STEP_MESSAGES = {
 };
 
 function showLoading() {
+    // Compact the input section so the progress bar is above the fold
+    document.querySelector('.audit-input-section')?.classList.add('compact');
+
     loadingSection.style.display = 'block';
     const card = loadingSection.querySelector('.loading-card');
     card.innerHTML = `
@@ -213,6 +216,9 @@ function showLoading() {
 
     const bar = document.getElementById('loading-bar');
     if (bar) bar.style.width = '0%';
+
+    // Scroll so the loading bar is visible
+    window.scrollTo({ top: 0, behavior: 'smooth' });
 }
 
 function updateLoadingProgress(step, progressPct) {
