@@ -59,6 +59,7 @@ Six categories sum to 100 points with a letter grade:
 | Best Practices | 20 | MTA-STS (8 pts), TLS-RPT (8 pts), DANE (4 pts) |
 | Key Security | 10 | DKIM key strength, rotation hygiene, algorithm modernity |
 | Vendor Intelligence | 10 | Email service provider detection confidence |
+*Note: DKIM selectors cannot be enumerated via DNS. For best results, provide your selector directly.*
 
 DMARC, SPF, and DKIM account for 60% of the score. Infrastructure checks (DNSSEC, CAA, DANE, Nameservers, Certificate Transparency, Blocklist) are evaluated and displayed but do not contribute to the numeric score, since their absence is often intentional.
 
