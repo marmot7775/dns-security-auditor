@@ -254,7 +254,7 @@ async def audit_domain(
         raise HTTPException(status_code=400, detail="Invalid DKIM selector")
     log.info("Audit requested: %s (scope=%s, ip=%s)", domain, scope or "complete", client_ip)
 
-    cache_key = f"{domain}:{selector or ''}"
+    cache_key = f"{domain}:{selector or ''}:{scope or 'complete'}"
 
     # Check cache
     if not nocache:
@@ -266,7 +266,7 @@ async def audit_domain(
     # Run audit
     start = time.time()
     try:
-        result = run_full_audit(domain, dkim_selector=selector)
+        result = run_full_audit(domain, dkim_selector=selector, scope=scope)
     except Exception as e:
         log.error("Audit failed for %s: %s", domain, str(e)[:200], exc_info=True)
         # Return a minimal error result instead of a 500 so the frontend can show something
@@ -316,7 +316,7 @@ async def audit_pdf(
     domain = _validate_domain(domain)
     log.info("PDF requested: %s (ip=%s)", domain, client_ip)
 
-    cache_key = f"{domain}:{selector or ''}"
+    cache_key = f"{domain}:{selector or ''}:complete"
 
     # Reuse cached audit data if available
     cached = _get_cached(cache_key)
@@ -324,10 +324,10 @@ async def audit_pdf(
         data = cached
         log.info("PDF using cached data: %s", domain)
     else:
-        # Run fresh audit
+        # Run fresh audit (always complete scope for PDF)
         start = time.time()
         try:
-            data = run_full_audit(domain, dkim_selector=selector)
+            data = run_full_audit(domain, dkim_selector=selector, scope="complete")
         except Exception as e:
             log.error("PDF audit failed for %s: %s", domain, str(e)[:200], exc_info=True)
             raise HTTPException(status_code=500, detail="Audit failed -- cannot generate PDF")
