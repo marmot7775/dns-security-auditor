@@ -82,6 +82,7 @@ class AuditPDFReport(FPDF):
         self.vendors = data.get("vendors", [])
         self.anomalies = data.get("anomalies") or []
         self.remediation_plan = data.get("remediation_plan") or {}
+        self.resilience = data.get("resilience") or {}
         self.score_data = data.get("score", {})
         self._records_for_appendix = []
 
@@ -280,8 +281,7 @@ class AuditPDFReport(FPDF):
         vendor_parts = []
         for v in self.vendors:
             name = v.get("name", "Unknown")
-            conf = v.get("confidence", 0)
-            vendor_parts.append(f"{name} ({conf}%)")
+            vendor_parts.append(name)
 
         self.set_font(self._font_body, "", 9)
         self.set_text_color(*COLORS["text_sec"])
@@ -362,6 +362,79 @@ class AuditPDFReport(FPDF):
             self.cell(score_w, 5, f"{cat_score:.0f}/{max_score}")
 
             self.ln(6)
+
+    # ============================================================
+    # Authentication Resilience
+    # ============================================================
+
+    def _render_resilience(self):
+        """Render the authentication resilience section."""
+        if not self.resilience:
+            return
+
+        level = self.resilience.get("level", "")
+        summary = self.resilience.get("summary", "")
+        risk = self.resilience.get("risk", "")
+        mechanisms = self.resilience.get("mechanisms", {})
+
+        if not summary:
+            return
+
+        if self.get_y() > 240:
+            self.add_page()
+
+        # Header
+        self.set_font(self._font_body, "B", 11)
+        self.set_text_color(*COLORS["primary"])
+        self.cell(0, 7, "Authentication Resilience", new_x="LMARGIN", new_y="NEXT")
+        self.ln(2)
+
+        # Level badge + summary
+        level_colors = {
+            "high": COLORS["pass"],
+            "moderate": COLORS["warn"],
+            "low": COLORS["fail"],
+            "none": COLORS["fail"],
+        }
+        level_color = level_colors.get(level, COLORS["text_dim"])
+
+        self.set_font(self._font_body, "B", 9)
+        self.set_text_color(*level_color)
+        self.cell(20, 5, level.upper())
+        self.set_font(self._font_body, "", 9)
+        self.set_text_color(*COLORS["text"])
+        self.multi_cell(0, 5, summary, new_x="LMARGIN", new_y="NEXT")
+        self.ln(2)
+
+        # Mechanisms
+        x = self.l_margin
+        for name, info in mechanisms.items():
+            status = info.get("status", "")
+            note = info.get("note", "")
+            self.set_font(self._font_mono, "", 8)
+            self.set_text_color(*COLORS["text"])
+            self.set_x(x)
+            self.cell(15, 4.5, name.upper())
+            self.set_font(self._font_body, "B", 8)
+            s_color = COLORS["pass"] if status in ("pass", "detected", "reject", "quarantine") else COLORS["warn"] if status in ("not_detected", "none") else COLORS["fail"]
+            self.set_text_color(*s_color)
+            self.cell(25, 4.5, status)
+            if note:
+                self.set_font(self._font_body, "", 7)
+                self.set_text_color(*COLORS["text_dim"])
+                self.cell(0, 4.5, note[:80], new_x="LMARGIN", new_y="NEXT")
+            else:
+                self.ln(4.5)
+
+        # Risk text
+        if risk:
+            self.ln(2)
+            self.set_font(self._font_body, "", 8)
+            self.set_text_color(*COLORS["text_sec"])
+            self.set_x(x)
+            self.multi_cell(170, 4.5, risk, new_x="LMARGIN", new_y="NEXT")
+
+        self.ln(4)
 
     # ============================================================
     # Anomalies Section
@@ -714,6 +787,9 @@ class AuditPDFReport(FPDF):
 
         # Page 1: Executive Summary (enhanced with risk level + category breakdown)
         self._render_executive_summary()
+
+        # Authentication Resilience
+        self._render_resilience()
 
         # Anomalies -- "What's Unusual" (if any)
         self._render_anomalies()
