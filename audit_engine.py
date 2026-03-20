@@ -274,10 +274,10 @@ def _check_report_authorization(domain: str, raw_dmarc: Dict, tree_walk_result: 
             "severity": "info",
             "issue": "Forensic reporting (ruf) configured",
             "plain_english": (
-                "Forensic reporting (ruf) is configured. Note that most major providers "
-                "(Google, Microsoft, Yahoo) no longer send forensic reports due to privacy concerns."
+                "Forensic reporting (ruf) is configured. Most mailbox providers no longer send "
+                "failure reports because of PII concerns."
             ),
-            "fix": "No action needed. ruf is optional and rarely honored by large providers.",
+            "fix": "No action needed. ruf is optional and most providers do not honor it.",
         })
 
     if not destinations:
@@ -821,8 +821,8 @@ def _raw_check_dmarc(domain: str) -> Dict[str, Any]:
                     "warning",
                     f"ruf address missing 'mailto:' prefix: {addr}",
                     "DMARC requires report addresses to be written as URIs with "
-                    "a mailto: prefix. Note: most major providers no longer send "
-                    "forensic reports due to privacy concerns, so this is low priority.",
+                    "a mailto: prefix. Note: most mailbox providers no longer send "
+                    "failure reports because of PII concerns, so this is low priority.",
                     f"Change to: ruf=mailto:{addr}",
                 )
 
