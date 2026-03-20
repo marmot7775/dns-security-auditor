@@ -39,7 +39,10 @@ from remediation_planner import build_remediation_plan
 from dkim_key_age import DKIMKeyAgeAnalyzer
 from dkim_tag_analyzer import DKIMTagAnalyzer
 from dmarc_tree_walk import dmarc_tree_walk
-import tldextract
+try:
+    import tldextract
+except ImportError:
+    tldextract = None
 from spf_intelligence import smart_dkim_check
 
 from result_transformer import (
@@ -296,12 +299,55 @@ def _get_org_domain(domain: str) -> Optional[str]:
       sub.example.co.uk -> example.co.uk
       yahoo.com -> yahoo.com (already the org domain)
 
+    Uses tldextract if available; falls back to a lightweight heuristic
+    that handles common two-part TLDs (co.uk, com.au, etc.).
+
     Returns None if the domain cannot be parsed.
     """
-    ext = tldextract.extract(domain)
-    if not ext.domain or not ext.suffix:
+    if tldextract is not None:
+        ext = tldextract.extract(domain)
+        if not ext.domain or not ext.suffix:
+            return None
+        return f"{ext.domain}.{ext.suffix}"
+
+    # Lightweight fallback: handle common two-part public suffixes
+    labels = domain.lower().rstrip(".").split(".")
+    if len(labels) < 2:
         return None
-    return f"{ext.domain}.{ext.suffix}"
+
+    _TWO_PART_TLDS = {
+        "co.uk", "org.uk", "ac.uk", "gov.uk", "me.uk", "net.uk",
+        "co.jp", "or.jp", "ne.jp", "ac.jp", "go.jp",
+        "com.au", "net.au", "org.au", "edu.au", "gov.au",
+        "co.nz", "net.nz", "org.nz",
+        "co.za", "org.za", "web.za",
+        "com.br", "net.br", "org.br",
+        "co.in", "net.in", "org.in", "gen.in",
+        "com.mx", "org.mx", "gob.mx",
+        "co.kr", "or.kr", "ne.kr",
+        "com.cn", "net.cn", "org.cn",
+        "com.tw", "org.tw", "net.tw",
+        "co.il", "org.il", "net.il",
+        "com.sg", "org.sg", "net.sg",
+        "com.hk", "org.hk", "net.hk",
+        "co.id", "or.id", "web.id",
+        "com.ar", "org.ar", "net.ar",
+        "com.tr", "org.tr", "net.tr",
+        "co.th", "or.th", "in.th",
+        "com.ph", "org.ph", "net.ph",
+        "co.ke", "or.ke",
+    }
+
+    # Check if the last two labels form a known two-part TLD
+    last_two = ".".join(labels[-2:])
+    if last_two in _TWO_PART_TLDS:
+        # Org domain is the label above the two-part TLD
+        if len(labels) < 3:
+            return None  # Already the org domain
+        return ".".join(labels[-3:])
+    else:
+        # Standard TLD: org domain is the last two labels
+        return ".".join(labels[-2:])
 
 
 def _enrich_dmarc_inheritance(
