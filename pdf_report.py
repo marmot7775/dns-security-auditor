@@ -416,7 +416,8 @@ class AuditPDFReport(FPDF):
             self.set_x(x)
             self.cell(15, 4.5, name.upper())
             self.set_font(self._font_body, "B", 8)
-            s_color = COLORS["pass"] if status in ("pass", "detected", "reject", "quarantine") else COLORS["warn"] if status in ("not_detected", "none") else COLORS["fail"]
+            # "not_detected" is neutral (DKIM selectors aren't enumerable), not a warning
+            s_color = COLORS["pass"] if status in ("pass", "detected", "reject", "quarantine", "not_detected") else COLORS["warn"] if status == "none" else COLORS["fail"]
             self.set_text_color(*s_color)
             self.cell(25, 4.5, status)
             if note:
