@@ -371,6 +371,8 @@ def transform_spf(raw: Dict, has_mx: bool = True) -> Dict:
             verdict = "SPF misconfigured (+all)"
         elif lookups > 10:
             verdict = f"SPF over lookup limit ({lookups}/10)"
+        elif not all_mech and raw.get("has_redirect"):
+            verdict = "SPF record configured (via redirect)"
         elif not all_mech:
             verdict = "SPF record configured (no all mechanism)"
         else:
