@@ -2414,7 +2414,7 @@ def _raw_check_blacklist(domain: str, raw_results: Dict[str, Any]) -> Dict[str, 
     }
 
     result = {
-        "check": "Blacklist",
+        "check": "Blocklist",
         "domain": domain,
         "ips_checked": [],
         "domain_checked": domain,

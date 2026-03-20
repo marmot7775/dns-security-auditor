@@ -297,11 +297,17 @@ def transform_dmarc(raw: Dict, tree_walk: Optional[Dict] = None) -> Dict:
             fix = None
     elif not record:
         fix = (
-            f"Publish a TXT record at <strong>_dmarc.{domain_name}</strong>. "
-            f"Start with <strong>p=none</strong> and an <strong>rua</strong> address to receive "
-            f"aggregate reports. These reports will show you which sources send mail using your "
-            f"domain and whether they pass SPF/DKIM alignment. Move to an enforcement policy "
-            f"only after you understand your sending ecosystem."
+            f"Publish a TXT record at <strong>_dmarc.{domain_name}</strong> starting with "
+            f"<strong>p=none</strong>.<br><br>"
+            f"The <strong>rua=</strong> tag specifies where aggregate reports are sent. You have two options:<br>"
+            f"<strong>1.</strong> Use a DMARC reporting service (Valimail, dmarcian, Postmark DMARC, Sendmarc, etc.) "
+            f"which provides a dashboard to visualize aggregate report data. The service gives you a "
+            f"<strong>mailto:</strong> address to use in rua.<br>"
+            f"<strong>2.</strong> Send reports to your own mailbox (e.g. <strong>rua=mailto:dmarc@{domain_name}</strong>). "
+            f"Reports arrive as compressed XML and need to be parsed to be useful.<br><br>"
+            f"Aggregate reports show which sources send mail using your domain and whether they "
+            f"pass SPF/DKIM alignment. Move to an enforcement policy only after you understand "
+            f"your sending ecosystem."
         )
     elif raw.get("syntax_errors") or any(i.get("severity") == "error" for i in raw.get("issues", [])):
         # Prioritize syntax/error fixes over generic policy advice
@@ -332,8 +338,8 @@ def transform_dmarc(raw: Dict, tree_walk: Optional[Dict] = None) -> Dict:
         fix_records.append({
             "type": "TXT",
             "host": f"_dmarc.{domain_name}",
-            "value": f"v=DMARC1; p=none; rua=mailto:dmarc-reports@{domain_name}; fo=1",
-            "comment": "Start with p=none to monitor. Upgrade to enforcement only after reviewing aggregate reports.",
+            "value": "v=DMARC1; p=none; rua=mailto:<YOUR_REPORTING_ADDRESS>; fo=1",
+            "comment": "Replace <YOUR_REPORTING_ADDRESS> with your own mailbox or a reporting service address. Start at p=none to collect data before enforcing.",
         })
 
     return {
@@ -995,15 +1001,15 @@ def transform_tls_rpt(raw: Dict, domain: str, has_mx: bool = True) -> Dict:
             ),
             "details": [_issue_to_detail(i) for i in raw.get("issues", [])],
             "fix": (
-                f"Consider adding TLS-RPT to gain visibility into TLS delivery failures. "
-                f"Add a TXT record at <strong>_smtp._tls.{domain}</strong> with value "
-                f"<strong>v=TLSRPTv1; rua=mailto:tls-reports@{domain}</strong>"
+                f"Add a TLS-RPT record at <strong>_smtp._tls.{domain}</strong>. "
+                f"The <strong>rua=</strong> address receives JSON reports about TLS delivery failures. "
+                f"Use a mailbox you control or a reporting service that can parse TLS-RPT data."
             ),
             "fix_records": [{
                 "type": "TXT",
                 "host": f"_smtp._tls.{domain}",
-                "value": f"v=TLSRPTv1; rua=mailto:tls-reports@{domain}",
-                "comment": "Replace tls-reports@{domain} with your preferred reporting address".format(domain=domain),
+                "value": "v=TLSRPTv1; rua=mailto:<YOUR_REPORTING_ADDRESS>",
+                "comment": "Replace <YOUR_REPORTING_ADDRESS> with a mailbox or reporting service that can process TLS-RPT JSON reports.",
             }],
         }
 
@@ -1899,7 +1905,7 @@ def transform_blacklist(raw: Dict, domain: str) -> Dict:
     # No MX IPs to check
     if not ips_checked and not domain_results:
         return {
-            "name": "Blacklist",
+            "name": "Blocklist",
             "status": "pass",
             "pill_label": "N/A",
             "verdict": "No MX servers to check",
@@ -2038,7 +2044,7 @@ def transform_blacklist(raw: Dict, domain: str) -> Dict:
             fix = "Review the listing reason with each blocklist operator and request removal once the underlying issue is resolved."
 
     return {
-        "name": "Blacklist",
+        "name": "Blocklist",
         "status": status,
         "pill_label": pill_label,
         "verdict": verdict,
