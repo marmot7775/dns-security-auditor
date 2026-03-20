@@ -642,7 +642,7 @@ def _validate_bimi_record(record: str) -> Tuple[Dict[str, str], List[Dict]]:
     return tags, issues
 
 
-def check_bimi(domain: str) -> Dict[str, Any]:
+def check_bimi(domain: str, dmarc_enforcing_override: bool = None) -> Dict[str, Any]:
     result = {
         "check": "BIMI", "domain": domain,
         "record": None, "records_found": 0, "tags": {},
@@ -686,16 +686,21 @@ def check_bimi(domain: str) -> Dict[str, Any]:
     result["vmc_url"] = tags.get("a") or None
 
     # DMARC prerequisite check
-    dmarc_records = _lookup_txt(f"_dmarc.{domain}")
-    dmarc_found = False
-    dmarc_enforcing = False
-    for rec in dmarc_records:
-        if rec.strip().lower().startswith("v=dmarc1"):
-            dmarc_found = True
-            rec_lower = rec.lower()
-            if "p=quarantine" in rec_lower or "p=reject" in rec_lower:
-                dmarc_enforcing = True
-            break
+    # Use override from audit orchestrator (accounts for inherited policies)
+    if dmarc_enforcing_override is not None:
+        dmarc_found = True
+        dmarc_enforcing = dmarc_enforcing_override
+    else:
+        dmarc_records = _lookup_txt(f"_dmarc.{domain}")
+        dmarc_found = False
+        dmarc_enforcing = False
+        for rec in dmarc_records:
+            if rec.strip().lower().startswith("v=dmarc1"):
+                dmarc_found = True
+                rec_lower = rec.lower()
+                if "p=quarantine" in rec_lower or "p=reject" in rec_lower:
+                    dmarc_enforcing = True
+                break
 
     if not dmarc_found:
         result["issues"].append(_make_issue(

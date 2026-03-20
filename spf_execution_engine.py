@@ -494,7 +494,7 @@ def build_dmarc_roadmap(raw_dmarc: Dict, raw_spf: Dict, raw_dkim: Dict,
         "title": "Publish SPF record",
         "description": "Define which servers are authorized to send email for your domain.",
         "status": "complete" if step1_complete else "current",
-        "dns_record": f"v=spf1 include:_spf.google.com -all" if not has_spf else None,
+        "dns_record": "v=spf1 include:<your-email-provider> ~all" if not has_spf else None,
         "prerequisites": None,
         "warnings": [f"SPF has {spf_lookup_count} lookups (limit 10)"] if has_spf and spf_lookup_count > 10 else None,
         "estimated_duration": "Immediate",
@@ -559,7 +559,7 @@ def build_dmarc_roadmap(raw_dmarc: Dict, raw_spf: Dict, raw_dkim: Dict,
         "estimated_duration": "2-4 weeks",
     })
 
-    # Step 5: p=quarantine pct=25
+    # Step 5: p=quarantine with t=y test mode
     step5_complete = policy in ("quarantine", "reject") or (policy == "quarantine" and pct >= 25)
     if current_stage in ("quarantine", "partial_reject", "full_reject"):
         step5_complete = True
@@ -577,10 +577,10 @@ def build_dmarc_roadmap(raw_dmarc: Dict, raw_spf: Dict, raw_dkim: Dict,
         blockers_5.append("Complete report monitoring first")
     steps.append({
         "stage": 5,
-        "title": "Move to p=quarantine (pct=25)",
-        "description": "Start quarantining 25% of messages that fail authentication.",
+        "title": "Move to p=quarantine with t=y (test mode)",
+        "description": "Test mode drops the effective policy one level. p=quarantine with t=y behaves as p=none, letting you verify before committing.",
         "status": step5_status,
-        "dns_record": f"v=DMARC1; p=quarantine; pct=25; rua={rua_addr}; fo=1" if not step5_complete else None,
+        "dns_record": f"v=DMARC1; p=quarantine; t=y; rua={rua_addr}; fo=1" if not step5_complete else None,
         "prerequisites": blockers_5 if blockers_5 else None,
         "warnings": None,
         "estimated_duration": "1-2 weeks",
@@ -597,8 +597,8 @@ def build_dmarc_roadmap(raw_dmarc: Dict, raw_spf: Dict, raw_dkim: Dict,
     )
     steps.append({
         "stage": 6,
-        "title": "Increase to p=quarantine (pct=100)",
-        "description": "Quarantine all messages that fail authentication.",
+        "title": "Enforce p=quarantine",
+        "description": "Remove t=y to fully enforce quarantine. Messages that fail authentication are sent to spam.",
         "status": step6_status,
         "dns_record": f"v=DMARC1; p=quarantine; rua={rua_addr}; fo=1" if not step6_complete else None,
         "prerequisites": None,
@@ -616,7 +616,7 @@ def build_dmarc_roadmap(raw_dmarc: Dict, raw_spf: Dict, raw_dkim: Dict,
     steps.append({
         "stage": 7,
         "title": "Move to p=reject",
-        "description": "Block all messages that fail authentication. This is the gold standard.",
+        "description": "Request that receivers reject all messages that fail authentication.",
         "status": step7_status,
         "dns_record": f"v=DMARC1; p=reject; rua={rua_addr}; fo=1" if not step7_complete else None,
         "prerequisites": None,
