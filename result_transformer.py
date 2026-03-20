@@ -1056,8 +1056,8 @@ def transform_tls_rpt(raw: Dict, domain: str, has_mx: bool = True) -> Dict:
 
         return {
             "name": "TLS-RPT",
-            "status": "fail",
-            "pill_label": "Missing",
+            "status": "warn",
+            "pill_label": "Not configured",
             "verdict": "No TLS-RPT record found",
             "record": None,
             "explanation": (
@@ -1192,8 +1192,10 @@ def transform_bimi(raw: Dict, domain: str, has_mx: bool = True) -> Dict:
     svg_validated = raw.get("svg_validated")
     svg_profile = raw.get("svg_profile")
     if svg_validated is True:
-        if svg_profile in ("tiny-ps", "tiny"):
+        if svg_profile == "tiny-ps":
             details.append({"type": "good", "text": f"SVG validated (profile: {svg_profile})"})
+        elif svg_profile == "tiny":
+            details.append({"type": "warning", "text": "SVG profile is 'tiny' but BIMI requires 'tiny-ps'. Gmail and other clients will reject this."})
         elif svg_profile:
             details.append({"type": "warning", "text": f"SVG parsed but profile is '{svg_profile}' (expected tiny-ps)"})
         else:

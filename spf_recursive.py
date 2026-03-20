@@ -289,7 +289,7 @@ def count_spf_lookups(domain: str) -> Dict[str, Any]:
                 "plain_english": (
                     f"Your SPF chain includes {entry['domain']} but that domain "
                     f"has no SPF record. This is a 'void lookup' and "
-                    f"too many (2+) cause a PermError."
+                    f"RFC 7208 limits void lookups to 2. A third may trigger a PermError."
                 ),
                 "impact": "Wasted lookup slot and potential PermError.",
                 "fix": f"Remove the include for {entry['domain']} if no longer used.",
