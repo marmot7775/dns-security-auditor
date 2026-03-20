@@ -20,6 +20,7 @@ from datetime import datetime
 try:
     import dns.resolver
     import dns.reversename
+    import dns.exception
     DNS_AVAILABLE = True
 except ImportError:
     DNS_AVAILABLE = False
@@ -118,13 +119,13 @@ def _resolve_host(hostname: str) -> Dict[str, Any]:
         answers = resolver.resolve(hostname, "A")
         result["a"] = [str(r) for r in answers]
         result["resolved"] = True
-    except Exception:
+    except (dns.resolver.NXDOMAIN, dns.resolver.NoAnswer, dns.resolver.NoNameservers, dns.exception.DNSException):
         pass
     try:
         answers = resolver.resolve(hostname, "AAAA")
         result["aaaa"] = [str(r) for r in answers]
         result["resolved"] = True
-    except Exception:
+    except (dns.resolver.NXDOMAIN, dns.resolver.NoAnswer, dns.resolver.NoNameservers, dns.exception.DNSException):
         pass
     return result
 
@@ -141,7 +142,7 @@ def _check_ptr(ip: str) -> Dict[str, Any]:
         all_ips = fwd["a"] + fwd["aaaa"]
         if ip in all_ips:
             result["fcrdns"] = True
-    except Exception:
+    except (dns.resolver.NXDOMAIN, dns.resolver.NoAnswer, dns.resolver.NoNameservers, dns.exception.DNSException):
         pass
     return result
 
@@ -191,7 +192,7 @@ def _check_starttls(hostname: str, port: int = 25, timeout: float = 10.0) -> Dic
                         expiry = parsedate_to_datetime(not_after)
                         result["cert_expiry"] = expiry.isoformat()
                         result["cert_valid"] = expiry > datetime.now(expiry.tzinfo)
-                    except Exception:
+                    except (ValueError, TypeError, OverflowError):
                         result["cert_expiry"] = not_after
         server.quit()
     except smtplib.SMTPServerDisconnected:
@@ -242,7 +243,7 @@ def check_mx(domain: str, deep_scan: bool = False) -> Dict[str, Any]:
             "No email can be received.",
             "Verify the domain name is correct."))
         return result
-    except Exception as e:
+    except dns.exception.DNSException as e:
         result["status"] = "error"
         result["issues"].append(_make_issue(
             "error", f"DNS query failed: {str(e)[:200]}",
