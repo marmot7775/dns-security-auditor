@@ -210,10 +210,19 @@ def transform_dmarc(raw: Dict, tree_walk: Optional[Dict] = None) -> Dict:
 
     # Reporting note
     if record and not raw.get("rua"):
-        explanation += (
-            " <strong>Note:</strong> No aggregate reporting (rua) is configured, "
-            "so you have no visibility into authentication results."
-        )
+        if policy in ("quarantine", "reject"):
+            explanation += (
+                " <strong>Warning:</strong> No aggregate reporting (rua) is configured. "
+                "You are enforcing a policy without seeing who is being affected. "
+                "If a legitimate sender (like a payroll system or CRM) fails authentication, "
+                "you will not know until users report missing email."
+            )
+        else:
+            explanation += (
+                " <strong>Note:</strong> No aggregate reporting (rua) is configured. "
+                "Without rua, you have no visibility into who is sending as your domain "
+                "or whether authentication is passing."
+            )
 
     # Details
     details = []
@@ -271,7 +280,12 @@ def transform_dmarc(raw: Dict, tree_walk: Optional[Dict] = None) -> Dict:
             details.append({"type": "good", "text": "Forensic reporting (ruf) is configured"})
 
         if raw.get("sp"):
-            details.append({"type": "info", "text": f"Subdomain policy: sp={raw['sp']}"})
+            sp_val = raw["sp"]
+            # Flag sp=none when p= is enforcing as a contradiction
+            if sp_val == "none" and policy in ("quarantine", "reject"):
+                details.append({"type": "warning", "text": f"Subdomain policy sp=none contradicts your p={policy} enforcement. Subdomains are unprotected."})
+            else:
+                details.append({"type": "info", "text": f"Subdomain policy: sp={sp_val}"})
 
         pct = raw.get("pct")
         if pct is not None and pct < 100:
