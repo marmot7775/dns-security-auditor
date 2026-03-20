@@ -106,10 +106,10 @@ class TestDmarcWithoutDkim:
         return detect_anomalies(raw, {}, has_mx=has_mx)
 
     def test_reject_no_dkim_has_mx(self):
+        # DKIM detection is heuristic and positive-only; not detecting keys
+        # should NOT produce an anomaly since selectors are not enumerable.
         result = self._base("reject", keys=[], has_mx=True)
-        a = find(result, "DKIM")
-        assert a is not None
-        assert a["severity"] == "medium"
+        assert find(result, "DKIM") is None
 
     def test_reject_no_dkim_no_mx(self):
         # No MX -- should not fire

@@ -525,8 +525,9 @@ class EmailSecurityScorer:
         if has_mx and dmarc.get('record'):
             if adkim == 's' and not dkim_results.get('found_selectors'):
                 recommendations.append(
-                    "🔴 CRITICAL: DMARC requires strict DKIM alignment (adkim=s) but no DKIM keys were found. "
-                    "DKIM authentication will always fail -- publish DKIM keys or switch to adkim=r"
+                    "🟡 HIGH: DMARC requires strict DKIM alignment (adkim=s) but no DKIM keys were confirmed. "
+                    "DKIM selectors are not publicly enumerable, so keys may exist under custom names. "
+                    "Verify DKIM is configured or consider switching to adkim=r (relaxed)"
                 )
             if aspf == 's' and not spf.get('record'):
                 recommendations.append(
@@ -556,16 +557,11 @@ class EmailSecurityScorer:
                 f"Flatten includes to IP addresses or remove unused sending services"
             )
 
-        # DKIM recommendations (only for mail-sending domains)
+        # DKIM recommendations (only for mail-sending domains with detected keys)
         if has_mx:
             dkim_score = scores['dkim']
             dkim_details = details.get('dkim', {})
-            if dkim_details.get('impact') == 'UNKNOWN':
-                recommendations.append(
-                    "🟡 HIGH: No DKIM keys were detected. If this domain sends email, verify DKIM signing is enabled "
-                    "with your email provider and confirm the public key is published in DNS"
-                )
-            elif dkim_score < 12:
+            if dkim_score < 12:
                 dkim_details = details.get('dkim', {})
                 if 'weak' in str(dkim_details.get('key_strength', '')).lower():
                     recommendations.append("🟡 HIGH: Upgrade 1024-bit DKIM keys to 2048-bit or stronger")

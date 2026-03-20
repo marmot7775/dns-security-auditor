@@ -3471,9 +3471,9 @@ def _build_resilience_analysis(
     else:
         dkim_status = "not_detected"
         dkim_note = (
-            "No DKIM key was found with the tested selectors. "
-            "DKIM uses custom selector names chosen by each mail service, so keys may exist under "
-            "selectors not in the test list. Without DKIM, forwarded messages have no way to pass DMARC."
+            "No DKIM keys were found among common selectors tested. "
+            "DKIM selector names are chosen by each mail service and are not publicly enumerable, "
+            "so DKIM may well be configured with selectors this audit did not test."
         )
 
     # -- DMARC mechanism status --
@@ -3573,7 +3573,10 @@ def _build_resilience_analysis(
     # -- Derive resilience level and risk text --
     spf_functional = spf_status == "pass"
     dkim_functional = dkim_status == "detected"
-    dkim_inconclusive = dkim_status == "inconclusive"
+    # "not_detected" means our heuristic didn't find keys, but DKIM may still be
+    # configured with custom selectors. Treat it the same as "inconclusive" so we
+    # never penalize based on a heuristic miss.
+    dkim_inconclusive = dkim_status in ("inconclusive", "not_detected")
     dmarc_enforcing = dmarc_status in ("quarantine", "reject")
 
     # Alignment explainer fragments (used in several branches)
@@ -3682,24 +3685,24 @@ def _build_resilience_analysis(
     elif dkim_inconclusive and spf_functional and dmarc_enforcing:
         level = "moderate"
         summary = (
-            "SPF is functional and DMARC is enforcing, but DKIM status could not be determined (the check timed out). "
-            "If DKIM is configured, resilience is likely high."
+            "SPF is functional and DMARC is enforcing. DKIM status could not be confirmed "
+            "because DKIM selectors are not publicly enumerable. "
+            "If DKIM is configured (likely), resilience is high."
         )
         risk = (
-            "Verify DKIM signing is enabled in each mail provider's admin console. "
-            "SPF alone provides alignment, but it breaks when mail is forwarded because the forwarding "
-            "server's IP is not in the original SPF record. DKIM survives forwarding and is the "
-            "more reliable alignment path. Without confirmed DKIM, forwarded messages will fail DMARC."
+            "DKIM selector names are chosen by each mail service and cannot be discovered from "
+            "the outside. This audit tested common selectors but may have missed custom ones. "
+            "SPF provides one alignment path. If DKIM is also configured, the domain has "
+            "redundant alignment paths and strong resilience."
         )
     elif dkim_inconclusive and spf_functional:
         level = "moderate"
         summary = (
-            "SPF is functional but DKIM status could not be determined (the check timed out), "
+            "SPF is functional but DKIM status could not be confirmed, "
             "and DMARC is not enforcing."
         )
         risk = (
-            "Two steps will improve this posture: verify DKIM signing is enabled for all sending services, "
-            "and move the DMARC policy from p=none to p=quarantine or p=reject. "
+            "Move the DMARC policy from p=none to p=quarantine or p=reject. "
             "Without enforcement, DMARC reports authentication failures but takes no action to prevent spoofing."
         )
     elif not dkim_functional and spf_functional:
