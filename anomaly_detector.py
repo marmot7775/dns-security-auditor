@@ -136,7 +136,7 @@ def detect_anomalies(raw_results: dict, score_result: dict, has_mx: bool, is_def
                 lookup_count = None
         if lookup_count is not None and lookup_count == 9:
             anomalies.append({
-                "title": "SPF at lookup limit",
+                "title": "SPF near lookup limit",
                 "description": (
                     "SPF is using 9 of the allowed 10 DNS lookups. "
                     "Adding one more include, a, or mx mechanism will push it "
@@ -144,7 +144,7 @@ def detect_anomalies(raw_results: dict, score_result: dict, has_mx: bool, is_def
                 ),
                 "severity": "medium",
                 "recommendation": (
-                    "Flatten SPF by replacing include chains with their resolved "
+                    "Flatten SPF by replacing include chains with their resolved IP addresses, "
                     "remove unused includes, or consolidate senders to stay under "
                     "the 10-lookup limit."
                 ),

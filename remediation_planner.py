@@ -255,7 +255,7 @@ def build_remediation_plan(
             "title": "Tighten SPF all Mechanism",
             "description": (
                 "Your SPF record ends with ?all (neutral), which provides no enforcement. "
-                "Replace it with ~all (soft fail) or -all (hard fail)."
+                "Replace it with ~all (soft fail)."
             ),
             "effort": "low",
             "impact": "high",
@@ -346,19 +346,8 @@ def build_remediation_plan(
             "check": "DMARC",
         })
 
-    # SPF ~all -- tighten to -all
-    if spf_record and spf_all == "~all":
-        long_term.append({
-            "title": "Tighten SPF to -all",
-            "description": (
-                "Switching from ~all (softfail) to -all (hardfail) makes a stronger authorization "
-                "declaration. In practice, the difference matters mainly for DMARC alignment; "
-                "few receivers reject on SPF result alone."
-            ),
-            "effort": "low",
-            "impact": "medium",
-            "check": "SPF",
-        })
+    # ~all is standard with DMARC; -all can cause issues with legacy receivers
+    # that reject on SPF hardfail before checking DMARC. No recommendation to change.
 
     # DKIM key rotation (only for mail-sending domains with DKIM)
     if has_any_dkim and not has_weak_dkim and has_mx:
