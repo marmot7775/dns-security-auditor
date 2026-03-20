@@ -205,9 +205,8 @@ RFC 7208 limits SPF to 10 DNS lookups to prevent performance issues. Each `inclu
 a lookup. If you exceed 10 lookups, your SPF record may be ignored entirely.
 
 **Solutions for Exceeding Limits:**
-- Use `ip4:` and `ip6:` mechanisms instead of `include:` where possible
-- Implement SPF flattening (convert includes to direct IP listings)
-- Remove services you no longer use
+- Remove includes for services you no longer use
+- Use `ip4:` and `ip6:` mechanisms where the provider's IP range is stable
 - Consider DKIM as your primary authentication method
 """,
 

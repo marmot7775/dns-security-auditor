@@ -544,7 +544,7 @@ class EmailSecurityScorer:
             count = spf['lookup_count']
             recommendations.append(
                 f"🟡 HIGH: SPF has {count} DNS lookups (limit is 10). "
-                f"Flatten includes to IP addresses or remove unused sending services"
+                f"Remove unused sending services to reduce lookup count"
             )
 
         # DKIM recommendations (only for mail-sending domains with detected keys)
