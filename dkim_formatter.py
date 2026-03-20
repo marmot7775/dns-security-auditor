@@ -117,7 +117,7 @@ def format_dkim_summary(domain: str, dkim_results: Dict, show_intelligence: bool
             if selector_info.get('vendor'):
                 vendor_note = f" [{selector_info['vendor']}]"
             
-            output.append(f"{status_icon} Selector: **{selector}**{fqdn_display} — {key_desc}{vendor_note}")
+            output.append(f"{status_icon} Selector: **{selector}**{fqdn_display}: {key_desc}{vendor_note}")
             output.append("")  # Add blank line between selectors for readability
     
     # Show tested but not found (only high-priority ones)

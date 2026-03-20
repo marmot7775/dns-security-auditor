@@ -310,13 +310,13 @@ def transform_dmarc(raw: Dict, tree_walk: Optional[Dict] = None) -> Dict:
         if inherited_policy == "none":
             fix = (
                 f"The inherited policy from <strong>{inherited_source}</strong> is p=none (monitoring only). "
-                f"Either move the parent domain to an enforcement policy, "
+                f"Either move the organizational domain to an enforcement policy, "
                 f"or publish a dedicated DMARC record at <strong>_dmarc.{domain_name}</strong>."
             )
         elif inherited_policy == "quarantine":
             fix = (
                 f"This subdomain inherits p=quarantine from <strong>{inherited_source}</strong>. "
-                f"To request rejection instead of spam delivery, upgrade the parent domain's policy "
+                f"To request rejection instead of spam delivery, upgrade the organizational domain's policy "
                 f"or publish a dedicated record at <strong>_dmarc.{domain_name}</strong> with p=reject."
             )
         else:

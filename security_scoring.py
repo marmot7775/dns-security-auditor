@@ -192,13 +192,13 @@ class EmailSecurityScorer:
             details['percentage'] = '100% (full enforcement)'
         elif pct >= 75:
             score += 2
-            details['percentage'] = f'{pct}% (nearly enforcing -- raise to 100)'
+            details['percentage'] = f'{pct}% (nearly enforcing; raise to 100)'
         elif pct >= 50:
             score += 1
             details['percentage'] = f'{pct}% (half of spoofed mail still gets through)'
         else:
             score += 0
-            details['percentage'] = f'{pct}% (negligible enforcement -- effectively monitoring only)'
+            details['percentage'] = f'{pct}% (negligible enforcement; effectively monitoring only)'
 
         # Reporting configured
         if dmarc.get('rua') or dmarc.get('ruf'):
@@ -221,7 +221,7 @@ class EmailSecurityScorer:
         elif adkim == 's' or aspf == 's':
             details['alignment'] = 'Mixed alignment (one strict, one relaxed)'
         else:
-            details['alignment'] = 'Relaxed alignment (default -- consider strict for tighter security)'
+            details['alignment'] = 'Relaxed alignment (default; consider strict for tighter security)'
 
         return min(score, 25), details
     
@@ -262,14 +262,14 @@ class EmailSecurityScorer:
             }
         elif lookup_count == 10:
             score += 1
-            details['lookup_count'] = f'{lookup_count} (at the breaking point -- reduce immediately)'
+            details['lookup_count'] = f'{lookup_count} (at the breaking point; reduce immediately)'
         elif lookup_count <= 8:
             score += 5
             details['lookup_count'] = f'{lookup_count} (good)'
         else:
             # 9 lookups
             score += 3
-            details['lookup_count'] = f'{lookup_count} (close to limit -- reduce)'
+            details['lookup_count'] = f'{lookup_count} (close to limit; reduce)'
 
         # Include count (fewer is better)
         include_count = spf.get('include_count', 0)
@@ -504,7 +504,7 @@ class EmailSecurityScorer:
         elif not dmarc.get('record') and inherited == 'none':
             recommendations.append(
                 "🟡 HIGH: Inherited DMARC policy is p=none (monitoring only). "
-                "Upgrade the parent domain's policy or publish a dedicated record with stronger enforcement"
+                "Upgrade the organizational domain's policy or publish a dedicated record with stronger enforcement"
             )
         elif dmarc.get('policy') == 'none':
             recommendations.append(
@@ -532,7 +532,7 @@ class EmailSecurityScorer:
             if aspf == 's' and not spf.get('record'):
                 recommendations.append(
                     "🔴 CRITICAL: DMARC requires strict SPF alignment (aspf=s) but no SPF record exists. "
-                    "SPF authentication will always fail -- publish an SPF record or switch to aspf=r"
+                    "SPF authentication will always fail. Publish an SPF record or switch to aspf=r"
                 )
             spf_all = (spf.get('all') or '').lower()
             if dmarc.get('policy') in ('reject', 'quarantine') and (dmarc.get('pct') or 100) == 100:

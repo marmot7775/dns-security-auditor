@@ -3708,16 +3708,13 @@ def _build_resilience_analysis(
     elif not dkim_functional and spf_functional:
         level = "moderate"
         summary = (
-            "No DKIM keys were detected. SPF is the only mechanism providing DMARC alignment. "
-            "This is a single point of failure, and SPF is the weaker of the two mechanisms."
+            "SPF is functional and provides one DMARC alignment path. "
+            "DKIM status could not be confirmed."
         )
         risk = (
-            "SPF checks the sending server's IP, which means it breaks when mail is forwarded "
-            "through mailing lists, auto-forwarding rules, or relay services. Forwarded messages "
-            "will fail SPF because the forwarding server's IP is not in the original SPF record. "
-            "Without DKIM as a second alignment path, those forwarded messages will fail DMARC. "
-            "Enable DKIM signing for all mail services to provide the more resilient alignment mechanism. "
-            "Custom selectors not in the test list may already be active; check your provider's DNS setup instructions."
+            "SPF provides IP-based authentication. DKIM selector names are chosen by each "
+            "mail service and are not publicly enumerable, so DKIM may be configured with "
+            "selectors this audit did not test."
         )
     elif not dmarc_enforcing:
         level = "moderate"
