@@ -8,6 +8,7 @@ Based on real-world consulting experience with 100+ enterprise deployments.
 
 import re
 import dns.resolver
+import dns.exception
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from typing import List, Dict, Set, Optional
 
@@ -229,7 +230,7 @@ def smart_dkim_check(domain: str, spf_record: Optional[str] = None, max_selector
                 if txt.startswith('v=spf1'):
                     spf_record = txt
                     break
-        except Exception:
+        except (dns.resolver.NXDOMAIN, dns.resolver.NoAnswer, dns.resolver.NoNameservers, dns.exception.DNSException):
             spf_record = None
     
     # SMART MODE: Use SPF analysis
@@ -268,7 +269,7 @@ def smart_dkim_check(domain: str, spf_record: Optional[str] = None, max_selector
             ),
         })
         return result
-    except Exception:
+    except (dns.resolver.NXDOMAIN, dns.resolver.NoAnswer, dns.resolver.NoNameservers, dns.exception.DNSException):
         pass  # No wildcard -- proceed normally
 
     # Test selectors in parallel
@@ -312,7 +313,7 @@ def smart_dkim_check(domain: str, spf_record: Optional[str] = None, max_selector
                 'vendor': matched_vendor,
                 'discovery_priority': 'HIGH' if matched_vendor else 'LOW',
             }
-        except Exception:
+        except (dns.resolver.NXDOMAIN, dns.resolver.NoAnswer, dns.resolver.NoNameservers, dns.exception.DNSException):
             return None
 
     found = []
