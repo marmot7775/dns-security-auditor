@@ -195,7 +195,7 @@ def transform_dmarc(raw: Dict, tree_walk: Optional[Dict] = None) -> Dict:
         explanation = (
             f"Your DMARC policy is <strong>p=reject</strong>. Receivers that honor DMARC "
             f"are requested to reject messages where neither SPF nor DKIM passes with an "
-            f"aligned domain. Most mailbox providers honor this policy. "
+            f"aligned domain. "
             f"DMARC requires only one of SPF or DKIM to pass with alignment -- "
             f"DKIM is the more resilient mechanism because it survives mail forwarding."
         )
