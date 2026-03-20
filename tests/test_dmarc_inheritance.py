@@ -416,7 +416,7 @@ class TestAnomalyDetectorInheritedDmarc(unittest.TestCase):
         result = detect_anomalies(raw, {}, has_mx=True)
         a = _find_anomaly(result, "without SPF")
         assert a is not None, "Expected 'DMARC enforcement without SPF' anomaly"
-        assert a["severity"] == "critical"
+        assert a["severity"] == "high"
 
     def test_inherited_quarantine_counts_as_present_and_enforced(self):
         """Inherited quarantine also triggers the 'enforcement without SPF' anomaly."""

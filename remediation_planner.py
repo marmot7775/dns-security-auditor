@@ -123,7 +123,7 @@ def build_remediation_plan(
     mx_records = mx.get("records") or []
     mx_count = mx.get("record_count") or len(mx_records)
 
-    blacklist_listed = bool(blacklist.get("listed"))
+    blacklist_listed = (blacklist.get("total_listings") or 0) > 0
 
     mta_sts_txt = mta_sts.get("txt_record") or ""
     mta_sts_mode = (mta_sts.get("policy_mode") or "").lower()
@@ -314,8 +314,11 @@ def build_remediation_plan(
             "check": "CAA",
         })
 
-    # Single MX host -- no redundancy
-    if has_mx and mx_count == 1:
+    # Single MX host -- no redundancy (skip for major providers who handle it internally)
+    _major_mx = {"google", "microsoft", "outlook", "proofpoint", "mimecast", "barracuda", "cloudflare"}
+    mx_providers = mx.get("providers") or []
+    _mx_is_major = any(any(m in p.lower() for m in _major_mx) for p in mx_providers)
+    if has_mx and mx_count == 1 and not _mx_is_major:
         short_term.append({
             "title": "Add a Secondary MX Host",
             "description": (

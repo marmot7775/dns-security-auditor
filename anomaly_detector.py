@@ -109,10 +109,10 @@ def detect_anomalies(raw_results: dict, score_result: dict, has_mx: bool, is_def
                     "SPF alignment can never pass, so every message must rely "
                     "solely on DKIM to satisfy DMARC."
                 ).format(dmarc_policy),
-                "severity": "critical",
+                "severity": "high",
                 "recommendation": (
-                    "Publish an SPF record (e.g. \"v=spf1 include:your-esp.com -all\") "
-                    "so that SPF alignment is available as a DMARC pass mechanism."
+                    "Publish an SPF record (e.g. \"v=spf1 include:your-esp.com ~all\") "
+                    "so that SPF alignment is available as a second DMARC pass mechanism."
                 ),
             })
 
@@ -157,9 +157,9 @@ def detect_anomalies(raw_results: dict, score_result: dict, has_mx: bool, is_def
             anomalies.append({
                 "title": "MTA-STS configured without TLS-RPT",
                 "description": (
-                    "MTA-STS is enforcing TLS for inbound mail but no TLS-RPT "
-                    "record exists. TLS delivery failures are silently discarded "
-                    "with no way to detect them."
+                    "MTA-STS enforces TLS for inbound delivery, but without TLS-RPT "
+                    "you have no visibility into failures. If a sending server cannot "
+                    "establish TLS, delivery fails and you will not know unless senders report it."
                 ),
                 "severity": "medium",
                 "recommendation": (
