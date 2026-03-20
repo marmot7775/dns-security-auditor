@@ -1,6 +1,6 @@
 /* ==========================================================================
    DNS Security Auditor - Frontend Application
-   v2.0 — Scoped audits, severity sorting, auto-collapse
+   v2.0  --  Scoped audits, severity sorting, auto-collapse
    ========================================================================== */
 
 const API_BASE = '/api';
@@ -377,10 +377,36 @@ function renderResults(data) {
     document.getElementById('share-btn').onclick = () => {
         _copyToClipboard(window.location.href, document.getElementById('share-btn')?.querySelector('span'), 'Share');
     };
+
+    // "Run another audit" button at bottom of results
+    let runAnother = document.getElementById('run-another-btn');
+    if (!runAnother) {
+        runAnother = document.createElement('div');
+        runAnother.id = 'run-another-btn';
+        runAnother.className = 'run-another';
+        runAnother.innerHTML = `
+            <button class="audit-btn run-another-btn" type="button">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+                     stroke-linecap="round" stroke-linejoin="round" width="16" height="16">
+                    <polyline points="23 4 23 10 17 10"/>
+                    <path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"/>
+                </svg>
+                <span>Run Another Audit</span>
+            </button>
+        `;
+        resultsSection.appendChild(runAnother);
+        runAnother.querySelector('button').addEventListener('click', () => {
+            window.scrollTo({ top: 0, behavior: 'smooth' });
+            setTimeout(() => {
+                domainInput.value = '';
+                domainInput.focus();
+            }, 400);
+        });
+    }
 }
 
 // ============================================================
-// Result card — auto-collapse passing, expand fail/warn
+// Result card  --  auto-collapse passing, expand fail/warn
 // ============================================================
 
 function createResultCard(check, index) {
@@ -414,6 +440,22 @@ function createResultCard(check, index) {
 
     card.querySelector('.result-header').addEventListener('click', () => {
         card.classList.toggle('expanded');
+        card.querySelector('.result-header').setAttribute('aria-expanded',
+            card.classList.contains('expanded') ? 'true' : 'false');
+    });
+
+    // Keyboard accessibility
+    const header = card.querySelector('.result-header');
+    header.setAttribute('tabindex', '0');
+    header.setAttribute('role', 'button');
+    header.setAttribute('aria-expanded', isExpanded ? 'true' : 'false');
+    header.addEventListener('keydown', (e) => {
+        if (e.key === 'Enter' || e.key === ' ') {
+            e.preventDefault();
+            card.classList.toggle('expanded');
+            header.setAttribute('aria-expanded',
+                card.classList.contains('expanded') ? 'true' : 'false');
+        }
     });
 
     // Copy buttons (DNS record blocks + fix record blocks)
@@ -454,7 +496,7 @@ function renderCheckBody(check) {
         html += `<div class="explanation">${sanitizeHtml(check.explanation)}</div>`;
     }
 
-    // Detail items — sorted by severity within each card
+    // Detail items  --  sorted by severity within each card
     if (check.details && check.details.length > 0) {
         const detailOrder = { error: 0, warning: 1, info: 2, good: 3 };
         const sorted = [...check.details].sort((a, b) =>
@@ -563,7 +605,7 @@ function renderTreeWalkFull(tw) {
             receivers walk up the DNS hierarchy to find an applicable policy.</div>`;
     }
 
-    // Timeline steps — pre-scan to find policy source index for line coloring
+    // Timeline steps  --  pre-scan to find policy source index for line coloring
     const policyIdx = tw.steps.findIndex((s, i) =>
         s.found && tw.policy_source && s.domain === tw.policy_source && tw.is_subdomain);
 
@@ -804,6 +846,13 @@ function sanitizeHtml(html) {
                         .filter(name => tag !== 'a' || !ALLOWED_LINK_ATTRS.includes(name));
                     for (const name of attrsToRemove) {
                         child.removeAttribute(name);
+                    }
+                    // Block non-http(s) protocols on links (XSS prevention)
+                    if (tag === 'a') {
+                        const href = child.getAttribute('href') || '';
+                        if (href && !/^https?:\/\//i.test(href)) {
+                            child.removeAttribute('href');
+                        }
                     }
                     clean(child);
                 }
