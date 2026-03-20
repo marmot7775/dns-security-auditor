@@ -226,12 +226,34 @@ def transform_dmarc(raw: Dict, tree_walk: Optional[Dict] = None) -> Dict:
         elif policy == "none":
             details.append({"type": "warning", "text": "Policy p=none provides no enforcement"})
 
-        if raw.get("rua"):
+        report_dests = raw.get("report_destinations")
+        if report_dests and raw.get("rua"):
+            rua_dests = [d for d in report_dests if d["type"] == "rua"]
+            unauthorized = [d for d in rua_dests if d.get("authorized") is False]
+            if unauthorized:
+                details.append({
+                    "type": "error",
+                    "text": (
+                        f"Aggregate reporting (rua): {len(rua_dests)} destination(s), "
+                        f"{len(unauthorized)} NOT authorized (reports silently dropped)"
+                    ),
+                })
+            else:
+                details.append({
+                    "type": "good",
+                    "text": f"Aggregate reporting (rua): {len(rua_dests)} destination(s), all authorized",
+                })
+        elif raw.get("rua"):
             details.append({"type": "good", "text": "Aggregate reporting (rua) is configured"})
         else:
             details.append({"type": "warning", "text": "No aggregate reporting (rua) configured"})
 
-        if raw.get("ruf"):
+        if report_dests and raw.get("ruf"):
+            details.append({
+                "type": "info",
+                "text": "Forensic reporting (ruf) configured (note: most major providers no longer send forensic reports)",
+            })
+        elif raw.get("ruf"):
             details.append({"type": "good", "text": "Forensic reporting (ruf) is configured"})
 
         if raw.get("sp"):

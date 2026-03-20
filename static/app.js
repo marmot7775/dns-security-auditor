@@ -420,9 +420,19 @@ function renderResults(data) {
         if ((check.name || '').toUpperCase().includes('DMARC') && data.dmarc_eval) {
             check._dmarc_eval = data.dmarc_eval;
         }
-        // Attach SPF execution trace to the SPF check
+        // Attach SPF execution trace + tree to the SPF check
         if ((check.name || '').toUpperCase() === 'SPF' && data.spf_execution) {
             check._spf_execution = data.spf_execution;
+        }
+        if ((check.name || '').toUpperCase() === 'SPF' && data.spf_tree) {
+            check._spf_tree = data.spf_tree;
+        }
+        // Attach report chain and roadmap to DMARC check
+        if ((check.name || '').toUpperCase().includes('DMARC') && data.report_chain) {
+            check._report_chain = data.report_chain;
+        }
+        if ((check.name || '').toUpperCase().includes('DMARC') && data.dmarc_roadmap) {
+            check._dmarc_roadmap = data.dmarc_roadmap;
         }
         const card = createResultCard(check, i);
         resultsList.appendChild(card);
@@ -610,6 +620,21 @@ function renderCheckBody(check) {
     // DMARC evaluation summary (after tree walk)
     if (check._dmarc_eval) {
         html += renderDmarcEvaluation(check._dmarc_eval);
+    }
+
+    // DMARC report delivery chain
+    if (check._report_chain) {
+        html += renderReportChain(check._report_chain);
+    }
+
+    // DMARC migration roadmap
+    if (check._dmarc_roadmap) {
+        html += renderDmarcRoadmap(check._dmarc_roadmap);
+    }
+
+    // SPF include tree
+    if (check._spf_tree) {
+        html += renderSpfTree(check._spf_tree);
     }
 
     // Fix records and recommended actions removed from web UI.
@@ -926,6 +951,257 @@ function renderDmarcEvaluation(ev) {
                 </div>
             </div>
         </div>`;
+}
+
+// ============================================================
+// DMARC Report Delivery Chain
+// ============================================================
+
+function renderReportChain(rc) {
+    if (!rc || !rc.report_destinations || rc.report_destinations.length === 0) return '';
+
+    const dests = rc.report_destinations;
+    const hasUnauthorized = dests.some(d => d.authorized === false);
+    const introClass = hasUnauthorized ? 'rc-intro rc-intro-warn' : 'rc-intro';
+    const introText = hasUnauthorized
+        ? 'One or more external report destinations are not authorized. Reports to those addresses will be silently dropped.'
+        : 'All report destinations are properly configured to receive DMARC reports.';
+
+    let html = `
+        <div class="report-chain rc-animated">
+            <div class="se-header-row">
+                <div class="se-header">DMARC Report Delivery Chain</div>
+                <a class="tw-spec-badge" href="https://datatracker.ietf.org/doc/html/rfc7489#section-7.1"
+                   target="_blank" rel="noopener">rfc7489 &sect;7.1</a>
+            </div>
+            <div class="${introClass}">${escapeHtml(introText)}</div>
+            <div class="rc-dests">`;
+
+    dests.forEach((dest, i) => {
+        const delay = (0.05 + i * 0.12).toFixed(2);
+        const typeClass = dest.type === 'rua' ? 'rc-type-rua' : 'rc-type-ruf';
+
+        let authHtml = '';
+        if (dest.authorized === true) {
+            authHtml = '<span class="rc-auth rc-authorized">&#10003; authorized</span>';
+        } else if (dest.authorized === false) {
+            authHtml = '<span class="rc-auth rc-unauthorized">&#10005; not authorized</span>';
+        } else {
+            authHtml = '<span class="rc-auth rc-same-domain">same domain</span>';
+        }
+
+        let mxHtml = '';
+        if (dest.has_mx === true) {
+            mxHtml = '<span class="rc-mx-ok">MX &#10003;</span>';
+        } else if (dest.has_mx === false && dest.is_external) {
+            mxHtml = '<span class="rc-mx-fail">no MX</span>';
+        }
+
+        let serviceHtml = '';
+        if (dest.service) {
+            serviceHtml = `<span class="se-vendor-badge se-vendor-email_security">${escapeHtml(dest.service)}</span>`;
+        }
+
+        html += `
+            <div class="rc-dest" style="animation-delay:${delay}s">
+                <span class="rc-type ${typeClass}">${dest.type}</span>
+                <span class="rc-address">${escapeHtml(dest.address)}</span>
+                ${serviceHtml}
+                ${authHtml}
+                ${mxHtml}
+            </div>`;
+    });
+
+    html += '</div>';
+
+    if (rc.ruf_provider_note) {
+        html += `<div class="rc-footnote">Note: Most major providers (Google, Microsoft, Yahoo) no longer send forensic (ruf) reports due to privacy concerns.</div>`;
+    }
+
+    html += '</div>';
+    return html;
+}
+
+// ============================================================
+// DMARC Migration Roadmap
+// ============================================================
+
+function renderDmarcRoadmap(rm) {
+    if (!rm) return '';
+    if (rm.current_stage === 'full_reject') return renderRoadmapComplete();
+
+    let html = `
+        <div class="dmarc-roadmap rm-animated">
+            <div class="se-header-row">
+                <div class="se-header">DMARC Migration Roadmap</div>
+                <a class="tw-spec-badge" href="https://datatracker.ietf.org/doc/html/rfc7489"
+                   target="_blank" rel="noopener">rfc7489</a>
+            </div>
+            <div class="rm-progress-track">
+                <div class="rm-progress-fill" style="width:${rm.progress_pct}%"></div>
+            </div>
+            <div class="rm-stage-label">${escapeHtml(rm.current_stage_label)} &middot; ${rm.progress_pct}% complete</div>
+            <div class="rm-steps">`;
+
+    rm.steps.forEach((step, i) => {
+        const isLast = i === rm.steps.length - 1;
+        const statusClass = `rm-${step.status}`;
+        const lastClass = isLast ? 'rm-last' : '';
+        const delay = (0.08 + i * 0.1).toFixed(2);
+
+        let dotContent = '';
+        if (step.status === 'complete') dotContent = '&#10003;';
+        else if (step.status === 'current') dotContent = '&#9654;';
+        else if (step.status === 'blocked') dotContent = '&#10005;';
+        else dotContent = `${step.stage}`;
+
+        let dnsHtml = '';
+        if (step.dns_record && step.status !== 'complete') {
+            dnsHtml = `
+                <div class="record-block rm-record-block">
+                    <span class="record-text">${escapeHtml(step.dns_record)}</span>
+                    <button class="copy-btn">Copy</button>
+                </div>`;
+        }
+
+        let blockersHtml = '';
+        if (step.prerequisites && step.prerequisites.length > 0 && step.status === 'blocked') {
+            blockersHtml = '<div class="rm-blockers">' +
+                step.prerequisites.map(b => `<div>${escapeHtml(b)}</div>`).join('') +
+                '</div>';
+        }
+
+        let warningsHtml = '';
+        if (step.warnings && step.warnings.length > 0 && step.status !== 'complete') {
+            warningsHtml = '<div class="rm-warnings">' +
+                step.warnings.map(w => `<div>${escapeHtml(w)}</div>`).join('') +
+                '</div>';
+        }
+
+        let durationHtml = '';
+        if (step.estimated_duration && step.status !== 'complete') {
+            durationHtml = `<div class="rm-duration">${escapeHtml(step.estimated_duration)}</div>`;
+        }
+
+        html += `
+            <div class="rm-step ${statusClass} ${lastClass}" style="animation-delay:${delay}s">
+                <div class="rm-connector">
+                    <div class="rm-dot">${dotContent}</div>
+                </div>
+                <div class="rm-content">
+                    <div class="rm-title">${escapeHtml(step.title)}</div>
+                    <div class="rm-desc">${escapeHtml(step.description)}</div>
+                    ${dnsHtml}
+                    ${blockersHtml}
+                    ${warningsHtml}
+                    ${durationHtml}
+                </div>
+            </div>`;
+    });
+
+    html += '</div></div>';
+    return html;
+}
+
+function renderRoadmapComplete() {
+    return `
+        <div class="dmarc-roadmap rm-animated">
+            <div class="se-header-row">
+                <div class="se-header">DMARC Migration Roadmap</div>
+                <a class="tw-spec-badge" href="https://datatracker.ietf.org/doc/html/rfc7489"
+                   target="_blank" rel="noopener">rfc7489</a>
+            </div>
+            <div class="rm-progress-track">
+                <div class="rm-progress-fill" style="width:100%"></div>
+            </div>
+            <div class="rm-complete-body">
+                <div class="rm-complete-check">&#10003;</div>
+                <div class="rm-complete-title">DMARC deployment complete</div>
+                <div class="rm-complete-text">This domain is at p=reject -- the gold standard for email authentication. All messages that fail DMARC are blocked entirely.</div>
+            </div>
+        </div>`;
+}
+
+// ============================================================
+// SPF Include Tree
+// ============================================================
+
+function renderSpfTree(tree) {
+    if (!tree || !tree.root) return '';
+
+    const budgetLabel = tree.over_limit
+        ? `${tree.total_lookups} / ${tree.limit} lookups (over limit)`
+        : `${tree.total_lookups} / ${tree.limit} lookups`;
+    const budgetClass = tree.over_limit ? 'se-counter exceeded' : 'se-counter';
+
+    let html = `
+        <div class="spf-tree st-animated">
+            <div class="se-header-row">
+                <div class="se-header">SPF Include Tree</div>
+                <a class="tw-spec-badge" href="https://datatracker.ietf.org/doc/html/rfc7208"
+                   target="_blank" rel="noopener">rfc7208</a>
+                <span class="${budgetClass}">${budgetLabel}</span>
+            </div>`;
+
+    html += renderTreeNode(tree.root, tree.total_lookups, true);
+
+    html += '</div>';
+    return html;
+}
+
+function renderTreeNode(node, totalLookups, isRoot) {
+    if (!node) return '';
+
+    const openAttr = isRoot ? ' open' : '';
+    const budgetPct = totalLookups > 0 ? Math.round((node.subtree_lookups / totalLookups) * 100) : 0;
+    const costClass = budgetPct > 60 ? 'st-budget-high'
+                    : budgetPct > 30 ? 'st-budget-mid'
+                    : 'st-budget-low';
+
+    let vendorHtml = '';
+    if (node.vendor) {
+        const catClass = node.vendor_category ? `se-vendor-${node.vendor_category}` : '';
+        vendorHtml = `<span class="se-vendor-badge ${catClass}">${escapeHtml(node.vendor)}</span>`;
+    }
+
+    let costHtml = '';
+    if (node.subtree_lookups > 0) {
+        costHtml = `<span class="st-cost ${costClass}">${node.subtree_lookups} lookup${node.subtree_lookups > 1 ? 's' : ''}</span>`;
+    }
+
+    let html = `<details class="st-node"${openAttr}>`;
+    html += `<summary><span class="st-domain">${escapeHtml(node.domain)}</span> ${vendorHtml} ${costHtml}</summary>`;
+
+    // Record
+    if (node.record) {
+        html += `<div class="st-record">${escapeHtml(node.record)}</div>`;
+    }
+
+    // IPs
+    if (node.ips && node.ips.length > 0) {
+        html += '<div class="st-ips">';
+        node.ips.forEach(ip => {
+            html += `<span class="st-ip">${escapeHtml(ip)}</span>`;
+        });
+        html += '</div>';
+    }
+
+    // Children
+    if (node.children && node.children.length > 0) {
+        html += '<div class="st-children">';
+        node.children.forEach(child => {
+            html += renderTreeNode(child, totalLookups, false);
+        });
+        html += '</div>';
+    }
+
+    // Terminal
+    if (node.terminal && isRoot) {
+        html += `<div class="st-terminal">${escapeHtml(node.terminal)}</div>`;
+    }
+
+    html += '</details>';
+    return html;
 }
 
 // ============================================================
