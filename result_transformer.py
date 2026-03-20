@@ -280,7 +280,7 @@ def transform_dmarc(raw: Dict, tree_walk: Optional[Dict] = None) -> Dict:
         if report_dests and raw.get("ruf"):
             details.append({
                 "type": "info",
-                "text": "Forensic reporting (ruf) configured (note: most major providers no longer send forensic reports)",
+                "text": "Forensic reporting (ruf) configured (note: most mailbox providers no longer send failure reports because of PII concerns)",
             })
         elif raw.get("ruf"):
             details.append({"type": "good", "text": "Forensic reporting (ruf) is configured"})
