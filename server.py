@@ -615,6 +615,10 @@ if STATIC_DIR.exists():
     @app.get("/privacy", tags=["Pages"])
     async def privacy():
         return FileResponse(str(STATIC_DIR / "privacy.html"))
+
+    @app.get("/methodology", tags=["Pages"])
+    async def methodology():
+        return FileResponse(str(STATIC_DIR / "methodology.html"))
 else:
     @app.get("/")
     async def index():
