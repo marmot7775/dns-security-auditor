@@ -3145,10 +3145,15 @@ details.st-node > summary:hover {
    RESPONSIVE FIXES -- comprehensive coverage
    ========================================================================== */
 
-/* Prevent horizontal scroll on all viewports */
-html, body {
+/* Prevent horizontal scroll on all viewports.
+   overflow-x: clip on html avoids the double-scroll-context browser quirk
+   where overflow-x: hidden on BOTH html and body causes body to become its
+   own scroll container, which clips the footer out of the visible area. */
+html {
+    overflow-x: clip;
+}
+body {
     overflow-x: hidden;
-    scroll-behavior: smooth;
 }
 
 /* -- Tablet (768px): banner stacks, tagline hides -- */
