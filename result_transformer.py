@@ -103,7 +103,7 @@ def transform_dmarc(raw: Dict, tree_walk: Optional[Dict] = None) -> Dict:
         status = "fail"
         pill_label = "Missing"
     elif policy == "reject":
-        verdict = "p=reject (receivers requested to reject failures)"
+        verdict = "p=reject (authentication failures are rejected)"
         # p=reject is always a pass regardless of what the audit engine returned
         # (the engine may flag "warning" for missing rua, but the policy itself is correct)
         status = "pass"
@@ -146,8 +146,7 @@ def transform_dmarc(raw: Dict, tree_walk: Optional[Dict] = None) -> Dict:
                 f"<strong>_dmarc.{raw.get('domain', '')}</strong>, but inherits "
                 f"<strong>p=reject</strong> from the organizational domain "
                 f"<strong>{inherited_source}</strong> via the {tag_label} tag. "
-                f"Receivers are requested to reject messages where neither "
-                f"SPF nor DKIM passes with aligned domains."
+                f"Messages that fail both SPF and DKIM alignment will be rejected."
                 + _method_note + _best_practice
             )
         elif inherited_policy == "quarantine":
@@ -156,7 +155,7 @@ def transform_dmarc(raw: Dict, tree_walk: Optional[Dict] = None) -> Dict:
                 f"<strong>_dmarc.{raw.get('domain', '')}</strong>, but inherits "
                 f"<strong>p=quarantine</strong> from the organizational domain "
                 f"<strong>{inherited_source}</strong> via the {tag_label} tag. "
-                f"Receivers are requested to route failing messages to the spam folder."
+                f"Messages that fail authentication will be routed to the spam folder."
                 + _method_note + _best_practice
             )
         elif inherited_policy == "none":
@@ -198,17 +197,16 @@ def transform_dmarc(raw: Dict, tree_walk: Optional[Dict] = None) -> Dict:
         )
     elif policy == "quarantine":
         explanation = (
-            f"Your DMARC policy is <strong>p=quarantine</strong>. Receivers that honor DMARC "
-            f"are requested to route messages to the spam folder when neither SPF nor DKIM "
-            f"passes with an aligned domain. DMARC requires only one of SPF or DKIM to pass "
-            f"with alignment. DKIM is preferred because it survives mail forwarding."
+            f"The enforcing DMARC policy <strong>p=quarantine</strong> tells mail receivers "
+            f"to send messages to spam when neither SPF nor DKIM passes with an aligned domain. "
+            f"Only one of SPF or DKIM needs to pass with alignment for the message to be delivered normally. "
+            f"DKIM is the more resilient mechanism because it survives mail forwarding."
         )
     elif policy == "reject":
         explanation = (
-            f"Your DMARC policy is <strong>p=reject</strong>. Receivers that honor DMARC "
-            f"are requested to reject messages where neither SPF nor DKIM passes with an "
-            f"aligned domain. "
-            f"DMARC requires only one of SPF or DKIM to pass with alignment. "
+            f"The enforcing DMARC policy <strong>p=reject</strong> tells mail receivers "
+            f"to reject messages outright when neither SPF nor DKIM passes with an aligned domain. "
+            f"Only one of SPF or DKIM needs to pass with alignment for the message to be delivered. "
             f"DKIM is the more resilient mechanism because it survives mail forwarding."
         )
     else:
@@ -249,9 +247,9 @@ def transform_dmarc(raw: Dict, tree_walk: Optional[Dict] = None) -> Dict:
 
     elif record:
         if policy == "reject":
-            details.append({"type": "good", "text": "Policy p=reject: receivers requested to reject authentication failures"})
+            details.append({"type": "good", "text": "Policy p=reject: authentication failures are rejected"})
         elif policy == "quarantine":
-            details.append({"type": "good", "text": "Policy p=quarantine: receivers requested to send failures to spam"})
+            details.append({"type": "good", "text": "Policy p=quarantine: authentication failures are sent to spam"})
         elif policy == "none":
             details.append({"type": "warning", "text": "Policy p=none: monitoring only, no enforcement requested"})
 

@@ -3496,12 +3496,11 @@ def _build_resilience_analysis(
         )
         if _inh_policy == "reject":
             dmarc_note += (
-                "Receivers are requested to block messages that fail "
-                "both SPF and DKIM alignment."
+                "Messages that fail both SPF and DKIM alignment will be rejected."
             )
         else:
             dmarc_note += (
-                "Receivers are requested to route failing messages "
+                "Failing messages will be routed "
                 "to the spam or junk folder."
             )
         dmarc_note += (
