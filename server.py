@@ -12,7 +12,10 @@ Usage:
     uvicorn server:app --host 0.0.0.0 --port 8000
 """
 
+import asyncio
+import json
 import logging
+import queue
 import re
 import threading
 import time
@@ -24,7 +27,7 @@ from urllib.parse import quote
 
 from fastapi import FastAPI, Query, HTTPException, Request
 from fastapi.staticfiles import StaticFiles
-from fastapi.responses import FileResponse, JSONResponse, PlainTextResponse, Response
+from fastapi.responses import FileResponse, JSONResponse, PlainTextResponse, Response, StreamingResponse
 from fastapi.middleware.cors import CORSMiddleware
 from starlette.middleware.base import BaseHTTPMiddleware
 
@@ -287,6 +290,109 @@ async def audit_domain(
     _set_cached(cache_key, result)
 
     return JSONResponse(content=result)
+
+
+# ============================================================
+# SSE Streaming Endpoint
+# ============================================================
+
+@app.get("/api/audit/stream", tags=["Audit"])
+async def audit_stream(
+    request: Request,
+    domain: str = Query(..., description="Domain to audit"),
+    selector: Optional[str] = Query(None, description="DKIM selector"),
+    scope: Optional[str] = Query(None, description="Audit scope"),
+    nocache: bool = Query(False, description="Bypass cache"),
+):
+    """Stream audit progress via Server-Sent Events."""
+    # Rate limiting
+    client_ip = _get_client_ip(request)
+    if not _check_rate_limit(client_ip):
+        # SSE can't return 429 cleanly, so stream an error event
+        async def _rate_error():
+            yield f"data: {json.dumps({'error': 'Rate limit exceeded. Please wait a minute before trying again.'})}\n\n"
+        return StreamingResponse(_rate_error(), media_type="text/event-stream")
+
+    domain = _validate_domain(domain)
+    if selector and not SELECTOR_PATTERN.match(selector.strip()):
+        raise HTTPException(status_code=400, detail="Invalid DKIM selector")
+    log.info("SSE audit requested: %s (scope=%s, ip=%s)", domain, scope or "complete", client_ip)
+
+    cache_key = f"{domain}:{selector or ''}:{scope or 'complete'}"
+
+    # Check cache -- if cached, send result immediately
+    if not nocache:
+        cached = _get_cached(cache_key)
+        if cached:
+            log.info("SSE cache hit: %s", domain)
+            async def _cached_stream():
+                yield f"data: {json.dumps({'done': True, 'result': cached, 'cached': True})}\n\n"
+            return StreamingResponse(_cached_stream(), media_type="text/event-stream")
+
+    # Run audit in a background thread, streaming progress via a queue
+    progress_q: queue.Queue = queue.Queue()
+
+    def _progress_callback(step_name, completed, total):
+        progress_pct = int((completed / total) * 100) if total else 0
+        progress_q.put({
+            "step": step_name,
+            "progress": progress_pct,
+            "total_checks": total,
+            "completed": completed,
+        })
+
+    def _run_audit():
+        try:
+            result = run_full_audit(domain, dkim_selector=selector, scope=scope,
+                                    progress_callback=_progress_callback)
+            progress_q.put({"_done": True, "_result": result})
+        except Exception as e:
+            log.error("SSE audit failed for %s: %s", domain, str(e)[:200], exc_info=True)
+            error_result = {
+                "domain": domain,
+                "timestamp": datetime.now().isoformat(),
+                "score": {"total": 0, "grade": "?"},
+                "checks": [],
+                "priority_fixes": [],
+                "vendors": [],
+                "error": "Audit could not complete. Please try again or check that the domain exists.",
+            }
+            progress_q.put({"_done": True, "_result": error_result})
+
+    audit_thread = threading.Thread(target=_run_audit, daemon=True)
+    audit_thread.start()
+
+    async def _event_stream():
+        loop = asyncio.get_running_loop()
+        while True:
+            try:
+                msg = await loop.run_in_executor(None, lambda: progress_q.get(timeout=0.2))
+            except queue.Empty:
+                # Check if client disconnected
+                if await request.is_disconnected():
+                    log.info("SSE client disconnected: %s", domain)
+                    return
+                continue
+
+            if "_done" in msg:
+                result = msg["_result"]
+                _set_cached(cache_key, result)
+                start_elapsed = result.get("elapsed_seconds", 0)
+                log.info("SSE audit complete: %s -- %.2fs, grade=%s",
+                         domain, start_elapsed, result.get("score", {}).get("grade", "?"))
+                yield f"data: {json.dumps({'done': True, 'result': result})}\n\n"
+                return
+            else:
+                yield f"data: {json.dumps(msg)}\n\n"
+
+    return StreamingResponse(
+        _event_stream(),
+        media_type="text/event-stream",
+        headers={
+            "Cache-Control": "no-cache",
+            "X-Accel-Buffering": "no",
+        },
+    )
 
 
 # ============================================================

@@ -93,23 +93,72 @@ async function runAudit(domain) {
     showLoading();
     hideResults();
 
-    try {
-        const selectorVal = document.getElementById('selector-input')?.value?.trim() || '';
-        let auditUrl = `${API_BASE}/audit?domain=${encodeURIComponent(domain)}`;
-        if (selectorVal) auditUrl += `&selector=${encodeURIComponent(selectorVal)}`;
-        const resp = await fetch(auditUrl);
+    const selectorVal = document.getElementById('selector-input')?.value?.trim() || '';
+    let streamUrl = `${API_BASE}/audit/stream?domain=${encodeURIComponent(domain)}`;
+    if (selectorVal) streamUrl += `&selector=${encodeURIComponent(selectorVal)}`;
+    if (currentScope && currentScope !== 'complete') streamUrl += `&scope=${encodeURIComponent(currentScope)}`;
 
+    try {
+        const resp = await fetch(streamUrl);
         if (!resp.ok) {
             const err = await resp.json().catch(() => ({}));
             throw new Error(err.detail || `Audit failed (HTTP ${resp.status})`);
         }
 
-        const data = await resp.json();
-        renderResults(data);
+        const reader = resp.body.getReader();
+        const decoder = new TextDecoder();
+        let buffer = '';
+
+        while (true) {
+            const { done, value } = await reader.read();
+            if (done) break;
+
+            buffer += decoder.decode(value, { stream: true });
+            const lines = buffer.split('\n');
+            // Keep the last incomplete line in the buffer
+            buffer = lines.pop();
+
+            for (const line of lines) {
+                if (!line.startsWith('data: ')) continue;
+                const payload = line.slice(6);
+                let msg;
+                try { msg = JSON.parse(payload); } catch { continue; }
+
+                if (msg.error) {
+                    throw new Error(msg.error);
+                }
+
+                if (msg.done) {
+                    renderResults(msg.result);
+                    return;
+                }
+
+                // Progress update
+                updateLoadingProgress(msg.step, msg.progress);
+            }
+        }
+
+        // If we got here without a done message, fall back to JSON endpoint
+        throw new Error('Stream ended without results');
     } catch (err) {
-        console.error('Audit error:', err);
-        hideLoading();
-        showError(err.message || 'Audit failed. Please check the domain and try again.');
+        console.error('SSE audit error:', err);
+        // Fall back to the regular JSON endpoint
+        try {
+            let auditUrl = `${API_BASE}/audit?domain=${encodeURIComponent(domain)}`;
+            if (selectorVal) auditUrl += `&selector=${encodeURIComponent(selectorVal)}`;
+            if (currentScope && currentScope !== 'complete') auditUrl += `&scope=${encodeURIComponent(currentScope)}`;
+            const resp = await fetch(auditUrl);
+            if (!resp.ok) {
+                const fallbackErr = await resp.json().catch(() => ({}));
+                throw new Error(fallbackErr.detail || `Audit failed (HTTP ${resp.status})`);
+            }
+            const data = await resp.json();
+            renderResults(data);
+        } catch (fallbackErr) {
+            console.error('Fallback audit error:', fallbackErr);
+            hideLoading();
+            showError(fallbackErr.message || 'Audit failed. Please check the domain and try again.');
+        }
     }
 }
 
@@ -117,23 +166,25 @@ async function runAudit(domain) {
 // Loading / Error
 // ============================================================
 
-const LOADING_STEPS = [
-    { pct: 6,  msg: 'Resolving DNS records...' },
-    { pct: 13, msg: 'Checking DMARC policy...' },
-    { pct: 20, msg: 'Analyzing SPF configuration...' },
-    { pct: 28, msg: 'Discovering DKIM selectors...' },
-    { pct: 35, msg: 'Checking MX records...' },
-    { pct: 42, msg: 'Validating MTA-STS...' },
-    { pct: 48, msg: 'Checking TLS-RPT...' },
-    { pct: 54, msg: 'Looking for BIMI record...' },
-    { pct: 60, msg: 'Verifying DNSSEC chain...' },
-    { pct: 66, msg: 'Checking CAA records...' },
-    { pct: 72, msg: 'Checking DANE TLSA records...' },
-    { pct: 78, msg: 'Querying certificate transparency logs...' },
-    { pct: 85, msg: 'Checking IP and domain blocklists...' },
-    { pct: 91, msg: 'Fingerprinting email services...' },
-    { pct: 97, msg: 'Calculating security score...' },
-];
+// Map backend step names to friendly status messages
+const STEP_MESSAGES = {
+    'Tree Walk':                'Resolving DNS records...',
+    'DMARC':                    'Checking DMARC policy...',
+    'MX':                       'Checking MX records...',
+    'SPF':                      'Analyzing SPF configuration...',
+    'MTA-STS':                  'Validating MTA-STS...',
+    'TLS-RPT':                  'Checking TLS-RPT...',
+    'BIMI':                     'Looking for BIMI record...',
+    'DNSSEC':                   'Verifying DNSSEC chain...',
+    'CAA':                      'Checking CAA records...',
+    'Nameservers':              'Checking nameservers...',
+    'DANE':                     'Checking DANE TLSA records...',
+    'DKIM':                     'Discovering DKIM selectors...',
+    'Certificate Transparency': 'Querying certificate transparency logs...',
+    'Blacklist':                'Checking IP and domain blocklists...',
+    'Vendor Fingerprinting':    'Fingerprinting email services...',
+    'Scoring':                  'Calculating security score...',
+};
 
 function showLoading() {
     loadingSection.style.display = 'block';
@@ -142,33 +193,27 @@ function showLoading() {
         <div class="loading-bar-track">
             <div class="loading-bar-fill" id="loading-bar"></div>
         </div>
-        <div class="loading-status" id="loading-status">Resolving DNS records...</div>
+        <div class="loading-status" id="loading-status">Starting audit...</div>
     `;
     resultsSection.style.display = 'none';
     auditBtn.disabled = true;
     auditBtn.classList.add('is-loading');
 
-    const bar    = document.getElementById('loading-bar');
-    const status = document.getElementById('loading-status');
+    const bar = document.getElementById('loading-bar');
     if (bar) bar.style.width = '0%';
-
-    let step = 0;
-    _loadingInterval = setInterval(() => {
-        if (step < LOADING_STEPS.length) {
-            if (bar) bar.style.width = LOADING_STEPS[step].pct + '%';
-            if (status) status.textContent = LOADING_STEPS[step].msg;
-            step++;
-        }
-    }, 350);
 }
 
-let _loadingInterval = null;
+function updateLoadingProgress(step, progressPct) {
+    const bar = document.getElementById('loading-bar');
+    const status = document.getElementById('loading-status');
+    if (bar) bar.style.width = Math.min(progressPct, 97) + '%';
+    if (status) status.textContent = STEP_MESSAGES[step] || `Checking ${step}...`;
+}
 
 function hideLoading() {
     loadingSection.style.display = 'none';
     auditBtn.disabled = false;
     auditBtn.classList.remove('is-loading');
-    if (_loadingInterval) { clearInterval(_loadingInterval); _loadingInterval = null; }
 }
 
 function hideResults() {
