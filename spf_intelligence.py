@@ -247,6 +247,29 @@ def smart_dkim_check(domain: str, spf_record: Optional[str] = None, max_selector
     if max_selectors > 0:
         selectors_to_test = selectors_to_test[:max_selectors]
 
+    # Wildcard detection: query a random nonsense selector. If it returns
+    # a TXT record, the domain has wildcard DNS and DKIM discovery is unreliable.
+    import uuid
+    _canary = f"_dkimwildcardtest{uuid.uuid4().hex[:8]}._domainkey.{domain}"
+    try:
+        _canary_answers = dns.resolver.resolve(_canary, 'TXT')
+        # Got a response for a random selector -- wildcard DNS detected
+        result['wildcard_detected'] = True
+        result['found_selectors'] = []
+        result['status'] = 'warning'
+        result['issues'] = result.get('issues', [])
+        result['issues'].append({
+            'severity': 'warning',
+            'issue': 'Wildcard DNS detected',
+            'plain_english': (
+                'This domain has wildcard DNS records that respond to any subdomain query. '
+                'DKIM selector discovery is not possible because every selector appears to exist.'
+            ),
+        })
+        return result
+    except Exception:
+        pass  # No wildcard -- proceed normally
+
     # Test selectors in priority order
     for selector in selectors_to_test:
         result['tested_count'] += 1

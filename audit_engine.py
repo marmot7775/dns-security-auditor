@@ -301,10 +301,10 @@ def _raw_check_dmarc(domain: str) -> Dict[str, Any]:
     VALID_ADKIM_ASPF = {"r", "s"}
     VALID_FO = {"0", "1", "d", "s"}
     VALID_RF = {"afrf"}
-    # Tags defined in DMARCbis (draft-ietf-dmarc-dmarcbis-41, Section 4.7)
-    # np, psd, t are new; pct, rf, ri are removed from DMARCbis
+    # Tags defined in RFC 9716 (draft-ietf-dmarc-RFC 9716, Section 4.7)
+    # np, psd, t are new; pct, rf, ri are removed from RFC 9716
     KNOWN_TAGS = {"v", "p", "sp", "np", "rua", "ruf", "adkim", "aspf", "fo", "psd", "t"}
-    # Tags from RFC 7489 that DMARCbis removes — recognize but flag
+    # Tags from RFC 7489 that RFC 9716 removes — recognize but flag
     DEPRECATED_TAGS = {"pct", "rf", "ri"}
 
     result = {
@@ -500,23 +500,22 @@ def _raw_check_dmarc(domain: str) -> Dict[str, Any]:
                     f"Check spelling. Valid DMARC tags are: {', '.join(sorted(KNOWN_TAGS))}.",
                 )
             elif key_clean in DEPRECATED_TAGS:
-                # Tag-specific deprecation guidance per dmarcbis-41
+                # Tag-specific deprecation guidance per RFC 9716
                 if key_clean == "pct":
                     _add_issue(
                         "warning",
-                        "Deprecated tag: 'pct' (removed in DMARCbis)",
-                        "The pct tag is removed in DMARCbis (draft-ietf-dmarc-dmarcbis-41). "
-                        "It was replaced by the t= tag for policy rollout testing. "
-                        "Current receivers still honor pct, but DMARCbis-compliant receivers "
-                        "will ignore it.",
-                        "Remove pct and use t=y (test mode) for gradual rollout, "
-                        "or t=n / omit t for full enforcement.",
+                        "Deprecated tag: 'pct' (removed in RFC 9716)",
+                        "The pct tag is removed in RFC 9716 (RFC 9716) with no replacement. "
+                        "The intended approach is to use p=none for monitoring, then move "
+                        "directly to p=quarantine or p=reject. Current receivers still honor "
+                        "pct, but RFC 9716-compliant receivers will ignore it.",
+                        "Remove the pct tag. Use p=none for monitoring before moving to enforcement.",
                     )
                 elif key_clean == "ri":
                     _add_issue(
                         "info",
-                        "Deprecated tag: 'ri' (removed in DMARCbis)",
-                        "The ri (report interval) tag is removed in DMARCbis. "
+                        "Deprecated tag: 'ri' (removed in RFC 9716)",
+                        "The ri (report interval) tag is removed in RFC 9716. "
                         "It was rarely honored by receivers. Most send aggregate "
                         "reports on their own schedule regardless of ri.",
                         "Remove the ri tag. Report frequency is determined by receivers.",
@@ -524,8 +523,8 @@ def _raw_check_dmarc(domain: str) -> Dict[str, Any]:
                 elif key_clean == "rf":
                     _add_issue(
                         "info",
-                        "Deprecated tag: 'rf' (removed in DMARCbis)",
-                        "The rf (report format) tag is removed in DMARCbis. "
+                        "Deprecated tag: 'rf' (removed in RFC 9716)",
+                        "The rf (report format) tag is removed in RFC 9716. "
                         "The only value ever defined was 'afrf', making the tag "
                         "redundant.",
                         "Remove the rf tag.",
@@ -570,13 +569,13 @@ def _raw_check_dmarc(domain: str) -> Dict[str, Any]:
     result["policy"] = policy
 
     if not raw_policy:
-        # DMARCbis §4.10.1: If p= missing but rua= present, treat as p=none
+        # RFC 9716 §4.10.1: If p= missing but rua= present, treat as p=none
         if tags.get("rua"):
             _add_issue(
                 "warning",
-                "Missing policy tag (p=). Treated as p=none per DMARCbis",
+                "Missing policy tag (p=). Treated as p=none per RFC 9716",
                 "This record has no explicit policy tag. Because a rua= tag is present, "
-                "DMARCbis-compliant receivers will treat this as p=none (monitoring only). "
+                "RFC 9716-compliant receivers will treat this as p=none (monitoring only). "
                 "However, some older receivers following RFC 7489 may ignore the record entirely.",
                 "Add an explicit p=none (or p=quarantine / p=reject) to the record.",
             )
@@ -625,7 +624,7 @@ def _raw_check_dmarc(domain: str) -> Dict[str, Any]:
             "Change to sp=none, sp=quarantine, or sp=reject.",
         )
 
-    # 6b2. Non-existent subdomain policy (np=) — DMARCbis §4.7
+    # 6b2. Non-existent subdomain policy (np=) — RFC 9716 §4.7
     raw_np = tags.get("np", "")
     np_val = raw_np.lower() if raw_np else None
     result["np"] = np_val
@@ -637,7 +636,7 @@ def _raw_check_dmarc(domain: str) -> Dict[str, Any]:
             "Change to np=none, np=quarantine, or np=reject.",
         )
 
-    # 6b3. Test mode (t=) — DMARCbis §4.7, replaces pct for rollout
+    # 6b3. Test mode (t=) — RFC 9716 §4.5
     raw_t = tags.get("t", "")
     if raw_t and raw_t.lower() not in ("y", "n"):
         _add_syntax(
@@ -647,7 +646,7 @@ def _raw_check_dmarc(domain: str) -> Dict[str, Any]:
             "Use t=y to test (policy drops one level) or t=n / omit the tag to enforce.",
         )
 
-    # 6b4. PSD flag (psd=) — DMARCbis §4.7
+    # 6b4. PSD flag (psd=) — RFC 9716 §4.7
     raw_psd = tags.get("psd", "")
     if raw_psd and raw_psd.lower() not in ("y", "n", "u"):
         _add_syntax(
@@ -714,7 +713,7 @@ def _raw_check_dmarc(domain: str) -> Dict[str, Any]:
             "Change to aspf=r (relaxed, recommended) or aspf=s (strict).",
         )
 
-    # 6g. pct (percentage) — deprecated in DMARCbis, replaced by t= tag
+    # 6g. pct (percentage) — removed in RFC 9716
     # Still validate if present since current receivers still honor it
     raw_pct = tags.get("pct", "")
     if raw_pct:
@@ -817,7 +816,7 @@ def _raw_check_dmarc(domain: str) -> Dict[str, Any]:
                 "Increase pct to 100 for full reject enforcement.",
             )
 
-    # DMARCbis t=y test mode (replaces pct for rollout)
+    # RFC 9716 t=y test mode (drops policy one level for cautious deployment)
     raw_t_val = tags.get("t", "")
     result["t"] = raw_t_val.lower() if raw_t_val else None
     if raw_t_val and raw_t_val.lower() == "y" and policy in ("quarantine", "reject"):
@@ -825,9 +824,9 @@ def _raw_check_dmarc(domain: str) -> Dict[str, Any]:
         _add_issue(
             "warning",
             f"DMARC test mode active (t=y). Policy effectively {effective}",
-            f"The t=y tag signals DMARCbis-aware receivers to apply the policy "
-            f"one level below {policy}. In practice, receivers will treat this as "
-            f"p={effective}. This is the DMARCbis replacement for the pct= rollout.",
+            f"The t=y tag (RFC 9716 Section 4.5) signals receivers to apply the policy "
+            f"one level below {policy}. Receivers treat this as p={effective}. "
+            f"This is useful for cautious deployment of a new enforcement policy.",
             f"Remove t=y (or set t=n) once you're confident in your authentication "
             f"to apply the full p={policy} policy.",
         )
@@ -2674,7 +2673,7 @@ def run_full_audit(domain: str, dkim_selector: Optional[str] = None,
     needs_mx = scope_set is None or bool(scope_set & (_MX_DEPENDENTS | {"mx"}))
     needs_spf = scope_set is None or bool(scope_set & (_SPF_DEPENDENTS | {"spf"}))
 
-    # --- DMARC Tree Walk (dmarcbis-41 Section 4.10) ---
+    # --- DMARC Tree Walk (RFC 9716 Section 4.10) ---
     # Run before DMARC card so inherited policy can inform the card
     tree_walk_result = None
     if needs_dmarc:

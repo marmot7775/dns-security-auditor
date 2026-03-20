@@ -341,8 +341,7 @@ def check_mta_sts(domain: str) -> Dict[str, Any]:
         result["status"] = "warning"
         result["issues"].append(_make_issue(
             "warning", "No MTA-STS TXT record found",
-            f"No TXT record found at '_mta-sts.{domain}'. MTA-STS tells sending "
-            "mail servers that your domain requires TLS encryption for inbound email.",
+            f"No TXT record found at '_mta-sts.{domain}'.",
             "Email may be transmitted without encryption.",
             f"Add a TXT record at '_mta-sts.{domain}' with value: v=STSv1; id=20240101",
         ))
@@ -530,8 +529,7 @@ def check_tls_rpt(domain: str) -> Dict[str, Any]:
         result["status"] = "warning"
         result["issues"].append(_make_issue(
             "warning", "No TLS-RPT record found",
-            f"No TXT record at '_smtp._tls.{domain}'. "
-            "TLS-RPT reports TLS connection failures.",
+            f"No TXT record at '_smtp._tls.{domain}'.",
             "No visibility into encryption issues.",
             f"Add TXT at _smtp._tls.{domain}: v=TLSRPTv1; rua=mailto:tls-reports@{domain}",
         ))

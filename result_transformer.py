@@ -129,7 +129,7 @@ def transform_dmarc(raw: Dict, tree_walk: Optional[Dict] = None) -> Dict:
         applied_tag = tree_walk.get("applied_tag", "p")
         tag_label = {"sp": "subdomain policy (sp=)", "np": "non-existent subdomain policy (np=)", "p": "domain policy (p=)"}.get(applied_tag, f"{applied_tag}=")
         _adoption_note = (
-            " However, policy inheritance via tree walk is a DMARCbis feature. "
+            " However, policy inheritance via tree walk is an RFC 9716 feature. "
             "Receivers still using RFC 7489 may not honor it. For the strongest protection, "
             "publish a dedicated DMARC record for this subdomain."
         )
@@ -268,7 +268,7 @@ def transform_dmarc(raw: Dict, tree_walk: Optional[Dict] = None) -> Dict:
 
         pct = raw.get("pct")
         if pct is not None and pct < 100:
-            details.append({"type": "warning", "text": f"pct={pct} -- policy applied to only {pct}% of failing messages (note: pct is deprecated in DMARCbis)"})
+            details.append({"type": "warning", "text": f"pct={pct} -- policy applied to only {pct}% of failing messages (pct is removed in RFC 9716)"})
 
         # Append all issues from the audit engine (syntax_errors already merged into issues)
         for issue in raw.get("issues", []):
@@ -369,7 +369,7 @@ def transform_spf(raw: Dict, has_mx: bool = True) -> Dict:
         verdict = "No SPF record (no mail)"
         pill_label = "No mail"
     elif not record:
-        verdict = "No authorized IP list published"
+        verdict = "No SPF record published"
         pill_label = "Missing"
     else:
         all_mech = raw.get("all_mechanism") or ""
@@ -379,11 +379,11 @@ def transform_spf(raw: Dict, has_mx: bool = True) -> Dict:
         elif lookups > 10:
             verdict = f"Broken -- exceeds lookup limit ({lookups}/10)"
         elif not all_mech and raw.get("has_redirect"):
-            verdict = "Authorized senders via redirect"
+            verdict = "SPF configured (via redirect)"
         elif not all_mech:
             verdict = "Configured but missing an all mechanism"
         else:
-            verdict = "Authorized IP list published"
+            verdict = "SPF record configured"
 
     # Explanation
     if null_spf:
@@ -740,6 +740,28 @@ def transform_mx(raw: Dict) -> Dict:
     providers = raw.get("providers", [])
     count = raw.get("record_count", 0)
 
+    # Null MX (RFC 7505): "0 ." means domain explicitly does not accept email
+    is_null_mx = (count == 1 and records and records[0].strip() in ("0 .", "0  ."))
+    if is_null_mx:
+        return {
+            "name": "MX Records",
+            "status": "pass",
+            "pill_label": "Null MX",
+            "verdict": "Domain does not accept email (RFC 7505)",
+            "record": records[0],
+            "explanation": (
+                "This domain publishes a null MX record (<strong>0 .</strong>) per RFC 7505, "
+                "which explicitly declares that it does not accept inbound email. "
+                "Sending servers will get a clean rejection rather than attempting delivery."
+            ),
+            "details": [
+                {"type": "good", "text": "Null MX record correctly configured"},
+                *[_issue_to_detail(i) for i in raw.get("issues", [])],
+            ],
+            "fix": None,
+            "fix_records": None,
+        }
+
     if not records:
         return {
             "name": "MX Records",
@@ -774,7 +796,7 @@ def transform_mx(raw: Dict) -> Dict:
     elif provider_str:
         verdict = provider_str
     else:
-        verdict = f"{count} hosts"
+        verdict = f"{count} MX hosts configured"
 
     # Record display (all MX records)
     record = "\n".join(records)
