@@ -25,6 +25,8 @@ import dns.exception
 import dns.message
 import dns.query
 import dns.rdatatype
+import dns.dnssec
+import dns.name
 
 from checks_extra import check_mta_sts, check_tls_rpt, check_bimi
 from mx_check import check_mx
@@ -1279,6 +1281,75 @@ def _raw_check_dnssec(domain: str) -> Dict[str, Any]:
                 "Add a DS record at your domain registrar pointing to your DNSKEY.",
             )
 
+    # DS-to-DNSKEY chain of trust verification
+    # Verify that the DS digest actually matches a published DNSKEY
+    result["chain_valid"] = None
+    result["chain_details"] = []
+
+    if ds_found and result["has_dnssec"]:
+        try:
+            # Re-fetch DS records for digest comparison
+            ds_records = []
+            for attempt_resolver in [resolver, _get_dnssec_resolver(timeout=12.0)]:
+                try:
+                    ds_answers = attempt_resolver.resolve(domain, "DS")
+                    ds_records = list(ds_answers)
+                    break
+                except Exception:
+                    continue
+
+            # Re-fetch DNSKEYs
+            dnskey_records = []
+            try:
+                dnskey_answers = resolver.resolve(domain, "DNSKEY")
+                dnskey_records = list(dnskey_answers)
+            except Exception:
+                pass
+
+            if ds_records and dnskey_records:
+                chain_matched = False
+                for ds_rdata in ds_records:
+                    ds_key_tag = ds_rdata.key_tag
+                    for dnskey_rdata in dnskey_records:
+                        try:
+                            computed_key_id = dns.dnssec.key_id(dnskey_rdata)
+                            if computed_key_id != ds_key_tag:
+                                continue
+                            # Key tag matches -- now verify digest
+                            domain_name = dns.name.from_text(domain)
+                            computed_ds = dns.dnssec.make_ds(
+                                domain_name, dnskey_rdata, ds_rdata.digest_type
+                            )
+                            if computed_ds.digest == ds_rdata.digest:
+                                chain_matched = True
+                                algo_name = DNSSEC_ALGORITHMS.get(
+                                    dnskey_rdata.algorithm,
+                                    f"Algorithm {dnskey_rdata.algorithm}",
+                                )
+                                result["chain_details"].append(
+                                    f"DS key_tag={ds_key_tag} matches DNSKEY ({algo_name})"
+                                )
+                                break
+                        except Exception:
+                            # UnsupportedAlgorithm or other -- skip this pair
+                            continue
+                    if chain_matched:
+                        break
+
+                result["chain_valid"] = chain_matched
+                if not chain_matched:
+                    _add_issue(
+                        "error",
+                        "DS digest does NOT match any DNSKEY (broken chain of trust)",
+                        "The DS record at the parent zone does not match any of the published "
+                        "DNSKEY records. This means DNSSEC validation will fail for all resolvers, "
+                        "potentially making the domain unresolvable for DNSSEC-validating clients.",
+                        "Re-generate the DS record from your current DNSKEY and update it at your registrar.",
+                    )
+        except Exception as e:
+            log.debug("DNSSEC chain verification error: %s", e)
+            result["chain_valid"] = None
+
     # Set final status
     severities = [i["severity"] for i in result["issues"]]
     if "error" in severities:
@@ -1545,6 +1616,82 @@ def _raw_check_nameservers(domain: str) -> Dict[str, Any]:
 
     result["nameservers"] = ns_details
     result["networks"] = list(networks_v4)
+
+    # Authoritative response testing -- query each NS directly for SOA
+    import time as _time
+    auth_results = []
+    soa_serials = {}
+
+    for ns_info in ns_details:
+        if not ns_info["resolves"]:
+            continue
+        # Use first IPv4 address for the query
+        ns_ip = ns_info["ipv4"][0] if ns_info["ipv4"] else (ns_info["ipv6"][0] if ns_info["ipv6"] else None)
+        if not ns_ip:
+            continue
+        try:
+            soa_query = dns.message.make_query(domain, dns.rdatatype.SOA)
+            soa_query.flags &= ~dns.flags.RD  # RD=0 for authoritative test
+            t0 = _time.monotonic()
+            response = dns.query.udp(soa_query, ns_ip, timeout=3)
+            elapsed_ms = round((_time.monotonic() - t0) * 1000, 1)
+            is_authoritative = bool(response.flags & dns.flags.AA)
+
+            # Extract SOA serial from answer section
+            soa_serial = None
+            for rrset in response.answer:
+                if rrset.rdtype == dns.rdatatype.SOA:
+                    for rdata in rrset:
+                        soa_serial = rdata.serial
+                        break
+                    break
+
+            auth_entry = {
+                "hostname": ns_info["hostname"],
+                "ip": ns_ip,
+                "authoritative": is_authoritative,
+                "soa_serial": soa_serial,
+                "response_time_ms": elapsed_ms,
+            }
+            auth_results.append(auth_entry)
+            ns_info["authoritative"] = is_authoritative
+            ns_info["soa_serial"] = soa_serial
+            ns_info["response_time_ms"] = elapsed_ms
+
+            if soa_serial is not None:
+                soa_serials[ns_info["hostname"]] = soa_serial
+
+            if not is_authoritative:
+                _add_issue(
+                    "error",
+                    f"Lame delegation: {ns_info['hostname']} ({ns_ip}) is not authoritative",
+                    f"Nameserver {ns_info['hostname']} does not return the AA (Authoritative Answer) "
+                    "flag for this domain. It is listed as a nameserver but cannot authoritatively "
+                    "answer queries, which can cause intermittent resolution failures.",
+                    "Remove this nameserver from your NS records or configure it to serve this zone.",
+                )
+        except Exception:
+            # Query failed -- don't penalize, just skip
+            ns_info["authoritative"] = None
+            ns_info["soa_serial"] = None
+            ns_info["response_time_ms"] = None
+
+    result["auth_results"] = auth_results
+
+    # Check SOA serial consistency across nameservers
+    unique_serials = set(soa_serials.values())
+    if len(unique_serials) > 1:
+        serial_detail = ", ".join(f"{h}: {s}" for h, s in sorted(soa_serials.items()))
+        _add_issue(
+            "warning",
+            f"SOA serial mismatch across nameservers ({len(unique_serials)} different serials)",
+            f"Nameservers are returning different SOA serial numbers ({serial_detail}). "
+            "This usually means zone transfers are delayed or failing, so some nameservers "
+            "are serving stale data.",
+            "Check zone transfer (AXFR/IXFR) configuration and ensure all secondaries are in sync.",
+        )
+    result["soa_serials_consistent"] = len(unique_serials) <= 1
+    result["soa_serial"] = next(iter(unique_serials)) if len(unique_serials) == 1 else None
 
     # Detect providers from NS hostnames
     PROVIDER_PATTERNS = {

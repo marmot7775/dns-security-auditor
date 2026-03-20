@@ -670,6 +670,9 @@ def transform_dkim(raw: Dict, domain: str, has_mx: bool = True) -> Dict:
 
     details.append({"type": "info", "text": f"Tested {tested} selectors"})
 
+    # ARC informational note -- DKIM keys enable ARC signing (RFC 8617)
+    details.append({"type": "info", "text": "These DKIM keys also enable ARC (Authenticated Received Chain) signing for mail forwarding"})
+
     # Append any issues from the audit engine
     for issue in raw.get("issues", []):
         details.append(_issue_to_detail(issue))
@@ -1096,6 +1099,21 @@ def transform_bimi(raw: Dict, domain: str, has_mx: bool = True) -> Dict:
         )
 
     details = [_issue_to_detail(i) for i in raw.get("issues", [])]
+
+    # Add SVG validation summary to details
+    svg_validated = raw.get("svg_validated")
+    svg_profile = raw.get("svg_profile")
+    if svg_validated is True:
+        if svg_profile in ("tiny-ps", "tiny"):
+            details.append({"type": "good", "text": f"SVG validated (profile: {svg_profile})"})
+        elif svg_profile:
+            details.append({"type": "warning", "text": f"SVG parsed but profile is '{svg_profile}' (expected tiny-ps)"})
+        else:
+            details.append({"type": "warning", "text": "SVG parsed but baseProfile not declared (expected tiny-ps)"})
+    elif svg_validated is False:
+        details.append({"type": "error", "text": "SVG validation failed"})
+        status = "fail"
+
     fix = _first_fix(raw.get("issues", []))
 
     return {
@@ -1154,8 +1172,16 @@ def transform_dnssec(raw: Dict) -> Dict:
     details = []
     details.append({"type": "good", "text": f"DNSKEY records found ({key_count} key{'s' if key_count != 1 else ''})"})
 
+    chain_valid = raw.get("chain_valid")
+    chain_details = raw.get("chain_details", [])
+
     if has_ds:
         details.append({"type": "good", "text": "DS record present at parent (chain of trust anchored)"})
+        # Chain verification result
+        if chain_valid is True:
+            details.append({"type": "good", "text": "DS digest matches DNSKEY (chain of trust verified)"})
+        elif chain_valid is False:
+            details.append({"type": "error", "text": "DS digest does NOT match any DNSKEY (broken chain)"})
     else:
         details.append({"type": "warning", "text": "No DS record at parent zone (chain may not validate)"})
 
@@ -1183,6 +1209,8 @@ def transform_dnssec(raw: Dict) -> Dict:
 
     # Downgrade status if issues exist
     if any(a.get("deprecated") for a in algorithms):
+        status = "fail"
+    elif chain_valid is False:
         status = "fail"
     elif not has_ds:
         status = "warn"
@@ -1569,7 +1597,7 @@ def transform_nameservers(raw: Dict, domain: str = "") -> Dict:
     elif ns_count == 1:
         details.append({"type": "error", "text": "Only 1 nameserver (single point of failure)"})
 
-    # Resolution status
+    # Resolution and authoritative status
     resolving = [ns for ns in nameservers if ns.get("resolves")]
     not_resolving = [ns for ns in nameservers if not ns.get("resolves")]
     if not_resolving:
@@ -1577,15 +1605,34 @@ def transform_nameservers(raw: Dict, domain: str = "") -> Dict:
             details.append({"type": "error", "text": f"{ns['hostname']} does not resolve (lame delegation)"})
     if resolving:
         for ns in resolving:
-            ipv4_str = ", ".join(ns.get("ipv4", []))
-            ipv6_count = len(ns.get("ipv6", []))
-            ip_info = ipv4_str
-            if ipv6_count:
-                ip_info += f" + {ipv6_count} IPv6"
-            if ip_info:
-                details.append({"type": "good", "text": f"{ns['hostname']} resolves ({ip_info})"})
+            ip = ns.get("ipv4", [""])[0] if ns.get("ipv4") else ""
+            ip_part = f" ({ip})" if ip else ""
+            auth = ns.get("authoritative")
+            rtt = ns.get("response_time_ms")
+            if auth is True:
+                rtt_str = f", {rtt}ms" if rtt is not None else ""
+                details.append({"type": "good", "text": f"{ns['hostname']}{ip_part} -- authoritative{rtt_str}"})
+            elif auth is False:
+                details.append({"type": "error", "text": f"{ns['hostname']}{ip_part} -- NOT authoritative (lame delegation)"})
             else:
-                details.append({"type": "good", "text": f"{ns['hostname']} resolves"})
+                # auth is None -- query failed or not attempted
+                ipv4_str = ", ".join(ns.get("ipv4", []))
+                ipv6_count = len(ns.get("ipv6", []))
+                ip_info = ipv4_str
+                if ipv6_count:
+                    ip_info += f" + {ipv6_count} IPv6"
+                if ip_info:
+                    details.append({"type": "good", "text": f"{ns['hostname']} resolves ({ip_info})"})
+                else:
+                    details.append({"type": "good", "text": f"{ns['hostname']} resolves"})
+
+    # SOA serial consistency
+    soa_consistent = raw.get("soa_serials_consistent")
+    soa_serial = raw.get("soa_serial")
+    if soa_consistent is True and soa_serial is not None:
+        details.append({"type": "good", "text": f"SOA serials consistent ({soa_serial})"})
+    elif soa_consistent is False:
+        details.append({"type": "warning", "text": "SOA serial mismatch across nameservers (zone sync issue)"})
 
     # Network diversity
     if len(networks) >= 2:
