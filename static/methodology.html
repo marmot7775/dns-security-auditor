@@ -267,8 +267,8 @@
 
             <h2>Scoring</h2>
             <p>
-                The security grade (A through F) is a weighted summary across six categories.
-                Authentication (DMARC, SPF, DKIM) accounts for 70 of 100 points.
+                The security grade (A+ through F) is a weighted summary across six categories.
+                Authentication (DMARC, SPF, DKIM) accounts for 60 of 100 points.
             </p>
 
             <div class="table-wrap-score">
@@ -284,59 +284,71 @@
                         <tr>
                             <td>DMARC</td>
                             <td>25</td>
-                            <td>Policy strength, alignment mode, reporting configuration, subdomain policy</td>
+                            <td>Policy strength (p=reject/quarantine/none), pct rollout, reporting (rua/ruf), subdomain policy (sp=), alignment mode (adkim/aspf)</td>
                         </tr>
                         <tr>
                             <td>SPF</td>
                             <td>20</td>
-                            <td>Record presence, all-mechanism qualifier, lookup count, include complexity</td>
+                            <td>Record presence, all-mechanism qualifier (-all/~all/?all), DNS lookup count vs. the 10-lookup limit, include complexity. ~all receives full credit when DMARC is enforcing</td>
                         </tr>
                         <tr>
                             <td>DKIM</td>
-                            <td>25</td>
-                            <td>Key discovery, key type, cryptographic strength</td>
+                            <td>15</td>
+                            <td>Key discovery, key count (redundancy), cryptographic strength (RSA 2048+, Ed25519)</td>
                         </tr>
                         <tr>
                             <td>Best Practices</td>
-                            <td>5</td>
-                            <td>MTA-STS, TLS-RPT</td>
+                            <td>20</td>
+                            <td>MTA-STS (5 pts), TLS-RPT (5 pts), DNSSEC (4 pts), DANE (3 pts), CAA (2 pts), nameserver diversity (1 pt)</td>
                         </tr>
                         <tr>
                             <td>Key Security</td>
-                            <td>15</td>
-                            <td>DKIM key strength, rotation hygiene, algorithm modernity</td>
+                            <td>10</td>
+                            <td>DKIM key rotation status, testing mode (t=y) detection, algorithm modernity (SHA-256/Ed25519 vs. legacy)</td>
                         </tr>
                         <tr>
                             <td>Vendor Intelligence</td>
                             <td>10</td>
-                            <td>Email service provider detection confidence</td>
+                            <td>Email service provider detection confidence and diversity</td>
                         </tr>
                     </tbody>
                 </table>
             </div>
 
             <p>
-                DKIM scoring does not penalize domains where selectors were not detected.
-                Because selectors are private and cannot be verified from outside, a domain
-                with undetectable DKIM receives partial credit rather than a zero score.
+                DKIM selectors are private and cannot be enumerated from outside.
+                When selectors are not detected, the tool cannot verify or deny DKIM configuration,
+                so it awards 10 of 15 points (partial credit) rather than penalizing the domain.
+                For a definitive check, provide your selector directly.
             </p>
             <p>
-                DNSSEC, CAA, Nameservers, Certificate Transparency, and Blocklist checks are evaluated
-                and reported but do not contribute to the numeric score.
-                Their absence may be intentional and is context-dependent.
+                DNSSEC, CAA, and nameserver diversity contribute to the Best Practices category (up to 7 of 20 points).
+                Certificate Transparency and Blocklist checks are evaluated and reported but do not contribute
+                to the numeric score.
             </p>
             <p>
                 A broken SPF record (PermError from exceeding the 10-lookup limit) receives zero
                 points in the SPF category regardless of other mechanisms.
             </p>
+            <p>
+                SPF ~all (softfail) receives the same credit as -all (hardfail) when the domain has
+                an enforcing DMARC policy (p=quarantine or p=reject), because DMARC enforcement
+                handles unauthorized mail regardless of the SPF qualifier.
+            </p>
+            <p>
+                DMARC pct values are scored on a sliding scale: 100% receives full credit (5 pts),
+                75%+ receives 4, 50%+ receives 3, 25%+ receives 2, and values above 0 receive 1.
+                A pct of 0 (enforcement disabled) receives no credit.
+            </p>
 
             <h3>Grade Thresholds</h3>
             <ul>
-                <li><strong>A:</strong> 85&ndash;100</li>
-                <li><strong>B:</strong> 70&ndash;84</li>
-                <li><strong>C:</strong> 55&ndash;69</li>
-                <li><strong>D:</strong> 40&ndash;54</li>
-                <li><strong>F:</strong> Below 40</li>
+                <li><strong>A+:</strong> 90 and above</li>
+                <li><strong>A:</strong> 80 to 89</li>
+                <li><strong>B:</strong> 65 to 79</li>
+                <li><strong>C:</strong> 50 to 64</li>
+                <li><strong>D:</strong> 35 to 49</li>
+                <li><strong>F:</strong> Below 35</li>
             </ul>
 
             <h2>Authentication Resilience</h2>
