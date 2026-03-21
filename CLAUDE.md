@@ -18,7 +18,7 @@
 
 ## Rules
 - NEVER use em-dashes (—) or double-hyphens ( -- ) in user-facing text. Rewrite the sentence instead.
-- Fail color is burnt red (#9b4040), not blue-gray
+- Fail color is #ef4444 (clear red). Dark theme default, light mode via prefers-color-scheme.
 - All touch targets must be 44px minimum on mobile
 - Text contrast must pass WCAG AA (4.5:1 ratio)
 - No personal data in logs (GDPR-safe)
