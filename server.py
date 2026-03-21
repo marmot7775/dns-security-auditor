@@ -651,6 +651,11 @@ async def sitemap_xml():
         "    <priority>1.0</priority>\n"
         "  </url>\n"
         "  <url>\n"
+        "    <loc>https://dns-audit.com/dmarcbis</loc>\n"
+        "    <changefreq>monthly</changefreq>\n"
+        "    <priority>0.8</priority>\n"
+        "  </url>\n"
+        "  <url>\n"
         "    <loc>https://dns-audit.com/privacy</loc>\n"
         "    <changefreq>monthly</changefreq>\n"
         "    <priority>0.3</priority>\n"
@@ -692,6 +697,10 @@ if STATIC_DIR.exists():
     @app.get("/privacy", tags=["Pages"])
     async def privacy():
         return FileResponse(str(STATIC_DIR / "privacy.html"))
+
+    @app.get("/dmarcbis", tags=["Pages"])
+    async def dmarcbis():
+        return FileResponse(str(STATIC_DIR / "dmarcbis.html"))
 
     @app.get("/methodology", tags=["Pages"])
     async def methodology():

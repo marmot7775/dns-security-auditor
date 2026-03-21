@@ -60,7 +60,12 @@
                 </div>
                 <span class="logo-text">dns<span class="logo-accent">-audit</span>.com</span>
             </a>
-            <span class="site-tagline">Free DNS & email security audit</span>
+            <nav class="site-nav">
+                <a href="/" class="nav-link nav-link-active">Home</a>
+                <a href="/dmarcbis" class="nav-link">DMARCbis Guide</a>
+                <a href="/methodology" class="nav-link">Methodology</a>
+                <a href="/privacy" class="nav-link">Privacy</a>
+            </nav>
         </div>
     </header>
 
@@ -169,6 +174,7 @@
                     </button>
                 </div>
             </div>
+            <div id="executive-summary-slot"></div>
             <div class="summary-grid" id="summary-grid">
                 <div class="summary-card grade-card">
                     <div class="summary-label">Security Grade</div>
@@ -236,90 +242,11 @@
             </div>
         </section>
 
-        <!-- DMARC Educational Section -->
+        <!-- DMARCbis Teaser -->
         <section class="edu-section" id="edu-section">
             <div class="container">
-                <button class="edu-toggle" id="edu-toggle">
-                    <span>About DMARC Standards</span>
-                    <span class="edu-chevron">&#9662;</span>
-                </button>
-                <div class="edu-content" id="edu-content">
-                    <div class="edu-intro">
-                        DMARC is the policy layer for email authentication. It tells receiving servers exactly what to do when a message fails verification. The current standard is <a href="https://datatracker.ietf.org/doc/html/rfc7489" target="_blank" rel="noopener">RFC 7489</a>. The IETF has approved an update (<a href="https://datatracker.ietf.org/doc/draft-ietf-dmarc-dmarcbis/" target="_blank" rel="noopener">DMARCbis</a>) that is awaiting final publication. This audit validates against RFC 7489 and incorporates DMARCbis features where applicable.
-                    </div>
-
-                    <h3 class="edu-heading">How DMARC Works: Three Components</h3>
-                    <p class="edu-text">
-                        DMARC evaluation has three components. The first two determine whether a message passes. The third determines what happens when it fails.
-                    </p>
-                    <div class="edu-changes">
-                        <div class="edu-change">
-                            <div class="edu-change-title">1. Authentication: Does SPF or DKIM pass?</div>
-                            <div class="edu-change-desc">The message must pass at least one of SPF (sender IP is authorized) or DKIM (cryptographic signature is valid). Both can pass, but only one is required. DKIM is the more reliable mechanism because SPF breaks when email is forwarded through intermediaries (mailing lists, forwarding rules, etc.).</div>
-                        </div>
-                        <div class="edu-change">
-                            <div class="edu-change-title">2. Alignment: Does the authenticated domain match the From address?</div>
-                            <div class="edu-change-desc">Passing SPF or DKIM is not enough on its own. The domain that passed the check must also <strong>align</strong> with the domain in the message's visible "From" address. For example, if a message is sent from <code>user@example.com</code> but SPF passes for <code>esp-provider.com</code>, that is an SPF pass without alignment. The message would need DKIM signed by <code>example.com</code> to achieve alignment.</div>
-                        </div>
-                        <div class="edu-change">
-                            <div class="edu-change-title">3. Policy: What happens when authentication or alignment fails?</div>
-                            <div class="edu-change-desc">The domain owner publishes a policy telling receivers what to do with failures. <strong>p=none</strong> requests no action (monitoring only, useful for collecting aggregate report data). <strong>p=quarantine</strong> requests that failures be routed to the spam folder. <strong>p=reject</strong> requests that failures be rejected outright. The policy is a request, not a guarantee. Most mailbox providers honor it.</div>
-                        </div>
-                    </div>
-
-                    <h3 class="edu-heading">What Changed: RFC 7489 vs. DMARCbis</h3>
-                    <table class="edu-table">
-                        <thead>
-                            <tr><th>Feature</th><th>RFC 7489</th><th>DMARCbis (draft)</th><th>Why It Matters</th></tr>
-                        </thead>
-                        <tbody>
-                            <tr>
-                                <td>Discovery</td>
-                                <td>Public Suffix List</td>
-                                <td>DNS Tree Walk</td>
-                                <td>Eliminates reliance on an external list. Uses the DNS hierarchy itself as the source of truth.</td>
-                            </tr>
-                            <tr>
-                                <td>Testing</td>
-                                <td><code>pct=</code> tag</td>
-                                <td><code>t=y</code> tag</td>
-                                <td><code>pct=</code> sampled a percentage of failures. <code>t=y</code> drops the effective policy one level (e.g., reject is treated as quarantine). They serve different purposes; <code>pct=</code> is removed, not replaced.</td>
-                            </tr>
-                            <tr>
-                                <td>Subdomains</td>
-                                <td>Inherits root policy</td>
-                                <td><code>np=</code> tag</td>
-                                <td>Allows a separate policy for non-existent subdomains. Useful for blocking mail from subdomains that should never exist.</td>
-                            </tr>
-                            <tr>
-                                <td>Reporting</td>
-                                <td><code>ri=</code> and <code>rf=</code> tags</td>
-                                <td>Tags removed</td>
-                                <td>Receivers ignored the report interval and only used one format. Removing them simplifies records.</td>
-                            </tr>
-                        </tbody>
-                    </table>
-
-                    <h3 class="edu-heading">New Tags in DMARCbis</h3>
-                    <div class="edu-changes">
-                        <div class="edu-change">
-                            <div class="edu-change-title"><code>t=y</code> (Test Mode)</div>
-                            <div class="edu-change-desc">Drops the effective policy by one level. A <code>p=reject</code> record with <code>t=y</code> is treated as <code>p=quarantine</code>. Useful for cautious deployment of a new enforcement policy.</div>
-                        </div>
-                        <div class="edu-change">
-                            <div class="edu-change-title"><code>np=</code> (Non-Existent Subdomain Policy)</div>
-                            <div class="edu-change-desc">Sets policy specifically for subdomains that do not exist in DNS. Prevents abuse of made-up subdomains (e.g., <code>fake.example.com</code>).</div>
-                        </div>
-                        <div class="edu-change">
-                            <div class="edu-change-title"><code>psd=</code> (Public Suffix Domain)</div>
-                            <div class="edu-change-desc">Signals whether a domain is a Public Suffix (like <code>.gov.uk</code> or <code>.com</code>). Clarifies the organizational boundary for policy discovery.</div>
-                        </div>
-                    </div>
-
-                    <h3 class="edu-heading">Adoption Status</h3>
-                    <p class="edu-text">
-                        DMARCbis has been approved by the IESG but is awaiting final publication as an RFC. Major providers (Gmail, Outlook, Yahoo) are beginning to support DMARCbis features but maintain backward compatibility with RFC 7489. The tree walk, <code>np=</code>, and <code>t=</code> tags may not be honored by all receivers yet. Where this matters, the audit results note the distinction.
-                    </p>
+                <div class="edu-teaser">
+                    Want to understand what DMARCbis changes and why it matters? <a href="/dmarcbis">Read our DMARCbis guide &rarr;</a>
                 </div>
             </div>
         </section>
@@ -335,6 +262,8 @@
             </div>
             <div class="footer-right">
                 <div class="footer-nav">
+                    <a href="/dmarcbis" class="footer-link">DMARCbis Guide</a>
+                    <span class="footer-dot">&middot;</span>
                     <a href="/methodology" class="footer-link">Methodology</a>
                     <span class="footer-dot">&middot;</span>
                     <a href="/privacy" class="footer-link">Privacy</a>
