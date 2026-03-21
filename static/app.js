@@ -826,11 +826,11 @@ function createResultCard(check, index) {
     const bodyId = `body-${(check.name || '').toLowerCase().replace(/[^a-z0-9]/g, '-')}`;
     card.innerHTML = `
         <div class="result-header">
-            <div class="status-dot ${check.status}" aria-hidden="true"></div>
+            <div class="status-dot ${check.status}" title="${check.status === 'pass' ? 'Passing' : check.status === 'warn' ? 'Warning' : 'Failed'}" aria-hidden="true"></div>
             ${titleHtml}
             <span class="status-pill ${check.status}">${escapeHtml(statusLabel)}</span>
             <div class="result-verdict">${escapeHtml(check.verdict || '')}</div>
-            <div class="result-chevron">&#9662;</div>
+            <div class="result-chevron" aria-hidden="true">&#9662;</div>
         </div>
         <div class="result-body" id="${bodyId}">
             <div class="result-body-inner">

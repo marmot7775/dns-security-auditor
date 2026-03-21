@@ -1187,7 +1187,7 @@ main {
     .result-card {
         opacity: 1;
         transform: none;
-        animation: none;
+        animation: none !important;
     }
 }
 
@@ -1376,12 +1376,12 @@ main {
     background: #21262d;
     border: 1px solid #30363d;
     border-radius: 6px;
-    padding: 0.5rem 0.8rem;
-    min-height: 44px;
+    padding: 0.4rem 0.7rem;
+    min-height: 32px;
     font-family: var(--font-body);
-    font-size: 0.68rem;
+    font-size: 0.7rem;
     font-weight: 500;
-    color: #8b949e;
+    color: #a0a8b8;
     cursor: pointer;
     transition: all var(--duration) var(--ease);
 }
@@ -3256,7 +3256,7 @@ details.st-node>summary:hover {
     }
 
     .record-block {
-        font-size: 0.72rem;
+        font-size: 0.78rem;
         padding: 0.75rem 0.85rem;
         padding-right: 3rem;
     }

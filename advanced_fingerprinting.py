@@ -297,6 +297,9 @@ class AdvancedVendorFingerprinter:
             '_spf.hubspot.com': 'HubSpot',
             '_spf.marketo.com': 'Marketo',
             'mail.zendesk.com': 'Zendesk',
+            'spf.mailkit.eu': 'Omnivery/Mailkit',
+            'mailkit.eu': 'Omnivery/Mailkit',
+            'omnivery.com': 'Omnivery',
         }
         
         for pattern, vendor in spf_map.items():
