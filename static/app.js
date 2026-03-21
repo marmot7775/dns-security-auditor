@@ -517,6 +517,13 @@ function renderResults(data) {
         anomaliesSection.style.display = 'none';
     }
 
+    // Security Roadmap (Prompt 11) -- render at top of results
+    if (data.security_roadmap && data.security_roadmap.items && data.security_roadmap.items.length > 0) {
+        const roadmapEl = document.createElement('div');
+        roadmapEl.innerHTML = renderSecurityRoadmap(data.security_roadmap);
+        resultsList.appendChild(roadmapEl.firstElementChild);
+    }
+
     checks.forEach((check, i) => {
         // Attach tree walk + DMARC eval data to the DMARC check
         if ((check.name || '').toUpperCase().includes('DMARC') && data.tree_walk) {
@@ -796,6 +803,42 @@ function renderCheckBody(check) {
         `;
     }
 
+    // Spec Mode Toggle (Prompt 5) — only for DMARC with both validations
+    if (check.spec_comparison && check.strict_validation && check.legacy_validation) {
+        html += renderSpecToggle(check.spec_comparison);
+    }
+
+    // DMARCbis Strict Validation (shown in DMARCbis mode)
+    if (check.strict_validation) {
+        html += `<div class="spec-dmarcbis">`;
+        html += renderStrictValidation(check.strict_validation);
+        html += `</div>`;
+    }
+
+    // Legacy Validation (hidden by default, shown in Legacy mode)
+    if (check.legacy_validation) {
+        html += `<div class="spec-legacy" style="display:none;">`;
+        html += renderStrictValidation(check.legacy_validation);
+        html += `</div>`;
+    }
+
+    // Structural errors banner for subsequent sections
+    if (check.strict_validation && check.strict_validation.has_structural_errors) {
+        html += `<div class="sv-error-banner spec-dmarcbis">Results below may be unreliable &mdash; this record has structural errors that affect parsing.</div>`;
+    }
+
+    // Attack Surface View (Prompt 6)
+    if (check.attack_surface) {
+        html += renderAttackSurface(check.attack_surface);
+    }
+
+    // DMARC Record Breakdown (DMARCbis mode only — has DMARCbis notes, health verdict, migration, etc.)
+    if (check.tag_breakdown) {
+        html += `<div class="spec-dmarcbis">`;
+        html += renderDmarcTagBreakdown(check.tag_breakdown);
+        html += `</div>`;
+    }
+
     // SPF execution trace
     if (check._spf_execution) {
         html += renderSpfExecution(check._spf_execution);
@@ -806,9 +849,11 @@ function renderCheckBody(check) {
         html += renderTreeWalk(check._tree_walk);
     }
 
-    // DMARCbis readiness (after tree walk, before evaluation)
+    // DMARCbis readiness (after tree walk, before evaluation) — DMARCbis mode only
     if (check.dmarcbis_readiness) {
+        html += `<div class="spec-dmarcbis">`;
         html += renderDmarcbisReadiness(check.dmarcbis_readiness);
+        html += `</div>`;
     }
 
     // DMARC evaluation summary (after tree walk)
@@ -819,6 +864,16 @@ function renderCheckBody(check) {
     // DMARC report delivery chain
     if (check._report_chain) {
         html += renderReportChain(check._report_chain);
+    }
+
+    // SPF Deep Analysis (Prompt 7)
+    if (check.spf_deep) {
+        html += renderSpfDeepAnalysis(check.spf_deep);
+    }
+
+    // DKIM Deep Analysis (Prompt 8)
+    if (check.dkim_deep) {
+        html += renderDkimKeyAnalysis(check.dkim_deep);
     }
 
     // SPF include tree
@@ -864,6 +919,425 @@ function renderFixPreview(fixRecords) {
 
     html += '</div>';
     return html;
+}
+
+// ============================================================
+// Spec Mode Toggle (RFC 7489 vs DMARCbis)
+// ============================================================
+
+let _specMode = 'dmarcbis'; // session-persistent toggle state
+
+function renderSpecToggle(comparison) {
+    if (!comparison) return '';
+
+    // "See the Future" callout
+    let futureHtml = '';
+    if (comparison.see_the_future && comparison.dmarcbis_only_items.length > 0) {
+        let itemsHtml = comparison.dmarcbis_only_items.map(item =>
+            `<div class="st-future-item">
+                <span class="st-future-code">${escapeHtml(item.code)}</span>
+                <span class="st-future-msg">${escapeHtml(item.message)}</span>
+            </div>`
+        ).join('');
+        futureHtml = `
+            <div class="st-future spec-dmarcbis">
+                <div class="st-future-title">This record passes under RFC 7489 but has issues under DMARCbis</div>
+                <div class="st-future-subtitle">${comparison.dmarcbis_only_count} problem${comparison.dmarcbis_only_count !== 1 ? 's' : ''} found that only appear under strict DMARCbis validation. Fixing these now ensures your record continues to work as receivers adopt the new standard.</div>
+                ${itemsHtml}
+            </div>`;
+    }
+
+    // Delta banner (switches with toggle)
+    let deltaDmarcbis = '';
+    if (comparison.dmarcbis_only_count > 0) {
+        deltaDmarcbis = `<div class="st-delta spec-dmarcbis">DMARCbis strict validation found ${comparison.dmarcbis_only_count} additional issue${comparison.dmarcbis_only_count !== 1 ? 's' : ''} that legacy validation missed.</div>`;
+    }
+    let deltaLegacy = '';
+    if (comparison.dmarcbis_only_count > 0) {
+        deltaLegacy = `<div class="st-delta spec-legacy" style="display:none;">Legacy mode is more lenient. ${comparison.dmarcbis_only_count} issue${comparison.dmarcbis_only_count !== 1 ? 's' : ''} flagged by DMARCbis ${comparison.dmarcbis_only_count !== 1 ? 'are' : 'is'} accepted under RFC 7489.</div>`;
+    }
+
+    return `
+        <div class="st-toggle-bar">
+            <div class="st-toggle-label">Validation Mode</div>
+            <div class="st-toggle-pills">
+                <button class="st-pill st-pill-legacy" data-mode="legacy">RFC 7489 (Legacy)</button>
+                <button class="st-pill st-pill-dmarcbis st-pill-active" data-mode="dmarcbis">DMARCbis (Strict)</button>
+            </div>
+        </div>
+        ${deltaDmarcbis}
+        ${deltaLegacy}
+        ${futureHtml}`;
+}
+
+// Attach toggle handler via event delegation
+document.addEventListener('click', function(e) {
+    const pill = e.target.closest('.st-pill');
+    if (!pill) return;
+
+    const mode = pill.dataset.mode;
+    if (mode === _specMode) return;
+    _specMode = mode;
+
+    // Update pill active states
+    const bar = pill.closest('.st-toggle-bar');
+    bar.querySelectorAll('.st-pill').forEach(p => p.classList.remove('st-pill-active'));
+    pill.classList.add('st-pill-active');
+
+    // Find the parent card
+    const card = pill.closest('.result-card');
+    if (!card) return;
+
+    // Toggle visibility of spec-mode sections
+    card.querySelectorAll('.spec-dmarcbis').forEach(el => {
+        el.style.display = mode === 'dmarcbis' ? '' : 'none';
+    });
+    card.querySelectorAll('.spec-legacy').forEach(el => {
+        el.style.display = mode === 'legacy' ? '' : 'none';
+    });
+});
+
+// ============================================================
+// Attack Surface View
+// ============================================================
+
+function renderAttackSurface(as) {
+    if (!as || !as.vectors || as.vectors.length === 0) return '';
+
+    const statusLabels = { protected: 'Protected', partial: 'Partially Protected', exposed: 'Exposed' };
+    const statusIcons = { protected: '&#9632;', partial: '&#9650;', exposed: '&#9679;' };
+
+    // Overall score
+    const overallClass = `as-overall-${as.overall.color}`;
+
+    // Vectors
+    let vectorsHtml = '';
+    as.vectors.forEach(v => {
+        const statusLabel = statusLabels[v.status] || v.status;
+        const icon = statusIcons[v.status] || '';
+        vectorsHtml += `
+            <div class="as-vector as-vector-${v.color}">
+                <div class="as-vector-header">
+                    <span class="as-vector-name">${escapeHtml(v.name)}</span>
+                    <span class="as-vector-badge as-badge-${v.color}">${icon} ${escapeHtml(statusLabel)}</span>
+                </div>
+                <div class="as-vector-summary">${escapeHtml(v.summary)}</div>
+                <div class="as-vector-detail">${escapeHtml(v.detail)}</div>
+            </div>`;
+    });
+
+    // Attacker perspective
+    let attackerHtml = '';
+    if (as.attacker_path) {
+        attackerHtml = `<div class="as-attacker">${escapeHtml(as.attacker_path)}</div>`;
+    }
+
+    return `
+        <div class="as-block">
+            <div class="as-header">
+                <div class="as-header-left">
+                    <span class="as-title">Email Spoofing Attack Surface</span>
+                </div>
+                <span class="as-overall ${overallClass}">${escapeHtml(as.overall.label)}</span>
+            </div>
+            <div class="as-overall-summary">${escapeHtml(as.overall.summary)}</div>
+            ${attackerHtml}
+            <div class="as-vectors">${vectorsHtml}</div>
+        </div>`;
+}
+
+// ============================================================
+// DMARCbis Strict Validation
+// ============================================================
+
+function renderStrictValidation(sv) {
+    if (!sv || !sv.categories || sv.categories.length === 0) return '';
+
+    const statusIcon = {
+        pass: '<span class="sv-icon sv-pass">&#10003;</span>',
+        fail: '<span class="sv-icon sv-fail">&#10005;</span>',
+        warn: '<span class="sv-icon sv-warn">&#9651;</span>'
+    };
+
+    // Summary badge
+    const summaryClass = sv.fail_count > 0 ? 'sv-summary-fail'
+        : sv.warn_count > 0 ? 'sv-summary-warn' : 'sv-summary-pass';
+
+    // Build category sections
+    let categoriesHtml = '';
+    sv.categories.forEach(cat => {
+        let checksHtml = '';
+        cat.checks.forEach(c => {
+            const icon = statusIcon[c.status] || statusIcon.warn;
+            checksHtml += `
+                <div class="sv-check sv-check-${c.status}">
+                    ${icon}
+                    <span class="sv-check-msg">${escapeHtml(c.message)}</span>
+                    <code class="sv-check-code">${escapeHtml(c.code)}</code>
+                </div>`;
+        });
+
+        const catPass = cat.checks.filter(c => c.status === 'pass').length;
+        const catTotal = cat.checks.length;
+        const catClass = cat.checks.some(c => c.status === 'fail') ? 'sv-cat-fail'
+            : cat.checks.some(c => c.status === 'warn') ? 'sv-cat-warn' : 'sv-cat-pass';
+
+        categoriesHtml += `
+            <div class="sv-category ${catClass}">
+                <div class="sv-cat-header">
+                    <span class="sv-cat-label">${escapeHtml(cat.label)}</span>
+                    <span class="sv-cat-score">${catPass}/${catTotal}</span>
+                </div>
+                <div class="sv-checks">${checksHtml}</div>
+            </div>`;
+    });
+
+    return `
+        <div class="sv-block">
+            <div class="sv-header">
+                <div class="sv-header-left">
+                    <span class="sv-badge">DMARCbis</span>
+                    <span class="sv-title">Strict Record Validation</span>
+                </div>
+                <div class="sv-header-right">
+                    <span class="sv-summary ${summaryClass}">${escapeHtml(sv.summary)}</span>
+                    <span class="sv-score">${sv.pass_count}/${sv.total_count}</span>
+                </div>
+            </div>
+            ${categoriesHtml}
+        </div>`;
+}
+
+// ============================================================
+// DMARC Record Breakdown
+// ============================================================
+
+function renderDmarcTagBreakdown(bd) {
+    if (!bd || !bd.tags || bd.tags.length === 0) return '';
+
+    // DMARCbis status badge classes
+    const dmarcbisClasses = {
+        'current': 'rb-bis-current',
+        'deprecated': 'rb-bis-deprecated',
+        'new': 'rb-bis-new'
+    };
+    const dmarcbisLabels = {
+        'current': 'Current',
+        'deprecated': 'Deprecated',
+        'new': 'New in DMARCbis'
+    };
+
+    // Health verdict colors (5 states)
+    const verdictClasses = {
+        'ready': 'rb-verdict-ready',
+        'compatible': 'rb-verdict-compatible',
+        'monitoring': 'rb-verdict-monitoring',
+        'attention': 'rb-verdict-attention',
+        'misconfigured': 'rb-verdict-misconfigured'
+    };
+
+    // --- Health verdict header (Prompt 3) ---
+    let verdictHtml = '';
+    if (bd.health) {
+        const h = bd.health;
+        const cls = verdictClasses[h.status] || 'rb-verdict-attention';
+        let reasonsHtml = '';
+        if (h.reasons && h.reasons.length > 0) {
+            reasonsHtml = h.reasons.map(r => `<span class="rb-verdict-reason">${escapeHtml(r)}</span>`).join('');
+        }
+        verdictHtml = `
+            <div class="rb-verdict ${cls}">
+                <div class="rb-verdict-top">
+                    <span class="rb-verdict-label">${escapeHtml(h.label)}</span>
+                    <span class="rb-verdict-summary">${escapeHtml(h.summary)}</span>
+                </div>
+                ${reasonsHtml ? `<div class="rb-verdict-reasons">${reasonsHtml}</div>` : ''}
+            </div>`;
+    }
+
+    // --- Tag rows ---
+    let tagsHtml = '';
+    bd.tags.forEach(tag => {
+        const bisClass = dmarcbisClasses[tag.dmarcbis] || '';
+        const bisLabel = dmarcbisLabels[tag.dmarcbis] || '';
+
+        // Value display
+        let valueDisplay;
+        if (tag.is_absent && tag.value == null) {
+            valueDisplay = '<span class="rb-absent">not set</span>';
+        } else if (tag.is_default) {
+            valueDisplay = `<span class="rb-default">${escapeHtml(tag.value)} <span class="rb-default-label">(default)</span></span>`;
+        } else {
+            valueDisplay = `<span class="rb-value">${escapeHtml(tag.value || '')}</span>`;
+        }
+
+        // Per-tag warnings
+        let warningsHtml = '';
+        if (tag.warnings && tag.warnings.length > 0) {
+            warningsHtml = tag.warnings.map(w => {
+                const warnClass = w.level === 'warning' ? 'rb-tag-warn' : 'rb-tag-info';
+                return `<div class="${warnClass}">${escapeHtml(w.text)}</div>`;
+            }).join('');
+        }
+
+        // Fallback chain (for np= absent)
+        let chainHtml = '';
+        if (tag.fallback_chain && tag.fallback_chain.length > 0) {
+            const links = tag.fallback_chain.map(link => {
+                const val = link.value != null ? `=${escapeHtml(link.value)}` : '';
+                const cls = link.active ? 'rb-chain-active' : 'rb-chain-inactive';
+                return `<span class="rb-chain-link ${cls}">${escapeHtml(link.tag)}${val}</span>`;
+            }).join('<span class="rb-chain-arrow">&#8594;</span>');
+            chainHtml = `<div class="rb-fallback-chain">${links}</div>`;
+        }
+
+        // DMARCbis note callout
+        let noteHtml = '';
+        if (tag.dmarcbis_note) {
+            noteHtml = `<div class="rb-bis-note"><span class="rb-bis-note-label">DMARCbis</span> ${escapeHtml(tag.dmarcbis_note)}</div>`;
+        }
+
+        tagsHtml += `
+            <div class="rb-tag-row">
+                <div class="rb-tag-header">
+                    <code class="rb-tag-name">${escapeHtml(tag.tag)}=</code>
+                    ${valueDisplay}
+                    <span class="rb-bis-badge ${bisClass}">${escapeHtml(bisLabel)}</span>
+                </div>
+                <div class="rb-tag-label">${escapeHtml(tag.label)}</div>
+                <div class="rb-tag-explain">${escapeHtml(tag.explanation || '')}</div>
+                ${chainHtml}
+                ${warningsHtml}
+                ${noteHtml}
+            </div>`;
+    });
+
+    // --- Configuration Warnings (Prompt 2) ---
+    let configWarningsHtml = '';
+    if (bd.config_warnings && bd.config_warnings.length > 0) {
+        let items = '';
+        bd.config_warnings.forEach(w => {
+            const cls = w.level === 'critical' ? 'rb-cw-critical'
+                : w.level === 'info' ? 'rb-cw-info' : 'rb-cw-advisory';
+            const icon = w.level === 'critical' ? '&#10005;'
+                : w.level === 'info' ? '&#8505;' : '&#9888;';
+            const tagPills = w.tags.map(t => `<code class="rb-cw-tag">${escapeHtml(t)}</code>`).join(' ');
+            items += `
+                <div class="rb-cw-item ${cls}">
+                    <div class="rb-cw-header">
+                        <span class="rb-cw-icon">${icon}</span>
+                        <span class="rb-cw-title">${escapeHtml(w.title)}</span>
+                        ${tagPills}
+                    </div>
+                    <div class="rb-cw-text">${escapeHtml(w.text)}</div>
+                </div>`;
+        });
+        configWarningsHtml = `
+            <div class="rb-config-warnings">
+                <div class="rb-cw-label">Configuration Analysis</div>
+                ${items}
+            </div>`;
+    }
+
+    // --- Migration Wizard (Prompt 3) ---
+    let migrationHtml = '';
+    if (bd.migration && bd.migration.steps && bd.migration.steps.length > 0) {
+        let stepsHtml = '';
+        bd.migration.steps.forEach(s => {
+            const hasRecord = s.record_after ? `
+                <div class="mw-record">
+                    <span class="mw-record-text">${escapeHtml(s.record_after)}</span>
+                </div>` : '';
+            const tagBadges = (s.tags_changed || []).map(t =>
+                `<code class="mw-tag-badge">${escapeHtml(t)}</code>`
+            ).join(' ');
+
+            stepsHtml += `
+                <div class="mw-step">
+                    <div class="mw-step-num">${s.step}</div>
+                    <div class="mw-step-body">
+                        <div class="mw-step-action">${escapeHtml(s.action)} ${tagBadges}</div>
+                        <div class="mw-step-why">${escapeHtml(s.why)}</div>
+                        ${hasRecord}
+                    </div>
+                </div>`;
+        });
+
+        migrationHtml = `
+            <div class="mw-block">
+                <div class="mw-header">
+                    <span class="mw-title">Migration Path to DMARCbis Ready</span>
+                    <span class="mw-progress">${bd.migration.total_steps} steps</span>
+                </div>
+                <div class="mw-steps">${stepsHtml}</div>
+                <div class="mw-target">
+                    <div class="mw-target-label">Target DMARCbis-Ready Record</div>
+                    <div class="record-block" style="margin: 0.4rem 0;">
+                        <span class="record-text">${escapeHtml(bd.migration.target_record)}</span>
+                        <button class="copy-btn">Copy</button>
+                    </div>
+                </div>
+            </div>`;
+    } else if (bd.migration && bd.migration.status === 'ready') {
+        migrationHtml = `
+            <div class="mw-block mw-ready">
+                <span class="mw-ready-check">&#10003;</span>
+                <span class="mw-ready-text">No migration needed. This record is DMARCbis Ready.</span>
+            </div>`;
+    }
+
+    // --- Why DMARCbis? Education Section (Prompt 4) ---
+    let whyHtml = '';
+    if (bd.why_dmarcbis && bd.why_dmarcbis.sections) {
+        let sectionsHtml = '';
+        bd.why_dmarcbis.sections.forEach(sec => {
+            let body = '';
+            if (sec.content) {
+                body += `<p class="wd-content">${escapeHtml(sec.content)}</p>`;
+            }
+            if (sec.items && sec.items.length > 0) {
+                body += sec.items.map(item =>
+                    `<div class="wd-item">${escapeHtml(item)}</div>`
+                ).join('');
+            }
+            if (sec.verdict_scale) {
+                body += '<div class="wd-scale">';
+                sec.verdict_scale.forEach(v => {
+                    const active = v.status === sec.current_verdict ? ' wd-scale-active' : '';
+                    body += `<span class="wd-scale-item wd-scale-${v.color}${active}">${escapeHtml(v.label)}</span>`;
+                });
+                body += '</div>';
+            }
+            sectionsHtml += `
+                <div class="wd-section">
+                    <div class="wd-section-title">${escapeHtml(sec.title)}</div>
+                    ${body}
+                </div>`;
+        });
+
+        whyHtml = `
+            <div class="wd-block">
+                <details>
+                    <summary class="wd-summary">
+                        <span class="wd-summary-icon">&#128218;</span>
+                        <span class="wd-summary-text">Why DMARCbis?</span>
+                    </summary>
+                    <div class="wd-body">${sectionsHtml}</div>
+                </details>
+            </div>`;
+    }
+
+    return `
+        <div class="record-breakdown">
+            <div class="rb-header">
+                <span class="rb-title">DMARC Record Breakdown</span>
+            </div>
+            ${verdictHtml}
+            <div class="rb-tags">${tagsHtml}</div>
+            ${configWarningsHtml}
+            ${migrationHtml}
+            ${whyHtml}
+        </div>`;
 }
 
 // ============================================================
@@ -1149,6 +1623,183 @@ function renderDmarcbisReadiness(readiness) {
             </div>
             <div class="dbis-checklist">${checklistHtml}</div>
             ${suggestedHtml}
+        </div>`;
+}
+
+// ============================================================
+// Security Roadmap
+// ============================================================
+
+function renderSecurityRoadmap(rm) {
+    if (!rm || !rm.items || rm.items.length === 0) return '';
+
+    const priorityLabels = { critical: 'Critical', high: 'High', medium: 'Medium', low: 'Low' };
+    const priorityColors = { critical: 'fail', high: 'warn', medium: 'info', low: 'pass' };
+
+    // Progress bar
+    const total = rm.total;
+    const tierSummary = Object.entries(rm.tiers)
+        .filter(([_, v]) => v > 0)
+        .map(([k, v]) => `${v} ${priorityLabels[k].toLowerCase()}`)
+        .join(', ');
+
+    // Group items by priority
+    let itemsHtml = '';
+    ['critical', 'high', 'medium', 'low'].forEach(tier => {
+        const tierItems = rm.items.filter(i => i.priority === tier);
+        if (tierItems.length === 0) return;
+
+        let rows = tierItems.map(item =>
+            `<div class="sr-item sr-item-${priorityColors[item.priority]}">
+                <span class="sr-protocol">${escapeHtml(item.protocol)}</span>
+                <div class="sr-item-body">
+                    <div class="sr-action">${escapeHtml(item.action)}</div>
+                    <div class="sr-impact">${escapeHtml(item.impact)}</div>
+                </div>
+            </div>`
+        ).join('');
+
+        itemsHtml += `
+            <div class="sr-tier">
+                <div class="sr-tier-label sr-tier-${priorityColors[tier]}">${escapeHtml(priorityLabels[tier])}</div>
+                ${rows}
+            </div>`;
+    });
+
+    return `
+        <div class="sr-block">
+            <div class="sr-header">
+                <span class="sr-title">Email Security Roadmap</span>
+                <span class="sr-summary">${escapeHtml(tierSummary)}</span>
+            </div>
+            ${itemsHtml}
+        </div>`;
+}
+
+// ============================================================
+// DKIM Key Analysis
+// ============================================================
+
+function renderDkimKeyAnalysis(dk) {
+    if (!dk || !dk.keys || dk.keys.length === 0) return '';
+
+    let keysHtml = '';
+    dk.keys.forEach(k => {
+        const ratingClass = `dk-rating-${k.rating}`;
+        const providerBadge = k.provider ? `<span class="spfd-provider">${escapeHtml(k.provider)}</span>` : '';
+
+        let tagsHtml = '';
+        if (k.tags && k.tags.length > 0) {
+            tagsHtml = k.tags.map(t => {
+                let val = t.truncated || t.value || '';
+                if (t.revoked) val = '(empty - REVOKED)';
+                const cls = t.revoked ? 'dk-tag-revoked' : '';
+                return `<div class="dk-tag ${cls}"><code>${escapeHtml(t.tag)}=</code> <span class="dk-tag-label">${escapeHtml(t.label)}</span></div>`;
+            }).join('');
+            tagsHtml = `<div class="dk-tags">${tagsHtml}</div>`;
+        }
+
+        keysHtml += `
+            <div class="dk-key ${ratingClass}">
+                <div class="dk-key-header">
+                    <code class="dk-selector">${escapeHtml(k.selector)}</code>
+                    <span class="dk-key-info">${k.bits > 0 ? k.bits + '-bit ' : ''}${escapeHtml(k.key_type)}</span>
+                    ${providerBadge}
+                    <span class="as-vector-badge as-badge-${k.rating}">${escapeHtml(k.rating_label.split('.')[0])}</span>
+                </div>
+                <div class="dk-key-detail">${escapeHtml(k.rating_label)}</div>
+                ${tagsHtml}
+            </div>`;
+    });
+
+    return `
+        <div class="dk-block">
+            <div class="spfd-header">
+                <span class="spfd-title">DKIM Key Analysis</span>
+            </div>
+            ${keysHtml}
+            <div class="dk-rotation">${escapeHtml(dk.rotation_guidance)}</div>
+        </div>`;
+}
+
+// ============================================================
+// SPF Deep Analysis
+// ============================================================
+
+function renderSpfDeepAnalysis(spf) {
+    if (!spf) return '';
+
+    // DMARCbis context note
+    let noteHtml = `<div class="rb-bis-note" style="margin-bottom:0.6rem;"><span class="rb-bis-note-label">DMARCbis</span> ${escapeHtml(spf.dmarcbis_note)}</div>`;
+
+    // Mechanism table
+    let mechHtml = '';
+    if (spf.mechanisms && spf.mechanisms.length > 0) {
+        let rows = '';
+        spf.mechanisms.forEach(m => {
+            const costDisplay = m.cost > 0 ? `<span class="spfd-cost">${m.cost}</span>` : '<span class="spfd-cost spfd-cost-zero">0</span>';
+            const providerBadge = m.provider ? `<span class="spfd-provider">${escapeHtml(m.provider)}</span>` : '';
+            rows += `
+                <div class="spfd-mech-row">
+                    <code class="spfd-mech-raw">${escapeHtml(m.raw)}</code>
+                    ${costDisplay}
+                    ${providerBadge}
+                </div>`;
+        });
+        mechHtml = `
+            <div class="spfd-mechs">
+                <div class="spfd-mechs-header">
+                    <span>Mechanism</span><span>Lookups</span><span>Service</span>
+                </div>
+                ${rows}
+            </div>`;
+    }
+
+    // All-mechanism
+    let allHtml = '';
+    if (spf.all_mechanism || spf.all_explanation) {
+        const allClass = spf.all_severity === 'critical' ? 'spfd-all-critical'
+            : spf.all_severity === 'warning' ? 'spfd-all-warning' : 'spfd-all-info';
+        allHtml = `
+            <div class="spfd-all ${allClass}">
+                <code class="spfd-all-mech">${escapeHtml(spf.all_mechanism || '(none)')}</code>
+                <span class="spfd-all-text">${escapeHtml(spf.all_explanation)}</span>
+            </div>`;
+    }
+
+    // Misconfigurations
+    let misconfigHtml = '';
+    if (spf.misconfigs && spf.misconfigs.length > 0) {
+        let items = spf.misconfigs.map(m => {
+            const cls = m.level === 'critical' ? 'rb-cw-critical' : m.level === 'warning' ? 'rb-cw-advisory' : 'rb-cw-info';
+            const icon = m.level === 'critical' ? '&#10005;' : '&#9888;';
+            return `<div class="rb-cw-item ${cls}">
+                <div class="rb-cw-header"><span class="rb-cw-icon">${icon}</span><span class="rb-cw-title">${escapeHtml(m.title)}</span></div>
+                <div class="rb-cw-text">${escapeHtml(m.text)}</div>
+            </div>`;
+        }).join('');
+        misconfigHtml = `<div class="spfd-misconfigs">${items}</div>`;
+    }
+
+    // Optimizations
+    let optHtml = '';
+    if (spf.optimizations && spf.optimizations.length > 0) {
+        optHtml = spf.optimizations.map(o =>
+            `<div class="spfd-opt">${escapeHtml(o)}</div>`
+        ).join('');
+    }
+
+    return `
+        <div class="spfd-block">
+            <div class="spfd-header">
+                <span class="spfd-title">SPF Record Analysis</span>
+                <span class="spfd-lookup-badge">${spf.lookup_count}/10 lookups</span>
+            </div>
+            ${noteHtml}
+            ${mechHtml}
+            ${allHtml}
+            ${misconfigHtml}
+            ${optHtml}
         </div>`;
 }
 

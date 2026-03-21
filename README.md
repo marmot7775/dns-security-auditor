@@ -1,10 +1,12 @@
-# DNS Audit
+# dns-audit.com
+
+**The first DMARCbis-aware DNS and email security audit tool**
 
 **Built by [Neil Anuskiewicz](https://www.linkedin.com/in/neilanuskiewicz/)** | **Live at [dns-audit.com](https://dns-audit.com)**
 
-DNS and email security analysis for any domain. Enter a domain and get a scored assessment with technical findings, plain-language explanations, and copy-paste DNS fix records.
+DNS and email security analysis for any domain. Enter a domain and get a scored assessment with technical findings, plain-language explanations, and copy-paste DNS fix records. The first tool to validate against the upcoming DMARCbis standard, showing domain owners what changes before their records break.
 
-Try it with `mail.google.com` to see the DMARC Tree Walk trace inherited policy from Google's organizational domain, or with your own domain to see where you stand.
+Our analysis of the top 1000 internet domains found 0% adoption of DMARCbis-specific tags (np=, psd=, t=), 30.6% still using deprecated tags (pct, rf, ri), and 26% with no DMARC record at all.
 
 Built for engineers, email administrators, and security consultants who need to evaluate a domain's authentication posture quickly and accurately.
 
@@ -16,7 +18,7 @@ Built for engineers, email administrators, and security consultants who need to 
 
 | Check | What It Does |
 |-------|-------------|
-| **DMARC** | Policy evaluation, tag validation, alignment modes, reporting configuration, external report authorization. Implements the DMARCbis DNS Tree Walk ([draft-ietf-dmarc-dmarcbis-41](https://datatracker.ietf.org/doc/draft-ietf-dmarc-dmarcbis/), Section 4.10) for hierarchical policy discovery with animated visualization. Detects deprecated tags (pct, ri, rf) and new DMARCbis tags (t, np, psd). |
+| **DMARC + DMARCbis** | DMARCbis-strict record validation (16 layered checks), tag-by-tag decoder with DMARCbis education notes, dangerous combination detection (21 checks across 3 severity levels), 5-state DMARCbis health verdict, personalized migration wizard, attack surface visualization (4 spoofing vectors), RFC 7489 vs DMARCbis spec mode toggle with delta view, "Why DMARCbis?" education section. Implements the DMARCbis DNS Tree Walk ([draft-ietf-dmarc-dmarcbis](https://datatracker.ietf.org/doc/draft-ietf-dmarc-dmarcbis/), Section 4.10) for hierarchical policy discovery with animated visualization. |
 | **SPF** | Syntax validation, mechanism analysis, recursive evaluation with full lookup chain tracing, void lookup detection, and vendor-labeled include tree visualization. Flags +all, ?all, missing all, redirect+all conflicts, deprecated ptr, overly broad CIDRs, and invalid IPs. |
 | **DKIM** | Selector discovery across 1,100+ common patterns using SPF-based vendor fingerprinting. Key strength analysis for RSA (1024/2048/4096) and Ed25519. Key rotation age estimation. Direct lookup of user-supplied selectors. Wildcard DNS detection prevents false positives. |
 
@@ -109,6 +111,23 @@ One-click branded PDF with executive summary (grade, score breakdown, priority f
 ### Vendor Detection
 
 Identifies email service providers using multiple signals: MX hostnames, SPF includes, DMARC reporting URIs, and DKIM selectors. Multi-signal detection with confidence scoring.
+
+### DMARCbis Checker
+
+The first tool to validate DMARC records against the upcoming DMARCbis standard (draft-ietf-dmarc-dmarcbis). Features that no other tool provides:
+
+- **Strict Record Validator**: 16 layered checks across tokenization, grammar, and semantics. Catches missing mailto: prefixes, duplicate tags, invalid URIs, and other issues that legacy tools silently accept.
+- **Spec Mode Toggle**: Switch between RFC 7489 (legacy) and DMARCbis (strict) validation to see exactly what changes. The "See the Future" view shows domain owners which issues will break when receivers adopt DMARCbis.
+- **Tag Decoder with DMARCbis Education**: Every tag explained with security consequences and a DMARCbis note explaining what changed from RFC 7489 and why.
+- **Dangerous Combination Detection**: 21 checks for dangerous tag interactions (sp=none + p=reject policy gaps, contradictory policies, test mode weakening enforcement).
+- **Health Verdict**: 5-state classification (DMARCbis Ready, Compatible, Monitoring, Needs Attention, Misconfigured) with specific findings.
+- **Migration Wizard**: Personalized step-by-step path from current state to DMARCbis Ready, with before/after DNS records at every step and a copy-to-clipboard target record.
+- **Attack Surface View**: 4-vector spoofing risk map (direct domain, subdomain, non-existent subdomain, reporting leakage) with concrete attack scenarios.
+- **Email Security Roadmap**: Cross-protocol prioritized action plan synthesizing findings across all 13 checks.
+
+### Email Security Roadmap
+
+Synthesizes findings across all protocols into one prioritized action plan with four tiers (critical, high, medium, low). Shows the most impactful action first with business impact context for each recommendation.
 
 ---
 
