@@ -74,6 +74,156 @@ def _first_fix(issues: List[Dict]) -> Optional[str]:
 
 
 # ============================================================
+# Executive Summary (Prompt 16)
+# ============================================================
+
+def build_executive_summary(checks: List[Dict], roadmap: Dict) -> Dict:
+    """Build the executive summary card shown at the very top of results.
+
+    Returns a dict with: verdict, spoofing_protection, dmarcbis_readiness,
+    protocol_coverage, biggest_risk, and has_record_builder.
+    """
+    check_map = {c.get("name", ""): c for c in checks}
+    dmarc = check_map.get("DMARC", {})
+
+    # ── Part 1: One-sentence verdict ─────────────────────────
+    attack_surface = dmarc.get("attack_surface")
+    health = (dmarc.get("tag_breakdown") or {}).get("health", {})
+    health_status = health.get("status", "")
+    dmarc_status = dmarc.get("status", "")
+    spf_status = check_map.get("SPF", {}).get("status", "")
+
+    # Count protected vectors
+    vectors = (attack_surface or {}).get("vectors", [])
+    protected_count = sum(1 for v in vectors if v.get("status") == "protected")
+    exposed_count = sum(1 for v in vectors if v.get("status") == "exposed")
+    partial_count = sum(1 for v in vectors if v.get("status") == "partial")
+
+    if dmarc_status == "fail" and dmarc.get("pill_label") == "Missing":
+        if spf_status == "fail":
+            verdict = "Your domain has no email authentication. Anyone on the internet can send email pretending to be you."
+        else:
+            verdict = "Your domain has no DMARC record. SPF alone cannot prevent email spoofing."
+    elif health_status == "monitoring":
+        verdict = "Your domain is monitoring email authentication but not yet enforcing it. Spoofed email is still delivered."
+    elif protected_count == 4:
+        if health_status == "ready":
+            verdict = "Your domain is well-protected against email spoofing across all attack vectors."
+        else:
+            verdict = "Your domain blocks spoofed email across all vectors, with minor improvements available."
+    elif protected_count >= 3 and exposed_count == 0:
+        verdict = "Your domain has strong email authentication with most attack vectors covered."
+    elif exposed_count >= 2:
+        verdict = "Your domain has significant gaps in email spoofing protection across multiple attack vectors."
+    elif exposed_count == 1:
+        weakest = [v for v in vectors if v.get("status") == "exposed"]
+        vec_name = weakest[0]["name"].lower() if weakest else "one vector"
+        verdict = f"Your domain has email authentication but attackers can still exploit {vec_name}."
+    elif partial_count > 0:
+        verdict = "Your domain partially blocks spoofed email but enforcement could be stronger."
+    else:
+        verdict = "Your domain has email authentication configured."
+
+    # Check if enforcement exists but no reporting
+    if health_status in ("ready", "compatible", "attention"):
+        tb = dmarc.get("tag_breakdown") or {}
+        cw = tb.get("config_warnings", [])
+        has_no_rua = any(w.get("title") == "No aggregate reporting" for w in cw)
+        if has_no_rua:
+            verdict = "Your domain blocks spoofed email but has no visibility into what is being blocked."
+
+    # ── Part 2: Three key metrics ────────────────────────────
+
+    # Metric 1: Spoofing Protection
+    if protected_count == 4:
+        spoof_label, spoof_color = "Full", "green"
+    elif protected_count == 3:
+        spoof_label, spoof_color = "Strong", "green"
+    elif protected_count == 2:
+        spoof_label, spoof_color = "Partial", "amber"
+    elif protected_count == 1:
+        spoof_label, spoof_color = "Weak", "red"
+    else:
+        spoof_label, spoof_color = "None", "red"
+
+    # No attack surface means no DMARC record
+    if not attack_surface:
+        spoof_label, spoof_color = "None", "red"
+        protected_count = 0
+
+    spoofing_protection = {
+        "label": spoof_label,
+        "color": spoof_color,
+        "detail": f"{protected_count}/4 vectors protected",
+    }
+
+    # Metric 2: DMARCbis Readiness
+    readiness_map = {
+        "ready": ("Ready", "green"),
+        "compatible": ("Compatible", "blue"),
+        "monitoring": ("In Progress", "amber"),
+        "attention": ("In Progress", "amber"),
+        "misconfigured": ("Action Needed", "red"),
+    }
+    if health_status and health_status in readiness_map:
+        rd_label, rd_color = readiness_map[health_status]
+    else:
+        rd_label, rd_color = "Action Needed", "red"
+
+    dmarcbis_readiness = {
+        "label": rd_label,
+        "color": rd_color,
+    }
+
+    # Metric 3: Protocol Coverage
+    protocol_names = ["DMARC", "SPF", "DKIM", "MTA-STS", "TLS-RPT", "DANE", "DNSSEC", "BIMI", "CAA"]
+    configured = 0
+    for pname in protocol_names:
+        c = check_map.get(pname, {})
+        st = c.get("status", "")
+        pill = c.get("pill_label", "")
+        # Consider configured if not missing/not-configured/fail-with-missing
+        if st == "pass" or st == "warn":
+            configured += 1
+        elif st == "fail" and pill not in ("Missing", "Not configured", ""):
+            configured += 1
+
+    total_protocols = len(protocol_names)
+    if configured >= 7:
+        cov_color = "green"
+    elif configured >= 4:
+        cov_color = "amber"
+    else:
+        cov_color = "red"
+
+    protocol_coverage = {
+        "configured": configured,
+        "total": total_protocols,
+        "color": cov_color,
+    }
+
+    # ── Part 3: Biggest risk ─────────────────────────────────
+    roadmap_items = roadmap.get("items", [])
+    if roadmap_items:
+        top = roadmap_items[0]
+        biggest_risk = top.get("impact", top.get("action", ""))
+    else:
+        biggest_risk = "No urgent risks found. See the roadmap below for optimization opportunities."
+
+    # ── Part 4: has_record_builder flag ──────────────────────
+    has_record_builder = dmarc.get("record_builder") is not None
+
+    return {
+        "verdict": verdict,
+        "spoofing_protection": spoofing_protection,
+        "dmarcbis_readiness": dmarcbis_readiness,
+        "protocol_coverage": protocol_coverage,
+        "biggest_risk": biggest_risk,
+        "has_record_builder": has_record_builder,
+    }
+
+
+# ============================================================
 # Email Security Roadmap (Prompt 11)
 # ============================================================
 
@@ -401,9 +551,23 @@ def transform_dmarc(raw: Dict, tree_walk: Optional[Dict] = None) -> Dict:
         status = "pass"
     elif policy == "none":
         verdict = "p=none (monitoring only, no enforcement)"
-        status = "warn"
+        # p=none with no rua is a critical failure: no enforcement AND no visibility
+        if not raw.get("rua"):
+            status = "fail"
+        else:
+            status = "warn"
     else:
         verdict = f"Policy: {policy}" if policy else "Invalid record"
+        status = "fail"
+
+    # Syntax errors or engine-level errors override to fail
+    if record and not inherited:
+        has_syntax_errors = bool(raw.get("syntax_errors"))
+        has_engine_errors = any(
+            i.get("severity") == "error" for i in raw.get("issues", [])
+        )
+        if has_syntax_errors or has_engine_errors:
+            status = "fail"
 
     # Build explanation
     if inherited:
@@ -646,13 +810,25 @@ def transform_dmarc(raw: Dict, tree_walk: Optional[Dict] = None) -> Dict:
         _domain = raw.get("domain", "")
         migration = _build_migration_path(_parsed, _pol, health["status"], domain=_domain)
         why_dmarcbis = _build_why_dmarcbis(_parsed, _pol, health["status"], domain=_domain)
+        record_builder = _build_record_builder(
+            _parsed, _pol, health["status"], breakdown_record,
+            config_warnings, domain=_domain,
+        )
         tag_breakdown = {
             "health": health,
             "tags": tags_list,
             "config_warnings": config_warnings,
             "migration": migration,
+            "record_builder": record_builder,
             "why_dmarcbis": why_dmarcbis,
         }
+
+    # Record builder for "no record" case (tag_breakdown is None)
+    _domain = raw.get("domain", "")
+    if not tag_breakdown:
+        no_record_builder = _build_record_builder({}, "", "", None, [], domain=_domain)
+    else:
+        no_record_builder = None
 
     return {
         "name": "DMARC",
@@ -671,6 +847,7 @@ def transform_dmarc(raw: Dict, tree_walk: Optional[Dict] = None) -> Dict:
         ),
         "attack_surface": _build_attack_surface(raw, display_record or record),
         "tag_breakdown": tag_breakdown,
+        "record_builder": no_record_builder,
         "dmarcbis_readiness": _build_dmarcbis_card_data(
             raw.get("dmarcbis_readiness"), raw.get("record")
         ),
@@ -2125,6 +2302,222 @@ def _build_migration_path(tags: Dict[str, str], policy: str, health_status: str,
 
 
 # ============================================================
+# Record Builder ("Fix It For Me")
+# ============================================================
+
+# Canonical tag order for generated records
+_RECORD_TAG_ORDER = ["v", "p", "sp", "np", "adkim", "aspf", "fo", "psd", "t", "rua", "ruf"]
+
+
+def _build_record_builder(
+    tags: Dict[str, str],
+    policy: str,
+    health_status: str,
+    record: Optional[str],
+    config_warnings: List[Dict],
+    domain: str = "",
+) -> Dict:
+    """Build the Record Builder payload.
+
+    Returns a dict with current_record, recommended_record, changes list,
+    deploy instructions, and edge-case flags.
+    """
+    has_record = bool(record and record.strip())
+
+    # ── No existing record ─────────────────────────────────────
+    if not has_record:
+        safe_domain = domain or "yourdomain.com"
+        rec = f"v=DMARC1; p=none; fo=1; rua=mailto:dmarc@{safe_domain}"
+        return {
+            "mode": "first_record",
+            "current_record": None,
+            "recommended_record": rec,
+            "changes": [{
+                "tag": "p", "action": "added", "value": "none",
+                "reason": "Start with monitoring to review aggregate reports before enforcing.",
+            }, {
+                "tag": "fo", "action": "added", "value": "1",
+                "reason": "Captures all authentication failures for full visibility.",
+            }, {
+                "tag": "rua", "action": "added", "value": f"mailto:dmarc@{safe_domain}",
+                "reason": "Aggregate reporting address. Replace with your actual address.",
+            }],
+            "deploy": _deploy_instructions(domain, record),
+        }
+
+    # ── Already DMARCbis Ready ─────────────────────────────────
+    if health_status == "ready":
+        suggestions = _ready_suggestions(tags)
+        return {
+            "mode": "ready",
+            "current_record": record,
+            "recommended_record": record,
+            "changes": [],
+            "suggestions": suggestions,
+            "deploy": _deploy_instructions(domain, record),
+        }
+
+    # ── Build recommended record from current ──────────────────
+    rec_tags: Dict[str, str] = {}
+    for part in record.split(";"):
+        part = part.strip()
+        if "=" in part:
+            k, _, v = part.partition("=")
+            rec_tags[k.strip().lower()] = v.strip()
+
+    changes: list = []
+
+    # 1. Fix policy progression — target is p=reject for DMARCbis Ready
+    cur_p = rec_tags.get("p", "none").lower()
+    if cur_p != "reject":
+        rec_tags["p"] = "reject"
+        if cur_p == "quarantine":
+            reason = "Upgrade from quarantine to reject for full spoofing protection."
+        else:
+            reason = "Enforce reject to block spoofed mail. Use t=y if you need a testing period first."
+        changes.append({
+            "tag": "p", "action": "changed",
+            "old": cur_p, "value": "reject",
+            "reason": reason,
+        })
+
+    # 2. Fix sp
+    cur_sp = rec_tags.get("sp", "").lower()
+    target_p = rec_tags["p"]
+    if cur_sp != target_p:
+        old_val = cur_sp if cur_sp else "(not set)"
+        rec_tags["sp"] = target_p
+        changes.append({
+            "tag": "sp", "action": "changed" if cur_sp else "added",
+            "old": old_val, "value": target_p,
+            "reason": "Closes subdomain policy gap. Matches root domain enforcement.",
+        })
+
+    # 3. Add np=
+    if "np" not in rec_tags:
+        rec_tags["np"] = target_p
+        changes.append({
+            "tag": "np", "action": "added", "value": target_p,
+            "reason": "Protects non-existent subdomains from spoofing (new in DMARCbis).",
+        })
+    elif rec_tags.get("np", "").lower() == "none" and target_p == "reject":
+        rec_tags["np"] = "reject"
+        changes.append({
+            "tag": "np", "action": "changed",
+            "old": "none", "value": "reject",
+            "reason": "Closes non-existent subdomain gap. Matches root policy.",
+        })
+
+    # 4. Fix fo
+    cur_fo = rec_tags.get("fo", "")
+    if cur_fo != "1":
+        old_val = cur_fo if cur_fo else "(not set)"
+        rec_tags["fo"] = "1"
+        changes.append({
+            "tag": "fo", "action": "changed" if cur_fo else "added",
+            "old": old_val, "value": "1",
+            "reason": "Captures all authentication failures, not just complete failures.",
+        })
+
+    # 5. Add psd=n if missing
+    cur_psd = rec_tags.get("psd", "")
+    if cur_psd not in ("y", "n"):
+        rec_tags["psd"] = "n"
+        changes.append({
+            "tag": "psd", "action": "added", "value": "n",
+            "reason": "Explicitly declares non-public-suffix status for the DNS tree walk.",
+        })
+
+    # 6. Remove deprecated tags
+    for dep in ("pct", "rf", "ri"):
+        if dep in rec_tags:
+            dep_reasons = {
+                "pct": "Deprecated in DMARCbis. Replaced by t= tag.",
+                "rf": "Deprecated in DMARCbis. Only afrf was ever implemented.",
+                "ri": "Deprecated in DMARCbis. Receivers standardize on daily reports.",
+            }
+            changes.append({
+                "tag": dep, "action": "removed",
+                "old": rec_tags[dep], "value": None,
+                "reason": dep_reasons[dep],
+            })
+            del rec_tags[dep]
+
+    # 7. Remove t=y if present and policy is already reject
+    if rec_tags.get("t") == "y" and rec_tags.get("p") == "reject":
+        rec_tags.pop("t", None)
+        changes.append({
+            "tag": "t", "action": "removed",
+            "old": "y", "value": None,
+            "reason": "Test mode is no longer needed at full reject enforcement.",
+        })
+
+    # 8. Fix psd=y if not actually a public suffix
+    if rec_tags.get("psd") == "y":
+        rec_tags["psd"] = "n"
+        # Only add change if not already in the list
+        if not any(c["tag"] == "psd" for c in changes):
+            changes.append({
+                "tag": "psd", "action": "changed",
+                "old": "y", "value": "n",
+                "reason": "Most domains are not public suffixes. Set psd=n unless you operate a TLD.",
+            })
+
+    # Assemble recommended record in canonical order
+    rec_parts = []
+    for tag_key in _RECORD_TAG_ORDER:
+        if tag_key in rec_tags:
+            rec_parts.append(f"{tag_key}={rec_tags[tag_key]}")
+    # Include any remaining tags not in canonical order (preserve unknowns)
+    for tag_key, val in rec_tags.items():
+        if tag_key not in _RECORD_TAG_ORDER:
+            rec_parts.append(f"{tag_key}={val}")
+
+    recommended = "; ".join(rec_parts)
+
+    return {
+        "mode": "fix",
+        "current_record": record,
+        "recommended_record": recommended,
+        "changes": changes,
+        "deploy": _deploy_instructions(domain, record),
+    }
+
+
+def _ready_suggestions(tags: Dict[str, str]) -> List[Dict]:
+    """Optional suggestions for already-ready records."""
+    suggestions = []
+    if "ruf" not in tags:
+        suggestions.append({
+            "tag": "ruf",
+            "reason": "Consider adding failure reporting (ruf=) for per-message forensic data.",
+        })
+    adkim = tags.get("adkim", "r")
+    aspf = tags.get("aspf", "r")
+    if adkim == "r" and tags.get("p") == "reject":
+        suggestions.append({
+            "tag": "adkim",
+            "reason": "Consider adkim=s (strict alignment) for tighter DKIM validation at p=reject.",
+        })
+    if aspf == "r" and tags.get("p") == "reject":
+        suggestions.append({
+            "tag": "aspf",
+            "reason": "Consider aspf=s (strict alignment) for tighter SPF validation at p=reject.",
+        })
+    return suggestions
+
+
+def _deploy_instructions(domain: str, record: Optional[str]) -> Dict:
+    """Build deployment instructions."""
+    host = f"_dmarc.{domain}" if domain else "_dmarc.yourdomain.com"
+    return {
+        "host": host,
+        "replace_existing": bool(record and record.strip()),
+        "note_ttl": "Changes typically propagate within minutes, depending on your DNS provider's TTL.",
+    }
+
+
+# ============================================================
 # SPF
 # ============================================================
 
@@ -2260,6 +2653,11 @@ def transform_spf(raw: Dict, has_mx: bool = True) -> Dict:
         details.append({"type": "info", "text": "No SPF record and no MX records"})
         details.append({"type": "info", "text": "This domain does not appear to send or receive email"})
         status = "warn"
+    elif not record:
+        # No SPF record but domain has MX (sends/receives mail) -- critical failure
+        status = "fail"
+        for issue in raw.get("issues", []):
+            details.append(_issue_to_detail(issue))
     elif record:
         lookups = raw.get("lookup_count", 0)
         if lookups <= 8:
@@ -2299,6 +2697,20 @@ def transform_spf(raw: Dict, has_mx: bool = True) -> Dict:
     else:
         for issue in raw.get("issues", []):
             details.append(_issue_to_detail(issue))
+
+    # Override status to fail for critical SPF issues
+    if record and not null_spf:
+        all_mech = raw.get("all_mechanism") or ""
+        lookups = raw.get("lookup_count", 0)
+        has_engine_errors = any(
+            i.get("severity") == "error" for i in raw.get("issues", [])
+        )
+        if all_mech == "+all":
+            status = "fail"
+        elif lookups and lookups > 10:
+            status = "fail"
+        elif has_engine_errors:
+            status = "fail"
 
     # Fix
     fix = None

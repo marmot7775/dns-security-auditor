@@ -359,6 +359,26 @@ function renderResults(data) {
         + ' ' + now.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit', timeZoneName: 'short' });
     document.getElementById('result-timestamp').textContent = `${tsText}  \u00b7  ${auditDuration}s`;
 
+    // -- Executive Summary (Prompt 16) -- render at the very top --
+    const esSlot = document.getElementById('executive-summary-slot');
+    if (esSlot) {
+        if (data.executive_summary) {
+            esSlot.innerHTML = renderExecutiveSummary(data.executive_summary);
+            esSlot.style.display = 'block';
+            // Wire up scroll buttons
+            esSlot.querySelectorAll('[data-scroll-to]').forEach(btn => {
+                btn.addEventListener('click', () => {
+                    const target = document.getElementById(btn.dataset.scrollTo)
+                        || document.querySelector(`[id="${btn.dataset.scrollTo}"]`);
+                    if (target) target.scrollIntoView({ behavior: 'smooth', block: 'start' });
+                });
+            });
+        } else {
+            esSlot.innerHTML = '';
+            esSlot.style.display = 'none';
+        }
+    }
+
     // -- Filter checks by scope --
     let checks = data.checks || [];
     const scopeFilter = SCOPE_CHECKS[currentScope];
@@ -578,7 +598,15 @@ function renderResults(data) {
     if (data.security_roadmap && data.security_roadmap.items && data.security_roadmap.items.length > 0) {
         const roadmapEl = document.createElement('div');
         roadmapEl.innerHTML = renderSecurityRoadmap(data.security_roadmap);
-        resultsList.appendChild(roadmapEl.firstElementChild);
+        const roadmapBlock = roadmapEl.firstElementChild;
+        roadmapBlock.id = 'security-roadmap-anchor';
+        resultsList.appendChild(roadmapBlock);
+        roadmapBlock.querySelectorAll('[data-scroll-to]').forEach(el => {
+            el.addEventListener('click', () => {
+                const target = document.getElementById(el.dataset.scrollTo);
+                if (target) target.scrollIntoView({ behavior: 'smooth', block: 'start' });
+            });
+        });
     }
 
     checks.forEach((check, i) => {
@@ -624,10 +652,8 @@ function renderResults(data) {
         vendorsSection.style.display = 'none';
     }
 
-    // Share button
-    document.getElementById('share-btn').onclick = () => {
-        _copyToClipboard(window.location.href, document.getElementById('share-btn')?.querySelector('span'), 'Share');
-    };
+    // Share button with dropdown
+    _initShareDropdown();
 
     // "Run another audit" button at bottom of results
     let runAnother = document.getElementById('run-another-btn');
@@ -667,6 +693,7 @@ function createResultCard(check, index) {
     const isDmarc = (check.name || '').toUpperCase() === 'DMARC';
     const isExpanded = true;
     card.className = 'result-card expanded';
+    card.id = `check-${(check.name || '').toLowerCase().replace(/[^a-z0-9]/g, '-')}`;
     card.dataset.status = check.status;
     card.style.animationDelay = `${index * 60}ms`;
 
@@ -909,6 +936,13 @@ function renderCheckBody(check) {
     // Tree walk visualization (DMARC only)
     if (check._tree_walk) {
         html += renderTreeWalk(check._tree_walk);
+    }
+
+    // Record Builder for "no record" case (not inside tag_breakdown)
+    if (check.record_builder) {
+        html += `<div class="spec-dmarcbis">`;
+        html += renderRecordBuilder(check.record_builder);
+        html += `</div>`;
     }
 
     // DMARCbis readiness (after tree walk, before evaluation) — DMARCbis mode only
@@ -1389,6 +1423,12 @@ function renderDmarcTagBreakdown(bd) {
             </div>`;
     }
 
+    // --- Record Builder ("Fix It For Me") ---
+    let builderHtml = '';
+    if (bd.record_builder) {
+        builderHtml = renderRecordBuilder(bd.record_builder);
+    }
+
     return `
         <div class="record-breakdown">
             <div class="rb-header">
@@ -1398,8 +1438,180 @@ function renderDmarcTagBreakdown(bd) {
             <div class="rb-tags">${tagsHtml}</div>
             ${configWarningsHtml}
             ${migrationHtml}
+            ${builderHtml}
             ${whyHtml}
         </div>`;
+}
+
+// ============================================================
+// Record Builder
+// ============================================================
+
+function renderRecordBuilder(rb) {
+    if (!rb) return '';
+
+    // ── Ready mode: no changes needed ──
+    if (rb.mode === 'ready') {
+        let suggestionsHtml = '';
+        if (rb.suggestions && rb.suggestions.length > 0) {
+            const items = rb.suggestions.map(s =>
+                `<div class="rcb-suggestion">
+                    <code class="rcb-suggestion-tag">${escapeHtml(s.tag)}</code>
+                    <span>${escapeHtml(s.reason)}</span>
+                </div>`
+            ).join('');
+            suggestionsHtml = `
+                <div class="rcb-suggestions">
+                    <div class="rcb-suggestions-label">Optional improvements</div>
+                    ${items}
+                </div>`;
+        }
+        return `
+            <div class="rcb-block rcb-ready">
+                <div class="rcb-header">
+                    <span class="rcb-title">Record Builder</span>
+                    <span class="rcb-badge rcb-badge-ready">No changes needed</span>
+                </div>
+                <p class="rcb-ready-msg">Your DMARC record is DMARCbis Ready. No modifications required.</p>
+                ${suggestionsHtml}
+            </div>`;
+    }
+
+    const isFirst = rb.mode === 'first_record';
+    const title = isFirst ? 'Your First DMARC Record' : 'Record Builder';
+
+    // ── Diff view ──
+    let diffHtml = '';
+    if (!isFirst && rb.current_record) {
+        // Parse both records into tag maps for diff coloring
+        const curTags = _parseRecordTags(rb.current_record);
+        const recTags = _parseRecordTags(rb.recommended_record);
+        const changedTagNames = new Set(rb.changes.map(c => c.tag));
+
+        diffHtml = `
+            <div class="rcb-diff">
+                <div class="rcb-diff-side rcb-diff-current">
+                    <div class="rcb-diff-label">Current Record</div>
+                    <div class="rcb-diff-record">${_renderDiffRecord(curTags, changedTagNames, 'current', rb.changes)}</div>
+                </div>
+                <div class="rcb-diff-arrow">&#10140;</div>
+                <div class="rcb-diff-side rcb-diff-recommended">
+                    <div class="rcb-diff-label">Recommended Record</div>
+                    <div class="rcb-diff-record">${_renderDiffRecord(recTags, changedTagNames, 'recommended', rb.changes)}</div>
+                </div>
+            </div>`;
+    }
+
+    // ── Changes list ──
+    let changesHtml = '';
+    if (rb.changes && rb.changes.length > 0) {
+        const items = rb.changes.map(c => {
+            let actionLabel, actionClass;
+            if (c.action === 'added') { actionLabel = 'Added'; actionClass = 'rcb-added'; }
+            else if (c.action === 'removed') { actionLabel = 'Removed'; actionClass = 'rcb-removed'; }
+            else { actionLabel = 'Changed'; actionClass = 'rcb-changed'; }
+
+            let valueDisplay = '';
+            if (c.action === 'removed') {
+                valueDisplay = `<code class="rcb-val-old">${escapeHtml(c.tag)}=${escapeHtml(c.old)}</code>`;
+            } else if (c.action === 'changed' && c.old) {
+                valueDisplay = `<code class="rcb-val-old">${escapeHtml(c.old)}</code> <span class="rcb-arrow">&rarr;</span> <code class="rcb-val-new">${escapeHtml(c.tag)}=${escapeHtml(c.value)}</code>`;
+            } else {
+                valueDisplay = `<code class="rcb-val-new">${escapeHtml(c.tag)}=${escapeHtml(c.value)}</code>`;
+            }
+
+            return `
+                <div class="rcb-change ${actionClass}">
+                    <div class="rcb-change-top">
+                        <span class="rcb-action-badge ${actionClass}">${actionLabel}</span>
+                        ${valueDisplay}
+                    </div>
+                    <div class="rcb-change-reason">${escapeHtml(c.reason)}</div>
+                </div>`;
+        }).join('');
+
+        changesHtml = `
+            <div class="rcb-changes">
+                <div class="rcb-changes-label">${rb.changes.length} change${rb.changes.length !== 1 ? 's' : ''}</div>
+                ${items}
+            </div>`;
+    }
+
+    // ── First record note ──
+    let firstNoteHtml = '';
+    if (isFirst) {
+        firstNoteHtml = `<div class="rcb-first-note">Start with monitoring. Once you have reviewed reports and confirmed legitimate senders align, progress through the migration path to full enforcement.</div>`;
+    }
+
+    // ── Deploy instructions ──
+    let deployHtml = '';
+    if (rb.deploy) {
+        const d = rb.deploy;
+        const replaceNote = d.replace_existing
+            ? 'Replace your existing DMARC record. Do not add a second one.'
+            : 'Add this as a new TXT record.';
+        deployHtml = `
+            <div class="rcb-deploy">
+                <div class="rcb-deploy-label">Deployment</div>
+                <div class="rcb-deploy-item"><strong>Host:</strong> <code>${escapeHtml(d.host)}</code></div>
+                <div class="rcb-deploy-item"><strong>Type:</strong> TXT</div>
+                <div class="rcb-deploy-item">${escapeHtml(replaceNote)}</div>
+                <div class="rcb-deploy-item">${escapeHtml(d.note_ttl)}</div>
+                <div class="rcb-deploy-item">After publishing, re-run this audit to verify.</div>
+            </div>`;
+    }
+
+    return `
+        <div class="rcb-block">
+            <div class="rcb-header">
+                <span class="rcb-title">${escapeHtml(title)}</span>
+            </div>
+            ${firstNoteHtml}
+            ${diffHtml}
+            ${changesHtml}
+            <div class="rcb-result">
+                <div class="rcb-result-label">${isFirst ? 'Recommended starting record' : 'Recommended DMARCbis-Ready record'}</div>
+                <div class="rcb-result-record record-block" style="margin: 0.4rem 0;">
+                    <span class="record-text">${escapeHtml(rb.recommended_record)}</span>
+                    <button class="copy-btn">Copy</button>
+                </div>
+            </div>
+            ${deployHtml}
+        </div>`;
+}
+
+function _parseRecordTags(record) {
+    const tags = [];
+    if (!record) return tags;
+    record.split(';').forEach(part => {
+        part = part.trim();
+        if (!part) return;
+        const eq = part.indexOf('=');
+        if (eq > 0) {
+            tags.push({ key: part.substring(0, eq).trim().toLowerCase(), raw: part.trim() });
+        }
+    });
+    return tags;
+}
+
+function _renderDiffRecord(tags, changedSet, side, changes) {
+    // Build a set of removed tags (only relevant for current side)
+    const removedTags = new Set(changes.filter(c => c.action === 'removed').map(c => c.tag));
+    const addedTags = new Set(changes.filter(c => c.action === 'added').map(c => c.tag));
+
+    return tags.map(t => {
+        let cls = '';
+        if (changedSet.has(t.key)) {
+            if (side === 'current') {
+                if (removedTags.has(t.key)) cls = 'rcb-hl-removed';
+                else cls = 'rcb-hl-modified';
+            } else {
+                if (addedTags.has(t.key)) cls = 'rcb-hl-added';
+                else cls = 'rcb-hl-modified';
+            }
+        }
+        return `<span class="rcb-diff-tag ${cls}">${escapeHtml(t.raw)}</span>`;
+    }).join('<span class="rcb-diff-sep">;</span> ');
 }
 
 // ============================================================
@@ -1689,6 +1901,69 @@ function renderDmarcbisReadiness(readiness) {
 }
 
 // ============================================================
+// Executive Summary (Prompt 16)
+// ============================================================
+
+function renderExecutiveSummary(es) {
+    if (!es) return '';
+
+    const sp = es.spoofing_protection || {};
+    const dr = es.dmarcbis_readiness || {};
+    const pc = es.protocol_coverage || {};
+
+    // Progress ring SVG for protocol coverage
+    const pct = pc.total ? (pc.configured / pc.total) : 0;
+    const circumference = 2 * Math.PI * 18;
+    const dashOffset = circumference * (1 - pct);
+    const ringColor = pc.color === 'green' ? 'var(--pass)' : pc.color === 'amber' ? 'var(--warn)' : 'var(--fail)';
+
+    const ringSvg = `<svg class="es-ring" width="44" height="44" viewBox="0 0 44 44">
+        <circle cx="22" cy="22" r="18" fill="none" stroke="var(--border)" stroke-width="3"/>
+        <circle cx="22" cy="22" r="18" fill="none" stroke="${ringColor}" stroke-width="3"
+            stroke-dasharray="${circumference}" stroke-dashoffset="${dashOffset}"
+            stroke-linecap="round" transform="rotate(-90 22 22)"/>
+    </svg>`;
+
+    // Biggest risk styling
+    const riskBg = es.biggest_risk.startsWith('No urgent risks')
+        ? 'es-risk-calm' : 'es-risk-urgent';
+
+    // Action buttons
+    let actions = `<button class="es-action" data-scroll-to="security-roadmap-anchor">View Full Roadmap</button>`;
+    actions += `<button class="es-action" data-scroll-to="check-dmarc">View Attack Surface</button>`;
+    if (es.has_record_builder) {
+        actions += `<button class="es-action" data-scroll-to="check-dmarc">Copy Recommended Record</button>`;
+    }
+
+    return `<div class="es-block" id="executive-summary">
+        <div class="es-verdict">${escapeHtml(es.verdict)}</div>
+
+        <div class="es-metrics">
+            <div class="es-metric">
+                <div class="es-metric-value es-color-${sp.color}">${escapeHtml(sp.label)}</div>
+                <div class="es-metric-label">Spoofing Protection</div>
+                <div class="es-metric-detail">${escapeHtml(sp.detail)}</div>
+            </div>
+            <div class="es-metric">
+                <div class="es-metric-value es-color-${dr.color}">${escapeHtml(dr.label)}</div>
+                <div class="es-metric-label">DMARCbis Readiness</div>
+            </div>
+            <div class="es-metric">
+                <div class="es-metric-ring">${ringSvg}<span class="es-ring-text">${pc.configured}/${pc.total}</span></div>
+                <div class="es-metric-label">Protocol Coverage</div>
+            </div>
+        </div>
+
+        <div class="es-risk ${riskBg}">
+            <div class="es-risk-label">Your biggest risk right now</div>
+            <div class="es-risk-text">${escapeHtml(es.biggest_risk)}</div>
+        </div>
+
+        <div class="es-actions">${actions}</div>
+    </div>`;
+}
+
+// ============================================================
 // Security Roadmap
 // ============================================================
 
@@ -1711,15 +1986,16 @@ function renderSecurityRoadmap(rm) {
         const tierItems = rm.items.filter(i => i.priority === tier);
         if (tierItems.length === 0) return;
 
-        let rows = tierItems.map(item =>
-            `<div class="sr-item sr-item-${priorityColors[item.priority]}">
+        let rows = tierItems.map(item => {
+            const anchor = `check-${item.protocol.toLowerCase().replace(/[^a-z0-9]/g, '-')}`;
+            return `<div class="sr-item sr-item-${priorityColors[item.priority]}" data-scroll-to="${anchor}" style="cursor:pointer;">
                 <span class="sr-protocol">${escapeHtml(item.protocol)}</span>
                 <div class="sr-item-body">
                     <div class="sr-action">${escapeHtml(item.action)}</div>
                     <div class="sr-impact">${escapeHtml(item.impact)}</div>
                 </div>
-            </div>`
-        ).join('');
+            </div>`;
+        }).join('');
 
         itemsHtml += `
             <div class="sr-tier">
@@ -2265,6 +2541,156 @@ document.getElementById('copy-all-btn').addEventListener('click', () => {
 // ============================================================
 // Helpers
 // ============================================================
+
+function _initShareDropdown() {
+    const shareBtn = document.getElementById('share-btn');
+    if (!shareBtn) return;
+
+    // Remove old dropdown if present
+    const old = document.getElementById('share-dropdown');
+    if (old) old.remove();
+
+    shareBtn.onclick = (e) => {
+        e.stopPropagation();
+        let dropdown = document.getElementById('share-dropdown');
+        if (dropdown) {
+            dropdown.remove();
+            return;
+        }
+        dropdown = document.createElement('div');
+        dropdown.id = 'share-dropdown';
+        dropdown.className = 'share-dropdown';
+        dropdown.innerHTML = _buildShareDropdownItems();
+        shareBtn.parentElement.style.position = 'relative';
+        shareBtn.parentElement.appendChild(dropdown);
+
+        // Position near the share button
+        requestAnimationFrame(() => dropdown.classList.add('open'));
+
+        // Bind actions
+        dropdown.querySelector('[data-action="copy-link"]').addEventListener('click', () => {
+            const url = _getShareUrl();
+            _copyToClipboard(url, dropdown.querySelector('[data-action="copy-link"] .share-option-label'), 'Copy Link');
+        });
+
+        dropdown.querySelector('[data-action="copy-summary"]').addEventListener('click', () => {
+            const summary = _buildShareSummary();
+            _copyToClipboard(summary, dropdown.querySelector('[data-action="copy-summary"] .share-option-label'), 'Copy Summary');
+        });
+
+        dropdown.querySelector('[data-action="linkedin"]').addEventListener('click', () => {
+            const url = _getShareUrl();
+            window.open('https://www.linkedin.com/sharing/share-offsite/?url=' + encodeURIComponent(url), '_blank', 'noopener');
+            dropdown.remove();
+        });
+
+        dropdown.querySelector('[data-action="twitter"]').addEventListener('click', () => {
+            const d = lastAuditData;
+            const grade = d?.score?.grade || '';
+            const score = Math.round(d?.score?.total || 0);
+            const domain = d?.domain || '';
+            const text = `DNS security audit for ${domain}: Grade ${grade} (${score}/100)`;
+            const url = _getShareUrl();
+            window.open('https://twitter.com/intent/tweet?text=' + encodeURIComponent(text) + '&url=' + encodeURIComponent(url), '_blank', 'noopener');
+            dropdown.remove();
+        });
+
+        // Close on click outside or Escape
+        const closeDropdown = (ev) => {
+            if (!dropdown.contains(ev.target) && ev.target !== shareBtn) {
+                dropdown.remove();
+                document.removeEventListener('click', closeDropdown);
+                document.removeEventListener('keydown', closeOnEsc);
+            }
+        };
+        const closeOnEsc = (ev) => {
+            if (ev.key === 'Escape') {
+                dropdown.remove();
+                document.removeEventListener('click', closeDropdown);
+                document.removeEventListener('keydown', closeOnEsc);
+            }
+        };
+        setTimeout(() => {
+            document.addEventListener('click', closeDropdown);
+            document.addEventListener('keydown', closeOnEsc);
+        }, 0);
+    };
+}
+
+function _getShareUrl() {
+    const d = lastAuditData;
+    if (!d) return window.location.href;
+    const url = new URL(window.location.origin);
+    url.searchParams.set('d', d.domain);
+    if (currentScope && currentScope !== 'complete') url.searchParams.set('scope', currentScope);
+    return url.toString();
+}
+
+function _buildShareSummary() {
+    const d = lastAuditData;
+    if (!d) return '';
+    const domain = d.domain || '';
+    const grade = d.score?.grade || '--';
+    const score = Math.round(d.score?.total || 0);
+    const checks = d.checks || [];
+    const passCount = checks.filter(c => c.status === 'pass').length;
+    const warnCount = checks.filter(c => c.status === 'warn').length;
+    const failCount = checks.filter(c => c.status === 'fail').length;
+    const fixes = d.priority_fixes || [];
+    const missing = checks.filter(c => c.status === 'fail').map(c => c.name).join(', ');
+
+    let lines = [];
+    lines.push(`DNS Security Audit: ${domain}`);
+    lines.push(`Grade: ${grade} (${score}/100)`);
+
+    let statusLine = '';
+    statusLine += `\u2713 ${passCount} Passing`;
+    statusLine += ` | \u26A0 ${warnCount} Warning${warnCount !== 1 ? 's' : ''}`;
+    statusLine += ` | \u2717 ${failCount} Issue${failCount !== 1 ? 's' : ''}`;
+    lines.push(statusLine);
+    lines.push('');
+
+    if (fixes.length > 0) {
+        lines.push('Priority: ' + fixes[0]);
+    }
+    if (missing) {
+        lines.push('Issues: ' + missing);
+    }
+
+    lines.push('');
+    lines.push('Full report: ' + _getShareUrl());
+    return lines.join('\n');
+}
+
+function _buildShareDropdownItems() {
+    return `
+        <button class="share-option" data-action="copy-link">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" width="16" height="16">
+                <path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/>
+                <path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/>
+            </svg>
+            <span class="share-option-label">Copy Link</span>
+        </button>
+        <button class="share-option" data-action="copy-summary">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" width="16" height="16">
+                <rect width="14" height="14" x="8" y="8" rx="2" ry="2"/><path d="M4 16c-1.1 0-2-.9-2-2V4c0-1.1.9-2 2-2h10c1.1 0 2 .9 2 2"/>
+            </svg>
+            <span class="share-option-label">Copy Summary</span>
+        </button>
+        <button class="share-option" data-action="linkedin">
+            <svg viewBox="0 0 24 24" fill="currentColor" width="16" height="16">
+                <path d="M20.447 20.452h-3.554v-5.569c0-1.328-.027-3.037-1.852-3.037-1.853 0-2.136 1.445-2.136 2.939v5.667H9.351V9h3.414v1.561h.046c.477-.9 1.637-1.85 3.37-1.85 3.601 0 4.267 2.37 4.267 5.455v6.286zM5.337 7.433a2.062 2.062 0 01-2.063-2.065 2.064 2.064 0 112.063 2.065zm1.782 13.019H3.555V9h3.564v11.452zM22.225 0H1.771C.792 0 0 .774 0 1.729v20.542C0 23.227.792 24 1.771 24h20.451C23.2 24 24 23.227 24 22.271V1.729C24 .774 23.2 0 22.222 0h.003z"/>
+            </svg>
+            <span class="share-option-label">LinkedIn</span>
+        </button>
+        <button class="share-option" data-action="twitter">
+            <svg viewBox="0 0 24 24" fill="currentColor" width="16" height="16">
+                <path d="M18.244 2.25h3.308l-7.227 8.26 8.502 11.24H16.17l-5.214-6.817L4.99 21.75H1.68l7.73-8.835L1.254 2.25H8.08l4.713 6.231zm-1.161 17.52h1.833L7.084 4.126H5.117z"/>
+            </svg>
+            <span class="share-option-label">X</span>
+        </button>
+    `;
+}
 
 function _copyToClipboard(text, feedbackEl, origLabel) {
     if (navigator.clipboard) {

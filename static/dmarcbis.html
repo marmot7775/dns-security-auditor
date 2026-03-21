@@ -1,0 +1,690 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>DMARCbis Explained | dns-audit.com</title>
+    <meta name="description" content="DMARCbis replaces RFC 7489 with stricter parsing, new subdomain protections, and a DNS-native discovery mechanism. Learn what changes, why it matters, and how to prepare.">
+    <meta name="keywords" content="DMARCbis, DMARC, email authentication, RFC 7489, DNS tree walk, np tag, psd tag, email security standard">
+    <meta name="author" content="Neil Anuskiewicz">
+    <meta property="og:title" content="DMARCbis Explained | dns-audit.com">
+    <meta property="og:description" content="DMARCbis replaces RFC 7489 with stricter parsing, new subdomain protections, and DNS-native discovery. Here's what changes and how to prepare.">
+    <meta property="og:type" content="article">
+    <meta property="og:url" content="https://dns-audit.com/dmarcbis">
+    <meta name="twitter:card" content="summary_large_image">
+    <meta name="twitter:title" content="DMARCbis Explained | dns-audit.com">
+    <meta name="twitter:description" content="DMARCbis replaces RFC 7489 with stricter parsing, new subdomain protections, and DNS-native discovery. Here's what changes and how to prepare.">
+    <link rel="canonical" href="https://dns-audit.com/dmarcbis">
+    <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><rect width='100' height='100' rx='18' fill='%231a1b1e'/><rect y='0' width='100' height='30' rx='18' fill='%232a2a2e'/><rect y='22' width='100' height='8' fill='%232a2a2e'/><circle cx='18' cy='15' r='5' fill='%23ff5f57'/><circle cx='33' cy='15' r='5' fill='%23febc2e'/><circle cx='48' cy='15' r='5' fill='%2328c840'/><text x='12' y='62' font-family='monospace' font-size='22' font-weight='700'><tspan fill='%235DCAA5'>$ </tspan><tspan fill='%2397C459'>dig</tspan></text><text x='12' y='84' font-family='monospace' font-size='18' font-weight='600' fill='%2385B7EB'>+secure</text></svg>">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="/static/style.css?v=dark2">
+    <style>
+        .dbis-page {
+            max-width: 760px;
+            margin: 0 auto;
+            padding: 2rem 1.25rem 3rem;
+        }
+
+        /* Hero */
+        .dbis-hero {
+            text-align: center;
+            padding: 2.5rem 0 2rem;
+        }
+        .dbis-hero h1 {
+            font-size: 2rem;
+            font-weight: 700;
+            letter-spacing: -0.03em;
+            color: var(--text-primary);
+            margin-bottom: 0.75rem;
+            line-height: 1.2;
+        }
+        .dbis-hero h1 span {
+            color: var(--dmarcbis);
+        }
+        .dbis-hero-sub {
+            font-size: 1rem;
+            color: var(--text-secondary);
+            line-height: 1.65;
+            max-width: 620px;
+            margin: 0 auto 1.5rem;
+        }
+        .dbis-hero-cta {
+            display: inline-flex;
+            align-items: center;
+            gap: 0.4rem;
+            padding: 0.6rem 1.25rem;
+            background: var(--dmarcbis);
+            color: #111;
+            font-size: 0.88rem;
+            font-weight: 600;
+            border-radius: 8px;
+            text-decoration: none;
+            transition: opacity 0.15s var(--ease);
+        }
+        .dbis-hero-cta:hover { opacity: 0.85; }
+
+        /* Sections */
+        .dbis-section {
+            margin-top: 2.5rem;
+        }
+        .dbis-section h2 {
+            font-size: 1.35rem;
+            font-weight: 700;
+            color: var(--text-primary);
+            letter-spacing: -0.02em;
+            margin-bottom: 0.75rem;
+        }
+        .dbis-section p {
+            font-size: 0.92rem;
+            color: var(--text-secondary);
+            line-height: 1.7;
+            margin-bottom: 0.85rem;
+        }
+        .dbis-section a {
+            color: var(--primary-light);
+            text-decoration: none;
+            font-weight: 500;
+        }
+        .dbis-section a:hover { text-decoration: underline; }
+        .dbis-section strong {
+            color: var(--text-primary);
+            font-weight: 600;
+        }
+        .dbis-section code {
+            font-family: var(--font-mono);
+            font-size: 0.82em;
+            background: var(--bg);
+            border: 1px solid var(--border);
+            padding: 0.1em 0.35em;
+            border-radius: 4px;
+            color: var(--primary-light);
+        }
+
+        /* Comparison table */
+        .dbis-table-wrap {
+            overflow-x: auto;
+            margin: 1rem 0;
+            border: 1px solid var(--border);
+            border-radius: 8px;
+        }
+        .dbis-table {
+            width: 100%;
+            border-collapse: collapse;
+            font-size: 0.82rem;
+        }
+        .dbis-table th {
+            text-align: left;
+            padding: 0.6rem 0.75rem;
+            background: var(--surface);
+            color: var(--text-primary);
+            font-weight: 600;
+            border-bottom: 1px solid var(--border);
+            white-space: nowrap;
+        }
+        .dbis-table td {
+            padding: 0.55rem 0.75rem;
+            color: var(--text-secondary);
+            border-bottom: 1px solid var(--border);
+            line-height: 1.5;
+            vertical-align: top;
+        }
+        .dbis-table tr:last-child td { border-bottom: none; }
+        .dbis-table code {
+            font-size: 0.85em;
+            background: var(--bg);
+            border: 1px solid var(--border);
+            padding: 0.05em 0.3em;
+            border-radius: 3px;
+            color: var(--primary-light);
+        }
+
+        /* Tag cards */
+        .dbis-tag-card {
+            background: var(--surface);
+            border: 1px solid var(--border);
+            border-radius: 8px;
+            padding: 1rem 1.25rem;
+            margin-bottom: 0.75rem;
+        }
+        .dbis-tag-header {
+            display: flex;
+            align-items: center;
+            gap: 0.6rem;
+            margin-bottom: 0.5rem;
+        }
+        .dbis-tag-name {
+            font-family: var(--font-mono);
+            font-size: 0.95rem;
+            font-weight: 600;
+            color: var(--text-primary);
+        }
+        .dbis-tag-badge {
+            font-size: 0.6rem;
+            font-weight: 700;
+            padding: 0.1rem 0.4rem;
+            border-radius: 4px;
+            background: var(--dmarcbis);
+            color: #111;
+            letter-spacing: 0.03em;
+        }
+        .dbis-tag-badge-dep {
+            background: var(--fail-bg);
+            color: var(--fail);
+        }
+        .dbis-tag-card p {
+            font-size: 0.85rem;
+            color: var(--text-secondary);
+            line-height: 1.6;
+            margin-bottom: 0.4rem;
+        }
+        .dbis-tag-card p:last-child { margin-bottom: 0; }
+        .dbis-tag-example {
+            font-size: 0.78rem;
+            color: var(--text-muted);
+        }
+
+        /* Tree walk diagram */
+        .dbis-walk-steps {
+            display: flex;
+            flex-direction: column;
+            gap: 0;
+            margin: 1rem 0;
+        }
+        .dbis-walk-step {
+            display: flex;
+            align-items: center;
+            gap: 0.6rem;
+            padding: 0.45rem 0.75rem;
+            font-family: var(--font-mono);
+            font-size: 0.8rem;
+            color: var(--text-secondary);
+            position: relative;
+        }
+        .dbis-walk-step::before {
+            content: '';
+            width: 8px;
+            height: 8px;
+            border-radius: 50%;
+            background: var(--border);
+            flex-shrink: 0;
+        }
+        .dbis-walk-step:not(:last-child)::after {
+            content: '';
+            position: absolute;
+            left: calc(0.75rem + 3px);
+            top: calc(0.45rem + 8px + 4px);
+            width: 2px;
+            height: calc(100% - 8px);
+            background: var(--border);
+        }
+        .dbis-walk-step.found::before {
+            background: var(--pass);
+        }
+        .dbis-walk-step.found {
+            color: var(--pass);
+            font-weight: 600;
+        }
+        .dbis-walk-step.stopped::before {
+            background: var(--fail);
+        }
+        .dbis-walk-step.stopped {
+            color: var(--text-muted);
+        }
+        .dbis-walk-label {
+            font-family: var(--font-body);
+            font-size: 0.72rem;
+            color: var(--text-muted);
+            margin-left: auto;
+            flex-shrink: 0;
+        }
+
+        /* Adoption stats */
+        .dbis-stats {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 0.5rem;
+            margin: 1rem 0;
+        }
+        .dbis-stat {
+            background: var(--surface);
+            border: 1px solid var(--border);
+            border-radius: 8px;
+            padding: 0.75rem 1rem;
+            text-align: center;
+        }
+        .dbis-stat-value {
+            font-size: 1.4rem;
+            font-weight: 700;
+            color: var(--text-primary);
+            line-height: 1;
+            margin-bottom: 0.25rem;
+        }
+        .dbis-stat-label {
+            font-size: 0.72rem;
+            color: var(--text-muted);
+            line-height: 1.3;
+        }
+
+        /* Steps list */
+        .dbis-steps {
+            counter-reset: step;
+            list-style: none;
+            padding: 0;
+            margin: 1rem 0;
+        }
+        .dbis-steps li {
+            counter-increment: step;
+            display: flex;
+            align-items: flex-start;
+            gap: 0.75rem;
+            padding: 0.5rem 0;
+            font-size: 0.88rem;
+            color: var(--text-secondary);
+            line-height: 1.6;
+        }
+        .dbis-steps li::before {
+            content: counter(step);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            min-width: 1.6rem;
+            height: 1.6rem;
+            border-radius: 50%;
+            background: var(--dmarcbis-bg);
+            color: var(--dmarcbis);
+            font-size: 0.72rem;
+            font-weight: 700;
+            flex-shrink: 0;
+            margin-top: 0.1rem;
+        }
+
+        /* Target record block */
+        .dbis-target {
+            background: var(--bg);
+            border: 1px solid var(--border);
+            border-radius: 6px;
+            padding: 0.65rem 0.85rem;
+            margin: 1rem 0;
+            font-family: var(--font-mono);
+            font-size: 0.8rem;
+            color: var(--text-primary);
+            line-height: 1.6;
+            word-break: break-all;
+        }
+
+        /* Further reading */
+        .dbis-links {
+            list-style: none;
+            padding: 0;
+            margin: 0.75rem 0;
+        }
+        .dbis-links li {
+            padding: 0.35rem 0;
+        }
+        .dbis-links a {
+            font-size: 0.88rem;
+        }
+
+        /* Footer CTA */
+        .dbis-footer-cta {
+            text-align: center;
+            padding: 2rem 0;
+            margin-top: 2.5rem;
+            border-top: 1px solid var(--border);
+        }
+        .dbis-footer-cta p {
+            font-size: 0.92rem;
+            color: var(--text-secondary);
+            margin-bottom: 1rem;
+        }
+
+        @media (max-width: 600px) {
+            .dbis-hero h1 { font-size: 1.5rem; }
+            .dbis-section h2 { font-size: 1.15rem; }
+            .dbis-stats { grid-template-columns: 1fr; }
+            .dbis-page { padding: 1.25rem 1rem 2rem; }
+        }
+    </style>
+    <script type="application/ld+json">
+    {
+        "@context": "https://schema.org",
+        "@type": "Article",
+        "headline": "DMARCbis Explained: What's Changing in Email Authentication",
+        "description": "DMARCbis replaces RFC 7489 with stricter parsing, new subdomain protections, and a DNS-native discovery mechanism.",
+        "author": {
+            "@type": "Person",
+            "name": "Neil Anuskiewicz",
+            "url": "https://www.linkedin.com/in/neilanuskiewicz/"
+        },
+        "publisher": {
+            "@type": "Organization",
+            "name": "dns-audit.com",
+            "url": "https://dns-audit.com"
+        },
+        "mainEntityOfPage": "https://dns-audit.com/dmarcbis"
+    }
+    </script>
+</head>
+<body>
+
+    <header class="site-header">
+        <div class="container header-inner">
+            <a href="/" class="logo">
+                <div class="logo-terminal">
+                    <div class="logo-titlebar">
+                        <span class="logo-dot logo-dot-red"></span>
+                        <span class="logo-dot logo-dot-yellow"></span>
+                        <span class="logo-dot logo-dot-green"></span>
+                    </div>
+                    <div class="logo-cmd">
+                        <span class="logo-prompt">$&nbsp;</span><span class="logo-bin">dig</span>&nbsp;<span class="logo-flag">+secure</span>
+                    </div>
+                </div>
+                <span class="logo-text">dns<span class="logo-accent">-audit</span>.com</span>
+            </a>
+            <nav class="site-nav">
+                <a href="/" class="nav-link">Home</a>
+                <a href="/dmarcbis" class="nav-link nav-link-active">DMARCbis Guide</a>
+                <a href="/methodology" class="nav-link">Methodology</a>
+                <a href="/privacy" class="nav-link">Privacy</a>
+            </nav>
+        </div>
+    </header>
+
+    <main>
+        <div class="dbis-page">
+
+            <!-- Hero -->
+            <div class="dbis-hero">
+                <h1><span>DMARCbis:</span> The Next DMARC Standard</h1>
+                <p class="dbis-hero-sub">DMARCbis replaces RFC 7489 with stricter parsing, new subdomain protections, and a DNS-native discovery mechanism. Here's what changes, why it matters, and how to prepare.</p>
+                <a href="/" class="dbis-hero-cta">Check Your Domain's DMARCbis Readiness &rarr;</a>
+            </div>
+
+            <!-- Section 1: What is DMARCbis? -->
+            <div class="dbis-section" id="what-is-dmarcbis">
+                <h2>What is DMARCbis?</h2>
+                <p>DMARCbis is the IETF's update to the DMARC email authentication standard. It was approved by the IESG in 2025 and replaces the original RFC 7489 (published in 2015 as an Informational RFC) with a Proposed Standard, a significant upgrade in authority. The name stands for "DMARC bis" (Latin for "twice" or "again"), signaling it's the second iteration of the specification.</p>
+                <p>The update addresses real-world problems discovered over a decade of DMARC deployment: inconsistent parsing across receivers, unreliable percentage-based policy rollout, no protection for non-existent subdomains, and dependence on the manually-maintained Public Suffix List for determining organizational domain boundaries.</p>
+                <p>Critically, DMARCbis maintains backward compatibility. It still uses <code>v=DMARC1</code> as the version identifier, and existing DMARC records continue to work. But records that relied on lenient parsing or deprecated features will encounter issues as receivers adopt the stricter specification.</p>
+            </div>
+
+            <!-- Section 2: What's New? -->
+            <div class="dbis-section" id="whats-new">
+                <h2>What's New?</h2>
+                <p>A side-by-side comparison of the original DMARC standard and its replacement:</p>
+                <div class="dbis-table-wrap">
+                    <table class="dbis-table">
+                        <thead>
+                            <tr>
+                                <th>What Changed</th>
+                                <th>RFC 7489 (Old)</th>
+                                <th>DMARCbis (New)</th>
+                                <th>Why It Matters</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            <tr>
+                                <td>Domain Discovery</td>
+                                <td>Public Suffix List</td>
+                                <td>DNS Tree Walk</td>
+                                <td>Eliminates dependency on an external, manually-maintained list</td>
+                            </tr>
+                            <tr>
+                                <td>Testing Mode</td>
+                                <td><code>pct=</code> (percentage)</td>
+                                <td><code>t=y</code> (binary)</td>
+                                <td>Only 0 and 100 were reliable; binary flag is predictable</td>
+                            </tr>
+                            <tr>
+                                <td>Subdomain Protection</td>
+                                <td>Inherits root policy</td>
+                                <td><code>np=</code> tag</td>
+                                <td>Closes non-existent subdomain spoofing loophole</td>
+                            </tr>
+                            <tr>
+                                <td>Domain Boundaries</td>
+                                <td>Public Suffix List</td>
+                                <td><code>psd=</code> tag</td>
+                                <td>Domain owners declare their own status in DNS</td>
+                            </tr>
+                            <tr>
+                                <td>Report Intervals</td>
+                                <td><code>ri=</code> tag</td>
+                                <td>Removed</td>
+                                <td>Receivers ignored it; daily is standard</td>
+                            </tr>
+                            <tr>
+                                <td>Report Format</td>
+                                <td><code>rf=</code> tag</td>
+                                <td>Removed</td>
+                                <td>Only <code>afrf</code> was ever used</td>
+                            </tr>
+                            <tr>
+                                <td>Parsing</td>
+                                <td>Lenient</td>
+                                <td>Strict</td>
+                                <td>Missing <code>mailto:</code>, duplicate tags, empty values now rejected</td>
+                            </tr>
+                            <tr>
+                                <td>URI Validation</td>
+                                <td>Basic</td>
+                                <td>RFC 3986-aligned</td>
+                                <td>Bare email addresses no longer accepted</td>
+                            </tr>
+                            <tr>
+                                <td>External Reporting</td>
+                                <td>Advisory</td>
+                                <td>Strict enforcement</td>
+                                <td>Authorization records more rigorously validated</td>
+                            </tr>
+                            <tr>
+                                <td>Spec Structure</td>
+                                <td>Single RFC</td>
+                                <td>Three RFCs</td>
+                                <td>Core, aggregate reporting, failure reporting separated</td>
+                            </tr>
+                            <tr>
+                                <td>Standard Status</td>
+                                <td>Informational</td>
+                                <td>Proposed Standard</td>
+                                <td>Stronger authority, encourages vendor enforcement</td>
+                            </tr>
+                            <tr>
+                                <td>SPF Evaluation</td>
+                                <td>MAIL FROM + HELO</td>
+                                <td>MAIL FROM only</td>
+                                <td>Clarifies alignment scope</td>
+                            </tr>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+
+            <!-- Section 3: New Tags -->
+            <div class="dbis-section" id="new-tags">
+                <h2>New Tags Explained</h2>
+
+                <div class="dbis-tag-card">
+                    <div class="dbis-tag-header">
+                        <span class="dbis-tag-name">np=</span>
+                        <span class="dbis-tag-badge">NEW in DMARCbis</span>
+                    </div>
+                    <p><strong>Non-Existent Subdomain Policy.</strong> Controls what happens when someone sends email from a subdomain that doesn't exist in DNS, like <code>secure-login.yourdomain.com</code>. Attackers prefer these because they look convincing and most organizations don't realize they need protection for domains that aren't real.</p>
+                    <p>Values: <code>none</code>, <code>quarantine</code>, <code>reject</code>. Falls back to <code>sp=</code>, then <code>p=</code> if not set.</p>
+                    <p class="dbis-tag-example">Adoption: 0% of top 1,000 domains.</p>
+                </div>
+
+                <div class="dbis-tag-card">
+                    <div class="dbis-tag-header">
+                        <span class="dbis-tag-name">psd=</span>
+                        <span class="dbis-tag-badge">NEW in DMARCbis</span>
+                    </div>
+                    <p><strong>Public Suffix Domain.</strong> Declares whether a domain is a Public Suffix (like <code>.com</code> or <code>.gov.uk</code>). This tells the DNS tree walk where to stop. If your domain is NOT a public suffix (most aren't), set <code>psd=n</code>. This replaces the PSL, a manually-maintained list that was the source of inconsistencies across receivers.</p>
+                    <p class="dbis-tag-example">Adoption: 0.1% of top 1,000 domains (1 domain).</p>
+                </div>
+
+                <div class="dbis-tag-card">
+                    <div class="dbis-tag-header">
+                        <span class="dbis-tag-name">t=</span>
+                        <span class="dbis-tag-badge">NEW in DMARCbis</span>
+                    </div>
+                    <p><strong>Test Mode.</strong> A binary testing flag that replaces the unreliable <code>pct</code> tag. When <code>t=y</code> is set, your published policy drops one level: <code>p=reject</code> becomes <code>p=quarantine</code>, <code>p=quarantine</code> becomes <code>p=none</code>. This gives you a safe, predictable way to test a stricter policy before committing.</p>
+                    <p>Under RFC 7489, <code>pct=50</code> meant "apply policy to 50% of failing mail," but receivers implemented this inconsistently.</p>
+                    <p class="dbis-tag-example">Adoption: 0% of top 1,000 domains.</p>
+                </div>
+            </div>
+
+            <!-- Section 4: Deprecated Tags -->
+            <div class="dbis-section" id="deprecated-tags">
+                <h2>Deprecated Tags</h2>
+
+                <div class="dbis-tag-card">
+                    <div class="dbis-tag-header">
+                        <span class="dbis-tag-name">pct=</span>
+                        <span class="dbis-tag-badge dbis-tag-badge-dep">DEPRECATED</span>
+                    </div>
+                    <p>Replaced by <code>t=y</code>. Only values of 0 and 100 were reliably honored by receivers. If your record has <code>pct=</code>, remove it and use <code>t=y</code> if you need test mode, or nothing for full enforcement.</p>
+                </div>
+
+                <div class="dbis-tag-card">
+                    <div class="dbis-tag-header">
+                        <span class="dbis-tag-name">rf=</span>
+                        <span class="dbis-tag-badge dbis-tag-badge-dep">DEPRECATED</span>
+                    </div>
+                    <p>Only <code>afrf</code> (Authentication Failure Reporting Format) was ever implemented. The tag served no practical purpose.</p>
+                </div>
+
+                <div class="dbis-tag-card">
+                    <div class="dbis-tag-header">
+                        <span class="dbis-tag-name">ri=</span>
+                        <span class="dbis-tag-badge dbis-tag-badge-dep">DEPRECATED</span>
+                    </div>
+                    <p>Reporting intervals were rarely respected by receivers. DMARCbis standardizes daily aggregate reports. Safe to remove.</p>
+                </div>
+            </div>
+
+            <!-- Section 5: DNS Tree Walk -->
+            <div class="dbis-section" id="tree-walk">
+                <h2>The DNS Tree Walk</h2>
+                <p>Under RFC 7489, if you queried DMARC for <code>news.marketing.example.com</code>, the resolver would check two places: the exact domain (<code>_dmarc.news.marketing.example.com</code>) and the organizational domain (<code>_dmarc.example.com</code>), determined by the Public Suffix List.</p>
+                <p>DMARCbis replaces this with a DNS Tree Walk that checks every level:</p>
+
+                <div class="dbis-walk-steps">
+                    <div class="dbis-walk-step">
+                        <code>_dmarc.news.marketing.example.com</code>
+                        <span class="dbis-walk-label">No record</span>
+                    </div>
+                    <div class="dbis-walk-step">
+                        <code>_dmarc.marketing.example.com</code>
+                        <span class="dbis-walk-label">No record</span>
+                    </div>
+                    <div class="dbis-walk-step found">
+                        <code>_dmarc.example.com</code>
+                        <span class="dbis-walk-label">Record found</span>
+                    </div>
+                    <div class="dbis-walk-step stopped">
+                        <code>_dmarc.com</code>
+                        <span class="dbis-walk-label">Stopped by psd=</span>
+                    </div>
+                </div>
+
+                <p>The first record found becomes the effective policy. This means a DMARC record at an intermediate level like <code>_dmarc.marketing.example.com</code> is found by DMARCbis but invisible to RFC 7489. This can produce different effective policies depending on which standard the receiver uses.</p>
+                <p>The tree walk has a safety limit of 8 DNS queries to prevent abuse.</p>
+            </div>
+
+            <!-- Section 6: Adoption Status -->
+            <div class="dbis-section" id="adoption">
+                <h2>Adoption Status</h2>
+                <p>DMARCbis adoption is effectively zero. Our scan of the top 1,000 internet domains found:</p>
+
+                <div class="dbis-stats">
+                    <div class="dbis-stat">
+                        <div class="dbis-stat-value">0%</div>
+                        <div class="dbis-stat-label">have adopted <code>np=</code></div>
+                    </div>
+                    <div class="dbis-stat">
+                        <div class="dbis-stat-value">0%</div>
+                        <div class="dbis-stat-label">use <code>t=</code> test mode</div>
+                    </div>
+                    <div class="dbis-stat">
+                        <div class="dbis-stat-value">0.1%</div>
+                        <div class="dbis-stat-label">have declared <code>psd=</code></div>
+                    </div>
+                    <div class="dbis-stat">
+                        <div class="dbis-stat-value">30.6%</div>
+                        <div class="dbis-stat-label">still use deprecated tags</div>
+                    </div>
+                </div>
+
+                <p>However, some receivers are already implementing DMARCbis features. Major German inbox providers including GMX, mail.com, and WEB.DE are running DMARCbis in production and sending aggregate reports following the updated specification.</p>
+                <p>The standard has been approved by the IESG and is awaiting final publication. The failure-reporting document is the last blocking item. When it publishes, adoption will accelerate, especially if major providers like Gmail, Microsoft, and Yahoo announce enforcement timelines, similar to how Google and Yahoo's 2024 bulk sender requirements doubled DMARC adoption overnight.</p>
+            </div>
+
+            <!-- Section 7: How to Prepare -->
+            <div class="dbis-section" id="how-to-prepare">
+                <h2>How to Prepare</h2>
+                <p>The good news: preparing for DMARCbis is safe to do today. All changes are backward-compatible with RFC 7489.</p>
+
+                <ol class="dbis-steps">
+                    <li>Check your current record with <a href="/">dns-audit.com</a></li>
+                    <li>Fix any structural issues flagged by strict validation</li>
+                    <li>Remove deprecated tags (<code>pct</code>, <code>rf</code>, <code>ri</code>)</li>
+                    <li>Add <code>np=reject</code> if your root policy is <code>reject</code></li>
+                    <li>Add <code>psd=n</code> (unless you're actually a public suffix domain)</li>
+                    <li>Use <code>t=y</code> instead of <code>pct</code> for testing</li>
+                    <li>Ensure all <code>rua=</code>/<code>ruf=</code> URIs have the <code>mailto:</code> prefix</li>
+                    <li>Re-check to verify DMARCbis Ready status</li>
+                </ol>
+
+                <p>Your target record should look something like:</p>
+                <div class="dbis-target">v=DMARC1; p=reject; sp=reject; np=reject; psd=n; fo=1; rua=mailto:dmarc@yourdomain.com</div>
+            </div>
+
+            <!-- Section 8: Further Reading -->
+            <div class="dbis-section" id="further-reading">
+                <h2>Further Reading</h2>
+                <ul class="dbis-links">
+                    <li><a href="https://datatracker.ietf.org/doc/draft-ietf-dmarc-dmarcbis/" target="_blank" rel="noopener">IETF DMARCbis Draft (datatracker.ietf.org)</a></li>
+                    <li><a href="https://dmarcian.com/dmarcbis/" target="_blank" rel="noopener">dmarcian's DMARCbis Overview</a></li>
+                    <li><a href="https://powerdmarc.com/what-is-dmarcbis/" target="_blank" rel="noopener">PowerDMARC: DMARCbis Explained</a></li>
+                    <li><a href="https://dmarcdkim.com/" target="_blank" rel="noopener">DmarcDkim.com Adoption Tracking</a></li>
+                    <li><a href="/methodology">dns-audit.com Methodology</a></li>
+                </ul>
+            </div>
+
+            <!-- Footer CTA -->
+            <div class="dbis-footer-cta">
+                <p>Ready to check your domain?</p>
+                <a href="/" class="dbis-hero-cta">Run a Free DMARCbis Audit &rarr;</a>
+            </div>
+
+        </div>
+    </main>
+
+    <footer class="site-footer">
+        <div class="container footer-inner">
+            <div class="footer-left">
+                <div class="footer-brand-name">dns-audit.com</div>
+                <div class="footer-brand-desc">Free, open-source DNS<br>& email security auditing</div>
+                <span class="footer-dmarcbis-badge">DMARCbis-aware</span>
+            </div>
+            <div class="footer-right">
+                <div class="footer-nav">
+                    <a href="/dmarcbis" class="footer-link">DMARCbis Guide</a>
+                    <span class="footer-dot">&middot;</span>
+                    <a href="/methodology" class="footer-link">Methodology</a>
+                    <span class="footer-dot">&middot;</span>
+                    <a href="/privacy" class="footer-link">Privacy</a>
+                    <span class="footer-dot">&middot;</span>
+                    <a href="https://github.com/marmot7775/dns-security-auditor" target="_blank" rel="noopener" class="footer-link">GitHub</a>
+                </div>
+                <div class="footer-attribution">Built by Neil Anuskiewicz</div>
+            </div>
+        </div>
+    </footer>
+
+</body>
+</html>
