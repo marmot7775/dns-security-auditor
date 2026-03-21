@@ -87,6 +87,18 @@ def _get_resolver(timeout: float = 5.0):
     return resolver
 
 
+def _lookup_ttl(name: str, rdtype: str = "TXT") -> Optional[int]:
+    """Look up the TTL for a DNS record. Returns None on any failure."""
+    if not DNS_AVAILABLE:
+        return None
+    try:
+        resolver = _get_resolver()
+        answers = resolver.resolve(name, rdtype)
+        return answers.rrset.ttl if answers.rrset else None
+    except dns.exception.DNSException:
+        return None
+
+
 def _lookup_txt(name: str) -> List[str]:
     if not DNS_AVAILABLE:
         return []
@@ -483,6 +495,7 @@ def check_mta_sts(domain: str) -> Dict[str, Any]:
         if fix and fix not in result["recommendations"]:
             result["recommendations"].append(fix)
 
+    result["ttl"] = _lookup_ttl(f"_mta-sts.{domain}")
     return result
 
 
@@ -613,6 +626,7 @@ def check_tls_rpt(domain: str) -> Dict[str, Any]:
         if fix and fix not in result["recommendations"]:
             result["recommendations"].append(fix)
 
+    result["ttl"] = _lookup_ttl(f"_smtp._tls.{domain}")
     return result
 
 
@@ -921,4 +935,5 @@ def check_bimi(domain: str, dmarc_enforcing_override: bool = None) -> Dict[str, 
         if fix and fix not in result["recommendations"]:
             result["recommendations"].append(fix)
 
+    result["ttl"] = _lookup_ttl(f"default._bimi.{domain}")
     return result

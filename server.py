@@ -3,6 +3,7 @@ DNS Security Auditor - FastAPI Server
 ======================================
 GET  /api/audit?domain=example.com  -- run full audit
 GET  /api/audit/pdf?domain=...      -- download PDF report
+POST /api/analyze-headers            -- analyze email headers
 GET  /api/health                     -- health check
 GET  /docs                           -- interactive API docs
 GET  /                               -- serve frontend
@@ -34,6 +35,7 @@ import dns.resolver
 import dns.exception
 
 from audit_engine import run_full_audit
+from header_analyzer import analyze_headers, get_sample_headers
 try:
     from pdf_report import generate_pdf
 except ImportError:
@@ -110,7 +112,7 @@ app.add_middleware(
         "http://localhost:8000",
         "http://127.0.0.1:8000",
     ],
-    allow_methods=["GET"],
+    allow_methods=["GET", "POST"],
     allow_headers=["Content-Type", "Accept"],
 )
 
@@ -632,6 +634,55 @@ async def audit_pdf(
 
 
 # ============================================================
+# Email Header Analyzer
+# ============================================================
+
+@app.post("/api/analyze-headers", tags=["Headers"])
+async def analyze_email_headers(request: Request):
+    """
+    Analyze raw email headers for authentication, deliverability, and security.
+
+    Accepts raw email header text as the POST body.
+    Returns structured analysis including authentication results,
+    mail journey, identity checks, and deliverability diagnosis.
+    """
+    # Rate limiting
+    client_ip = _get_client_ip(request)
+    if not _check_rate_limit(client_ip):
+        return JSONResponse(
+            status_code=429,
+            content={"detail": "Rate limit exceeded. Please wait a minute before trying again."},
+            headers={"Retry-After": str(RATE_LIMIT_WINDOW)},
+        )
+
+    try:
+        body = await request.body()
+        raw_headers = body.decode("utf-8", errors="replace")
+    except Exception:
+        raise HTTPException(status_code=400, detail="Could not read request body")
+
+    if not raw_headers.strip():
+        raise HTTPException(status_code=400, detail="No headers provided")
+
+    if len(raw_headers) > 200_000:
+        raise HTTPException(status_code=400, detail="Input too large (max 200KB)")
+
+    try:
+        result = analyze_headers(raw_headers)
+    except Exception as e:
+        log.error("Header analysis failed: %s", str(e)[:200], exc_info=True)
+        raise HTTPException(status_code=500, detail="Header analysis failed")
+
+    return JSONResponse(content=result)
+
+
+@app.get("/api/sample-headers", tags=["Headers"])
+async def sample_headers():
+    """Return sample email headers for the try-it-out feature."""
+    return PlainTextResponse(content=get_sample_headers())
+
+
+# ============================================================
 # Health check
 # ============================================================
 
@@ -687,6 +738,11 @@ async def sitemap_xml():
         "    <changefreq>monthly</changefreq>\n"
         "    <priority>0.3</priority>\n"
         "  </url>\n"
+        "  <url>\n"
+        "    <loc>https://dns-audit.com/headers</loc>\n"
+        "    <changefreq>monthly</changefreq>\n"
+        "    <priority>0.7</priority>\n"
+        "  </url>\n"
         "</urlset>\n"
     )
     return Response(content=xml, media_type="application/xml")
@@ -732,6 +788,10 @@ if STATIC_DIR.exists():
     @app.get("/methodology", tags=["Pages"])
     async def methodology():
         return FileResponse(str(STATIC_DIR / "methodology.html"))
+
+    @app.get("/headers", tags=["Pages"])
+    async def headers_page():
+        return FileResponse(str(STATIC_DIR / "index.html"))
 else:
     @app.get("/")
     async def index():
