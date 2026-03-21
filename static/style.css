@@ -2113,6 +2113,23 @@ main {
     font-weight: 600;
 }
 
+.de-note {
+    font-size: 0.68rem;
+    color: var(--text-muted);
+    font-style: italic;
+    width: 100%;
+    margin-top: 0.15rem;
+}
+
+.de-mailing-list-note {
+    font-size: 0.72rem;
+    color: var(--text-muted);
+    font-style: italic;
+    margin-top: 0.6rem;
+    padding-top: 0.5rem;
+    border-top: 1px solid var(--border);
+}
+
 .de-aligned {
     color: var(--pass);
 }
@@ -4220,6 +4237,248 @@ main .meth-page {
 
     .limit-item {
         padding: 0.55rem 0.75rem;
+    }
+}
+
+/* ── DMARCbis Readiness Block ──────────────────────────────── */
+
+.dbis-readiness-block {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 1rem 1.25rem;
+    margin: 0.85rem 0;
+}
+
+.dbis-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 0.75rem;
+    padding-bottom: 0.6rem;
+    border-bottom: 1px solid var(--border);
+}
+
+.dbis-header-left {
+    display: flex;
+    align-items: center;
+    gap: 0.6rem;
+}
+
+.dbis-badge {
+    background: #1a1e2e;
+    color: #93d5ff;
+    font-size: 0.62rem;
+    font-weight: 700;
+    padding: 0.15rem 0.5rem;
+    border-radius: 4px;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+}
+
+.dbis-title {
+    font-size: 0.85rem;
+    font-weight: 600;
+    color: var(--text-primary);
+}
+
+.dbis-header-right {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+}
+
+.dbis-status {
+    font-size: 0.75rem;
+    font-weight: 600;
+    padding: 0.2rem 0.6rem;
+    border-radius: 100px;
+}
+
+.dbis-status-pass {
+    background: var(--pass-bg);
+    color: var(--pass);
+}
+
+.dbis-status-warn {
+    background: var(--warn-bg);
+    color: var(--warn);
+}
+
+.dbis-status-fail {
+    background: var(--fail-bg);
+    color: var(--fail);
+}
+
+.dbis-score {
+    font-size: 0.75rem;
+    color: var(--text-muted);
+}
+
+.dbis-check-item {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    padding: 0.35rem 0;
+    font-size: 0.82rem;
+}
+
+.dbis-check-label {
+    flex: 1;
+    min-width: 0;
+}
+
+.dbis-info-icon {
+    color: var(--text-muted);
+}
+
+.dbis-tag {
+    background: #1a1e2e;
+    color: #f87171;
+    font-family: var(--font-mono);
+    font-size: 0.7rem;
+    padding: 0.1rem 0.4rem;
+    border-radius: 3px;
+    flex-shrink: 0;
+}
+
+.dbis-dep-details {
+    margin: 0.15rem 0 0.3rem 1.5rem;
+}
+
+.dbis-dep-item {
+    display: flex;
+    align-items: baseline;
+    gap: 0.5rem;
+    padding: 0.15rem 0;
+    font-size: 0.75rem;
+}
+
+.dbis-dep-tag {
+    font-family: var(--font-mono);
+    font-weight: 600;
+    color: var(--fail);
+    flex-shrink: 0;
+}
+
+.dbis-dep-reason {
+    color: var(--text-muted);
+}
+
+.dbis-np-chain {
+    margin: 0.15rem 0 0.3rem 1.5rem;
+    font-size: 0.75rem;
+}
+
+.dbis-chain-label {
+    color: var(--text-muted);
+    margin-bottom: 0.25rem;
+}
+
+.dbis-chain-links {
+    display: flex;
+    align-items: center;
+    gap: 0.3rem;
+    flex-wrap: wrap;
+}
+
+.dbis-chain-link {
+    font-family: var(--font-mono);
+    font-size: 0.72rem;
+    padding: 0.1rem 0.4rem;
+    border-radius: 3px;
+}
+
+.dbis-chain-active {
+    background: var(--pass-bg);
+    color: var(--pass);
+    font-weight: 600;
+}
+
+.dbis-chain-inactive {
+    background: var(--surface);
+    color: var(--text-muted);
+    border: 1px solid var(--border);
+    text-decoration: line-through;
+}
+
+.dbis-chain-arrow {
+    color: var(--text-muted);
+    font-size: 0.68rem;
+}
+
+.dbis-chain-note {
+    color: var(--text-muted);
+    margin-top: 0.2rem;
+    font-style: italic;
+}
+
+.dbis-suggested {
+    margin-top: 0.85rem;
+    padding-top: 0.75rem;
+    border-top: 1px solid var(--border);
+}
+
+.dbis-suggested-label {
+    font-size: 0.78rem;
+    font-weight: 600;
+    color: var(--text-secondary);
+    margin-bottom: 0.4rem;
+}
+
+.dbis-changes {
+    margin-top: 0.5rem;
+}
+
+.dbis-change {
+    display: flex;
+    align-items: baseline;
+    gap: 0.5rem;
+    padding: 0.25rem 0;
+    font-size: 0.75rem;
+}
+
+.dbis-removed {
+    background: var(--fail-bg);
+    color: var(--fail);
+    font-size: 0.62rem;
+    font-weight: 700;
+    padding: 0.1rem 0.4rem;
+    border-radius: 3px;
+    text-transform: uppercase;
+    flex-shrink: 0;
+}
+
+.dbis-added {
+    background: var(--pass-bg);
+    color: var(--pass);
+    font-size: 0.62rem;
+    font-weight: 700;
+    padding: 0.1rem 0.4rem;
+    border-radius: 3px;
+    text-transform: uppercase;
+    flex-shrink: 0;
+}
+
+.dbis-change-tag {
+    font-family: var(--font-mono);
+    font-weight: 600;
+    color: var(--text-primary);
+}
+
+.dbis-change-reason {
+    color: var(--text-muted);
+}
+
+@media (max-width: 600px) {
+    .dbis-header {
+        flex-direction: column;
+        align-items: flex-start;
+        gap: 0.4rem;
+    }
+
+    .dbis-change {
+        flex-wrap: wrap;
     }
 }
 

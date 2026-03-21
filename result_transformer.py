@@ -77,6 +77,171 @@ def _first_fix(issues: List[Dict]) -> Optional[str]:
 # DMARC
 # ============================================================
 
+
+def _build_dmarcbis_card_data(readiness: Optional[Dict], record: Optional[str]) -> Optional[Dict]:
+    """Transform the raw _assess_dmarcbis_readiness output into the
+    checklist + suggested-record format consumed by the frontend card.
+
+    Returns None when there is no record (nothing to assess).
+    """
+    if not readiness or not record:
+        return None
+
+    # Parse tags from the record for building suggestions
+    tags = {}
+    for part in record.split(";"):
+        part = part.strip()
+        if "=" in part:
+            k, _, v = part.partition("=")
+            tags[k.strip().lower()] = v.strip()
+
+    deprecated = readiness.get("deprecated_tags", [])
+    new_tags = readiness.get("new_tags", {})
+
+    checklist = []
+
+    # 1. Valid DMARC record
+    checklist.append({
+        "label": "Valid DMARC record found",
+        "status": "pass",
+        "detail": None,
+    })
+
+    # 2. No deprecated tags (pct, rf, ri)
+    dep_names = [d["tag"] for d in deprecated]
+    if dep_names:
+        dep_reasons = {
+            "pct": "Replaced by t=y/t=n for testing; remove pct entirely",
+            "rf": "Only afrf was ever supported, making this tag redundant",
+            "ri": "No longer respected; receivers send reports daily",
+        }
+        dep_details = [
+            {"tag": d["tag"], "reason": dep_reasons.get(d["tag"], "Deprecated in DMARCbis")}
+            for d in deprecated
+        ]
+        checklist.append({
+            "label": "No deprecated tags (pct, rf, ri)",
+            "status": "warn",
+            "detail": ", ".join(dep_names),
+            "deprecated_details": dep_details,
+        })
+    else:
+        checklist.append({
+            "label": "No deprecated tags (pct, rf, ri)",
+            "status": "pass",
+            "detail": None,
+        })
+
+    # 3. NP policy defined + precedence chain
+    np_info = new_tags.get("np", {})
+    p_val = tags.get("p", "none")
+    sp_val = tags.get("sp")
+    np_val = np_info.get("value")
+
+    # Build the fallback chain: np → sp → p
+    np_chain = []
+    if np_val:
+        np_chain.append({"tag": "np", "value": np_val, "active": True})
+    else:
+        np_chain.append({"tag": "np", "value": None, "active": False})
+    if sp_val:
+        np_chain.append({"tag": "sp", "value": sp_val, "active": not np_val})
+    np_chain.append({"tag": "p", "value": p_val, "active": not np_val and not sp_val})
+
+    if np_info.get("present"):
+        checklist.append({
+            "label": "NP policy defined (non-existent domains)",
+            "status": "pass",
+            "detail": f"np={np_info['value']}",
+            "np_chain": np_chain,
+        })
+    else:
+        fallback_tag = "sp" if sp_val else "p"
+        fallback_val = sp_val if sp_val else p_val
+        checklist.append({
+            "label": "NP policy defined (non-existent domains)",
+            "status": "warn",
+            "detail": "missing",
+            "suggestion": f"np={fallback_val}",
+            "np_chain": np_chain,
+            "np_fallback_note": f"Non-existent subdomains currently fall back to {fallback_tag}={fallback_val}",
+        })
+
+    # 4. PSD indicator declared
+    psd_info = new_tags.get("psd", {})
+    if psd_info.get("present") and psd_info.get("value") in ("y", "n"):
+        checklist.append({
+            "label": "PSD indicator declared",
+            "status": "pass",
+            "detail": f"psd={psd_info['value']}",
+        })
+    else:
+        psd_val = psd_info.get("value")
+        checklist.append({
+            "label": "PSD indicator declared",
+            "status": "info",
+            "detail": f"psd={psd_val}" if psd_val else "u (default)",
+            "note": "Most domains should use psd=n (not a public suffix)",
+        })
+
+    # Overall status
+    raw_status = readiness.get("status", "compatible")
+    status_map = {"ready": "compliant", "needs_update": "non_compliant"}
+    status = status_map.get(raw_status, "compatible")
+
+    # Build suggested record + changes list
+    changes = []
+    new_record_tags = dict(tags)
+
+    for dep in deprecated:
+        tag_name = dep["tag"]
+        if tag_name in new_record_tags:
+            val = new_record_tags.pop(tag_name)
+            reason = f"{tag_name} tag is deprecated in DMARCbis"
+            if tag_name == "pct":
+                if val == "100":
+                    reason += "; value was already 100 (default)"
+                else:
+                    reason += f"; was {val}%. Use t=y for testing instead"
+            elif tag_name == "rf":
+                reason += "; only afrf was ever supported"
+            elif tag_name == "ri":
+                reason += "; reports are now sent daily"
+            changes.append({"type": "removed", "tag": tag_name, "reason": reason})
+
+    if not np_info.get("present"):
+        np_source = "sp" if "sp" in new_record_tags else "p"
+        np_value = new_record_tags.get(np_source, "none")
+        new_record_tags["np"] = np_value
+        changes.append({
+            "type": "added", "tag": "np",
+            "reason": f"np tag added from {np_source} value to explicitly control non-existent subdomain policy",
+        })
+
+    # Reconstruct in standard tag order
+    tag_order = ["v", "p", "sp", "np", "adkim", "aspf", "psd", "t", "fo", "rua", "ruf"]
+    parts = []
+    for t in tag_order:
+        if t in new_record_tags:
+            parts.append(f"{t}={new_record_tags[t]}")
+    for t, v in new_record_tags.items():
+        if t not in tag_order:
+            parts.append(f"{t}={v}")
+
+    suggested_record = "; ".join(parts) if changes else None
+
+    pass_count = sum(1 for c in checklist if c["status"] == "pass")
+
+    return {
+        "status": status,
+        "checklist": checklist,
+        "pass_count": pass_count,
+        "total_count": len(checklist),
+        "suggested_record": suggested_record,
+        "changes": changes,
+    }
+
+
 def transform_dmarc(raw: Dict, tree_walk: Optional[Dict] = None) -> Dict:
     status = _map_status(raw.get("status", "error"))
     policy = raw.get("policy", "")
@@ -354,7 +519,9 @@ def transform_dmarc(raw: Dict, tree_walk: Optional[Dict] = None) -> Dict:
         "details": details,
         "fix": fix,
         "fix_records": fix_records,
-        "dmarcbis_readiness": raw.get("dmarcbis_readiness"),
+        "dmarcbis_readiness": _build_dmarcbis_card_data(
+            raw.get("dmarcbis_readiness"), raw.get("record")
+        ),
     }
 
 

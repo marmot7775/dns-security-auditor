@@ -7,11 +7,11 @@ const API_BASE = '/api';
 
 // -- Scope definitions: which checks to show per scope --
 const SCOPE_CHECKS = {
-    complete:      null, // null = show all
-    email_full:    ['DMARC', 'SPF', 'DKIM', 'MX Records', 'MX', 'MTA-STS', 'TLS-RPT', 'BIMI', 'Blocklist'],
-    dmarc:         ['DMARC', 'SPF', 'DKIM'],
-    transport:     ['MTA-STS', 'TLS-RPT', 'DANE', 'MX Records', 'MX'],
-    dns_infra:     ['DNSSEC', 'CAA', 'DANE', 'Nameservers', 'Certificate Transparency'],
+    complete: null, // null = show all
+    email_full: ['DMARC', 'SPF', 'DKIM', 'MX Records', 'MX', 'MTA-STS', 'TLS-RPT', 'BIMI', 'Blocklist'],
+    dmarc: ['DMARC', 'SPF', 'DKIM'],
+    transport: ['MTA-STS', 'TLS-RPT', 'DANE', 'MX Records', 'MX'],
+    dns_infra: ['DNSSEC', 'CAA', 'DANE', 'Nameservers', 'Certificate Transparency'],
     security_scan: ['DMARC', 'SPF', 'DKIM', 'DNSSEC', 'DANE', 'Certificate Transparency', 'Blocklist', 'CAA', 'MTA-STS'],
 };
 
@@ -25,9 +25,9 @@ let auditStartTime = 0;
 let auditController = null;
 
 // -- DOM References --
-const auditForm      = document.getElementById('audit-form');
-const domainInput    = document.getElementById('domain-input');
-const auditBtn       = document.getElementById('audit-btn');
+const auditForm = document.getElementById('audit-form');
+const domainInput = document.getElementById('domain-input');
+const auditBtn = document.getElementById('audit-btn');
 const loadingSection = document.getElementById('loading-section');
 const resultsSection = document.getElementById('results-section');
 
@@ -56,7 +56,7 @@ document.getElementById('selector-toggle').addEventListener('click', (e) => {
 document.addEventListener('DOMContentLoaded', () => {
     const params = new URLSearchParams(window.location.search);
     const domain = params.get('d');
-    const scope  = params.get('scope');
+    const scope = params.get('scope');
     if (scope && SCOPE_CHECKS[scope]) {
         currentScope = scope;
         document.querySelectorAll('.scope-btn').forEach(b => {
@@ -188,22 +188,22 @@ async function runAudit(domain) {
 
 // Map backend step names to friendly status messages
 const STEP_MESSAGES = {
-    'Tree Walk':                'Resolving DNS records...',
-    'DMARC':                    'Checking DMARC policy...',
-    'MX':                       'Checking MX records...',
-    'SPF':                      'Analyzing SPF configuration...',
-    'MTA-STS':                  'Validating MTA-STS...',
-    'TLS-RPT':                  'Checking TLS-RPT...',
-    'BIMI':                     'Looking for BIMI record...',
-    'DNSSEC':                   'Verifying DNSSEC chain...',
-    'CAA':                      'Checking CAA records...',
-    'Nameservers':              'Checking nameservers...',
-    'DANE':                     'Checking DANE TLSA records...',
-    'DKIM':                     'Discovering DKIM selectors...',
+    'Tree Walk': 'Resolving DNS records...',
+    'DMARC': 'Checking DMARC policy...',
+    'MX': 'Checking MX records...',
+    'SPF': 'Analyzing SPF configuration...',
+    'MTA-STS': 'Validating MTA-STS...',
+    'TLS-RPT': 'Checking TLS-RPT...',
+    'BIMI': 'Looking for BIMI record...',
+    'DNSSEC': 'Verifying DNSSEC chain...',
+    'CAA': 'Checking CAA records...',
+    'Nameservers': 'Checking nameservers...',
+    'DANE': 'Checking DANE TLSA records...',
+    'DKIM': 'Discovering DKIM selectors...',
     'Certificate Transparency': 'Querying certificate transparency logs...',
-    'Blocklist':                'Checking IP and domain blocklists...',
-    'Vendor Fingerprinting':    'Fingerprinting email services...',
-    'Scoring':                  'Calculating security score...',
+    'Blocklist': 'Checking IP and domain blocklists...',
+    'Vendor Fingerprinting': 'Fingerprinting email services...',
+    'Scoring': 'Calculating security score...',
 };
 
 function showLoading() {
@@ -355,7 +355,7 @@ function renderResults(data) {
 
     // Grade color-coding
     const gradeCard = document.querySelector('.grade-card');
-    const gradeEl   = document.getElementById('summary-grade');
+    const gradeEl = document.getElementById('summary-grade');
     const grade = data.score?.grade || '--';
     const isDefensive = data.defensive_dns;
 
@@ -412,7 +412,7 @@ function renderResults(data) {
     const res = data.resilience;
     if (res) {
         resSection.style.display = 'block';
-        const levelColors = {high: 'pass', moderate: 'warn', low: 'fail', none: 'fail'};
+        const levelColors = { high: 'pass', moderate: 'warn', low: 'fail', none: 'fail' };
         const levelClass = levelColors[res.level] || 'info';
 
         document.getElementById('resilience-summary').innerHTML = `
@@ -424,7 +424,7 @@ function renderResults(data) {
         let mechHtml = '';
         for (const [name, info] of Object.entries(mechs)) {
             const sClass = info.status === 'missing' || info.status === 'broken' ? 'fail'
-                         : info.status === 'not_detected' || info.status === 'none' ? 'warn' : 'pass';
+                : info.status === 'not_detected' || info.status === 'none' ? 'warn' : 'pass';
             mechHtml += `<div class="resilience-mech">
                 <span class="resilience-mech-name">${escapeHtml(name.toUpperCase())}</span>
                 <span class="resilience-mech-status resilience-${sClass}">${escapeHtml(info.status)}</span>
@@ -442,7 +442,7 @@ function renderResults(data) {
 
     // -- Priority fixes (always at top, before detailed results) --
     const prioritySection = document.getElementById('priority-section');
-    const priorityList    = document.getElementById('priority-list');
+    const priorityList = document.getElementById('priority-list');
     priorityList.innerHTML = '';
 
     const fixes = data.priority_fixes || [];
@@ -499,8 +499,8 @@ function renderResults(data) {
     if (data.anomalies && data.anomalies.length > 0) {
         anomaliesSection.style.display = 'block';
         data.anomalies.forEach(a => {
-            const sevClass = {critical: 'fail', high: 'warn', medium: 'info'}[a.severity] || 'info';
-            const sevLabel = {critical: 'Critical', high: 'High', medium: 'Medium'}[a.severity] || escapeHtml(a.severity);
+            const sevClass = { critical: 'fail', high: 'warn', medium: 'info' }[a.severity] || 'info';
+            const sevLabel = { critical: 'Critical', high: 'High', medium: 'Medium' }[a.severity] || escapeHtml(a.severity);
             const item = document.createElement('div');
             item.className = `anomaly-card anomaly-${sevClass}`;
             item.innerHTML = `
@@ -542,7 +542,7 @@ function renderResults(data) {
 
     // Vendors
     const vendorsSection = document.getElementById('vendors-section');
-    const vendorsGrid    = document.getElementById('vendors-grid');
+    const vendorsGrid = document.getElementById('vendors-grid');
     vendorsGrid.innerHTML = '';
 
     if (data.vendors && data.vendors.length > 0) {
@@ -806,6 +806,11 @@ function renderCheckBody(check) {
         html += renderTreeWalk(check._tree_walk);
     }
 
+    // DMARCbis readiness (after tree walk, before evaluation)
+    if (check.dmarcbis_readiness) {
+        html += renderDmarcbisReadiness(check.dmarcbis_readiness);
+    }
+
     // DMARC evaluation summary (after tree walk)
     if (check._dmarc_eval) {
         html += renderDmarcEvaluation(check._dmarc_eval);
@@ -877,8 +882,8 @@ function renderTreeWalkSimple(tw) {
     const domain = escapeHtml(tw.domain);
     const policy = escapeHtml(tw.effective_policy || 'none');
     const policyClass = policy === 'reject' ? 'tw-pill-pass'
-                      : policy === 'quarantine' ? 'tw-pill-warn'
-                      : 'tw-pill-muted';
+        : policy === 'quarantine' ? 'tw-pill-warn'
+            : 'tw-pill-muted';
 
     return `
         <div class="tree-walk tree-walk-simple tw-animated">
@@ -968,8 +973,8 @@ function renderTreeWalkFull(tw) {
     if (tw.policy_source) {
         const policy = escapeHtml(tw.effective_policy || 'none');
         const policyClass = policy === 'reject' ? 'tw-pill-pass'
-                          : policy === 'quarantine' ? 'tw-pill-warn'
-                          : 'tw-pill-muted';
+            : policy === 'quarantine' ? 'tw-pill-warn'
+                : 'tw-pill-muted';
         const tag = tw.applied_tag || 'p';
         const tagExplanation = getTagExplanation(tag, tw);
 
@@ -1029,6 +1034,122 @@ function getTagExplanation(tag, tw) {
         default:
             return `<code>${escapeHtml(tag)}</code>`;
     }
+}
+
+// ============================================================
+// DMARCbis Readiness
+// ============================================================
+
+function renderDmarcbisReadiness(readiness) {
+    if (!readiness || readiness.status === 'no_record') return '';
+
+    const statusLabels = {
+        'compliant': 'DMARCbis Ready',
+        'compatible': 'DMARCbis Compatible',
+        'non_compliant': 'Needs Update'
+    };
+    const statusColors = {
+        'compliant': 'pass',
+        'compatible': 'warn',
+        'non_compliant': 'fail'
+    };
+
+    const statusLabel = statusLabels[readiness.status] || 'Unknown';
+    const statusClass = statusColors[readiness.status] || 'warn';
+
+    // Checklist items
+    let checklistHtml = '';
+    readiness.checklist.forEach(item => {
+        const iconClass = item.status === 'pass' ? 'tw-hit'
+            : item.status === 'warn' ? 'tw-psd'
+                : 'dbis-info-icon';
+        const icon = item.status === 'pass' ? '&#10003;'
+            : item.status === 'warn' ? '&#9651;'
+                : '&#8505;';
+        const detail = item.detail
+            ? `<span class="dbis-tag">${escapeHtml(item.detail)}</span>`
+            : '';
+
+        // Per-tag deprecation details (expanded under the checklist item)
+        let subDetailsHtml = '';
+        if (item.deprecated_details && item.deprecated_details.length > 0) {
+            let depItems = '';
+            item.deprecated_details.forEach(dep => {
+                depItems += `
+                    <div class="dbis-dep-item">
+                        <span class="dbis-dep-tag">${escapeHtml(dep.tag)}</span>
+                        <span class="dbis-dep-reason">${escapeHtml(dep.reason)}</span>
+                    </div>`;
+            });
+            subDetailsHtml = `<div class="dbis-dep-details">${depItems}</div>`;
+        }
+
+        // NP precedence chain
+        if (item.np_chain && item.np_chain.length > 0) {
+            let chainItems = item.np_chain.map(link => {
+                const val = link.value != null ? `=${escapeHtml(link.value)}` : '';
+                const cls = link.active ? 'dbis-chain-active' : 'dbis-chain-inactive';
+                return `<span class="dbis-chain-link ${cls}">${escapeHtml(link.tag)}${val}</span>`;
+            }).join('<span class="dbis-chain-arrow">&#8594;</span>');
+            let fallbackNote = item.np_fallback_note
+                ? `<div class="dbis-chain-note">${escapeHtml(item.np_fallback_note)}</div>`
+                : '';
+            subDetailsHtml += `<div class="dbis-np-chain">
+                <div class="dbis-chain-label">Non-existent subdomain policy precedence:</div>
+                <div class="dbis-chain-links">${chainItems}</div>
+                ${fallbackNote}
+            </div>`;
+        }
+
+        checklistHtml += `
+            <div class="dbis-check-item">
+                <span class="${iconClass}">${icon}</span>
+                <span class="dbis-check-label">${escapeHtml(item.label)}</span>
+                ${detail}
+            </div>
+            ${subDetailsHtml}`;
+    });
+
+    // Suggested record with changes
+    let suggestedHtml = '';
+    if (readiness.suggested_record && readiness.changes && readiness.changes.length > 0) {
+        let changesHtml = '';
+        readiness.changes.forEach(change => {
+            const changeClass = change.type === 'removed' ? 'dbis-removed' : 'dbis-added';
+            const changeLabel = change.type === 'removed' ? 'REMOVED' : 'ADDED';
+            changesHtml += `
+                <div class="dbis-change">
+                    <span class="${changeClass}">${changeLabel}</span>
+                    <span class="dbis-change-tag">${escapeHtml(change.tag)}</span>
+                    <span class="dbis-change-reason">${escapeHtml(change.reason)}</span>
+                </div>`;
+        });
+
+        suggestedHtml = `
+            <div class="dbis-suggested">
+                <div class="dbis-suggested-label">Suggested DMARCbis Record</div>
+                <div class="record-block" style="margin: 0.5rem 0;">
+                    <span class="record-text">${escapeHtml(readiness.suggested_record)}</span>
+                </div>
+                <div class="dbis-changes">${changesHtml}</div>
+            </div>`;
+    }
+
+    return `
+        <div class="dbis-readiness-block">
+            <div class="dbis-header">
+                <div class="dbis-header-left">
+                    <span class="dbis-badge">DMARCbis</span>
+                    <span class="dbis-title">DMARCbis Readiness</span>
+                </div>
+                <div class="dbis-header-right">
+                    <span class="dbis-status dbis-status-${statusClass}">${escapeHtml(statusLabel)}</span>
+                    <span class="dbis-score">${readiness.pass_count}/${readiness.total_count}</span>
+                </div>
+            </div>
+            <div class="dbis-checklist">${checklistHtml}</div>
+            ${suggestedHtml}
+        </div>`;
 }
 
 // ============================================================
@@ -1112,15 +1233,15 @@ function renderDmarcEvaluation(ev) {
     if (!ev) return '';
 
     const spfPillClass = (ev.spf_result === 'pass' || ev.spf_result === 'configured') ? 'de-pill-pass'
-                       : ev.spf_result === 'none' ? 'de-pill-muted'
-                       : 'de-pill-fail';
+        : ev.spf_result === 'none' ? 'de-pill-muted'
+            : 'de-pill-fail';
     const dkimPillClass = (ev.dkim_result === 'pass' || ev.dkim_result === 'configured') ? 'de-pill-pass'
-                        : ev.dkim_result === 'none' ? 'de-pill-muted'
-                        : 'de-pill-fail';
+        : ev.dkim_result === 'none' ? 'de-pill-muted'
+            : 'de-pill-fail';
     const dmarcPillClass = (ev.dmarc_result === 'pass' || ev.dmarc_result === 'configured') ? 'de-pill-pass' : 'de-pill-fail';
     const policyPillClass = ev.policy === 'reject' ? 'de-pill-pass'
-                          : ev.policy === 'quarantine' ? 'de-pill-warn'
-                          : 'de-pill-muted';
+        : ev.policy === 'quarantine' ? 'de-pill-warn'
+            : 'de-pill-muted';
 
     const spfAlignIcon = ev.spf_aligned ? '&#10003; alignment possible' : '&#10005; not configured';
     const spfAlignClass = ev.spf_aligned ? 'de-aligned' : 'de-not-aligned';
@@ -1128,9 +1249,13 @@ function renderDmarcEvaluation(ev) {
     const dkimAlignClass = ev.dkim_aligned ? 'de-aligned' : 'de-not-aligned';
 
     const dispLabel = ev.disposition === 'none' ? 'delivered'
-                    : ev.disposition === 'quarantine' ? 'quarantined'
-                    : ev.disposition === 'reject' ? 'rejected'
-                    : escapeHtml(ev.disposition);
+        : ev.disposition === 'quarantine' ? 'quarantined'
+            : ev.disposition === 'reject' ? 'rejected'
+                : escapeHtml(ev.disposition);
+
+    const mailingListNote = ev.policy === 'reject'
+        ? `<div class="de-mailing-list-note">DMARCbis notes that p=reject can cause delivery failures for messages sent through mailing lists or forwarding services. Consider this if your domain participates in mailing lists.</div>`
+        : '';
 
     return `
         <div class="dmarc-eval de-animated">
@@ -1146,6 +1271,7 @@ function renderDmarcEvaluation(ev) {
                     <span class="de-pill ${spfPillClass}">${escapeHtml(ev.spf_result)}</span>
                     <span class="de-align-mode">${escapeHtml(ev.spf_alignment_mode)}</span>
                     <span class="de-align-result ${spfAlignClass}">${spfAlignIcon}</span>
+                    <span class="de-note">DMARCbis evaluates SPF alignment against MAIL FROM only (not HELO)</span>
                 </div>
                 <div class="de-row">
                     <span class="de-protocol">DKIM</span>
@@ -1162,6 +1288,7 @@ function renderDmarcEvaluation(ev) {
                     <span class="de-disposition">${escapeHtml(dispLabel)}</span>
                 </div>
             </div>
+            ${mailingListNote}
         </div>`;
 }
 
@@ -1227,7 +1354,7 @@ function renderReportChain(rc) {
     html += '</div>';
 
     if (rc.ruf_provider_note) {
-        html += `<div class="rc-footnote">Note: Most major mailbox providers (Google, Microsoft, Yahoo) no longer send failure reports (ruf) because they can contain PII (message headers, recipient addresses).</div>`;
+        html += `<div class="rc-footnote">Note: Most mailbox providers no longer send failure reports (ruf) because they can contain PII (message headers, recipient addresses).</div>`;
     }
 
     html += '</div>';
@@ -1278,8 +1405,8 @@ function renderTreeNode(node, totalLookups, isRoot) {
     const openAttr = isRoot ? ' open' : '';
     const budgetPct = totalLookups > 0 ? Math.round((node.subtree_lookups / totalLookups) * 100) : 0;
     const costClass = budgetPct > 60 ? 'st-budget-high'
-                    : budgetPct > 30 ? 'st-budget-mid'
-                    : 'st-budget-low';
+        : budgetPct > 30 ? 'st-budget-mid'
+            : 'st-budget-low';
 
     let vendorHtml = '';
     if (node.vendor) {
