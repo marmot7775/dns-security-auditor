@@ -4613,6 +4613,304 @@ main .meth-page {
     }
 }
 
+/* ==========================================================================
+   DMARCbis Guide Page
+   ========================================================================== */
+
+.dbis-page {
+    max-width: 760px;
+    margin: 0 auto;
+    padding: 2rem 1.25rem 3rem;
+}
+
+/* Hero */
+.dbis-hero {
+    text-align: center;
+    padding: 2.5rem 0 2rem;
+}
+.dbis-hero h1 {
+    font-size: 2rem;
+    font-weight: 700;
+    letter-spacing: -0.03em;
+    color: var(--text-primary);
+    margin-bottom: 0.75rem;
+    line-height: 1.2;
+}
+.dbis-hero h1 span {
+    color: var(--dmarcbis);
+}
+.dbis-hero-sub {
+    font-size: 1rem;
+    color: var(--text-secondary);
+    line-height: 1.65;
+    max-width: 620px;
+    margin: 0 auto 1.5rem;
+}
+.dbis-hero-cta {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.4rem;
+    padding: 0.6rem 1.25rem;
+    background: var(--dmarcbis);
+    color: #111;
+    font-size: 0.88rem;
+    font-weight: 600;
+    border-radius: 8px;
+    text-decoration: none;
+    transition: opacity 0.15s var(--ease);
+}
+.dbis-hero-cta:hover { opacity: 0.85; }
+
+/* Sections */
+.dbis-section {
+    margin-top: 2.5rem;
+}
+.dbis-section h2 {
+    font-size: 1.35rem;
+    font-weight: 700;
+    color: var(--text-primary);
+    letter-spacing: -0.02em;
+    margin-bottom: 0.75rem;
+}
+.dbis-section p {
+    font-size: 0.92rem;
+    color: var(--text-secondary);
+    line-height: 1.7;
+    margin-bottom: 0.85rem;
+}
+.dbis-section a {
+    color: var(--primary-light);
+    text-decoration: none;
+    font-weight: 500;
+}
+.dbis-section a:hover { text-decoration: underline; }
+.dbis-section strong {
+    color: var(--text-primary);
+    font-weight: 600;
+}
+.dbis-section code {
+    font-family: var(--font-mono);
+    font-size: 0.82em;
+    background: var(--bg);
+    border: 1px solid var(--border);
+    padding: 0.1em 0.35em;
+    border-radius: 4px;
+    color: var(--primary-light);
+}
+
+/* Comparison table */
+.dbis-table-wrap {
+    overflow-x: auto;
+    margin: 1rem 0;
+    border: 1px solid var(--border);
+    border-radius: 8px;
+}
+.dbis-table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 0.82rem;
+}
+.dbis-table th {
+    text-align: left;
+    padding: 0.6rem 0.75rem;
+    background: var(--surface);
+    color: var(--text-primary);
+    font-weight: 600;
+    border-bottom: 1px solid var(--border);
+    white-space: nowrap;
+}
+.dbis-table td {
+    padding: 0.55rem 0.75rem;
+    color: var(--text-secondary);
+    border-bottom: 1px solid var(--border);
+    line-height: 1.5;
+    vertical-align: top;
+}
+.dbis-table tr:last-child td { border-bottom: none; }
+.dbis-table code {
+    font-size: 0.85em;
+    background: var(--bg);
+    border: 1px solid var(--border);
+    padding: 0.05em 0.3em;
+    border-radius: 3px;
+    color: var(--primary-light);
+}
+
+/* Tag cards */
+.dbis-tag-card {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 1rem 1.25rem;
+    margin-bottom: 0.75rem;
+}
+.dbis-tag-header {
+    display: flex;
+    align-items: center;
+    gap: 0.6rem;
+    margin-bottom: 0.5rem;
+}
+.dbis-tag-name {
+    font-family: var(--font-mono);
+    font-size: 0.95rem;
+    font-weight: 600;
+    color: var(--text-primary);
+}
+.dbis-tag-badge {
+    font-size: 0.6rem;
+    font-weight: 700;
+    padding: 0.1rem 0.4rem;
+    border-radius: 4px;
+    background: var(--dmarcbis);
+    color: #111;
+    letter-spacing: 0.03em;
+}
+.dbis-tag-badge-dep {
+    background: var(--fail-bg);
+    color: var(--fail);
+}
+.dbis-tag-card p {
+    font-size: 0.85rem;
+    color: var(--text-secondary);
+    line-height: 1.6;
+    margin-bottom: 0.4rem;
+}
+.dbis-tag-card p:last-child { margin-bottom: 0; }
+
+/* Tree walk diagram */
+.dbis-walk-steps {
+    display: flex;
+    flex-direction: column;
+    gap: 0;
+    margin: 1rem 0;
+}
+.dbis-walk-step {
+    display: flex;
+    align-items: center;
+    gap: 0.6rem;
+    padding: 0.45rem 0.75rem;
+    font-family: var(--font-mono);
+    font-size: 0.8rem;
+    color: var(--text-secondary);
+    position: relative;
+}
+.dbis-walk-step::before {
+    content: '';
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    background: var(--border);
+    flex-shrink: 0;
+}
+.dbis-walk-step:not(:last-child)::after {
+    content: '';
+    position: absolute;
+    left: calc(0.75rem + 3px);
+    top: calc(0.45rem + 8px + 4px);
+    width: 2px;
+    height: calc(100% - 8px);
+    background: var(--border);
+}
+.dbis-walk-step.found::before {
+    background: var(--pass);
+}
+.dbis-walk-step.found {
+    color: var(--pass);
+    font-weight: 600;
+}
+.dbis-walk-step.stopped::before {
+    background: var(--fail);
+}
+.dbis-walk-step.stopped {
+    color: var(--text-muted);
+}
+.dbis-walk-label {
+    font-family: var(--font-body);
+    font-size: 0.72rem;
+    color: var(--text-muted);
+    margin-left: auto;
+    flex-shrink: 0;
+}
+
+/* Steps list */
+.dbis-steps {
+    counter-reset: step;
+    list-style: none;
+    padding: 0;
+    margin: 1rem 0;
+}
+.dbis-steps li {
+    counter-increment: step;
+    display: flex;
+    align-items: flex-start;
+    gap: 0.75rem;
+    padding: 0.5rem 0;
+    font-size: 0.88rem;
+    color: var(--text-secondary);
+    line-height: 1.6;
+}
+.dbis-steps li::before {
+    content: counter(step);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    min-width: 1.6rem;
+    height: 1.6rem;
+    border-radius: 50%;
+    background: var(--dmarcbis-bg);
+    color: var(--dmarcbis);
+    font-size: 0.72rem;
+    font-weight: 700;
+    flex-shrink: 0;
+    margin-top: 0.1rem;
+}
+
+/* Target record block */
+.dbis-target {
+    background: var(--bg);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    padding: 0.65rem 0.85rem;
+    margin: 1rem 0;
+    font-family: var(--font-mono);
+    font-size: 0.8rem;
+    color: var(--text-primary);
+    line-height: 1.6;
+    word-break: break-all;
+}
+
+/* Further reading */
+.dbis-links {
+    list-style: none;
+    padding: 0;
+    margin: 0.75rem 0;
+}
+.dbis-links li {
+    padding: 0.35rem 0;
+}
+.dbis-links a {
+    font-size: 0.88rem;
+}
+
+/* Footer CTA */
+.dbis-footer-cta {
+    text-align: center;
+    padding: 2rem 0;
+    margin-top: 2.5rem;
+    border-top: 1px solid var(--border);
+}
+.dbis-footer-cta p {
+    font-size: 0.92rem;
+    color: var(--text-secondary);
+    margin-bottom: 1rem;
+}
+
+@media (max-width: 600px) {
+    .dbis-hero h1 { font-size: 1.5rem; }
+    .dbis-section h2 { font-size: 1.15rem; }
+    .dbis-page { padding: 1.25rem 1rem 2rem; }
+}
+
 /* ── Executive Summary (Prompt 16) ────────────────────────── */
 
 .es-block {
