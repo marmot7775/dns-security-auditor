@@ -136,7 +136,7 @@ def _lookup_txt(name: str) -> List[str]:
             txt = txt.replace("\\;", ";")
             records.append(txt)
         return records
-    except Exception:
+    except dns.exception.DNSException:
         return []
 
 
@@ -230,7 +230,7 @@ def _check_report_authorization(domain: str, raw_dmarc: Dict, tree_walk_result: 
                         for r in txt_records
                     )
                     dest_info["authorized"] = authorized
-                except Exception:
+                except dns.exception.DNSException:
                     dest_info["authorized"] = False
 
                 if not dest_info["authorized"]:
@@ -254,7 +254,7 @@ def _check_report_authorization(domain: str, raw_dmarc: Dict, tree_walk_result: 
             try:
                 resolver.resolve(dest_domain, "MX")
                 dest_info["has_mx"] = True
-            except Exception:
+            except dns.exception.DNSException:
                 dest_info["has_mx"] = False
                 if is_external:
                     issues.append({
@@ -1456,7 +1456,7 @@ def _raw_check_dnssec(domain: str) -> Dict[str, Any]:
             "unconfigured. Large DNSKEY responses can exceed typical timeouts.",
             "Try checking with 'delv' or 'dig +dnssec' for a definitive answer.",
         )
-    except Exception as e:
+    except dns.exception.DNSException as e:
         result["has_dnssec"] = False
         _add_issue(
             "warning",
@@ -1486,7 +1486,7 @@ def _raw_check_dnssec(domain: str) -> Dict[str, Any]:
                 ds_algos.add(rdata.algorithm)
         except (dns.resolver.NoAnswer, dns.resolver.NXDOMAIN):
             continue
-        except Exception:
+        except dns.exception.DNSException:
             continue
 
     # Method 2: Query parent zone NS directly with dns.query.udp
@@ -1508,7 +1508,7 @@ def _raw_check_dnssec(domain: str) -> Dict[str, Any]:
                         a_answers = parent_resolver.resolve(ns_name, "A")
                         for a_rdata in a_answers:
                             parent_ns_ips.append(str(a_rdata.address))
-                    except Exception:
+                    except dns.exception.DNSException:
                         pass
 
                 # Build a raw DS query with DO flag and send directly to parent NS
@@ -1531,7 +1531,7 @@ def _raw_check_dnssec(domain: str) -> Dict[str, Any]:
                                     for rdata in rrset:
                                         ds_algos.add(rdata.algorithm)
                                     break
-                        except Exception:
+                        except (dns.exception.DNSException, OSError):
                             continue
 
                     # If UDP failed (possible truncation), try TCP
@@ -1547,9 +1547,9 @@ def _raw_check_dnssec(domain: str) -> Dict[str, Any]:
                                         for rdata in rrset:
                                             ds_algos.add(rdata.algorithm)
                                         break
-                            except Exception:
+                            except (dns.exception.DNSException, OSError):
                                 continue
-        except Exception:
+        except (dns.exception.DNSException, OSError):
             pass
 
     # Method 3: If DNSKEY query had AD flag set, the chain is validated
@@ -1584,7 +1584,7 @@ def _raw_check_dnssec(domain: str) -> Dict[str, Any]:
                     ds_answers = attempt_resolver.resolve(domain, "DS")
                     ds_records = list(ds_answers)
                     break
-                except Exception:
+                except dns.exception.DNSException:
                     continue
 
             # Re-fetch DNSKEYs
@@ -1592,7 +1592,7 @@ def _raw_check_dnssec(domain: str) -> Dict[str, Any]:
             try:
                 dnskey_answers = resolver.resolve(domain, "DNSKEY")
                 dnskey_records = list(dnskey_answers)
-            except Exception:
+            except dns.exception.DNSException:
                 pass
 
             if ds_records and dnskey_records:
@@ -1619,7 +1619,7 @@ def _raw_check_dnssec(domain: str) -> Dict[str, Any]:
                                     f"DS key_tag={ds_key_tag} matches DNSKEY ({algo_name})"
                                 )
                                 break
-                        except Exception:
+                        except (dns.dnssec.UnsupportedAlgorithm, dns.dnssec.ValidationFailure, ValueError, TypeError):
                             # UnsupportedAlgorithm or other -- skip this pair
                             continue
                     if chain_matched:
@@ -1767,7 +1767,7 @@ def _raw_check_caa(domain: str) -> Dict[str, Any]:
             "The domain returned NXDOMAIN when querying for CAA records.",
             "Verify the domain name is correct.",
         )
-    except Exception:
+    except dns.exception.DNSException:
         pass
 
     # No CAA records found at all
@@ -1847,7 +1847,7 @@ def _raw_check_nameservers(domain: str) -> Dict[str, Any]:
         )
         result["status"] = "error"
         return result
-    except Exception as e:
+    except dns.exception.DNSException as e:
         _add_issue(
             "error",
             f"NS lookup failed: {str(e)[:100]}",
@@ -1887,9 +1887,9 @@ def _raw_check_nameservers(domain: str) -> Dict[str, Any]:
                 try:
                     net = ipaddress.IPv4Network(f"{ip_str}/24", strict=False)
                     networks_v4.add(str(net))
-                except Exception:
+                except (ValueError, TypeError):
                     pass
-        except Exception:
+        except dns.exception.DNSException:
             pass
 
         # Resolve AAAA records
@@ -1898,7 +1898,7 @@ def _raw_check_nameservers(domain: str) -> Dict[str, Any]:
             for rdata in aaaa_answers:
                 ns_info["ipv6"].append(str(rdata))
                 ns_info["resolves"] = True
-        except Exception:
+        except dns.exception.DNSException:
             pass
 
         ns_details.append(ns_info)
@@ -1959,7 +1959,7 @@ def _raw_check_nameservers(domain: str) -> Dict[str, Any]:
                     "answer queries, which can cause intermittent resolution failures.",
                     "Remove this nameserver from your NS records or configure it to serve this zone.",
                 )
-        except Exception:
+        except (dns.exception.DNSException, OSError):
             # Query failed -- don't penalize, just skip
             ns_info["authoritative"] = None
             ns_info["soa_serial"] = None
@@ -2206,7 +2206,7 @@ def _raw_check_dane(domain: str, raw_results: Dict[str, Any]) -> Dict[str, Any]:
             pass  # No TLSA
         except dns.resolver.LifetimeTimeout:
             host_result["error"] = "Query timed out"
-        except Exception as e:
+        except dns.exception.DNSException as e:
             host_result["error"] = str(e)[:120]
 
         result["tlsa_records"].append(host_result)
@@ -2308,7 +2308,7 @@ def _raw_check_ct(domain: str, raw_results: Dict[str, Any]) -> Dict[str, Any]:
         _add_issue("warning", "crt.sh timed out", "Certificate Transparency log query timed out.")
         result["status"] = "warning"
         return result
-    except Exception as e:
+    except (requests.exceptions.RequestException, ValueError) as e:
         _add_issue("warning", f"crt.sh query failed: {type(e).__name__}", "Could not query Certificate Transparency logs.")
         result["status"] = "warning"
         return result
@@ -2559,7 +2559,7 @@ def _raw_check_blacklist(domain: str, raw_results: Dict[str, Any]) -> Dict[str, 
                 return str(rdata)
         except (dns.resolver.NXDOMAIN, dns.resolver.NoAnswer, dns.resolver.NoNameservers):
             return None
-        except Exception:
+        except dns.exception.DNSException:
             return None
 
     # Check domain against domain-based lists
@@ -2715,6 +2715,7 @@ def run_full_audit(domain: str, dkim_selector: Optional[str] = None,
         try:
             tree_walk_result = _run_with_timeout(dmarc_tree_walk, domain)
         except Exception as e:
+            log.warning("Tree Walk failed: %s", e, exc_info=True)
             errors.append(f"Tree Walk: {str(e)}")
         _notify("Tree Walk")
 
@@ -2732,6 +2733,7 @@ def run_full_audit(domain: str, dkim_selector: Optional[str] = None,
             if _should_include("dmarc", scope_set):
                 checks.append(_timeout_card("DMARC"))
         except Exception as e:
+            log.warning("DMARC check failed: %s", e, exc_info=True)
             errors.append(f"DMARC: {str(e)}")
             if _should_include("dmarc", scope_set):
                 checks.append(_error_card("DMARC", e))
@@ -2752,7 +2754,7 @@ def run_full_audit(domain: str, dkim_selector: Optional[str] = None,
                 raw_dmarc["ruf_provider_note"] = report_auth.get("ruf_provider_note", False)
                 raw_dmarc["issues"].extend(report_auth.get("report_auth_issues", []))
         except Exception:
-            pass
+            log.debug("Report auth enrichment failed", exc_info=True)
 
     # --- 2. MX Records (run before SPF so we know if domain sends mail) ---
     if needs_mx:
@@ -2766,6 +2768,7 @@ def run_full_audit(domain: str, dkim_selector: Optional[str] = None,
             if _should_include("mx", scope_set):
                 checks.append(_timeout_card("MX Records"))
         except Exception as e:
+            log.warning("MX check failed: %s", e, exc_info=True)
             errors.append(f"MX: {str(e)}")
             if _should_include("mx", scope_set):
                 checks.append(_error_card("MX Records", e))
@@ -2787,6 +2790,7 @@ def run_full_audit(domain: str, dkim_selector: Optional[str] = None,
             if _should_include("spf", scope_set):
                 checks.append(_timeout_card("SPF"))
         except Exception as e:
+            log.warning("SPF check failed: %s", e, exc_info=True)
             errors.append(f"SPF: {str(e)}")
             if _should_include("spf", scope_set):
                 checks.append(_error_card("SPF", e))
@@ -2802,7 +2806,7 @@ def run_full_audit(domain: str, dkim_selector: Optional[str] = None,
                 raw_spf["spf_recursive"], raw_spf.get("record")
             )
         except Exception:
-            pass  # never block audit
+            log.debug("SPF execution trace failed", exc_info=True)
 
     # --- SPF Include Tree (post-processor, zero DNS queries) ---
     spf_tree_viz = None
@@ -2812,7 +2816,7 @@ def run_full_audit(domain: str, dkim_selector: Optional[str] = None,
             from spf_execution_engine import build_spf_tree_viz
             spf_tree_viz = build_spf_tree_viz(raw_spf["spf_recursive"])
         except Exception:
-            pass
+            log.debug("SPF tree viz failed", exc_info=True)
 
     # --- 4. MTA-STS ---
     if _should_include("mta_sts", scope_set):
@@ -2824,6 +2828,7 @@ def run_full_audit(domain: str, dkim_selector: Optional[str] = None,
             errors.append("MTA-STS: timed out")
             checks.append(_timeout_card("MTA-STS"))
         except Exception as e:
+            log.warning("MTA-STS check failed: %s", e, exc_info=True)
             errors.append(f"MTA-STS: {str(e)}")
             checks.append(_error_card("MTA-STS", e))
         _notify("MTA-STS")
@@ -2838,6 +2843,7 @@ def run_full_audit(domain: str, dkim_selector: Optional[str] = None,
             errors.append("TLS-RPT: timed out")
             checks.append(_timeout_card("TLS-RPT"))
         except Exception as e:
+            log.warning("TLS-RPT check failed: %s", e, exc_info=True)
             errors.append(f"TLS-RPT: {str(e)}")
             checks.append(_error_card("TLS-RPT", e))
         _notify("TLS-RPT")
@@ -2858,6 +2864,7 @@ def run_full_audit(domain: str, dkim_selector: Optional[str] = None,
             errors.append("BIMI: timed out")
             checks.append(_timeout_card("BIMI"))
         except Exception as e:
+            log.warning("BIMI check failed: %s", e, exc_info=True)
             errors.append(f"BIMI: {str(e)}")
             checks.append(_error_card("BIMI", e))
         _notify("BIMI")
@@ -2872,6 +2879,7 @@ def run_full_audit(domain: str, dkim_selector: Optional[str] = None,
             errors.append("DNSSEC: timed out")
             checks.append(_timeout_card("DNSSEC"))
         except Exception as e:
+            log.warning("DNSSEC check failed: %s", e, exc_info=True)
             errors.append(f"DNSSEC: {str(e)}")
             checks.append(_error_card("DNSSEC", e))
         _notify("DNSSEC")
@@ -2886,6 +2894,7 @@ def run_full_audit(domain: str, dkim_selector: Optional[str] = None,
             errors.append("CAA: timed out")
             checks.append(_timeout_card("CAA"))
         except Exception as e:
+            log.warning("CAA check failed: %s", e, exc_info=True)
             errors.append(f"CAA: {str(e)}")
             checks.append(_error_card("CAA", e))
         _notify("CAA")
@@ -2900,6 +2909,7 @@ def run_full_audit(domain: str, dkim_selector: Optional[str] = None,
             errors.append("Nameservers: timed out")
             checks.append(_timeout_card("Nameservers"))
         except Exception as e:
+            log.warning("Nameservers check failed: %s", e, exc_info=True)
             errors.append(f"Nameservers: {str(e)}")
             checks.append(_error_card("Nameservers", e))
         _notify("Nameservers")
@@ -2914,6 +2924,7 @@ def run_full_audit(domain: str, dkim_selector: Optional[str] = None,
             errors.append("DANE: timed out")
             checks.append(_timeout_card("DANE"))
         except Exception as e:
+            log.warning("DANE check failed: %s", e, exc_info=True)
             errors.append(f"DANE: {str(e)}")
             checks.append(_error_card("DANE", e))
         _notify("DANE")
@@ -2945,7 +2956,7 @@ def run_full_audit(domain: str, dkim_selector: Optional[str] = None,
                         })
                 except FuturesTimeoutError:
                     raise  # Let outer handler catch it
-                except Exception:
+                except dns.exception.DNSException:
                     # User-provided selector not found
                     raw_dkim["selector_not_found"] = sel
                     raw_dkim["tested_count"] = 1
@@ -2961,6 +2972,7 @@ def run_full_audit(domain: str, dkim_selector: Optional[str] = None,
             dkim_pos = min(2, len(checks))
             checks.insert(dkim_pos, _timeout_card("DKIM"))
         except Exception as e:
+            log.warning("DKIM check failed: %s", e, exc_info=True)
             errors.append(f"DKIM: {str(e)}")
             dkim_pos = min(2, len(checks))
             checks.insert(dkim_pos, _error_card("DKIM", e))
@@ -3021,7 +3033,7 @@ def run_full_audit(domain: str, dkim_selector: Optional[str] = None,
                 tree_walk_result,
             )
         except Exception:
-            pass  # never block audit
+            log.debug("DMARC evaluation failed", exc_info=True)
 
     # --- DMARC Alignment Cross-Check ---
     # Flag misconfigurations where DMARC alignment settings conflict with
@@ -3152,6 +3164,7 @@ def run_full_audit(domain: str, dkim_selector: Optional[str] = None,
             errors.append("Certificate Transparency: timed out")
             checks.append(_timeout_card("Certificate Transparency"))
         except Exception as e:
+            log.warning("CT check failed: %s", e, exc_info=True)
             errors.append(f"Certificate Transparency: {str(e)}")
             checks.append(_error_card("Certificate Transparency", e))
         _notify("Certificate Transparency")
@@ -3166,6 +3179,7 @@ def run_full_audit(domain: str, dkim_selector: Optional[str] = None,
             errors.append("Blacklist: timed out")
             checks.append(_timeout_card("Blacklist"))
         except Exception as e:
+            log.warning("Blacklist check failed: %s", e, exc_info=True)
             errors.append(f"Blacklist: {str(e)}")
             checks.append(_error_card("Blacklist", e))
         _notify("Blacklist")
@@ -3179,7 +3193,7 @@ def run_full_audit(domain: str, dkim_selector: Optional[str] = None,
             fp_result = fp.fingerprint_all()
             fp_vendors = fp_result.get("vendors", [])
         except Exception:
-            pass
+            log.debug("Vendor fingerprinting failed", exc_info=True)
         _notify("Vendor Fingerprinting")
 
     # --- Security Score ---
@@ -3198,18 +3212,21 @@ def run_full_audit(domain: str, dkim_selector: Optional[str] = None,
     try:
         anomalies = detect_anomalies(raw_results, score_result, has_mx, is_defensive, tree_walk=tree_walk_result)
     except Exception:
+        log.debug("Anomaly detection failed", exc_info=True)
         anomalies = []
 
     # --- Remediation Plan ---
     try:
         remediation_plan = build_remediation_plan(checks, raw_results, has_mx, is_defensive, tree_walk=tree_walk_result)
     except Exception:
+        log.debug("Remediation plan failed", exc_info=True)
         remediation_plan = {"immediate": [], "short_term": [], "long_term": []}
 
     # --- Authentication Resilience Analysis ---
     try:
         resilience_result = _build_resilience_analysis(raw_results, checks, has_mx, is_defensive, tree_walk=tree_walk_result)
     except Exception:
+        log.debug("Resilience analysis failed", exc_info=True)
         resilience_result = None
 
     # --- Ensure every check has pill_label ---
@@ -3313,7 +3330,7 @@ def _calculate_score(raw_results: Dict, domain: str, tree_walk: Optional[Dict] =
                 elif status == "CURRENT":
                     key_age["current"] += 1
         except Exception:
-            pass
+            log.debug("DKIM key age analysis failed", exc_info=True)
 
         # Vendor fingerprint (pre-computed, passed in)
         vendor_for_scorer = {"vendors": [
