@@ -73,9 +73,25 @@ Domains where DKIM selectors could not be detected receive full DKIM credit, sin
 
 ## Key Features
 
-### DMARC DNS Tree Walk
+### DMARC (RFC 7849)
 
-When a domain has no DMARC record, the tool walks up the DNS hierarchy per DMARCbis Section 4.10, querying each ancestor for an applicable policy. The full walk is visualized as an animated timeline showing which domains were queried, where the policy was found, and which tag (p, sp, or np) applies.
+When evaluating an inbound message, the receiver queries DNS for a TXT record at _dmarc.<domain>, where the domain is taken from the email's RFC 5322.From (Header From). If no record is found at the exact Author Domain, the receiver determines the Organizational Domain using a Public Suffix List (PSL) and performs a single fallback lookup at that level. No intermediate subdomains are checked.
+
+If a valid record (beginning with v=DMARC1) is found at either level, its policy is applied. Otherwise, DMARC does not apply to the message.
+
+### DMARCbis DNS Tree Walk
+
+Starting from the Author Domain (RFC 5322.From), the tool queries for a DMARC Policy Record. If none is found, it initiates a DNS Tree Walk as described in DMARCbis (draft-ietf-dmarc-dmarcbis-41, Section 4.10), walking up the DNS hierarchy one label at a time to discover both an applicable policy and the Organizational Domain used for identifier alignment. The walk is capped at eight DNS queries to prevent abuse.
+
+Because DMARCbis is on the Standards Track and expected to be published as a Proposed Standard, these results are displayed alongside traditional RFC 7489 lookups. This lets domain owners compare how policy discovery, inheritance via sp and np, and new tags like psd and t will behave once receivers adopt the updated specification.
+
+### Why DMARCbis Matters
+
+DMARCbis addresses several architectural limitations in RFC 7489 that carry real security and sustainability implications for email authentication. The original spec was published in 2015 as an Informational RFC, not a formal Internet standard, and carried no conformance requirements. Receivers were free to interpret it however they chose, and they did. A decade of deployment exposed problems that could not be patched within the original framework.
+
+The most significant change is replacing the Public Suffix List, a community-maintained external dependency, with the DNS Tree Walk, a DNS-native mechanism that lets domain owners control their own domain boundaries. RFC 7489 also only performs two lookups (the exact Author Domain and the Organizational Domain), leaving no way for intermediate subdomains to govern their own branch of the tree. The tree walk queries each level of the hierarchy, enabling decentralized policy management. DMARCbis also introduces the `np` tag to set separate policies for non-existent subdomains, closing a gap that allowed attackers to spoof fabricated subdomains like `ceo.example.com`, and replaces the widely misunderstood `pct` tag with `t`, a cleaner binary signal for testing mode.
+
+The DMARCbis specification (draft-ietf-dmarc-dmarcbis-41) is currently in the RFC Editor Queue and is expected to be published as a Proposed Standard. This tool analyzes DMARCbis alongside RFC 7489 so that domain owners can evaluate the impact on their domains now and begin preparing their records before receivers adopt the updated specification.
 
 ### SPF Evaluation Trace
 
