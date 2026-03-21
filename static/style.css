@@ -978,12 +978,22 @@ main {
     border: 1px solid var(--border);
     border-left: 3px solid var(--border);
     overflow: hidden;
-    animation: fadeIn var(--duration-slow) var(--ease-out) backwards;
-    transition: box-shadow var(--duration) var(--ease);
+    opacity: 0;
+    transform: translateY(12px);
+    animation: cardEntrance 400ms var(--ease-out) forwards;
+    transition: border-color 150ms ease, box-shadow 150ms ease;
 }
 
 .result-card:hover {
+    border-color: var(--border);
     box-shadow: var(--shadow-md);
+}
+
+@keyframes cardEntrance {
+    to {
+        opacity: 1;
+        transform: translateY(0);
+    }
 }
 
 /* Status-aware left accent */
@@ -1011,16 +1021,27 @@ main {
     border-left-color: var(--fail);
 }
 
-.result-card:nth-child(1) { animation-delay: 0.06s; }
-.result-card:nth-child(2) { animation-delay: 0.10s; }
-.result-card:nth-child(3) { animation-delay: 0.14s; }
-.result-card:nth-child(4) { animation-delay: 0.18s; }
-.result-card:nth-child(5) { animation-delay: 0.22s; }
-.result-card:nth-child(6) { animation-delay: 0.26s; }
-.result-card:nth-child(7) { animation-delay: 0.30s; }
-.result-card:nth-child(8) { animation-delay: 0.34s; }
-.result-card:nth-child(9) { animation-delay: 0.38s; }
-.result-card:nth-child(10) { animation-delay: 0.42s; }
+.result-card:nth-child(1) { animation-delay: 0ms; }
+.result-card:nth-child(2) { animation-delay: 60ms; }
+.result-card:nth-child(3) { animation-delay: 120ms; }
+.result-card:nth-child(4) { animation-delay: 180ms; }
+.result-card:nth-child(5) { animation-delay: 240ms; }
+.result-card:nth-child(6) { animation-delay: 300ms; }
+.result-card:nth-child(7) { animation-delay: 360ms; }
+.result-card:nth-child(8) { animation-delay: 420ms; }
+.result-card:nth-child(9) { animation-delay: 480ms; }
+.result-card:nth-child(10) { animation-delay: 540ms; }
+.result-card:nth-child(11) { animation-delay: 600ms; }
+.result-card:nth-child(12) { animation-delay: 660ms; }
+.result-card:nth-child(13) { animation-delay: 720ms; }
+
+@media (prefers-reduced-motion: reduce) {
+    .result-card {
+        opacity: 1;
+        transform: none;
+        animation: none;
+    }
+}
 
 .result-header {
     padding: var(--space-md) var(--space-lg);
@@ -2567,35 +2588,73 @@ details.st-node>summary:hover {
    ========================================================================== */
 .site-footer {
     border-top: 1px solid var(--border);
-    padding: var(--space-xl) 0;
+    padding: var(--space-xl) 0 var(--space-xl);
     margin-top: var(--space-3xl);
     flex-shrink: 0;
-    background: transparent;
+    background: var(--bg-raised);
 }
 
 .footer-inner {
-    text-align: center;
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-start;
+    text-align: left;
 }
 
-.footer-brand {
-    font-size: 0.82rem;
-    color: var(--text-secondary);
-    line-height: 1.7;
+.footer-left {
+    display: flex;
+    flex-direction: column;
+    gap: 0.35rem;
 }
 
-.footer-brand strong {
-    color: var(--text-primary);
+.footer-brand-name {
+    font-size: 1.07rem;
     font-weight: 600;
+    color: var(--text-primary);
+    letter-spacing: -0.01em;
 }
 
-.footer-sep {
-    margin: 0 0.45rem;
-    opacity: 0.35;
+.footer-brand-desc {
+    font-size: 0.87rem;
+    color: var(--text-secondary);
+    line-height: 1.5;
+}
+
+.footer-dmarcbis-badge {
+    display: inline-block;
+    margin-top: 0.25rem;
+    font-size: 0.72rem;
+    font-weight: 600;
+    color: var(--dmarcbis);
+    background: var(--dmarcbis-bg);
+    border: 1px solid var(--dmarcbis-border);
+    padding: 0.15rem 0.55rem;
+    border-radius: 100px;
+    width: fit-content;
+}
+
+.footer-right {
+    display: flex;
+    flex-direction: column;
+    align-items: flex-end;
+    gap: 0.4rem;
+}
+
+.footer-nav {
+    display: flex;
+    align-items: center;
+    gap: 0.4rem;
+}
+
+.footer-dot {
+    color: var(--text-muted);
+    font-size: 0.9rem;
 }
 
 .footer-link {
     color: var(--primary-light);
     text-decoration: none;
+    font-size: 0.93rem;
     font-weight: 500;
     transition: color var(--duration) var(--ease);
 }
@@ -2605,16 +2664,9 @@ details.st-node>summary:hover {
     text-decoration: underline;
 }
 
-.footer-linkedin {
-    color: var(--text-secondary);
-    display: inline-flex;
-    align-items: center;
-    vertical-align: middle;
-    transition: color var(--duration) var(--ease);
-}
-
-.footer-linkedin:hover {
-    color: #0a66c2;
+.footer-attribution {
+    font-size: 0.87rem;
+    color: var(--text-muted);
 }
 
 /* ==========================================================================
@@ -2827,24 +2879,19 @@ details.st-node>summary:hover {
     }
 
     /* Footer stacks on mobile */
-    .footer-brand {
-        font-size: 0.78rem;
-        line-height: 1.9;
-    }
-
-    .footer-sep {
-        display: none;
-    }
-
-    .footer-brand strong,
-    .footer-brand a {
-        display: block;
+    .footer-inner {
+        flex-direction: column;
+        align-items: center;
         text-align: center;
+        gap: 1.25rem;
     }
 
-    .footer-linkedin {
-        display: inline-flex;
-        margin-top: 0.25rem;
+    .footer-right {
+        align-items: center;
+    }
+
+    .footer-left {
+        align-items: center;
     }
 
     .priority-section {
@@ -3417,8 +3464,7 @@ body {
         max-width: 100%;
     }
 
-    .footer-role {
-        display: block;
+    .footer-attribution {
         text-align: center;
     }
 
@@ -3611,6 +3657,182 @@ body {
     }
 }
 
+/* ==========================================================================
+   TOP PROGRESS BAR
+   ========================================================================== */
+.top-progress-bar {
+    position: fixed;
+    top: 0;
+    left: 0;
+    height: 3px;
+    width: 0%;
+    background: linear-gradient(90deg, var(--primary), var(--dmarcbis));
+    z-index: 9999;
+    transition: width 300ms ease-out;
+    box-shadow: 0 0 8px var(--primary-subtle);
+    pointer-events: none;
+}
+
+.top-progress-bar.complete {
+    width: 100% !important;
+    opacity: 0;
+    transition: width 200ms ease-out, opacity 400ms ease 200ms;
+}
+
+/* ==========================================================================
+   BACK TO TOP BUTTON
+   ========================================================================== */
+.back-to-top {
+    position: fixed;
+    bottom: 24px;
+    right: 24px;
+    width: 40px;
+    height: 40px;
+    border-radius: 50%;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    color: var(--text-secondary);
+    font-size: 18px;
+    cursor: pointer;
+    opacity: 0;
+    transform: translateY(8px);
+    transition: opacity 200ms ease, transform 200ms ease, background 150ms ease, color 150ms ease;
+    z-index: 100;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    pointer-events: none;
+}
+
+.back-to-top.visible {
+    opacity: 1;
+    transform: translateY(0);
+    pointer-events: auto;
+}
+
+.back-to-top:hover {
+    background: var(--surface-hover);
+    color: var(--text-primary);
+}
+
+@media (max-width: 640px) {
+    .back-to-top {
+        bottom: 16px;
+        right: 16px;
+    }
+}
+
+/* ==========================================================================
+   TOOLTIP SYSTEM
+   ========================================================================== */
+.protocol-name-tip {
+    position: relative;
+    cursor: help;
+    border-bottom: 1px dotted var(--text-tertiary);
+}
+
+.protocol-tooltip {
+    position: absolute;
+    bottom: calc(100% + 8px);
+    left: 50%;
+    transform: translateX(-50%);
+    background: var(--surface-hover);
+    color: var(--text-primary);
+    font-size: 0.87rem;
+    font-weight: 400;
+    max-width: 280px;
+    width: max-content;
+    padding: 8px 12px;
+    border-radius: 6px;
+    box-shadow: var(--shadow-md);
+    pointer-events: none;
+    opacity: 0;
+    transition: opacity 150ms ease;
+    z-index: 200;
+    line-height: 1.45;
+    text-transform: none;
+    letter-spacing: 0;
+}
+
+.protocol-tooltip::after {
+    content: '';
+    position: absolute;
+    top: 100%;
+    left: 50%;
+    transform: translateX(-50%);
+    border: 5px solid transparent;
+    border-top-color: var(--surface-hover);
+}
+
+.protocol-name-tip:hover .protocol-tooltip,
+.protocol-name-tip:focus .protocol-tooltip {
+    opacity: 1;
+}
+
+/* ==========================================================================
+   GRADE CARD ANIMATION
+   ========================================================================== */
+.grade-value.animate-in {
+    animation: gradeScale 300ms ease-out forwards;
+}
+
+@keyframes gradeScale {
+    from {
+        transform: scale(0.8);
+        opacity: 0.5;
+    }
+    to {
+        transform: scale(1);
+        opacity: 1;
+    }
+}
+
+.grade-value.grade-glow {
+    animation: gradeScale 300ms ease-out forwards, gradePulse 1s ease-out 300ms;
+}
+
+@keyframes gradePulse {
+    0% {
+        box-shadow: none;
+    }
+    50% {
+        box-shadow: 0 0 20px rgba(34, 197, 94, 0.3);
+    }
+    100% {
+        box-shadow: none;
+    }
+}
+
+/* ==========================================================================
+   COPY ALL RECORDS BUTTON
+   ========================================================================== */
+.copy-all-btn {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.4rem;
+    padding: 0.45rem 0.85rem;
+    background: transparent;
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    font-family: var(--font-body);
+    font-size: 0.78rem;
+    font-weight: 500;
+    color: var(--text-secondary);
+    cursor: pointer;
+    transition: border-color var(--duration) var(--ease), color var(--duration) var(--ease), background var(--duration) var(--ease);
+}
+
+.copy-all-btn:hover {
+    border-color: var(--primary-border);
+    color: var(--text-primary);
+    background: var(--surface-hover);
+}
+
+.copy-all-btn.copied {
+    color: var(--pass);
+    border-color: var(--pass-border);
+}
+
 /* Print stylesheet */
 @media print {
 
@@ -3622,7 +3844,10 @@ body {
     .run-another,
     .site-footer,
     .scope-selector,
-    .copy-btn {
+    .copy-btn,
+    .back-to-top,
+    .top-progress-bar,
+    .copy-all-btn {
         display: none !important;
     }
 

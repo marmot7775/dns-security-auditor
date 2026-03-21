@@ -52,6 +52,24 @@ document.getElementById('selector-toggle').addEventListener('click', (e) => {
     }
 });
 
+// -- Protocol tooltip descriptions --
+const PROTOCOL_TOOLTIPS = {
+    'DMARC': 'Tells receivers what to do with unauthenticated email from your domain',
+    'SPF': 'Lists which servers are authorized to send email for your domain',
+    'DKIM': 'Cryptographic signature proving emails haven\'t been tampered with',
+    'BIMI': 'Displays your brand logo in email clients that support it',
+    'MTA-STS': 'Forces encrypted TLS connections between mail servers',
+    'TLS-RPT': 'Receives reports when TLS connections to your domain fail',
+    'DANE': 'Uses DNSSEC to verify mail server TLS certificates',
+    'DNSSEC': 'Cryptographically signs DNS records to prevent spoofing',
+    'CAA': 'Controls which Certificate Authorities can issue certificates for your domain',
+    'MX Records': 'Specifies which mail servers accept email for your domain',
+    'MX': 'Specifies which mail servers accept email for your domain',
+    'Nameservers': 'The DNS servers that answer queries about your domain',
+    'Certificate Transparency': 'Public log of all certificates issued for your domain',
+    'Blocklist': 'Checks if your domain or IPs appear on email blocklists',
+};
+
 // -- Check URL for domain parameter on load --
 document.addEventListener('DOMContentLoaded', () => {
     const params = new URLSearchParams(window.location.search);
@@ -69,6 +87,19 @@ document.addEventListener('DOMContentLoaded', () => {
     } else {
         domainInput.focus();
     }
+
+    // Back-to-top button
+    const backToTop = document.createElement('button');
+    backToTop.innerHTML = '\u2191';
+    backToTop.className = 'back-to-top';
+    backToTop.setAttribute('aria-label', 'Back to top');
+    document.body.appendChild(backToTop);
+    backToTop.addEventListener('click', () => {
+        window.scrollTo({ top: 0, behavior: 'smooth' });
+    });
+    window.addEventListener('scroll', () => {
+        backToTop.classList.toggle('visible', window.scrollY > 500);
+    }, { passive: true });
 });
 
 // -- Educational section toggle --
@@ -225,6 +256,17 @@ function showLoading() {
     const bar = document.getElementById('loading-bar');
     if (bar) bar.style.width = '0%';
 
+    // Top progress bar
+    let topBar = document.querySelector('.top-progress-bar');
+    if (!topBar) {
+        topBar = document.createElement('div');
+        topBar.className = 'top-progress-bar';
+        document.body.appendChild(topBar);
+    }
+    topBar.classList.remove('complete');
+    topBar.style.width = '0%';
+    topBar.style.opacity = '1';
+
     // Scroll so the loading bar is visible
     window.scrollTo({ top: 0, behavior: 'smooth' });
 }
@@ -232,8 +274,11 @@ function showLoading() {
 function updateLoadingProgress(step, progressPct) {
     const bar = document.getElementById('loading-bar');
     const status = document.getElementById('loading-status');
-    if (bar) bar.style.width = Math.min(progressPct, 97) + '%';
+    const pct = Math.min(progressPct, 97);
+    if (bar) bar.style.width = pct + '%';
     if (status) status.textContent = STEP_MESSAGES[step] || `Checking ${step}...`;
+    const topBar = document.querySelector('.top-progress-bar');
+    if (topBar) topBar.style.width = pct + '%';
 }
 
 function hideLoading() {
@@ -280,6 +325,8 @@ function renderResults(data) {
     const status = document.getElementById('loading-status');
     if (bar) bar.style.width = '100%';
     if (status) status.textContent = 'Complete';
+    const topBar = document.querySelector('.top-progress-bar');
+    if (topBar) topBar.classList.add('complete');
 
     const scopeAtRender = currentScope;
     setTimeout(() => {
@@ -359,6 +406,9 @@ function renderResults(data) {
     const grade = data.score?.grade || '--';
     const isDefensive = data.defensive_dns;
 
+    // Clear previous animation classes
+    gradeEl.classList.remove('animate-in', 'grade-glow');
+
     if (isDefensive) {
         // Non-mail domains get a shield icon instead of a letter grade
         gradeEl.textContent = '\u26E8';
@@ -391,8 +441,14 @@ function renderResults(data) {
         // Restore label in case previous audit was defensive
         const label = gradeCard?.querySelector('.summary-label');
         if (label) label.textContent = 'Security Grade';
+        // Grade entrance animation (with glow for A/A+)
+        if (grade === 'A' || grade === 'A+') {
+            gradeEl.classList.add('grade-glow');
+        } else {
+            gradeEl.classList.add('animate-in');
+        }
     }
-    // Score number
+    // Score number with count-up animation
     const scoreNum = data.score?.total;
     let scoreEl = document.getElementById('summary-score');
     if (scoreNum !== undefined && gradeCard) {
@@ -402,7 +458,7 @@ function renderResults(data) {
             scoreEl.className = 'score-subtext';
             gradeEl.parentNode.insertBefore(scoreEl, gradeEl.nextSibling);
         }
-        scoreEl.textContent = Math.round(scoreNum) + ' / 100';
+        _animateScore(scoreEl, Math.round(scoreNum));
     } else if (scoreEl) {
         scoreEl.remove();
     }
@@ -611,16 +667,21 @@ function createResultCard(check, index) {
     const isExpanded = true;
     card.className = 'result-card expanded';
     card.dataset.status = check.status;
-    card.style.animationDelay = `${0.05 + index * 0.04}s`;
+    card.style.animationDelay = `${index * 60}ms`;
 
     const statusLabel = check.pill_label || {
         pass: 'Pass', warn: 'Warning', fail: 'Issue'
     }[check.status] || 'Unknown';
 
+    const tooltipText = PROTOCOL_TOOLTIPS[check.name] || '';
+    const titleHtml = tooltipText
+        ? `<div class="result-title"><span class="protocol-name-tip" tabindex="0">${escapeHtml(check.name)}<span class="protocol-tooltip">${escapeHtml(tooltipText)}</span></span></div>`
+        : `<div class="result-title">${escapeHtml(check.name)}</div>`;
+
     card.innerHTML = `
         <div class="result-header">
             <div class="status-dot ${check.status}"></div>
-            <div class="result-title">${escapeHtml(check.name)}</div>
+            ${titleHtml}
             <span class="status-pill ${check.status}">${escapeHtml(statusLabel)}</span>
             <div class="result-verdict">${escapeHtml(check.verdict || '')}</div>
             <div class="result-chevron">&#9662;</div>
@@ -2161,6 +2222,44 @@ document.getElementById('pdf-btn').addEventListener('click', () => {
         toggleBtn.querySelector('span').textContent = allExpanded ? 'Collapse All' : 'Expand All';
     });
 })();
+
+// ============================================================
+// Score count-up animation
+// ============================================================
+
+function _animateScore(element, target) {
+    const duration = 600;
+    const start = performance.now();
+    function update(now) {
+        const elapsed = now - start;
+        const progress = Math.min(elapsed / duration, 1);
+        const eased = 1 - Math.pow(1 - progress, 3);
+        element.textContent = Math.round(eased * target) + ' / 100';
+        if (progress < 1) requestAnimationFrame(update);
+    }
+    requestAnimationFrame(update);
+}
+
+// ============================================================
+// Copy All Records
+// ============================================================
+
+document.getElementById('copy-all-btn').addEventListener('click', () => {
+    const records = [];
+    document.querySelectorAll('.record-text').forEach(el => {
+        const text = el.textContent.trim();
+        if (text) records.push(text);
+    });
+    if (records.length === 0) {
+        records.push('No DNS records found.');
+    }
+    const output = records.join('\n\n');
+    const btn = document.getElementById('copy-all-btn');
+    const span = btn.querySelector('span');
+    _copyToClipboard(output, span, 'Copy All Records');
+    btn.classList.add('copied');
+    setTimeout(() => btn.classList.remove('copied'), 2000);
+});
 
 // ============================================================
 // Helpers
