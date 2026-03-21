@@ -23,7 +23,6 @@ from collections import defaultdict
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Dict, Optional
-from urllib.parse import quote
 
 from fastapi import FastAPI, Query, HTTPException, Request
 from fastapi.staticfiles import StaticFiles
@@ -35,7 +34,7 @@ import dns.resolver
 import dns.exception
 
 from audit_engine import run_full_audit
-from pdf_report import generate_audit_pdf
+from pdf_report import generate_pdf
 
 
 # ============================================================
@@ -527,10 +526,11 @@ async def audit_stream(
 # PDF Report Endpoint
 # ============================================================
 
-@app.get("/api/audit/pdf", tags=["Audit"])
+@app.get("/api/audit/{domain}/pdf", tags=["Audit"])
 async def audit_pdf(
     request: Request,
-    domain: str = Query(..., description="Domain to generate PDF report for"),
+    domain: str,
+    scope: Optional[str] = Query("complete", description="Audit scope"),
     selector: Optional[str] = Query(None, description="DKIM selector"),
 ):
     """
@@ -548,11 +548,12 @@ async def audit_pdf(
         )
 
     domain = _validate_domain(domain)
+    scope = _validate_scope(scope)
     if selector and not SELECTOR_PATTERN.match(selector.strip()):
         raise HTTPException(status_code=400, detail="Invalid DKIM selector")
-    log.info("PDF requested: %s (ip=%s)", domain, client_ip)
+    log.info("PDF requested: %s (scope=%s, ip=%s)", domain, scope or "complete", client_ip)
 
-    cache_key = f"{domain}:{selector or ''}:complete"
+    cache_key = f"{domain}:{selector or ''}:{scope or 'complete'}"
 
     # Reuse cached audit data if available
     cached = _get_cached(cache_key)
@@ -560,10 +561,9 @@ async def audit_pdf(
         data = cached
         log.info("PDF using cached data: %s", domain)
     else:
-        # Run fresh audit (always complete scope for PDF)
         start = time.time()
         try:
-            data = run_full_audit(domain, dkim_selector=selector, scope="complete")
+            data = run_full_audit(domain, dkim_selector=selector, scope=scope)
         except Exception as e:
             log.error("PDF audit failed for %s: %s", domain, str(e)[:200], exc_info=True)
             raise HTTPException(status_code=500, detail="Audit failed -- cannot generate PDF")
@@ -571,19 +571,28 @@ async def audit_pdf(
         log.info("PDF audit complete: %s -- %.2fs", domain, elapsed)
         _set_cached(cache_key, data)
 
+    # Check for audit errors
+    if data.get("error"):
+        return Response(
+            content=data.get("error_message", "Audit failed"),
+            status_code=400,
+            media_type="text/plain",
+        )
+
     # Generate PDF
     try:
-        pdf_bytes = generate_audit_pdf(data)
+        pdf_bytes = generate_pdf(data)
     except Exception as e:
         log.error("PDF generation failed for %s: %s", domain, str(e)[:200], exc_info=True)
         raise HTTPException(status_code=500, detail="PDF generation failed")
 
-    filename = f"dns-audit-{domain}.pdf"
+    safe_domain = re.sub(r'[^a-zA-Z0-9._-]', '', domain)
+    filename = f"dns-audit-{safe_domain}.pdf"
     return Response(
         content=bytes(pdf_bytes),
         media_type="application/pdf",
         headers={
-            "Content-Disposition": f"attachment; filename*=UTF-8''{quote(filename)}",
+            "Content-Disposition": f'attachment; filename="{filename}"',
             "Cache-Control": "no-store",
         },
     )
