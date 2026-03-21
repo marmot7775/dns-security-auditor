@@ -85,7 +85,8 @@ document.addEventListener('DOMContentLoaded', () => {
         domainInput.value = domain;
         runAudit(domain);
     } else {
-        domainInput.focus();
+        // Ensure focus after all DOM mutations complete
+        requestAnimationFrame(() => domainInput.focus());
     }
 
     // Back-to-top button
