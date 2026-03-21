@@ -698,12 +698,15 @@ function renderResults(data) {
     }
 
     checks.forEach((check, i) => {
-        // Attach tree walk + DMARC eval data to the DMARC check
+        // Attach tree walk + DMARC eval + subdomain audit data to the DMARC check
         if ((check.name || '').toUpperCase().includes('DMARC') && data.tree_walk) {
             check._tree_walk = data.tree_walk;
         }
         if ((check.name || '').toUpperCase().includes('DMARC') && data.dmarc_eval) {
             check._dmarc_eval = data.dmarc_eval;
+        }
+        if ((check.name || '').toUpperCase().includes('DMARC') && data.subdomain_audit) {
+            check._subdomain_audit = data.subdomain_audit;
         }
         // Attach SPF execution trace + tree to the SPF check
         if ((check.name || '').toUpperCase() === 'SPF' && data.spf_execution) {
@@ -715,6 +718,29 @@ function renderResults(data) {
         // Attach report chain to DMARC check
         if ((check.name || '').toUpperCase().includes('DMARC') && data.report_chain) {
             check._report_chain = data.report_chain;
+        }
+        // Attach change detection history to each check card
+        if (data.change_detection && data.change_detection.changes) {
+            const checkName = (check.name || '').toLowerCase().replace(/\s+/g, '');
+            const relevant = data.change_detection.changes.filter(c => {
+                const rt = (c.record_type || '').toLowerCase().replace(/[:\s]/g, '');
+                return rt === checkName || rt.startsWith(checkName);
+            });
+            if (relevant.length > 0) {
+                check._change_history = relevant;
+            }
+            // First audit message
+            if (data.change_detection.status === 'first_audit') {
+                check._change_status = 'first_audit';
+            }
+        }
+        // Attach consistency findings to each check card
+        if (data.consistency_findings) {
+            const checkName = check.name || '';
+            const relevant = data.consistency_findings.filter(f => f.protocol === checkName);
+            if (relevant.length > 0) {
+                check._consistency_findings = relevant;
+            }
         }
         const card = createResultCard(check, i);
         resultsList.appendChild(card);
@@ -974,6 +1000,11 @@ function renderCheckBody(check) {
         html += _renderDetailItem(d);
     });
 
+    // TTL freshness badge (Prompt 18, Part 2)
+    if (check.ttl_info) {
+        html += renderTtlBadge(check.ttl_info);
+    }
+
     // Raw record with syntax highlighting
     if (check.record) {
         const highlighted = highlightRecord(check.record, check.name);
@@ -1012,6 +1043,11 @@ function renderCheckBody(check) {
     // Attack Surface View (Prompt 6)
     if (check.attack_surface) {
         html += renderAttackSurface(check.attack_surface);
+    }
+
+    // Subdomain Security Audit (Prompt 17)
+    if (check._subdomain_audit) {
+        html += renderSubdomainAudit(check._subdomain_audit);
     }
 
     // DMARC Record Breakdown (DMARCbis mode only — has DMARCbis notes, health verdict, migration, etc.)
@@ -1080,6 +1116,21 @@ function renderCheckBody(check) {
     // Fix preview -- before/after DNS records
     if (check.fix_records && check.fix_records.length > 0) {
         html += renderFixPreview(check.fix_records);
+    }
+
+    // Change History (Prompt 18, Part 1)
+    if (check._change_history && check._change_history.length > 0) {
+        html += renderChangeHistory(check._change_history);
+    } else if (check._change_status === 'first_audit') {
+        html += `<div class="cd-first-audit">
+            <span class="cd-first-icon">&#128203;</span>
+            We are now tracking this domain. Run another audit later to detect changes.
+        </div>`;
+    }
+
+    // Consistency findings (Prompt 18, Part 4)
+    if (check._consistency_findings && check._consistency_findings.length > 0) {
+        html += renderConsistencyFindings(check._consistency_findings);
     }
 
     if (!html) {
@@ -1242,6 +1293,101 @@ function renderAttackSurface(as) {
             <div class="as-vectors">${vectorsHtml}</div>
         </div>`;
 }
+
+// ============================================================
+// Subdomain Security Audit (Prompt 17)
+// ============================================================
+
+function renderSubdomainAudit(sa) {
+    if (!sa || !sa.subdomains || sa.subdomains.length === 0) return '';
+
+    const statusIcons = { protected: '&#x2705;', partial: '&#x26A0;&#xFE0F;', exposed: '&#x1F534;' };
+
+    // Summary stats
+    let summaryHtml = '';
+    (sa.summary_lines || []).forEach(line => {
+        summaryHtml += `<div class="sua-summary-line">${escapeHtml(line)}</div>`;
+    });
+
+    // Callout
+    let calloutHtml = '';
+    if (sa.callout) {
+        calloutHtml = `<div class="sua-callout">${escapeHtml(sa.callout)}</div>`;
+    }
+
+    // Table rows
+    let rowsHtml = '';
+    sa.subdomains.forEach(s => {
+        const icon = statusIcons[s.status] || '';
+        const existsText = s.exists ? 'Yes' : 'No';
+        let mailText = '\u2014';
+        if (s.exists) {
+            mailText = s.sends_mail ? `Yes (${escapeHtml(s.mail_signals || '')})` : 'No';
+        }
+        const dmarcText = s.exists ? (s.has_own_dmarc ? 'Yes' : 'No') : '\u2014';
+
+        rowsHtml += `
+            <tr class="sua-row sua-row-${s.color}">
+                <td class="sua-cell-sub">
+                    <span class="sua-sub-name">${escapeHtml(s.subdomain)}</span>
+                </td>
+                <td>${existsText}</td>
+                <td>${mailText}</td>
+                <td>${dmarcText}</td>
+                <td class="sua-cell-policy">${escapeHtml(s.policy_display)}</td>
+                <td class="sua-cell-status">${icon} ${escapeHtml(s.status_label)}</td>
+                <td class="sua-cell-action">
+                    <button class="sua-audit-btn" data-domain="${escapeHtml(s.subdomain)}"
+                            title="Run full audit on ${escapeHtml(s.subdomain)}">Audit \u2192</button>
+                </td>
+            </tr>`;
+    });
+
+    return `
+        <div class="sua-block">
+            <div class="sua-header">
+                <span class="sua-title">Subdomain Security</span>
+                <span class="sua-badge">${sa.total_probed} probed</span>
+            </div>
+            ${summaryHtml}
+            ${calloutHtml}
+            <details class="sua-details">
+                <summary class="sua-toggle">
+                    <span class="sua-toggle-icon">&#9654;</span>
+                    Show ${sa.subdomains.length} subdomain${sa.subdomains.length === 1 ? '' : 's'}
+                </summary>
+                <div class="sua-table-wrap">
+                    <table class="sua-table">
+                        <thead>
+                            <tr>
+                                <th>Subdomain</th>
+                                <th>Exists</th>
+                                <th>Sends Mail</th>
+                                <th>Own DMARC</th>
+                                <th>Effective Policy</th>
+                                <th>Status</th>
+                                <th></th>
+                            </tr>
+                        </thead>
+                        <tbody>${rowsHtml}</tbody>
+                    </table>
+                </div>
+            </details>
+        </div>`;
+}
+
+// Wire up "Audit" buttons for subdomain rows (delegated)
+document.addEventListener('click', function(e) {
+    const btn = e.target.closest('.sua-audit-btn');
+    if (!btn) return;
+    const sub = btn.dataset.domain;
+    if (!sub) return;
+    const input = document.getElementById('domain-input');
+    if (input) input.value = sub;
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+    // Small delay so scroll starts before audit triggers
+    setTimeout(() => { runAudit(sub); }, 120);
+});
 
 // ============================================================
 // DMARCbis Strict Validation

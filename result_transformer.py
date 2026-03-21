@@ -343,6 +343,563 @@ def build_security_roadmap(checks: List[Dict]) -> Dict:
 
 
 # ============================================================
+# TTL Freshness Helpers (Prompt 18, Part 2)
+# ============================================================
+
+
+def format_ttl(ttl: Optional[int]) -> Optional[Dict]:
+    """Convert a TTL value into a human-readable freshness indicator."""
+    if ttl is None:
+        return None
+
+    if ttl < 300:
+        category = "very_short"
+        label = "Very short TTL"
+        detail = "This record changes frequently or was recently modified. Changes propagate in under 5 minutes."
+    elif ttl <= 3600:
+        minutes = ttl // 60
+        category = "short"
+        label = "Short TTL"
+        detail = f"Changes propagate within {minutes} minute{'s' if minutes != 1 else ''}."
+    elif ttl <= 86400:
+        hours = ttl // 3600
+        category = "standard"
+        label = "Standard TTL"
+        detail = f"Changes propagate within {hours} hour{'s' if hours != 1 else ''}."
+    else:
+        hours = ttl // 3600
+        days = ttl // 86400
+        category = "long"
+        label = "Long TTL"
+        if days >= 1:
+            detail = f"Changes take over {days} day{'s' if days != 1 else ''} to propagate."
+        else:
+            detail = f"Changes take over {hours} hours to propagate."
+
+    return {
+        "ttl": ttl,
+        "category": category,
+        "label": label,
+        "detail": detail,
+        "human": _humanize_seconds(ttl),
+    }
+
+
+def _humanize_seconds(seconds: int) -> str:
+    """Convert seconds to a human-readable duration."""
+    if seconds < 60:
+        return f"{seconds}s"
+    if seconds < 3600:
+        m = seconds // 60
+        return f"{m}m"
+    if seconds < 86400:
+        h = seconds // 3600
+        m = (seconds % 3600) // 60
+        return f"{h}h{m}m" if m else f"{h}h"
+    d = seconds // 86400
+    h = (seconds % 86400) // 3600
+    return f"{d}d{h}h" if h else f"{d}d"
+
+
+# ============================================================
+# Change Detection (Prompt 18, Part 1)
+# ============================================================
+
+
+_RECORD_TYPE_LABELS = {
+    "dmarc": "DMARC",
+    "spf": "SPF",
+    "mx": "MX Records",
+    "mta-sts": "MTA-STS",
+    "tls-rpt": "TLS-RPT",
+    "dnssec": "DNSSEC",
+    "caa": "CAA",
+    "nameservers": "Nameservers",
+}
+
+
+def _classify_change(record_type: str, old_value: str, new_value: str) -> Dict:
+    """Analyze what specifically changed between two record values and whether
+    the change is an improvement or regression."""
+    change = {
+        "description": f"{_RECORD_TYPE_LABELS.get(record_type, record_type)} record changed",
+        "is_improvement": None,  # True = green, False = red, None = neutral
+    }
+
+    if record_type == "dmarc":
+        old_tags = _parse_record_tags(old_value)
+        new_tags = _parse_record_tags(new_value)
+
+        # Check policy change
+        old_p = old_tags.get("p", "")
+        new_p = new_tags.get("p", "")
+        policy_rank = {"none": 0, "quarantine": 1, "reject": 2}
+        if old_p != new_p:
+            old_rank = policy_rank.get(old_p.lower(), -1)
+            new_rank = policy_rank.get(new_p.lower(), -1)
+            if new_rank > old_rank:
+                change["description"] = f"Policy upgraded from p={old_p} to p={new_p}"
+                change["is_improvement"] = True
+            elif new_rank < old_rank:
+                change["description"] = f"Policy downgraded from p={old_p} to p={new_p}"
+                change["is_improvement"] = False
+            else:
+                change["description"] = f"Policy changed from p={old_p} to p={new_p}"
+
+        # Check sp change
+        old_sp = old_tags.get("sp", "")
+        new_sp = new_tags.get("sp", "")
+        if old_sp != new_sp and old_p == new_p:
+            change["description"] = f"Subdomain policy changed from sp={old_sp or '(absent)'} to sp={new_sp or '(absent)'}"
+            sp_old_rank = policy_rank.get(old_sp.lower(), -1) if old_sp else -1
+            sp_new_rank = policy_rank.get(new_sp.lower(), -1) if new_sp else -1
+            change["is_improvement"] = sp_new_rank > sp_old_rank
+
+        # Check np added
+        if "np" not in old_tags and "np" in new_tags:
+            change["description"] = f"Added np={new_tags['np']} (DMARCbis tag)"
+            change["is_improvement"] = True
+
+        # Check rua added/removed
+        if "rua" not in old_tags and "rua" in new_tags:
+            change["description"] = "Added aggregate reporting (rua=)"
+            change["is_improvement"] = True
+        elif "rua" in old_tags and "rua" not in new_tags:
+            change["description"] = "Removed aggregate reporting (rua=)"
+            change["is_improvement"] = False
+
+    elif record_type == "spf":
+        # Check for all-mechanism changes
+        old_all = _extract_spf_all(old_value)
+        new_all = _extract_spf_all(new_value)
+        all_rank = {"+all": 0, "?all": 1, "~all": 2, "-all": 3}
+        if old_all != new_all:
+            old_rank = all_rank.get(old_all, -1)
+            new_rank = all_rank.get(new_all, -1)
+            if new_rank > old_rank:
+                change["description"] = f"SPF hardened: {old_all} to {new_all}"
+                change["is_improvement"] = True
+            elif new_rank < old_rank:
+                change["description"] = f"SPF weakened: {old_all} to {new_all}"
+                change["is_improvement"] = False
+
+    return change
+
+
+def _parse_record_tags(record: str) -> Dict[str, str]:
+    """Parse tag=value pairs from a DMARC-style record."""
+    tags = {}
+    for part in record.split(";"):
+        part = part.strip()
+        if "=" in part:
+            k, _, v = part.partition("=")
+            tags[k.strip().lower()] = v.strip()
+    return tags
+
+
+def _extract_spf_all(record: str) -> str:
+    """Extract the all mechanism from an SPF record."""
+    parts = record.strip().split()
+    for p in reversed(parts):
+        p_lower = p.lower()
+        if p_lower in ("+all", "-all", "~all", "?all", "all"):
+            return p_lower
+    return ""
+
+
+def build_change_detection(
+    raw_results: Dict,
+    history: Dict[str, list],
+    first_seen: Optional[str],
+) -> Optional[Dict]:
+    """Build the change detection section from snapshot history.
+
+    Args:
+        raw_results: Current raw audit results keyed by check name
+        history: Dict of record_type -> list of historical snapshots (newest first)
+        first_seen: Timestamp of earliest snapshot for this domain
+    """
+    if not history:
+        return {
+            "status": "first_audit",
+            "message": "We are now tracking this domain. Run another audit later to detect changes.",
+            "changes": [],
+            "first_seen": None,
+        }
+
+    changes = []
+
+    # Map raw_results keys to snapshot record types
+    record_map = {
+        "dmarc": ("dmarc", lambda r: r.get("record")),
+        "spf": ("spf", lambda r: r.get("record")),
+        "mx": ("mx", lambda r: "; ".join(sorted(r.get("records") or []))),
+    }
+
+    for check_key, (record_type, extract_fn) in record_map.items():
+        raw = raw_results.get(check_key, {})
+        current_value = extract_fn(raw)
+        snapshots = history.get(record_type, [])
+
+        if not snapshots:
+            continue
+
+        if len(snapshots) >= 2:
+            # We have at least two snapshots, meaning at least one change happened
+            for i in range(len(snapshots) - 1):
+                newer = snapshots[i]
+                older = snapshots[i + 1]
+                if newer["record_hash"] != older["record_hash"]:
+                    classification = _classify_change(
+                        record_type, older["record_value"], newer["record_value"]
+                    )
+                    changes.append({
+                        "record_type": record_type,
+                        "record_label": _RECORD_TYPE_LABELS.get(record_type, record_type),
+                        "timestamp": newer["timestamp"],
+                        "old_value": older["record_value"],
+                        "new_value": newer["record_value"],
+                        "description": classification["description"],
+                        "is_improvement": classification["is_improvement"],
+                    })
+
+    # Also check DKIM selectors
+    for rt, snapshots in history.items():
+        if rt.startswith("dkim:") and len(snapshots) >= 2:
+            selector = rt.split(":", 1)[1]
+            for i in range(len(snapshots) - 1):
+                newer = snapshots[i]
+                older = snapshots[i + 1]
+                if newer["record_hash"] != older["record_hash"]:
+                    changes.append({
+                        "record_type": rt,
+                        "record_label": f"DKIM ({selector})",
+                        "timestamp": newer["timestamp"],
+                        "old_value": older["record_value"],
+                        "new_value": newer["record_value"],
+                        "description": f"DKIM key for selector '{selector}' changed (possible rotation)",
+                        "is_improvement": True,
+                    })
+
+    # Sort changes by timestamp (newest first)
+    changes.sort(key=lambda c: c.get("timestamp", ""), reverse=True)
+
+    if not changes:
+        # We have snapshots but no changes detected
+        latest_ts = first_seen
+        for snapshots in history.values():
+            if snapshots:
+                ts = snapshots[0].get("timestamp", "")
+                if ts > (latest_ts or ""):
+                    latest_ts = ts
+
+        return {
+            "status": "no_changes",
+            "message": f"No changes detected since {latest_ts or 'first audit'}",
+            "changes": [],
+            "first_seen": first_seen,
+        }
+
+    return {
+        "status": "changes_found",
+        "message": f"{len(changes)} record change{'s' if len(changes) != 1 else ''} detected",
+        "changes": changes,
+        "first_seen": first_seen,
+    }
+
+
+# ============================================================
+# Consistency Findings (Prompt 18, Part 4)
+# ============================================================
+
+
+def build_consistency_findings(
+    raw_results: Dict,
+    checks: List[Dict],
+) -> Optional[List[Dict]]:
+    """Check for cross-record inconsistencies that suggest partial updates
+    or configuration drift.
+
+    Returns a list of finding dicts, or None if no findings.
+    """
+    findings = []
+    check_map = {c.get("name", ""): c for c in checks}
+
+    # 1. SPF includes that resolve to empty/error
+    spf_raw = raw_results.get("spf", {})
+    spf_deep = check_map.get("SPF", {}).get("spf_deep")
+    if spf_deep:
+        for mech in spf_deep.get("mechanisms", []):
+            if mech.get("type") == "include" and mech.get("provider") is None:
+                # Could be decommissioned service, but only flag if we also don't know the provider
+                pass  # Covered by SPF deep analysis already
+
+    # 2. MTA-STS MX mismatch
+    mta_sts_raw = raw_results.get("mta_sts", {})
+    mx_raw = raw_results.get("mx", {})
+    mta_sts_mx = mta_sts_raw.get("policy_mx") or []
+    actual_mx = []
+    for detail in mx_raw.get("mx_details", []):
+        host = detail.get("host", "").rstrip(".")
+        if host:
+            actual_mx.append(host.lower())
+    if mta_sts_mx and actual_mx:
+        mta_set = {m.lower().lstrip("*.") for m in mta_sts_mx}
+        mx_set = set(actual_mx)
+        # Check if any actual MX is not covered by MTA-STS
+        uncovered = []
+        for mx_host in mx_set:
+            covered = False
+            for pattern in mta_set:
+                if mx_host == pattern or mx_host.endswith("." + pattern):
+                    covered = True
+                    break
+            if not covered:
+                uncovered.append(mx_host)
+        if uncovered:
+            findings.append({
+                "protocol": "MTA-STS",
+                "badge": "Configuration Drift",
+                "title": "MTA-STS policy does not cover all MX hosts",
+                "detail": (
+                    f"Your MTA-STS policy does not list {', '.join(uncovered)}. "
+                    f"Senders enforcing MTA-STS may refuse to deliver to "
+                    f"{'this host' if len(uncovered) == 1 else 'these hosts'}."
+                ),
+                "severity": "warning",
+            })
+
+    # 3. DKIM selectors that resolve to NXDOMAIN
+    dkim_raw = raw_results.get("dkim", {})
+    for sel in dkim_raw.get("found_selectors", []):
+        if sel.get("status") == "nxdomain" or (not sel.get("record") and sel.get("selector")):
+            pass  # Already handled by DKIM check
+
+    # 4. DMARC rua provider vs SPF authorization
+    dmarc_raw = raw_results.get("dmarc", {})
+    rua = dmarc_raw.get("rua", "")
+    spf_record = spf_raw.get("record", "")
+    if rua and spf_record:
+        # Extract domain from rua mailto:
+        import re
+        rua_domains = re.findall(r'mailto:[^@]+@([^,;\s]+)', rua)
+        for rua_domain in rua_domains:
+            rua_domain = rua_domain.lower().rstrip(".")
+            domain_val = dmarc_raw.get("domain", "").lower()
+            # Only flag if rua domain differs from audited domain
+            if rua_domain and rua_domain != domain_val:
+                # Check if SPF includes this domain
+                if rua_domain not in spf_record.lower():
+                    findings.append({
+                        "protocol": "DMARC",
+                        "badge": "Informational",
+                        "title": f"DMARC reports sent to external domain",
+                        "detail": (
+                            f"Your DMARC aggregate reports are sent to {rua_domain}, "
+                            f"which is not authorized in your SPF record. This is normal "
+                            f"if they only receive reports, but verify the destination is correct."
+                        ),
+                        "severity": "info",
+                    })
+
+    return findings if findings else None
+
+
+# ============================================================
+# Subdomain Discovery & Audit (Prompt 17)
+# ============================================================
+
+
+def build_subdomain_audit(
+    raw: Dict,
+    policy: Optional[str] = None,
+    sp: Optional[str] = None,
+    np: Optional[str] = None,
+    has_record: bool = False,
+) -> Optional[Dict]:
+    """Transform raw subdomain probe results into a structured audit section.
+
+    Classifies each discovered subdomain as active mail sender, exists but no
+    mail config, or does not exist, and determines the effective DMARC policy.
+
+    Args:
+        raw: Output from _audit_subdomains() with "probes" list
+        policy: Root domain DMARC p= value (e.g. "reject", "none")
+        sp: Root domain sp= value (or None if absent)
+        np: Root domain np= value (or None if absent)
+        has_record: Whether root domain has a DMARC record at all
+    """
+    probes = raw.get("probes", [])
+    if not probes:
+        return None
+
+    # Effective subdomain policy: sp= if set, otherwise falls back to p=
+    effective_sp = sp if sp else policy
+    # Effective non-existent subdomain policy: np= if set, otherwise sp= then p=
+    effective_np = np if np else (sp if sp else policy)
+
+    subdomains = []
+    for probe in probes:
+        sub = probe.get("subdomain", "")
+        exists = probe.get("exists", False)
+        has_mx = probe.get("has_mx", False)
+        has_spf = probe.get("has_spf", False)
+        has_dmarc = probe.get("has_dmarc", False)
+        dmarc_record = probe.get("dmarc_record")
+
+        sends_mail = has_mx or has_spf
+        mail_reason = []
+        if has_mx:
+            mail_reason.append("MX")
+        if has_spf:
+            mail_reason.append("SPF")
+
+        # Determine effective policy
+        if has_dmarc and dmarc_record:
+            # Parse the subdomain's own DMARC record for its policy
+            own_policy = None
+            for part in dmarc_record.split(";"):
+                part = part.strip()
+                if part.startswith("p="):
+                    own_policy = part[2:].strip().lower()
+                    break
+            eff_policy = own_policy or "none"
+            policy_source = "own"
+            policy_display = f"p={eff_policy}"
+        elif exists:
+            eff_policy = effective_sp or "none"
+            policy_source = "inherited_sp"
+            if sp:
+                policy_display = f"Inherits sp={sp}"
+            elif policy:
+                policy_display = f"Inherits p={policy}"
+            else:
+                policy_display = "No DMARC (none)"
+        else:
+            eff_policy = effective_np or "none"
+            policy_source = "inherited_np"
+            if np:
+                policy_display = f"np={np}"
+            elif sp:
+                policy_display = f"No np=, fallback sp={sp}"
+            elif policy:
+                policy_display = f"No np=, fallback p={policy}"
+            else:
+                policy_display = "No np=, fallback none"
+
+        # Classify
+        if exists and sends_mail:
+            category = "active_mail"
+            category_label = "Active mail sender"
+        elif exists:
+            category = "exists_no_mail"
+            category_label = "Exists, no mail config"
+        else:
+            category = "nonexistent"
+            category_label = "Does not exist"
+
+        # Status: protected / partial / exposed
+        if eff_policy == "reject":
+            status = "protected"
+            status_label = "Protected"
+            color = "green"
+        elif eff_policy == "quarantine":
+            status = "partial"
+            status_label = "Quarantine"
+            color = "amber"
+        else:
+            status = "exposed"
+            status_label = "Exposed"
+            color = "red"
+
+        # If no DMARC record on root at all, everything is exposed
+        if not has_record and not has_dmarc:
+            status = "exposed"
+            status_label = "Exposed"
+            color = "red"
+            policy_display = "No DMARC record"
+
+        subdomains.append({
+            "subdomain": sub,
+            "exists": exists,
+            "sends_mail": sends_mail,
+            "mail_signals": ", ".join(mail_reason) if mail_reason else None,
+            "has_own_dmarc": has_dmarc,
+            "dmarc_record": dmarc_record,
+            "effective_policy": eff_policy,
+            "policy_source": policy_source,
+            "policy_display": policy_display,
+            "category": category,
+            "category_label": category_label,
+            "status": status,
+            "status_label": status_label,
+            "color": color,
+        })
+
+    # Sort: exposed first, then partial, then protected
+    sort_order = {"exposed": 0, "partial": 1, "protected": 2}
+    subdomains.sort(key=lambda s: (sort_order.get(s["status"], 3), s["subdomain"]))
+
+    # Summary stats
+    total_discovered = sum(1 for s in subdomains if s["exists"])
+    total_mail = sum(1 for s in subdomains if s["sends_mail"])
+    total_exposed = sum(1 for s in subdomains if s["status"] == "exposed")
+    exposed_mail = sum(1 for s in subdomains if s["status"] == "exposed" and s["sends_mail"])
+    exposed_exist = sum(1 for s in subdomains if s["status"] == "exposed" and s["exists"] and not s["sends_mail"])
+    exposed_nx = sum(1 for s in subdomains if s["status"] == "exposed" and not s["exists"])
+
+    # Build summary lines
+    summary_lines = [
+        f"{total_discovered} subdomain{'s' if total_discovered != 1 else ''} discovered, "
+        f"{total_mail} with mail configuration",
+    ]
+    if total_exposed > 0:
+        summary_lines.append(
+            f"{total_exposed} subdomain{'s' if total_exposed != 1 else ''} "
+            f"exposed due to policy gaps"
+        )
+
+    # Build the "killer insight" callout
+    callout = None
+    if (policy and policy.lower() in ("reject", "quarantine")
+            and (not sp or sp.lower() == "none")
+            and exposed_mail > 0):
+        callout = (
+            f"We found {exposed_mail} active subdomain{'s' if exposed_mail != 1 else ''} "
+            f"that inherit{'s' if exposed_mail == 1 else ''} your sp={sp or 'none'} policy. "
+            f"{'This subdomain' if exposed_mail == 1 else 'These subdomains'} can be spoofed "
+            f"despite your root domain being at p={policy}. "
+            f"This is not a theoretical risk: "
+            f"{'this is a real subdomain' if exposed_mail == 1 else 'these are real subdomains'} "
+            f"with real mail infrastructure."
+        )
+    elif not has_record and total_discovered > 0:
+        callout = (
+            f"Your domain has no DMARC record. All {total_discovered} discovered "
+            f"subdomain{'s' if total_discovered != 1 else ''} can be freely spoofed."
+        )
+    elif sp and sp.lower() == "none" and total_discovered > 0 and total_exposed > 0:
+        callout = (
+            f"Your subdomain policy gap (sp=none) affects "
+            f"{total_exposed} real subdomain{'s' if total_exposed != 1 else ''}, "
+            f"not just theoretical ones."
+        )
+
+    return {
+        "subdomains": subdomains,
+        "summary_lines": summary_lines,
+        "callout": callout,
+        "total_probed": len(subdomains),
+        "total_discovered": total_discovered,
+        "total_mail": total_mail,
+        "total_exposed": total_exposed,
+        "exposed_mail": exposed_mail,
+        "exposed_exist": exposed_exist,
+        "exposed_nx": exposed_nx,
+    }
+
+
+# ============================================================
 # DMARC
 # ============================================================
 
@@ -856,6 +1413,7 @@ def transform_dmarc(raw: Dict, tree_walk: Optional[Dict] = None) -> Dict:
         "dmarcbis_readiness": _build_dmarcbis_card_data(
             raw.get("dmarcbis_readiness"), raw.get("record")
         ),
+        "ttl_info": format_ttl(raw.get("ttl")),
     }
 
 
@@ -2900,6 +3458,7 @@ def transform_spf(raw: Dict, has_mx: bool = True) -> Dict:
         "fix": fix,
         "fix_records": fix_records if fix_records else None,
         "spf_deep": _build_spf_deep_analysis(raw) if record else None,
+        "ttl_info": format_ttl(raw.get("ttl")),
     }
 
 

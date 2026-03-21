@@ -5239,6 +5239,192 @@ main .meth-page {
     }
 }
 
+/* ── Subdomain Security Audit ───────────────────────────── */
+
+.sua-block {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 1rem;
+    margin: 0.75rem 0;
+}
+
+.sua-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 0.5rem;
+}
+
+.sua-title {
+    font-weight: 700;
+    font-size: 0.85rem;
+    color: var(--text-primary);
+}
+
+.sua-badge {
+    font-size: 0.68rem;
+    font-weight: 600;
+    padding: 0.15rem 0.5rem;
+    border-radius: 99px;
+    background: var(--bg-raised);
+    color: var(--text-muted);
+}
+
+.sua-summary-line {
+    font-size: 0.78rem;
+    color: var(--text-secondary);
+    line-height: 1.5;
+}
+
+.sua-callout {
+    font-size: 0.78rem;
+    color: var(--text-primary);
+    background: var(--fail-bg);
+    border-left: 3px solid var(--fail);
+    padding: 0.6rem 0.8rem;
+    border-radius: 0 6px 6px 0;
+    margin: 0.5rem 0;
+    line-height: 1.5;
+}
+
+.sua-details {
+    margin-top: 0.5rem;
+}
+
+.sua-toggle {
+    font-size: 0.76rem;
+    font-weight: 600;
+    color: var(--primary);
+    cursor: pointer;
+    list-style: none;
+    padding: 0.4rem 0;
+    user-select: none;
+}
+
+.sua-toggle::-webkit-details-marker {
+    display: none;
+}
+
+.sua-toggle-icon {
+    display: inline-block;
+    transition: transform 0.2s ease;
+    margin-right: 0.3rem;
+    font-size: 0.65rem;
+}
+
+.sua-details[open] .sua-toggle-icon {
+    transform: rotate(90deg);
+}
+
+.sua-table-wrap {
+    overflow-x: auto;
+    margin-top: 0.4rem;
+    -webkit-overflow-scrolling: touch;
+}
+
+.sua-table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 0.72rem;
+}
+
+.sua-table th {
+    text-align: left;
+    font-weight: 600;
+    color: var(--text-muted);
+    padding: 0.4rem 0.5rem;
+    border-bottom: 1px solid var(--border);
+    white-space: nowrap;
+    font-size: 0.68rem;
+    text-transform: uppercase;
+    letter-spacing: 0.03em;
+}
+
+.sua-table td {
+    padding: 0.4rem 0.5rem;
+    border-bottom: 1px solid var(--border-light);
+    color: var(--text-secondary);
+    vertical-align: middle;
+}
+
+.sua-row-red {
+    background: color-mix(in srgb, var(--fail) 6%, transparent);
+}
+
+.sua-row-amber {
+    background: color-mix(in srgb, var(--warn) 6%, transparent);
+}
+
+.sua-row-green td {
+    color: var(--text-tertiary);
+}
+
+.sua-cell-sub {
+    min-width: 10rem;
+}
+
+.sua-sub-name {
+    font-family: var(--font-mono, 'JetBrains Mono', monospace);
+    font-size: 0.72rem;
+}
+
+.sua-cell-policy {
+    font-family: var(--font-mono, 'JetBrains Mono', monospace);
+    font-size: 0.68rem;
+}
+
+.sua-cell-status {
+    white-space: nowrap;
+    font-weight: 600;
+}
+
+.sua-cell-action {
+    text-align: right;
+    white-space: nowrap;
+}
+
+.sua-audit-btn {
+    background: transparent;
+    border: 1px solid var(--primary);
+    color: var(--primary);
+    font-size: 0.68rem;
+    font-weight: 600;
+    padding: 0.2rem 0.5rem;
+    border-radius: 4px;
+    cursor: pointer;
+    transition: background 0.15s, color 0.15s;
+    min-height: 28px;
+}
+
+.sua-audit-btn:hover {
+    background: var(--primary);
+    color: #fff;
+}
+
+@media (max-width: 768px) {
+    .sua-table {
+        font-size: 0.68rem;
+    }
+    .sua-audit-btn {
+        border: none;
+        padding: 0.15rem 0.3rem;
+        font-size: 0.65rem;
+    }
+    .sua-cell-sub {
+        min-width: 7rem;
+    }
+}
+
+@media (max-width: 480px) {
+    .sua-table th:nth-child(2),
+    .sua-table td:nth-child(2),
+    .sua-table th:nth-child(4),
+    .sua-table td:nth-child(4) {
+        display: none;
+    }
+}
+
 /* ── Spec Mode Toggle ─────────────────────────────────────── */
 
 .st-toggle-bar {

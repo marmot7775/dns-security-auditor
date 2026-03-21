@@ -62,8 +62,12 @@ from result_transformer import (
     transform_blacklist,
     build_security_roadmap,
     build_executive_summary,
+    build_subdomain_audit,
+    build_change_detection,
+    build_consistency_findings,
     _build_provider_intelligence,
 )
+from dns_snapshots import store_audit_snapshots, get_all_history, purge_old_snapshots, get_first_seen
 
 
 # ============================================================
@@ -188,6 +192,16 @@ def _lookup_txt(name: str) -> List[str]:
     except dns.exception.DNSException as e:
         log.debug("DNS error for TXT lookup %s: %s", name, e)
         return []
+
+
+def _lookup_ttl(name: str, rdtype: str = "TXT") -> Optional[int]:
+    """Look up the TTL for a DNS record. Returns None on any failure."""
+    try:
+        resolver = _get_resolver()
+        answers = resolver.resolve(name, rdtype)
+        return answers.rrset.ttl if answers.rrset else None
+    except dns.exception.DNSException:
+        return None
 
 
 # ============================================================
@@ -621,6 +635,9 @@ def _raw_check_dmarc(domain: str) -> Dict[str, Any]:
 
     record = dmarc_records[0]
     result["record"] = record
+
+    # Capture TTL for freshness indicators
+    result["ttl"] = _lookup_ttl(dmarc_fqdn, "TXT")
 
     # ── Step 2b: Long record warning ────────────────────────────
     if len(record) > 1000:
@@ -1727,6 +1744,7 @@ def _raw_check_spf(domain: str) -> Dict[str, Any]:
 
     record = spf_records[0]
     result["record"] = record
+    result["ttl"] = _lookup_ttl(domain, "TXT")
 
     # ── Step 3: Parse mechanisms and run syntax checks ──────────
     parts = record.split()
@@ -3278,6 +3296,115 @@ def _raw_check_blacklist(domain: str, raw_results: Dict[str, Any]) -> Dict[str, 
 _shared_executor = ThreadPoolExecutor(max_workers=8)
 
 
+# ============================================================
+# Subdomain Discovery & Audit
+# ============================================================
+
+_SUBDOMAIN_PREFIXES = [
+    "mail", "email", "smtp", "mx", "newsletter", "marketing",
+    "support", "helpdesk", "portal", "app", "dev", "staging",
+    "test", "api", "shop", "store", "billing", "secure", "login",
+    "accounts",
+]
+
+_SUBDOMAIN_TIMEOUT = 2.0  # seconds per DNS query
+
+
+def _probe_subdomain(subdomain: str) -> Dict[str, Any]:
+    """Probe a single subdomain for DNS existence, DMARC, SPF, and MX records.
+
+    Returns a dict with probe results.  All DNS errors are caught and treated
+    as "record not found" so a single slow or broken subdomain never blocks
+    the audit.
+    """
+    result = {
+        "subdomain": subdomain,
+        "exists": False,
+        "has_mx": False,
+        "has_spf": False,
+        "has_dmarc": False,
+        "dmarc_record": None,
+        "spf_record": None,
+        "mx_hosts": [],
+    }
+    resolver = _get_resolver(timeout=_SUBDOMAIN_TIMEOUT)
+
+    # Check existence (A / AAAA / CNAME)
+    for rdtype in ("A", "AAAA", "CNAME"):
+        try:
+            resolver.resolve(subdomain, rdtype, raise_on_no_answer=False)
+            result["exists"] = True
+            break
+        except dns.exception.DNSException:
+            continue
+
+    # MX records
+    try:
+        mx_ans = resolver.resolve(subdomain, "MX")
+        mx_list = [str(r.exchange).rstrip(".") for r in mx_ans]
+        if mx_list:
+            result["has_mx"] = True
+            result["mx_hosts"] = mx_list
+            result["exists"] = True  # MX implies existence
+    except dns.exception.DNSException:
+        pass
+
+    # SPF record
+    try:
+        txt_ans = resolver.resolve(subdomain, "TXT")
+        for rdata in txt_ans:
+            txt = b"".join(rdata.strings).decode("utf-8", errors="replace")
+            if txt.lower().startswith("v=spf1"):
+                result["has_spf"] = True
+                result["spf_record"] = txt
+                result["exists"] = True
+                break
+    except dns.exception.DNSException:
+        pass
+
+    # DMARC record
+    dmarc_name = f"_dmarc.{subdomain}"
+    try:
+        txt_ans = resolver.resolve(dmarc_name, "TXT")
+        for rdata in txt_ans:
+            txt = b"".join(rdata.strings).decode("utf-8", errors="replace")
+            if txt.lower().startswith("v=dmarc1"):
+                result["has_dmarc"] = True
+                result["dmarc_record"] = txt
+                break
+    except dns.exception.DNSException:
+        pass
+
+    return result
+
+
+def _audit_subdomains(domain: str) -> Dict[str, Any]:
+    """Probe common subdomains in parallel and return raw discovery results.
+
+    All queries run concurrently with a 2-second per-query timeout.
+    The entire batch is bounded by CHECK_TIMEOUT to stay within budget.
+    """
+    subdomains = [f"{prefix}.{domain}" for prefix in _SUBDOMAIN_PREFIXES]
+
+    futures = {}
+    for sub in subdomains:
+        future = _shared_executor.submit(_probe_subdomain, sub)
+        futures[future] = sub
+
+    results = []
+    for future in as_completed(futures, timeout=CHECK_TIMEOUT):
+        try:
+            results.append(future.result(timeout=_SUBDOMAIN_TIMEOUT + 1))
+        except Exception:
+            # Skip subdomains that time out or error
+            pass
+
+    return {
+        "domain": domain,
+        "probes": results,
+    }
+
+
 def _run_with_timeout(func, *args, timeout=CHECK_TIMEOUT, **kwargs):
     """Run a check function with a timeout. Raises TimeoutError on expiry."""
     future = _shared_executor.submit(func, *args, **kwargs)
@@ -3887,6 +4014,56 @@ def run_full_audit(domain: str, dkim_selector: Optional[str] = None,
             ),
         })
 
+    # --- Subdomain Discovery & Audit ---
+    subdomain_raw = None
+    if needs_dmarc and not raw_results.get("dmarc", {}).get("is_subdomain"):
+        try:
+            subdomain_raw = _run_with_timeout(_audit_subdomains, domain, timeout=CHECK_TIMEOUT)
+        except Exception as e:
+            log.warning("Subdomain audit failed: %s", e, exc_info=True)
+
+    # Build the subdomain audit section from raw probes + DMARC policy context
+    subdomain_audit = None
+    if subdomain_raw:
+        dmarc_raw = raw_results.get("dmarc", {})
+        subdomain_audit = build_subdomain_audit(
+            subdomain_raw,
+            policy=dmarc_raw.get("policy"),
+            sp=dmarc_raw.get("sp"),
+            np=dmarc_raw.get("np"),
+            has_record=bool(dmarc_raw.get("record")),
+        )
+
+    # --- Snapshot storage & change detection ---
+    # Store current records for future change tracking
+    try:
+        store_audit_snapshots(domain, raw_results)
+        purge_old_snapshots()
+    except Exception as e:
+        log.debug("Snapshot storage failed: %s", e)
+
+    # Retrieve history for change detection
+    record_history = {}
+    first_seen = None
+    try:
+        record_history = get_all_history(domain)
+        first_seen = get_first_seen(domain)
+    except Exception as e:
+        log.debug("History retrieval failed: %s", e)
+
+    # Build change detection from history + current raw results
+    change_detection = build_change_detection(raw_results, record_history, first_seen)
+
+    # Build TTL map from raw results
+    ttl_map = {}
+    for check_key in ("dmarc", "spf"):
+        raw = raw_results.get(check_key, {})
+        if raw.get("ttl") is not None:
+            ttl_map[check_key] = raw["ttl"]
+
+    # Build consistency findings (Part 4)
+    consistency = build_consistency_findings(raw_results, checks)
+
     # --- Assemble final response ---
     elapsed = (datetime.now(timezone.utc) - start_time).total_seconds()
     _roadmap = build_security_roadmap(checks)
@@ -3920,6 +4097,10 @@ def run_full_audit(domain: str, dkim_selector: Optional[str] = None,
         "resilience": resilience_result,
         "security_roadmap": _roadmap,
         "executive_summary": build_executive_summary(checks, _roadmap),
+        "subdomain_audit": subdomain_audit,
+        "change_detection": change_detection,
+        "ttl_map": ttl_map,
+        "consistency_findings": consistency,
         "advisories": advisories if advisories else None,
         "errors": errors if errors else None,
     }
