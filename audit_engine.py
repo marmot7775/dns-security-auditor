@@ -2847,165 +2847,143 @@ def run_full_audit(domain: str, dkim_selector: Optional[str] = None,
         except Exception:
             log.debug("SPF tree viz failed", exc_info=True)
 
-    # --- 4. MTA-STS ---
+    # ================================================================
+    # Phase 2: Parallel checks (all inputs from Phase 1 are ready)
+    # ================================================================
+    _bimi_dmarc = raw_results.get("dmarc") or {}
+    _bimi_dmarc_enforcing = (
+        (_bimi_dmarc.get("policy") or "").lower() in ("quarantine", "reject")
+        or (_bimi_dmarc.get("inherited_policy") or "").lower() in ("quarantine", "reject")
+    )
+
+    # Define each independent check as (key, run_func, transform_func, label, extra_kwargs)
+    _parallel_checks = []
+
     if _should_include("mta_sts", scope_set):
-        try:
-            raw_mta_sts = _run_with_timeout(check_mta_sts, domain)
-            raw_results["mta_sts"] = raw_mta_sts
-            checks.append(transform_mta_sts(raw_mta_sts, domain, has_mx=has_mx))
-        except FuturesTimeoutError:
-            errors.append("MTA-STS: timed out")
-            checks.append(_timeout_card("MTA-STS"))
-        except Exception as e:
-            log.warning("MTA-STS check failed: %s", e, exc_info=True)
-            errors.append(f"MTA-STS: {str(e)}")
-            checks.append(_error_card("MTA-STS", e))
-        _notify("MTA-STS")
+        _parallel_checks.append(("mta_sts",
+            lambda: check_mta_sts(domain),
+            lambda raw: transform_mta_sts(raw, domain, has_mx=has_mx),
+            "MTA-STS"))
 
-    # --- 5. TLS-RPT ---
     if _should_include("tls_rpt", scope_set):
-        try:
-            raw_tls_rpt = _run_with_timeout(check_tls_rpt, domain)
-            raw_results["tls_rpt"] = raw_tls_rpt
-            checks.append(transform_tls_rpt(raw_tls_rpt, domain, has_mx=has_mx))
-        except FuturesTimeoutError:
-            errors.append("TLS-RPT: timed out")
-            checks.append(_timeout_card("TLS-RPT"))
-        except Exception as e:
-            log.warning("TLS-RPT check failed: %s", e, exc_info=True)
-            errors.append(f"TLS-RPT: {str(e)}")
-            checks.append(_error_card("TLS-RPT", e))
-        _notify("TLS-RPT")
+        _parallel_checks.append(("tls_rpt",
+            lambda: check_tls_rpt(domain),
+            lambda raw: transform_tls_rpt(raw, domain, has_mx=has_mx),
+            "TLS-RPT"))
 
-    # --- 6. BIMI ---
     if _should_include("bimi", scope_set):
-        try:
-            # Pass resolved DMARC enforcement (including inherited) to BIMI check
-            _bimi_dmarc = raw_results.get("dmarc") or {}
-            _bimi_dmarc_enforcing = (
-                (_bimi_dmarc.get("policy") or "").lower() in ("quarantine", "reject")
-                or (_bimi_dmarc.get("inherited_policy") or "").lower() in ("quarantine", "reject")
-            )
-            raw_bimi = _run_with_timeout(check_bimi, domain, dmarc_enforcing_override=_bimi_dmarc_enforcing)
-            raw_results["bimi"] = raw_bimi
-            checks.append(transform_bimi(raw_bimi, domain, has_mx=has_mx))
-        except FuturesTimeoutError:
-            errors.append("BIMI: timed out")
-            checks.append(_timeout_card("BIMI"))
-        except Exception as e:
-            log.warning("BIMI check failed: %s", e, exc_info=True)
-            errors.append(f"BIMI: {str(e)}")
-            checks.append(_error_card("BIMI", e))
-        _notify("BIMI")
+        _bimi_enforcing = _bimi_dmarc_enforcing  # capture for closure
+        _parallel_checks.append(("bimi",
+            lambda: check_bimi(domain, dmarc_enforcing_override=_bimi_enforcing),
+            lambda raw: transform_bimi(raw, domain, has_mx=has_mx),
+            "BIMI"))
 
-    # --- 7. DNSSEC ---
     if _should_include("dnssec", scope_set):
-        try:
-            raw_dnssec = _run_with_timeout(_raw_check_dnssec, domain)
-            raw_results["dnssec"] = raw_dnssec
-            checks.append(transform_dnssec(raw_dnssec))
-        except FuturesTimeoutError:
-            errors.append("DNSSEC: timed out")
-            checks.append(_timeout_card("DNSSEC"))
-        except Exception as e:
-            log.warning("DNSSEC check failed: %s", e, exc_info=True)
-            errors.append(f"DNSSEC: {str(e)}")
-            checks.append(_error_card("DNSSEC", e))
-        _notify("DNSSEC")
+        _parallel_checks.append(("dnssec",
+            lambda: _raw_check_dnssec(domain),
+            lambda raw: transform_dnssec(raw),
+            "DNSSEC"))
 
-    # --- 8. CAA ---
     if _should_include("caa", scope_set):
-        try:
-            raw_caa = _run_with_timeout(_raw_check_caa, domain)
-            raw_results["caa"] = raw_caa
-            checks.append(transform_caa(raw_caa, domain))
-        except FuturesTimeoutError:
-            errors.append("CAA: timed out")
-            checks.append(_timeout_card("CAA"))
-        except Exception as e:
-            log.warning("CAA check failed: %s", e, exc_info=True)
-            errors.append(f"CAA: {str(e)}")
-            checks.append(_error_card("CAA", e))
-        _notify("CAA")
+        _parallel_checks.append(("caa",
+            lambda: _raw_check_caa(domain),
+            lambda raw: transform_caa(raw, domain),
+            "CAA"))
 
-    # --- 9. Nameservers ---
     if _should_include("nameservers", scope_set):
-        try:
-            raw_ns = _run_with_timeout(_raw_check_nameservers, domain)
-            raw_results["nameservers"] = raw_ns
-            checks.append(transform_nameservers(raw_ns, domain))
-        except FuturesTimeoutError:
-            errors.append("Nameservers: timed out")
-            checks.append(_timeout_card("Nameservers"))
-        except Exception as e:
-            log.warning("Nameservers check failed: %s", e, exc_info=True)
-            errors.append(f"Nameservers: {str(e)}")
-            checks.append(_error_card("Nameservers", e))
-        _notify("Nameservers")
+        _parallel_checks.append(("nameservers",
+            lambda: _raw_check_nameservers(domain),
+            lambda raw: transform_nameservers(raw, domain),
+            "Nameservers"))
 
-    # --- 10. DANE ---
     if _should_include("dane", scope_set):
-        try:
-            raw_dane = _run_with_timeout(_raw_check_dane, domain, raw_results)
-            raw_results["dane"] = raw_dane
-            checks.append(transform_dane(raw_dane, domain))
-        except FuturesTimeoutError:
-            errors.append("DANE: timed out")
-            checks.append(_timeout_card("DANE"))
-        except Exception as e:
-            log.warning("DANE check failed: %s", e, exc_info=True)
-            errors.append(f"DANE: {str(e)}")
-            checks.append(_error_card("DANE", e))
-        _notify("DANE")
+        # DANE needs raw_results for MX info -- capture current snapshot
+        _dane_raw = dict(raw_results)
+        _parallel_checks.append(("dane",
+            lambda: _raw_check_dane(domain, _dane_raw),
+            lambda raw: transform_dane(raw, domain),
+            "DANE"))
 
-    # --- 11. DKIM (direct lookup of user-provided selector) ---
     if _should_include("dkim", scope_set):
-        try:
-            if dkim_selector and dkim_selector.strip():
-                sel = dkim_selector.strip()
-                fqdn = f"{sel}._domainkey.{domain}"
-                raw_dkim = {
-                    "domain": domain,
-                    "found_selectors": [],
-                    "selector_queried": sel,
-                }
+        if dkim_selector and dkim_selector.strip():
+            _dkim_sel = dkim_selector.strip()
+            def _run_dkim_direct():
+                _fqdn = f"{_dkim_sel}._domainkey.{domain}"
+                _raw = {"domain": domain, "found_selectors": [], "selector_queried": _dkim_sel}
                 try:
                     import dns.resolver as _dkim_resolver
-                    answers = _run_with_timeout(_dkim_resolver.resolve, fqdn, "TXT")
+                    answers = _dkim_resolver.resolve(_fqdn, "TXT")
                     txt = "".join(
                         s.decode() if isinstance(s, bytes) else s
                         for rdata in answers for s in rdata.strings
                     )
                     if "p=" in txt:
                         key_analysis = analyze_dkim_key_strength(txt)
-                        raw_dkim["found_selectors"].append({
-                            "selector": sel,
-                            "record": txt,
+                        _raw["found_selectors"].append({
+                            "selector": _dkim_sel, "record": txt,
                             "key_size": key_analysis.get("key_bits"),
                         })
-                except FuturesTimeoutError:
-                    raise  # Let outer handler catch it
                 except dns.exception.DNSException:
-                    # User-provided selector not found
-                    raw_dkim["selector_not_found"] = sel
-                    raw_dkim["tested_count"] = 1
-            else:
-                # No selector provided -- fall back to auto-discovery
-                raw_dkim = _run_with_timeout(smart_dkim_check, domain, spf_record)
-            raw_results["dkim"] = raw_dkim
-            dkim_pos = min(2, len(checks))
-            checks.insert(dkim_pos, transform_dkim(raw_dkim, domain, has_mx=has_mx))
+                    _raw["selector_not_found"] = _dkim_sel
+                    _raw["tested_count"] = 1
+                return _raw
+            _parallel_checks.append(("dkim", _run_dkim_direct,
+                lambda raw: transform_dkim(raw, domain, has_mx=has_mx), "DKIM"))
+        else:
+            _spf_rec = spf_record  # capture
+            _parallel_checks.append(("dkim",
+                lambda: smart_dkim_check(domain, _spf_rec),
+                lambda raw: transform_dkim(raw, domain, has_mx=has_mx), "DKIM"))
+
+    if _should_include("ct", scope_set):
+        _ct_raw = dict(raw_results)
+        _parallel_checks.append(("ct",
+            lambda: _raw_check_ct(domain, _ct_raw),
+            lambda raw: transform_ct(raw, domain),
+            "Certificate Transparency"))
+
+    if _should_include("blacklist", scope_set):
+        _bl_raw = dict(raw_results)
+        _parallel_checks.append(("blacklist",
+            lambda: _raw_check_blacklist(domain, _bl_raw),
+            lambda raw: transform_blacklist(raw, domain),
+            "Blacklist"))
+
+    # Submit all Phase 2 checks in parallel
+    _p2_futures = {}
+    for key, run_fn, transform_fn, label in _parallel_checks:
+        future = _shared_executor.submit(run_fn)
+        _p2_futures[future] = (key, transform_fn, label)
+
+    # Desired card ordering (DKIM inserted at position 2 later)
+    _CARD_ORDER = ["mta_sts", "tls_rpt", "bimi", "dnssec", "caa",
+                    "nameservers", "dane", "ct", "blacklist"]
+    _p2_cards = {}  # key -> card
+
+    for future in as_completed(_p2_futures):
+        key, transform_fn, label = _p2_futures[future]
+        try:
+            raw = future.result(timeout=CHECK_TIMEOUT + 5)
+            raw_results[key] = raw
+            _p2_cards[key] = transform_fn(raw)
         except FuturesTimeoutError:
-            errors.append("DKIM: timed out")
-            raw_results["dkim"] = {"found_selectors": [], "tested_count": 0, "timed_out": True}
-            dkim_pos = min(2, len(checks))
-            checks.insert(dkim_pos, _timeout_card("DKIM"))
+            errors.append(f"{label}: timed out")
+            if key == "dkim":
+                raw_results["dkim"] = {"found_selectors": [], "tested_count": 0, "timed_out": True}
+            _p2_cards[key] = _timeout_card(label)
         except Exception as e:
-            log.warning("DKIM check failed: %s", e, exc_info=True)
-            errors.append(f"DKIM: {str(e)}")
-            dkim_pos = min(2, len(checks))
-            checks.insert(dkim_pos, _error_card("DKIM", e))
-        _notify("DKIM")
+            log.warning("%s check failed: %s", label, e, exc_info=True)
+            errors.append(f"{label}: {str(e)}")
+            _p2_cards[key] = _error_card(label, e)
+        _notify(label)
+
+    # Insert DKIM card at position 2 (after DMARC+SPF), others in order
+    if "dkim" in _p2_cards:
+        dkim_pos = min(2, len(checks))
+        checks.insert(dkim_pos, _p2_cards.pop("dkim"))
+    for key in _CARD_ORDER:
+        if key in _p2_cards:
+            checks.append(_p2_cards[key])
 
     # --- Detect Defensive DNS pattern (moved early -- roadmap needs it) ---
     defensive_signals = []
@@ -3182,36 +3160,6 @@ def run_full_audit(domain: str, dkim_selector: Optional[str] = None,
                             if new > cur:
                                 card["status"] = _xc_downgrade
                         break
-
-    # --- 12. Certificate Transparency ---
-    if _should_include("ct", scope_set):
-        try:
-            raw_ct = _run_with_timeout(_raw_check_ct, domain, raw_results, timeout=15)
-            raw_results["ct"] = raw_ct
-            checks.append(transform_ct(raw_ct, domain))
-        except FuturesTimeoutError:
-            errors.append("Certificate Transparency: timed out")
-            checks.append(_timeout_card("Certificate Transparency"))
-        except Exception as e:
-            log.warning("CT check failed: %s", e, exc_info=True)
-            errors.append(f"Certificate Transparency: {str(e)}")
-            checks.append(_error_card("Certificate Transparency", e))
-        _notify("Certificate Transparency")
-
-    # --- 13. Blacklist ---
-    if _should_include("blacklist", scope_set):
-        try:
-            raw_blacklist = _run_with_timeout(_raw_check_blacklist, domain, raw_results, timeout=15)
-            raw_results["blacklist"] = raw_blacklist
-            checks.append(transform_blacklist(raw_blacklist, domain))
-        except FuturesTimeoutError:
-            errors.append("Blacklist: timed out")
-            checks.append(_timeout_card("Blacklist"))
-        except Exception as e:
-            log.warning("Blacklist check failed: %s", e, exc_info=True)
-            errors.append(f"Blacklist: {str(e)}")
-            checks.append(_error_card("Blacklist", e))
-        _notify("Blacklist")
 
     # --- Vendor Fingerprinting (only useful for email scopes) ---
     fp_vendors = []
