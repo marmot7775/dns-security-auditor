@@ -34,7 +34,10 @@ import dns.resolver
 import dns.exception
 
 from audit_engine import run_full_audit
-from pdf_report import generate_pdf
+try:
+    from pdf_report import generate_pdf
+except ImportError:
+    generate_pdf = None
 
 
 # ============================================================
@@ -538,6 +541,9 @@ async def audit_pdf(
 
     Reuses cached audit data when available; otherwise runs a fresh audit.
     """
+    if generate_pdf is None:
+        raise HTTPException(status_code=503, detail="PDF generation unavailable (reportlab not installed)")
+
     # Rate limiting (shared with /api/audit)
     client_ip = _get_client_ip(request)
     if not _check_rate_limit(client_ip):
