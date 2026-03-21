@@ -27,7 +27,7 @@ Built for engineers, email administrators, and security consultants who need to 
 | Check | What It Does |
 |-------|-------------|
 | **MX Records** | Mail exchanger discovery, vendor fingerprinting, FCrDNS validation, redundancy analysis, dangling MX detection, null MX (RFC 7505) recognition. Major providers recognized as internally redundant. |
-| **MTA-STS** | TXT record validation, HTTPS policy file retrieval and parsing, mode analysis (`enforce`/`testing`/`none`), MX pattern cross-referencing, `max_age` evaluation. |
+| **MTA-STS** | `TXT` record validation, HTTPS policy file retrieval and parsing, mode analysis (`enforce`/`testing`/`none`), MX pattern cross-referencing, `max_age` evaluation. |
 | **TLS-RPT** | SMTP TLS reporting record validation, report destination verification (`mailto` and HTTPS). |
 | **BIMI** | Record parsing, DMARC enforcement prerequisite check (including inherited policies), SVG logo fetch with Tiny PS profile validation, script element detection, external reference scanning, `viewBox` verification, file size check, VMC certificate tag analysis. |
 
@@ -35,15 +35,15 @@ Built for engineers, email administrators, and security consultants who need to 
 
 | Check | What It Does |
 |-------|-------------|
-| **DNSSEC** | DNSKEY presence, DS record validation at parent zone (recursive + direct parent NS query), algorithm analysis per RFC 8624, chain of trust verification via AD flag and DS-to-DNSKEY digest matching. |
+| **DNSSEC** | `DNSKEY` presence, `DS` record validation at parent zone (recursive + direct parent NS query), algorithm analysis per RFC 8624, chain of trust verification via `AD` flag and `DS`-to-`DNSKEY` digest matching. |
 | **CAA** | Certificate Authority Authorization records, issuer restrictions (`issue`), wildcard policy (`issuewild`), incident reporting (`iodef`). |
-| **DANE** | TLSA record lookup for each MX host, usage/selector/matching type analysis, DNSSEC dependency enforcement per RFC 7672. |
+| **DANE** | `TLSA` record lookup for each MX host, usage/selector/matching type analysis, DNSSEC dependency enforcement per RFC 7672. |
 
 ### Infrastructure and Reputation
 
 | Check | What It Does |
 |-------|-------------|
-| **Nameservers** | NS count, resolution and authoritative response verification, SOA serial consistency, IPv6 support, network diversity across /24 ranges, provider identification. |
+| **Nameservers** | NS count, resolution and authoritative response verification, `SOA` serial consistency, IPv6 support, network diversity across /24 ranges, provider identification. |
 | **Certificate Transparency** | CT log query via crt.sh, issuer breakdown, CAA mismatch detection, expiring certificate alerts, subdomain discovery. |
 | **Blocklist** | Domain reputation check against Spamhaus DBL with return code interpretation (spam, phishing, malware, botnet C&C). |
 
@@ -75,7 +75,7 @@ Domains where DKIM selectors could not be detected receive full DKIM credit, sin
 
 ### DMARC (RFC 7489)
 
-When evaluating an inbound message, the receiver queries DNS for a TXT record at `_dmarc.<domain>`, where the domain is taken from the email's RFC 5322.From (Header From). If no record is found at the exact Author Domain, the receiver determines the Organizational Domain using a Public Suffix List (PSL) and performs a single fallback lookup at that level. No intermediate subdomains are checked.
+When evaluating an inbound message, the receiver queries DNS for a `TXT` record at `_dmarc.<domain>`, where the domain is taken from the email's RFC 5322.From (Header From). If no record is found at the exact Author Domain, the receiver determines the Organizational Domain using a Public Suffix List (PSL) and performs a single fallback lookup at that level. No intermediate subdomains are checked.
 
 If a valid record (beginning with `v=DMARC1`) is found at either level, its policy is applied. Otherwise, DMARC does not apply to the message.
 
@@ -89,17 +89,17 @@ Because DMARCbis is on the Standards Track and expected to be published as a Pro
 
 DMARCbis addresses several architectural limitations in RFC 7489 that carry real security and sustainability implications for email authentication. The original spec was published in 2015 as an Informational RFC, not a formal Internet standard, and carried no conformance requirements. Receivers were free to interpret it however they chose, and they did. A decade of deployment exposed problems that could not be patched within the original framework.
 
-The most significant change is replacing the Public Suffix List, a community-maintained external dependency, with the DNS Tree Walk, a DNS-native mechanism that lets domain owners control their own domain boundaries. RFC 7489 also only performs two lookups (the exact Author Domain and the Organizational Domain), leaving no way for intermediate subdomains to govern their own branch of the tree. The tree walk queries each level of the hierarchy, enabling decentralized policy management. DMARCbis also introduces the `np` tag to set separate policies for non-existent subdomains, closing a gap that allowed attackers to spoof fabricated subdomains like `ceo.example.com`, and replaces the widely misunderstood `pct` tag with `t`, a cleaner binary signal for testing mode.
+The most significant change is replacing the Public Suffix List, a community-maintained external dependency, with the DNS Tree Walk, a DNS-native mechanism that lets domain owners control their own domain boundaries. RFC 7489 also only performs two lookups (the exact Author Domain and the Organizational Domain), leaving no way for intermediate subdomains to govern their own branch of the tree. For a domain like `notifications.app.services.example.com`, the only two lookups are at that exact subdomain and at `example.com`. There is no way for `services.example.com` to independently govern its own branch. The tree walk queries each level of the hierarchy, enabling decentralized policy management. DMARCbis also introduces the `np` tag to set separate policies for non-existent subdomains, closing a gap that allowed attackers to spoof fabricated subdomains like `ceo.example.com`, and replaces the widely misunderstood `pct` tag with `t`, a cleaner binary signal for testing mode.
 
 The DMARCbis specification (draft-ietf-dmarc-dmarcbis-41) is currently in the RFC Editor Queue and is expected to be published as a Proposed Standard. This tool analyzes DMARCbis alongside RFC 7489 so that domain owners can evaluate the impact on their domains now and begin preparing their records before receivers adopt the updated specification.
 
 ### SPF Evaluation Trace
 
-Full recursive SPF evaluation that traces the path through every `include`, `redirect`, and mechanism, showing the per-node lookup cost. Detected vendors are labeled inline so you can see exactly which services consume your 10-lookup budget.
+Full recursive SPF evaluation that traces the path through every `include` and `redirect`, showing the per-node lookup cost. Detected vendors are labeled inline so you can see exactly which services consume your 10-lookup budget.
 
 ### Defensive DNS Detection
 
-Domains configured to not send or receive email (null MX, null SPF, `p=reject`) are identified as defensive DNS configurations and scored appropriately rather than penalized for intentionally absent email infrastructure.
+Domains configured to not send or receive email (null MX, `v=spf1 -all`, `p=reject`) are identified as defensive DNS configurations and scored appropriately rather than penalized for intentionally absent email infrastructure.
 
 ### Authentication Resilience
 
@@ -126,7 +126,7 @@ One-click branded PDF with executive summary (grade, score breakdown, priority f
 
 ### Vendor Detection
 
-Identifies email service providers using multiple signals: MX hostnames, SPF `include` chains, DMARC reporting URIs (`rua`/`ruf`), and DKIM selectors. Multi-signal detection with confidence scoring.
+Identifies email service providers using multiple signals: MX hostnames, SPF `include` chains, DMARC `rua` reporting URIs, and DKIM selectors. Multi-signal detection with confidence scoring.
 
 ### DMARCbis Checker
 
