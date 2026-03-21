@@ -1,314 +1,420 @@
+```html
 <!DOCTYPE html>
 <html lang="en">
 <head>
-<meta charset="UTF-8">
-<title>Domain Security Dashboard</title>
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
-<style>
-body { font-family: Arial, sans-serif; margin: 0; padding: 10px; background: #f9f9f9; }
-.check-table { border-collapse: collapse; width: 100%; }
-.check-table th, .check-table td { border: 1px solid #ccc; padding: 8px; text-align: left; vertical-align: top; }
-.check-table th { background-color: #f4f4f4; }
-.status { font-weight: bold; padding: 2px 6px; border-radius: 4px; color: #fff; text-align: center; position: relative; display: inline-block; }
-.status-pass { background-color: #4CAF50; }      
-.status-warning { background-color: #FF9800; }   
-.status-fail { background-color: #F44336; }      
-.status-optional { background-color: #2196F3; }  
-.icon { margin-right: 4px; font-weight: bold; }
-.accordion-content { display: none; padding: 8px; background-color: #f1f1f1; border-top: 1px solid #ccc; }
-.accordion-button { background: none; border: none; width: 100%; text-align: left; padding: 0; font: inherit; cursor: pointer; }
-.filter-buttons { margin-bottom: 10px; }
-.filter-buttons button { margin-right: 5px; padding: 6px 12px; cursor: pointer; border-radius: 4px; border: 1px solid #ccc; background-color: #eee; }
-.filter-buttons button.active { background-color: #2196F3; color: #fff; border-color: #2196F3; }
-.legend { margin-bottom: 15px; }
-.legend-item { display: inline-block; margin-right: 20px; padding: 4px 8px; border-radius: 4px; color: #fff; font-weight: bold; }
-.legend-pass { background-color: #4CAF50; }
-.legend-warning { background-color: #FF9800; }
-.legend-fail { background-color: #F44336; }
-.legend-optional { background-color: #2196F3; }
-.status[data-tooltip]:hover::after {
-  content: attr(data-tooltip);
-  position: absolute;
-  top: -28px;
-  left: 50%;
-  transform: translateX(-50%);
-  background: #333;
-  color: #fff;
-  padding: 3px 8px;
-  border-radius: 4px;
-  font-size: 12px;
-  white-space: nowrap;
-  z-index: 10;
-  pointer-events: none;
-}
-/* Responsive */
-@media screen and (max-width: 768px) {
-  .check-table, .check-table thead, .check-table tbody, .check-table th, .check-table td, .check-table tr { display: block; }
-  .check-table th { position: absolute; top: -9999px; left: -9999px; }
-  .check-table td { border: none; position: relative; padding-left: 50%; }
-  .check-table td:before { position: absolute; top: 8px; left: 8px; width: 45%; white-space: nowrap; font-weight: bold; }
-  .check-table td:nth-of-type(1):before { content: "Check"; }
-  .check-table td:nth-of-type(2):before { content: "What We Do"; }
-  .check-table td:nth-of-type(3):before { content: "Standard / Notes"; }
-  .check-table td:nth-of-type(4):before { content: "Status"; }
-}
-</style>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Methodology | dns-audit.com</title>
+    <meta name="description" content="How dns-audit.com works: DNS query methodology, security checks, scoring model, standards references, and limitations.">
+    <link rel="stylesheet" href="/static/style.css">
+    <style>
+        .meth-page { max-width: var(--max-width); margin: 0 auto; padding: 2.5rem 1.5rem 1.5rem; }
+        .meth-page h1 { font-size: 1.65rem; font-weight: 700; letter-spacing: -0.03em; color: var(--text-primary); margin-bottom: 0.35rem; }
+        .meth-intro { font-size: 0.92rem; color: var(--text-secondary); line-height: 1.7; margin-bottom: 2rem; }
+        .meth-page h2 { font-size: 1.15rem; font-weight: 700; color: var(--text-primary); margin-top: 2.25rem; margin-bottom: 0.75rem; padding-bottom: 0.4rem; border-bottom: 1px solid var(--border-light); }
+        .meth-page h3 { font-size: 0.95rem; font-weight: 700; color: var(--primary); margin-top: 1.5rem; margin-bottom: 0.5rem; }
+        .meth-page p { font-size: 0.9rem; color: var(--text-secondary); line-height: 1.75; margin-bottom: 0.85rem; }
+        .meth-page code { font-family: var(--font-mono); font-size: 0.82rem; background: rgba(0,0,0,0.04); padding: 0.1rem 0.35rem; border-radius: 3px; color: var(--text-primary); }
+        .meth-page ul, .meth-page ol { margin: 0.5rem 0 1rem 1.25rem; font-size: 0.9rem; color: var(--text-secondary); line-height: 1.75; }
+        .meth-page li { margin-bottom: 0.4rem; }
+        .meth-page li strong { color: var(--text-primary); }
+
+        .check-table { width: 100%; border-collapse: collapse; margin: 0.75rem 0 1.25rem; font-size: 0.82rem; }
+        .check-table th { background: var(--primary-subtle); color: var(--primary); font-weight: 700; text-align: left; padding: 0.55rem 0.75rem; border: 1px solid var(--border); font-size: 0.76rem; letter-spacing: 0.02em; }
+        .check-table td { padding: 0.55rem 0.75rem; border: 1px solid var(--border-light); color: var(--text-secondary); line-height: 1.55; vertical-align: top; }
+        .check-table td:first-child { font-weight: 600; color: var(--text-primary); white-space: nowrap; width: 100px; }
+        .check-table a { color: var(--primary-light); text-decoration: none; border-bottom: 1px solid var(--primary-border); }
+        .check-table a:hover { color: var(--primary); }
+        .check-table .op-note { display: block; margin-top: 0.35rem; font-style: italic; color: var(--text-tertiary); font-size: 0.78rem; line-height: 1.5; }
+
+        .score-table { width: 100%; border-collapse: collapse; margin: 0.75rem 0 1.25rem; font-size: 0.82rem; }
+        .score-table th { background: var(--primary-subtle); color: var(--primary); font-weight: 700; text-align: left; padding: 0.55rem 0.75rem; border: 1px solid var(--border); font-size: 0.76rem; }
+        .score-table td { padding: 0.5rem 0.75rem; border: 1px solid var(--border-light); color: var(--text-secondary); line-height: 1.55; vertical-align: top; }
+        .score-table td:nth-child(2) { text-align: center; font-weight: 700; color: var(--text-primary); white-space: nowrap; }
+
+        .limit-item { padding: 0.65rem 0.85rem; border-left: 3px solid var(--border); background: var(--bg); border-radius: 0 var(--radius) var(--radius) 0; margin-bottom: 0.65rem; }
+        .limit-item strong { color: var(--text-primary); display: block; font-size: 0.85rem; margin-bottom: 0.2rem; }
+        .limit-item p { margin: 0; font-size: 0.84rem; }
+
+        .std-list { display: flex; flex-direction: column; gap: 0.5rem; margin: 0.75rem 0 1.25rem; }
+        .std-item { display: flex; gap: 0.75rem; align-items: baseline; font-size: 0.84rem; line-height: 1.55; }
+        .std-item a { color: var(--primary-light); text-decoration: none; font-weight: 600; font-family: var(--font-mono); font-size: 0.78rem; white-space: nowrap; border-bottom: 1px solid var(--primary-border); }
+        .std-item a:hover { color: var(--primary); }
+        .std-item span { color: var(--text-secondary); }
+
+        .meth-footer { margin-top: 1.25rem; padding-top: 0.75rem; border-top: 1px solid var(--border); font-size: 0.82rem; color: var(--text-tertiary); line-height: 1.65; }
+        .meth-footer a { color: var(--primary-light); text-decoration: none; }
+        .meth-footer a:hover { color: var(--primary); text-decoration: underline; }
+        .audit-cta { display: inline-flex; align-items: center; gap: 0.5rem; margin-top: 0.75rem; padding: 0.65rem 1.25rem; background: var(--primary); color: var(--text-inverse); border-radius: var(--radius); font-family: var(--font-body); font-size: 0.88rem; font-weight: 600; text-decoration: none; transition: background var(--duration) var(--ease); }
+        .audit-cta:hover { background: var(--primary-hover); }
+
+        @media (max-width: 640px) {
+            .meth-page { padding: 1.75rem 1rem 2.5rem; }
+            .meth-page h1 { font-size: 1.35rem; }
+            .check-table td:first-child { white-space: normal; }
+            .std-item { flex-direction: column; gap: 0.15rem; }
+        }
+    </style>
 </head>
 <body>
 
-<div class="legend">
-  <span class="legend-item legend-pass">✔ Pass – Check passed successfully</span>
-  <span class="legend-item legend-warning">▲ Warning – Attention recommended</span>
-  <span class="legend-item legend-fail">✖ Fail – Immediate action required</span>
-  <span class="legend-item legend-optional">ⓘ Optional – Informational / Not mandatory</span>
-</div>
-
-<div class="filter-buttons">
-  <button data-filter="all" class="active">Show All</button>
-  <button data-filter="status-pass">Pass</button>
-  <button data-filter="status-warning">Warning</button>
-  <button data-filter="status-fail">Fail</button>
-  <button data-filter="status-optional">Optional</button>
-</div>
-
-<table class="check-table">
-  <thead>
-    <tr>
-      <th>Check</th>
-      <th>What We Do</th>
-      <th>Standard / Notes</th>
-      <th>Status</th>
-    </tr>
-  </thead>
-  <tbody>
-    <!-- DMARC -->
-    <tr>
-      <td>
-        <button class="accordion-button">DMARC</button>
-        <div class="accordion-content">
-          <ul>
-            <li>Recursive evaluation of DMARC policies.</li>
-            <li>Verify external reporting URIs to avoid data leaks.</li>
-          </ul>
+    <header class="site-header">
+        <div class="container header-inner">
+            <a href="/" class="logo">
+                <div class="logo-terminal">
+                    <div class="logo-titlebar">
+                        <span class="logo-dot logo-dot-red"></span>
+                        <span class="logo-dot logo-dot-yellow"></span>
+                        <span class="logo-dot logo-dot-green"></span>
+                    </div>
+                    <div class="logo-cmd">
+                        <span class="logo-prompt">$ </span><span class="logo-bin">dig </span><span class="logo-flag">+secure</span>
+                    </div>
+                </div>
+                <span class="logo-text">dns-audit.com</span>
+            </a>
+            <div class="header-right">
+                <span class="site-tagline">Free DNS &amp; email security audit</span>
+            </div>
         </div>
-      </td>
-      <td>Queries <code>_dmarc.{domain}</code> TXT record, validates syntax, checks deprecated tags, and verifies authorization.</td>
-      <td><a href="https://datatracker.ietf.org/doc/draft-ietf-dmarc-dmarcbis/" target="_blank">DMARCbis</a></td>
-      <td><span class="status status-pass" data-tooltip="This check passed successfully. No issues detected."><span class="icon">✔</span>Pass</span></td>
-    </tr>
+    </header>
 
-    <!-- SPF -->
-    <tr>
-      <td>
-        <button class="accordion-button">SPF</button>
-        <div class="accordion-content">
-          <ul>
-            <li>Max 10 DNS lookups enforced.</li>
-            <li>Flag overly broad mechanisms like <code>+all</code>.</li>
-          </ul>
+    <main>
+        <div class="meth-page">
+
+            <h1>Methodology</h1>
+            <p class="meth-intro">
+                How this tool works, what it checks, what it cannot check, and how scores are calculated.
+                We believe transparency about methodology is as important as the results themselves.
+            </p>
+
+            <h2>How We Query DNS</h2>
+            <p>
+                All checks are performed by querying public DNS records from a single server location (DigitalOcean, US-East).
+                Results reflect what our resolver sees at the time of the audit. DNS is distributed by design, so results
+                may vary by resolver, geography, and caching state. This audit represents a point-in-time snapshot from one
+                vantage point. It does not guarantee global consistency of DNS responses.
+            </p>
+            <p>
+                We resolve records using <code>dnspython</code> against public nameservers. We do not send or receive email,
+                access private systems, or modify any records. The audit is read-only and non-intrusive.
+            </p>
+
+            <h2>What We Check</h2>
+
+            <table class="check-table">
+                <thead>
+                    <tr><th>Check</th><th>What We Do</th><th>Standard</th></tr>
+                </thead>
+                <tbody>
+                    <tr>
+                        <td>DMARC</td>
+                        <td>
+                            Query <code>_dmarc.{domain}</code> TXT record. Parse policy, reporting, alignment, and subdomain tags.
+                            Perform DMARCbis tree walk for policy discovery on subdomains.
+                            Validate syntax, detect deprecated tags (<code>pct</code>, <code>ri</code>, <code>rf</code>)
+                            and new tags (<code>t</code>, <code>np</code>, <code>psd</code>).
+                            Verify external report authorization per Section 7.1.
+                            <span class="op-note">External reporting URIs are verified to prevent data leaks to unauthorized destinations.</span>
+                        </td>
+                        <td><a href="https://datatracker.ietf.org/doc/draft-ietf-dmarc-dmarcbis/">DMARCbis</a></td>
+                    </tr>
+                    <tr>
+                        <td>SPF</td>
+                        <td>
+                            Query domain TXT records for <code>v=spf1</code>. Recursively resolve all
+                            <code>include</code> and <code>redirect</code> mechanisms. Count total DNS lookups against
+                            the 10-lookup limit. Detect void lookups (2-lookup limit). Flag multiple records,
+                            deprecated mechanisms (<code>ptr</code>), invalid IPs, and overly broad CIDRs.
+                            <span class="op-note">The 10-lookup limit is strictly enforced. Mechanisms like <code>+all</code> are flagged as dangerous.</span>
+                        </td>
+                        <td><a href="https://datatracker.ietf.org/doc/html/rfc7208">RFC 7208</a></td>
+                    </tr>
+                    <tr>
+                        <td>DKIM</td>
+                        <td>
+                            Query common selectors at <code>{selector}._domainkey.{domain}</code>.
+                            Analyze key type (RSA/Ed25519) and strength. Use SPF-based vendor detection
+                            to prioritize relevant selectors. Support direct lookup of user-supplied selectors.
+                            <span class="op-note">Selectors are private and cannot be enumerated. A "not detected" result does not mean DKIM is absent.</span>
+                        </td>
+                        <td><a href="https://datatracker.ietf.org/doc/html/rfc6376">RFC 6376</a></td>
+                    </tr>
+                    <tr>
+                        <td>MX</td>
+                        <td>
+                            Query MX records. Verify each host resolves. Detect null MX (RFC 7505),
+                            dangling hosts, and single-host configurations with no failover.
+                            <span class="op-note">Priority ordering and failover readiness are evaluated. Dangling hosts that do not resolve are flagged.</span>
+                        </td>
+                        <td><a href="https://datatracker.ietf.org/doc/html/rfc5321">RFC 5321</a></td>
+                    </tr>
+                    <tr>
+                        <td>MTA-STS</td>
+                        <td>
+                            Query <code>_mta-sts.{domain}</code> TXT record. Fetch and parse the HTTPS policy
+                            file at <code>/.well-known/mta-sts.txt</code>. Validate mode, MX pattern matching, and <code>max_age</code>.
+                            <span class="op-note">The HTTPS policy file must be served with a valid TLS certificate to be effective.</span>
+                        </td>
+                        <td><a href="https://datatracker.ietf.org/doc/html/rfc8461">RFC 8461</a></td>
+                    </tr>
+                    <tr>
+                        <td>TLS-RPT</td>
+                        <td>
+                            Query <code>_smtp._tls.{domain}</code> TXT record. Validate reporting
+                            destinations (mailto and HTTPS).
+                            <span class="op-note">Reporting destinations must be deliverable. Without TLS-RPT, encryption failures are invisible.</span>
+                        </td>
+                        <td><a href="https://datatracker.ietf.org/doc/html/rfc8460">RFC 8460</a></td>
+                    </tr>
+                    <tr>
+                        <td>BIMI</td>
+                        <td>
+                            Query <code>default._bimi.{domain}</code> TXT record. Check DMARC enforcement prerequisite.
+                            Fetch SVG logo and validate Tiny PS profile. Check for VMC certificate tag.
+                            <span class="op-note">BIMI is a brand feature, not a security control. Requires DMARC enforcement. Gmail requires a VMC or CMC for logo display.</span>
+                        </td>
+                        <td><a href="https://datatracker.ietf.org/doc/draft-brand-indicators-for-message-identification/">Draft (BIMI WG)</a></td>
+                    </tr>
+                    <tr>
+                        <td>DNSSEC</td>
+                        <td>
+                            Query DNSKEY records. Validate DS record at parent zone. Verify DS digest
+                            matches DNSKEY (chain of trust). Identify signing algorithm.
+                            <span class="op-note">Signature validity, algorithm strength, and chain-of-trust integrity are all verified.</span>
+                        </td>
+                        <td><a href="https://datatracker.ietf.org/doc/html/rfc4033">RFC 4033</a>/<a href="https://datatracker.ietf.org/doc/html/rfc4034">4034</a>/<a href="https://datatracker.ietf.org/doc/html/rfc4035">4035</a></td>
+                    </tr>
+                    <tr>
+                        <td>CAA</td>
+                        <td>
+                            Query Certificate Authority Authorization records. Check <code>issue</code>,
+                            <code>issuewild</code>, and <code>iodef</code> tags. Flag domains with no issuance restrictions.
+                            <span class="op-note">The <code>critical</code> flag is handled. Without CAA, any CA in the world may issue certificates for your domain.</span>
+                        </td>
+                        <td><a href="https://datatracker.ietf.org/doc/html/rfc8659">RFC 8659</a></td>
+                    </tr>
+                    <tr>
+                        <td>DANE</td>
+                        <td>
+                            Query TLSA records at <code>_25._tcp.{mx-host}</code> for each MX host.
+                            Validate usage, selector, and matching type fields. Verify DNSSEC is enabled
+                            (DANE is ineffective without it).
+                            <span class="op-note">DANE requires a validated DNSSEC chain to function. Without DNSSEC, TLSA records provide no security benefit.</span>
+                        </td>
+                        <td><a href="https://datatracker.ietf.org/doc/html/rfc7672">RFC 7672</a></td>
+                    </tr>
+                    <tr>
+                        <td>Nameservers</td>
+                        <td>
+                            Query NS records. Check SOA serial consistency, response times, network diversity
+                            across /24 ranges, and IPv6 availability.
+                            <span class="op-note">Delegation, glue records, and authority consistency are validated. IPv6 readiness is noted.</span>
+                        </td>
+                        <td><a href="https://datatracker.ietf.org/doc/html/rfc1034">RFC 1034</a>/<a href="https://datatracker.ietf.org/doc/html/rfc1035">1035</a></td>
+                    </tr>
+                    <tr>
+                        <td>CT</td>
+                        <td>
+                            Query Certificate Transparency logs via crt.sh. Report issuer breakdown,
+                            active certificate count, expiring certificates, wildcard usage, and subdomain discovery.
+                            <span class="op-note">CT log coverage may be incomplete. Do not assume full visibility into all issued certificates.</span>
+                        </td>
+                        <td><a href="https://datatracker.ietf.org/doc/html/rfc6962">RFC 6962</a></td>
+                    </tr>
+                    <tr>
+                        <td>Blocklist</td>
+                        <td>
+                            Check domain against Spamhaus DBL with return code interpretation
+                            (spam, phishing, malware, botnet C&amp;C).
+                            <span class="op-note">Single blocklist source. A clean result here does not guarantee clean reputation across all blocklists.</span>
+                        </td>
+                        <td></td>
+                    </tr>
+                </tbody>
+            </table>
+
+            <h2>What We Cannot Check</h2>
+            <p>
+                This is a DNS-based audit. We query public DNS records only. We do not send or receive email,
+                which limits what we can verify.
+            </p>
+
+            <div class="limit-item">
+                <strong>DKIM signature verification</strong>
+                <p>We detect public keys in DNS but cannot verify that outgoing messages are actually signed or that signatures are valid. That requires inspecting live email headers.</p>
+            </div>
+            <div class="limit-item">
+                <strong>DMARC alignment on live mail</strong>
+                <p>Alignment requires comparing the From header with SPF/DKIM domains on a real message. We can only confirm that the prerequisites exist in DNS, not that alignment succeeds in practice.</p>
+            </div>
+            <div class="limit-item">
+                <strong>DKIM selectors</strong>
+                <p>Selectors are chosen by each mail service and are not publicly enumerable via DNS. We test common selectors but may miss custom ones. A "not detected" result does not mean DKIM is not configured. Provide your selector for a definitive check.</p>
+            </div>
+            <div class="limit-item">
+                <strong>Outbound sending IPs</strong>
+                <p>We check DNS records, not which IPs actually send mail for your domain. IP reputation is not assessed.</p>
+            </div>
+            <div class="limit-item">
+                <strong>Deliverability</strong>
+                <p>Inbox placement depends on reputation, content, engagement, and other factors beyond DNS configuration. A passing audit does not guarantee deliverability.</p>
+            </div>
+            <div class="limit-item">
+                <strong>Global DNS consistency</strong>
+                <p>Results come from one resolver location. DNS responses may differ in other regions due to GeoDNS, CDN routing, or propagation delays.</p>
+            </div>
+
+            <h2>Scoring</h2>
+            <p>
+                The security grade (A through F) is a weighted summary across six categories.
+                Authentication (DMARC, SPF, DKIM) accounts for 70 of 100 points.
+            </p>
+
+            <table class="score-table">
+                <thead>
+                    <tr><th>Category</th><th>Weight</th><th>What It Measures</th></tr>
+                </thead>
+                <tbody>
+                    <tr><td>DMARC</td><td>25</td><td>Policy strength, alignment mode, reporting configuration, subdomain policy</td></tr>
+                    <tr><td>SPF</td><td>20</td><td>Record presence, all-mechanism qualifier, lookup count, include complexity</td></tr>
+                    <tr><td>DKIM</td><td>25</td><td>Key discovery, key type, cryptographic strength</td></tr>
+                    <tr><td>Best Practices</td><td>5</td><td>MTA-STS, TLS-RPT</td></tr>
+                    <tr><td>Key Security</td><td>15</td><td>DKIM key strength, rotation hygiene, algorithm modernity</td></tr>
+                    <tr><td>Vendor Intelligence</td><td>10</td><td>Email service provider detection confidence</td></tr>
+                </tbody>
+            </table>
+
+            <p>
+                DKIM scoring does not penalize domains where selectors were not detected.
+                Because selectors are private and cannot be verified from outside, a domain
+                with undetectable DKIM receives partial credit rather than a zero score.
+            </p>
+            <p>
+                DNSSEC, CAA, Nameservers, Certificate Transparency, and Blocklist checks are evaluated
+                and reported but do not contribute to the numeric score.
+                Their absence may be intentional and is context-dependent.
+            </p>
+            <p>
+                A broken SPF record (PermError from exceeding the 10-lookup limit) receives zero
+                points in the SPF category regardless of other mechanisms.
+            </p>
+
+            <h3>Grade Thresholds</h3>
+            <ul>
+                <li><strong>A:</strong> 85&ndash;100</li>
+                <li><strong>B:</strong> 70&ndash;84</li>
+                <li><strong>C:</strong> 55&ndash;69</li>
+                <li><strong>D:</strong> 40&ndash;54</li>
+                <li><strong>F:</strong> Below 40</li>
+            </ul>
+
+            <h2>Authentication Resilience</h2>
+            <p>
+                Beyond the numeric score, we assess how resilient your authentication is to real-world
+                failure scenarios. This is a qualitative assessment, not a scored metric.
+            </p>
+            <ul>
+                <li>
+                    <strong>High:</strong> Both SPF and DKIM are functional and DMARC is enforcing.
+                    Either mechanism can independently satisfy DMARC alignment, so authentication
+                    survives both forwarding (where SPF breaks) and content modification (where DKIM breaks).
+                </li>
+                <li>
+                    <strong>Moderate:</strong> SPF is functional and DMARC is enforcing, but DKIM
+                    could not be confirmed. DKIM may exist but was not detectable. Also applies when
+                    DKIM is functional but SPF is broken, or when DMARC is not yet enforcing.
+                </li>
+                <li>
+                    <strong>Low:</strong> Broken SPF and no detected DKIM, or no DMARC record at all.
+                    The domain has minimal protection against spoofing.
+                </li>
+            </ul>
+
+            <h2>Standards Reference</h2>
+            <p>This tool validates against the following specifications:</p>
+
+            <div class="std-list">
+                <div class="std-item">
+                    <a href="https://datatracker.ietf.org/doc/draft-ietf-dmarc-dmarcbis/">DMARCbis</a>
+                    <span>Domain-based Message Authentication, Reporting, and Conformance. The current DMARC standard (Proposed Standard, replaces RFC 7489). Implements DNS Tree Walk for policy discovery (Section 4.10), new tags (<code>t</code>, <code>np</code>, <code>psd</code>), and deprecated tag detection (<code>pct</code>, <code>ri</code>, <code>rf</code>).</span>
+                </div>
+                <div class="std-item">
+                    <a href="https://datatracker.ietf.org/doc/html/rfc7208">RFC 7208</a>
+                    <span>Sender Policy Framework (SPF). 10-lookup limit, void lookup limit, mechanism evaluation.</span>
+                </div>
+                <div class="std-item">
+                    <a href="https://datatracker.ietf.org/doc/html/rfc6376">RFC 6376</a>
+                    <span>DomainKeys Identified Mail (DKIM). Key record format, selector resolution, signature semantics.</span>
+                </div>
+                <div class="std-item">
+                    <a href="https://datatracker.ietf.org/doc/html/rfc8461">RFC 8461</a>
+                    <span>MTA Strict Transport Security (MTA-STS). HTTPS-based TLS enforcement for SMTP.</span>
+                </div>
+                <div class="std-item">
+                    <a href="https://datatracker.ietf.org/doc/html/rfc8460">RFC 8460</a>
+                    <span>SMTP TLS Reporting (TLS-RPT). TLS failure reporting for inbound email.</span>
+                </div>
+                <div class="std-item">
+                    <a href="https://datatracker.ietf.org/doc/html/rfc7672">RFC 7672</a>
+                    <span>SMTP Security via DANE (TLSA). DNS-based certificate pinning for mail servers.</span>
+                </div>
+                <div class="std-item">
+                    <a href="https://datatracker.ietf.org/doc/html/rfc4033">RFC 4033/4034/4035</a>
+                    <span>DNS Security Extensions (DNSSEC). Chain-of-trust validation, DNSKEY, and DS records.</span>
+                </div>
+                <div class="std-item">
+                    <a href="https://datatracker.ietf.org/doc/html/rfc8659">RFC 8659</a>
+                    <span>DNS Certification Authority Authorization (CAA). Certificate issuance restrictions.</span>
+                </div>
+                <div class="std-item">
+                    <a href="https://datatracker.ietf.org/doc/html/rfc6962">RFC 6962</a>
+                    <span>Certificate Transparency. Public audit log for issued certificates.</span>
+                </div>
+            </div>
+
+            <p>
+                Where DMARCbis behavior differs from RFC 7489, the audit results note the distinction.
+                Both legacy and current semantics are evaluated.
+            </p>
+
+            <h2>Open Source</h2>
+            <p>
+                Built by <a href="https://www.linkedin.com/in/neilanuskiewicz/">Neil Anuskiewicz</a>,
+                email security and deliverability consultant.
+                Source code is available on <a href="https://github.com/marmot7775/dns-security-auditor">GitHub</a>
+                under the MIT License.
+            </p>
+
+            <a href="/" class="audit-cta">Run an Audit</a>
+
+            <div class="meth-footer">
+                Last updated March 2026.
+            </div>
+
         </div>
-      </td>
-      <td>Resolves <code>v=spf1</code> TXT records, counts DNS lookups, flags invalid/broad configurations.</td>
-      <td><a href="https://datatracker.ietf.org/doc/html/rfc7208" target="_blank">RFC 7208</a></td>
-      <td><span class="status status-warning" data-tooltip="Attention recommended: configuration may be broad or exceed limits."><span class="icon">▲</span>Warning</span></td>
-    </tr>
+    </main>
 
-    <!-- DKIM -->
-    <tr>
-      <td>
-        <button class="accordion-button">DKIM</button>
-        <div class="accordion-content">
-          <ul>
-            <li>Verify public key existence and strength.</li>
-          </ul>
+    <footer class="site-footer">
+        <div class="container footer-inner">
+            <div class="footer-brand">
+                <strong>Neil Anuskiewicz</strong>
+                <span class="footer-sep">|</span>
+                Email Security &amp; Deliverability Consultant
+                <span class="footer-sep">|</span>
+                <a href="/methodology" class="footer-link">Methodology</a>
+                <span class="footer-sep">|</span>
+                <a href="/privacy" class="footer-link">Privacy</a>
+                <span class="footer-sep">|</span>
+                <a href="https://www.linkedin.com/in/neilanuskiewicz/" target="_blank" rel="noopener" class="footer-linkedin" title="Neil Anuskiewicz on LinkedIn">
+                    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" width="18" height="18" fill="currentColor">
+                        <path d="M20.447 20.452h-3.554v-5.569c0-1.328-.027-3.037-1.852-3.037-1.853 0-2.136 1.445-2.136 2.939v5.667H9.351V9h3.414v1.561h.046c.477-.9 1.637-1.85 3.37-1.85 3.601 0 4.267 2.37 4.267 5.455v6.286zM5.337 7.433a2.062 2.062 0 01-2.063-2.065 2.064 2.064 0 112.063 2.065zm1.782 13.019H3.555V9h3.564v11.452zM22.225 0H1.771C.792 0 0 .774 0 1.729v20.542C0 23.227.792 24 1.771 24h20.451C23.2 24 24 23.227 24 22.271V1.729C24 .774 23.2 0 22.222 0h.003z"/>
+                    </svg>
+                </a>
+            </div>
         </div>
-      </td>
-      <td>Queries selectors at <code>{selector}._domainkey.{domain}</code>, analyzes key types and strength.</td>
-      <td><a href="https://datatracker.ietf.org/doc/html/rfc6376" target="_blank">RFC 6376</a></td>
-      <td><span class="status status-pass" data-tooltip="This check passed successfully. No issues detected."><span class="icon">✔</span>Pass</span></td>
-    </tr>
+    </footer>
 
-    <!-- MX Records -->
-    <tr>
-      <td>
-        <button class="accordion-button">MX Records</button>
-        <div class="accordion-content">
-          <ul>
-            <li>Check MX priority and failover.</li>
-            <li>Detect null MX or dangling hosts.</li>
-          </ul>
-        </div>
-      </td>
-      <td>Queries MX records, validates host resolution, checks failover readiness.</td>
-      <td><a href="https://datatracker.ietf.org/doc/html/rfc5321" target="_blank">RFC 5321</a></td>
-      <td><span class="status status-pass" data-tooltip="This check passed successfully. No issues detected."><span class="icon">✔</span>Pass</span></td>
-    </tr>
-
-    <!-- MTA-STS -->
-    <tr>
-      <td>
-        <button class="accordion-button">MTA-STS</button>
-        <div class="accordion-content">
-          <ul>
-            <li>HTTPS policy must have valid TLS certificate.</li>
-          </ul>
-        </div>
-      </td>
-      <td>Fetches <code>_mta-sts.{domain}</code> TXT record, validates mode, MX matches, and TLS certificate.</td>
-      <td><a href="https://datatracker.ietf.org/doc/html/rfc8461" target="_blank">RFC 8461</a></td>
-      <td><span class="status status-pass" data-tooltip="This check passed successfully. No issues detected."><span class="icon">✔</span>Pass</span></td>
-    </tr>
-
-    <!-- TLS-RPT -->
-    <tr>
-      <td>
-        <button class="accordion-button">TLS-RPT</button>
-        <div class="accordion-content">
-          <ul>
-            <li>Reports must be deliverable.</li>
-          </ul>
-        </div>
-      </td>
-      <td>Queries <code>_smtp._tls.{domain}</code> TXT record, verifies syntax and reporting destinations.</td>
-      <td><a href="https://datatracker.ietf.org/doc/html/rfc8460" target="_blank">RFC 8460</a></td>
-      <td><span class="status status-pass" data-tooltip="This check passed successfully. No issues detected."><span class="icon">✔</span>Pass</span></td>
-    </tr>
-
-    <!-- BIMI -->
-    <tr>
-      <td>
-        <button class="accordion-button">BIMI</button>
-        <div class="accordion-content">
-          <ul>
-            <li>Dependent on mailbox provider support.</li>
-            <li>DMARC enforcement required.</li>
-          </ul>
-        </div>
-      </td>
-      <td>Queries <code>default._bimi.{domain}</code> TXT record, validates SVG logo, Tiny PS profile, and VMC certificate if present.</td>
-      <td><a href="https://datatracker.ietf.org/doc/draft-brand-indicators-for-message-identification/" target="_blank">Draft BIMI</a></td>
-      <td><span class="status status-optional" data-tooltip="Informational / Not mandatory."><span class="icon">ⓘ</span>Optional</span></td>
-    </tr>
-
-    <!-- DNSSEC -->
-    <tr>
-      <td>
-        <button class="accordion-button">DNSSEC</button>
-        <div class="accordion-content">
-          <ul>
-            <li>Check signature validity, expiration, algorithm transitions.</li>
-          </ul>
-        </div>
-      </td>
-      <td>Queries DNSKEY and parent DS records, validates chain of trust and algorithm security.</td>
-      <td>RFC 4033, RFC 4034, RFC 4035</td>
-      <td><span class="status status-pass" data-tooltip="This check passed successfully. No issues detected."><span class="icon">✔</span>Pass</span></td>
-    </tr>
-
-    <!-- CAA -->
-    <tr>
-      <td>
-        <button class="accordion-button">CAA</button>
-        <div class="accordion-content">
-          <ul>
-            <li>Handle <code>critical</code> tags correctly.</li>
-          </ul>
-        </div>
-      </td>
-      <td>Queries CAA records, checks <code>issue</code>, <code>issuewild</code>, <code>iodef</code> tags.</td>
-      <td><a href="https://datatracker.ietf.org/doc/html/rfc8659" target="_blank">RFC 8659</a></td>
-      <td><span class="status status-pass" data-tooltip="This check passed successfully. No issues detected."><span class="icon">✔</span>Pass</span></td>
-    </tr>
-
-    <!-- DANE -->
-    <tr>
-      <td>
-        <button class="accordion-button">DANE</button>
-        <div class="accordion-content">
-          <ul>
-            <li>Supports alternative ports like 587 and 465.</li>
-          </ul>
-        </div>
-      </td>
-      <td>Queries TLSA records, validates usage, selector, matching type, DNSSEC verification.</td>
-      <td><a href="https://datatracker.ietf.org/doc/html/rfc7672" target="_blank">RFC 7672</a></td>
-      <td><span class="status status-warning" data-tooltip="Attention recommended: configuration may need review."><span class="icon">▲</span>Warning</span></td>
-    </tr>
-
-    <!-- Nameservers -->
-    <tr>
-      <td>
-        <button class="accordion-button">Nameservers</button>
-        <div class="accordion-content">
-          <ul>
-            <li>Check delegation, glue records, authority consistency.</li>
-          </ul>
-        </div>
-      </td>
-      <td>Queries NS records, validates SOA serial consistency, response times, network diversity, IPv6 availability.</td>
-      <td>RFC 1034, RFC 1035</td>
-      <td><span class="status status-warning" data-tooltip="Attention recommended: check delegation and IPv6 readiness."><span class="icon">▲</span>Warning</span></td>
-    </tr>
-
-    <!-- Certificate Transparency -->
-    <tr>
-      <td>
-        <button class="accordion-button">Certificate Transparency (CT)</button>
-        <div class="accordion-content">
-          <ul>
-            <li>CT log coverage may be incomplete; do not assume full visibility.</li>
-          </ul>
-        </div>
-      </td>
-      <td>Queries CT logs via <a href="https://crt.sh" target="_blank">crt.sh</a>, reports issuer distribution, wildcard usage, and subdomains.</td>
-      <td><a href="https://datatracker.ietf.org/doc/html/rfc6962" target="_blank">RFC 6962</a></td>
-      <td><span class="status status-warning" data-tooltip="Attention recommended: coverage may be incomplete."><span class="icon">▲</span>Warning</span></td>
-    </tr>
-
-    <!-- Blocklist -->
-    <tr>
-      <td>
-        <button class="accordion-button">Blocklist</button>
-        <div class="accordion-content">
-          <ul>
-            <li>Single DBL source may miss threats; use multiple blocklists.</li>
-          </ul>
-        </div>
-      </td>
-      <td>Checks domain against Spamhaus DBL; flags spam, phishing, malware, or botnet activity.</td>
-      <td>N/A</td>
-      <td><span class="status status-fail" data-tooltip="Immediate action required: domain is listed on blocklist."><span class="icon">✖</span>Fail</span></td>
-    </tr>
-
-  </tbody>
-</table>
-
-<script>
-  // Auto-refresh every 5 minutes
-  setTimeout(() => { location.reload(); }, 300000);
-
-  // Accordion toggle
-  document.querySelectorAll('.accordion-button').forEach(button => {
-    button.addEventListener('click', () => {
-      const content = button.nextElementSibling;
-      content.style.display = content.style.display === 'block' ? 'none' : 'block';
-    });
-  });
-
-  // Filter buttons
-  const filterButtons = document.querySelectorAll('.filter-buttons button');
-  const rows = document.querySelectorAll('.check-table tbody tr');
-  filterButtons.forEach(btn => {
-    btn.addEventListener('click', () => {
-      const filter = btn.getAttribute('data-filter');
-      filterButtons.forEach(b => b.classList.remove('active'));
-      btn.classList.add('active');
-      rows.forEach(row => {
-        const status = row.querySelector('.status').classList;
-        row.style.display = (filter === 'all' || status.contains(filter)) ? '' : 'none';
-      });
-    });
-  });
-</script>
 </body>
 </html>
+```
