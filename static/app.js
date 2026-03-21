@@ -3399,31 +3399,8 @@ function _renderProviderCard(provider, showScorecard) {
 
 let headerAnalyzerIntent = null;
 
-// -- Tab switching: /headers route --
+// -- Tab switching: /headers route (disabled) --
 (function initHeaderAnalyzer() {
-    const isHeadersPage = window.location.pathname === '/headers';
-    if (isHeadersPage) {
-        _switchToHeadersView();
-    }
-
-    // Handle nav click without full page reload
-    const navLink = document.getElementById('nav-headers');
-    if (navLink) {
-        navLink.addEventListener('click', (e) => {
-            e.preventDefault();
-            history.pushState(null, '', '/headers');
-            _switchToHeadersView();
-        });
-    }
-
-    // Handle popstate (back button)
-    window.addEventListener('popstate', () => {
-        if (window.location.pathname === '/headers') {
-            _switchToHeadersView();
-        } else {
-            _switchToAuditView();
-        }
-    });
 
     // Intent buttons
     document.querySelectorAll('.ha-intent-btn').forEach(btn => {
