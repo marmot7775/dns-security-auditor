@@ -88,6 +88,7 @@ VENDOR_SPF_INCLUDES = {
     "Intercom": "include:intercom-mail.com",
     "Mimecast": "include:_netblocks.mimecast.com",
     "Barracuda": "include:spf.barracudanetworks.com",
+    "Omnivery/Mailkit": "include:spf.mailkit.eu",
 }
 
 
