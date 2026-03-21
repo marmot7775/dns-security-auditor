@@ -19,7 +19,7 @@ Each card looks like:
 }
 """
 
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Optional, Tuple
 from datetime import datetime, timezone
 from html import escape as _e
 
@@ -814,6 +814,7 @@ def transform_dmarc(raw: Dict, tree_walk: Optional[Dict] = None) -> Dict:
             _parsed, _pol, health["status"], breakdown_record,
             config_warnings, domain=_domain,
         )
+        comparison = _build_comparison_intelligence(_parsed, _pol, health["status"], has_record=True)
         tag_breakdown = {
             "health": health,
             "tags": tags_list,
@@ -821,14 +822,17 @@ def transform_dmarc(raw: Dict, tree_walk: Optional[Dict] = None) -> Dict:
             "migration": migration,
             "record_builder": record_builder,
             "why_dmarcbis": why_dmarcbis,
+            "comparison_intelligence": comparison,
         }
 
     # Record builder for "no record" case (tag_breakdown is None)
     _domain = raw.get("domain", "")
     if not tag_breakdown:
         no_record_builder = _build_record_builder({}, "", "", None, [], domain=_domain)
+        no_record_comparison = _build_comparison_intelligence({}, "", "", has_record=False)
     else:
         no_record_builder = None
+        no_record_comparison = None
 
     return {
         "name": "DMARC",
@@ -848,6 +852,7 @@ def transform_dmarc(raw: Dict, tree_walk: Optional[Dict] = None) -> Dict:
         "attack_surface": _build_attack_surface(raw, display_record or record),
         "tag_breakdown": tag_breakdown,
         "record_builder": no_record_builder,
+        "comparison_intelligence": no_record_comparison,
         "dmarcbis_readiness": _build_dmarcbis_card_data(
             raw.get("dmarcbis_readiness"), raw.get("record")
         ),
@@ -2035,6 +2040,114 @@ def _calculate_dmarcbis_health(tags: Dict[str, str], policy: str, config_warning
 
 
 # ============================================================
+# Domain Comparison Intelligence (Prompt 14)
+# ============================================================
+
+# Static stats from top 1000 domain scan
+_TOP1K = {
+    "no_dmarc_pct": 26.0,
+    "p_reject_pct": 55.0,
+    "p_quarantine_pct": 12.0,
+    "p_none_pct": 7.0,
+    "np_adoption_pct": 0.0,
+    "t_adoption_pct": 0.0,
+    "psd_adoption_pct": 0.1,
+    "deprecated_still_used_pct": 30.6,
+}
+
+
+def _build_comparison_intelligence(
+    tags: Dict[str, str],
+    policy: str,
+    health_status: str,
+    has_record: bool,
+) -> Dict:
+    """Build a contextual comparison showing where this domain stands
+    relative to the top 1000 internet domains.
+
+    Returns:
+      position_statement - single punchy sentence
+      position_pct       - 0-100 numeric position (higher = better)
+      position_label     - e.g. "Ahead of 99.9%"
+      adoption_stats     - mini-stat block for DMARCbis adoption
+    """
+
+    has_dmarcbis_tags = any(t in tags for t in ("np", "psd", "t"))
+
+    # --- Position statement (one punchy line) ---
+    if not has_record:
+        statement = (
+            "Among the 26% of top 1000 domains with no DMARC protection."
+        )
+        position_pct = 0
+        position_label = "Bottom 26%"
+
+    elif policy == "none" and tags.get("rua"):
+        statement = (
+            "Monitoring mode. 26% of the top 1000 have no DMARC at all, "
+            "so you are ahead of them, but enforcement is the goal."
+        )
+        position_pct = 30
+        position_label = "Ahead of ~26%"
+
+    elif policy == "none" and not tags.get("rua"):
+        statement = (
+            "This record provides less protection than having no DMARC at all "
+            "(which 26% of top domains have) because it creates a false sense of security."
+        )
+        position_pct = 5
+        position_label = "Below baseline"
+
+    elif policy == "quarantine":
+        statement = (
+            "Stronger enforcement than ~33% of the top 1000."
+        )
+        position_pct = 55
+        position_label = "Ahead of ~33%"
+
+    elif policy == "reject" and has_dmarcbis_tags:
+        statement = (
+            "Ahead of 99.9% of the top 1000 domains in DMARCbis readiness."
+        )
+        position_pct = 99
+        position_label = "Top 0.1%"
+
+    elif policy == "reject":
+        statement = (
+            "Stronger than 45% of the top 1000 in enforcement, "
+            "but among the 99.9% not yet DMARCbis-ready."
+        )
+        position_pct = 75
+        position_label = "Ahead of ~45%"
+
+    else:
+        statement = (
+            "This domain has DMARC configured. 26% of the top 1000 have none at all."
+        )
+        position_pct = 35
+        position_label = "Ahead of ~26%"
+
+    # --- DMARCbis adoption mini-stats ---
+    adoption_stats = [
+        {"tag": "np=", "adoption_pct": _TOP1K["np_adoption_pct"], "label": "np= adoption"},
+        {"tag": "t=", "adoption_pct": _TOP1K["t_adoption_pct"], "label": "t= adoption"},
+        {"tag": "psd=", "adoption_pct": _TOP1K["psd_adoption_pct"], "label": "psd= adoption"},
+        {"tag": "deprecated", "adoption_pct": _TOP1K["deprecated_still_used_pct"], "label": "Still using deprecated tags"},
+    ]
+
+    return {
+        "position_statement": statement,
+        "position_pct": position_pct,
+        "position_label": position_label,
+        "adoption_stats": adoption_stats,
+        "adoption_tagline": (
+            "DMARCbis adoption is effectively zero. Early adopters gain a "
+            "security advantage and set the standard for their industry."
+        ),
+    }
+
+
+# ============================================================
 # Migration Wizard
 # ============================================================
 
@@ -2121,13 +2234,25 @@ def _build_why_dmarcbis(tags: Dict[str, str], policy: str, health_status: str, d
     sections.append({
         "title": f"How does {domain or 'this domain'} compare?",
         "content": (
-            "Based on analysis of the top 1000 internet domains: 0% have adopted DMARCbis-specific "
-            "tags (np=, psd=, t=). Many still use deprecated tags (pct, rf, ri). "
+            "Based on analysis of the top 1000 internet domains: 26% have no DMARC at all, "
+            "~55% are at p=reject, ~12% at p=quarantine, and ~7% at p=none. "
+            "0% have adopted DMARCbis-specific tags (np=, t=), only 0.1% use psd=, "
+            "and 30.6% still use deprecated tags (pct, rf, ri). "
             f"Your record is currently rated '{health_status}'. Adopting DMARCbis tags now puts you "
             "ahead of the vast majority of the internet."
         ),
         "verdict_scale": verdict_scale,
         "current_verdict": health_status,
+        "adoption_stats": [
+            {"tag": "np=", "pct": 0.0},
+            {"tag": "t=", "pct": 0.0},
+            {"tag": "psd=", "pct": 0.1},
+            {"tag": "Deprecated tags still in use", "pct": 30.6},
+        ],
+        "adoption_tagline": (
+            "DMARCbis adoption is effectively zero. Early adopters gain a "
+            "security advantage and set the standard for their industry."
+        ),
     })
 
     # Section 4: Why does this matter
@@ -4726,4 +4851,696 @@ def transform_blacklist(raw: Dict, domain: str) -> Dict:
         "details": details,
         "fix": fix,
         "fix_records": None,
+    }
+
+
+# ============================================================
+# Provider Intelligence (Prompt 19)
+# ============================================================
+
+# --- Provider detection rules ---
+
+_PROVIDER_MX_PATTERNS: List[Tuple[str, str, str]] = [
+    # (substring in MX host, provider_id, category)
+    (".google.com", "google_workspace", "mailbox"),
+    (".googlemail.com", "google_workspace", "mailbox"),
+    (".mail.protection.outlook.com", "microsoft_365", "mailbox"),
+    (".pphosted.com", "proofpoint", "gateway"),
+    (".mimecast.com", "mimecast", "gateway"),
+    (".barracudanetworks.com", "barracuda", "gateway"),
+    (".zoho.com", "zoho", "mailbox"),
+    (".protonmail.ch", "protonmail", "mailbox"),
+    (".fastmail.com", "fastmail", "mailbox"),
+]
+
+_PROVIDER_SPF_PATTERNS: List[Tuple[str, str, str]] = [
+    ("include:_spf.google.com", "google_workspace", "mailbox"),
+    ("include:spf.protection.outlook.com", "microsoft_365", "mailbox"),
+    ("include:pphosted.com", "proofpoint", "gateway"),
+    ("include:_netblocks.mimecast.com", "mimecast", "gateway"),
+    ("include:spf.barracudanetworks.com", "barracuda", "gateway"),
+    ("include:zoho.com", "zoho", "mailbox"),
+    ("include:_spf.protonmail.ch", "protonmail", "mailbox"),
+    ("include:spf.messagingengine.com", "fastmail", "mailbox"),
+    ("include:amazonses.com", "amazon_ses", "sending"),
+    # Sending services
+    ("include:sendgrid.net", "sendgrid", "sending"),
+    ("include:servers.mcsv.net", "mailchimp", "sending"),
+    ("include:mailgun.org", "mailgun", "sending"),
+    ("include:mandrillapp.com", "mandrill", "sending"),
+    ("include:hubspot.com", "hubspot", "sending"),
+    ("include:_spf.salesforce.com", "salesforce", "sending"),
+    ("include:mail.zendesk.com", "zendesk", "sending"),
+    ("include:email.freshdesk.com", "freshdesk", "sending"),
+    ("include:ccsend.com", "constant_contact", "sending"),
+    ("include:_spf.createsend.com", "campaign_monitor", "sending"),
+]
+
+_PROVIDER_DKIM_SELECTORS: Dict[str, Tuple[str, str]] = {
+    "google": ("google_workspace", "mailbox"),
+    "selector1": ("microsoft_365", "mailbox"),
+    "selector2": ("microsoft_365", "mailbox"),
+    "s1": ("sendgrid", "sending"),
+    "s2": ("sendgrid", "sending"),
+    "k1": ("mailchimp", "sending"),
+    "mandrill": ("mandrill", "sending"),
+    "hubspot": ("hubspot", "sending"),
+    "salesforce": ("salesforce", "sending"),
+    "zendesk1": ("zendesk", "sending"),
+    "zendesk2": ("zendesk", "sending"),
+    "protonmail": ("protonmail", "mailbox"),
+    "fm1": ("fastmail", "mailbox"),
+    "fm2": ("fastmail", "mailbox"),
+    "fm3": ("fastmail", "mailbox"),
+}
+
+_PROVIDER_META: Dict[str, Dict] = {
+    "google_workspace": {
+        "name": "Google Workspace",
+        "category": "mailbox",
+        "badge_class": "pi-badge-google",
+        "capabilities": {
+            "dkim_2048": True,
+            "dkim_auto_rotation": True,
+            "arc": True,
+            "mta_sts": True,
+            "tls_rpt": True,
+            "dane": False,
+            "bimi": True,
+        },
+        "guidance": [
+            {
+                "topic": "DKIM",
+                "text": (
+                    "Google Workspace supports 2048-bit DKIM. Enable in "
+                    "Admin Console > Apps > Google Workspace > Gmail > Authenticate Email."
+                ),
+            },
+            {
+                "topic": "DMARC",
+                "text": (
+                    "Google recommends setting up rua= first, monitoring for 2 weeks, "
+                    "then moving to enforcement."
+                ),
+            },
+            {
+                "topic": "Known issue",
+                "text": (
+                    "Google rewrites the envelope sender for forwarded mail, which can "
+                    "break SPF alignment. DKIM is the more reliable alignment mechanism."
+                ),
+            },
+        ],
+    },
+    "microsoft_365": {
+        "name": "Microsoft 365",
+        "category": "mailbox",
+        "badge_class": "pi-badge-microsoft",
+        "capabilities": {
+            "dkim_2048": True,
+            "dkim_auto_rotation": True,
+            "arc": True,
+            "mta_sts": True,
+            "tls_rpt": True,
+            "dane": True,
+            "bimi": False,
+        },
+        "guidance": [
+            {
+                "topic": "DKIM",
+                "text": (
+                    "Enable DKIM signing in Microsoft 365 Defender > "
+                    "Email Authentication > DKIM. Both selector1 and selector2 "
+                    "should be published."
+                ),
+            },
+            {
+                "topic": "DMARC",
+                "text": (
+                    "Microsoft DMARC reporting can be configured in the "
+                    "Microsoft 365 admin center."
+                ),
+            },
+            {
+                "topic": "Known issue",
+                "text": (
+                    "Microsoft 365 uses selector1 and selector2 DKIM selectors. "
+                    "Both must be rotated when key rotation is needed."
+                ),
+            },
+        ],
+    },
+    "proofpoint": {
+        "name": "Proofpoint",
+        "category": "gateway",
+        "badge_class": "pi-badge-proofpoint",
+        "capabilities": {
+            "dkim_2048": True,
+            "dkim_auto_rotation": False,
+            "arc": True,
+            "mta_sts": False,
+            "tls_rpt": False,
+            "dane": False,
+            "bimi": False,
+        },
+        "guidance": [
+            {
+                "topic": "Gateway",
+                "text": (
+                    "Proofpoint acts as a mail gateway. DMARC alignment depends on "
+                    "Proofpoint's configuration of envelope sender and DKIM signing."
+                ),
+            },
+            {
+                "topic": "SPF efficiency",
+                "text": (
+                    "Proofpoint's macro-based SPF "
+                    "(%{ir}.%{v}.%{d}.spf.has.pphosted.com) is efficient, "
+                    "using only 1 DNS lookup regardless of IP count."
+                ),
+            },
+        ],
+    },
+    "mimecast": {
+        "name": "Mimecast",
+        "category": "gateway",
+        "badge_class": "pi-badge-mimecast",
+        "capabilities": {
+            "dkim_2048": True,
+            "dkim_auto_rotation": False,
+            "arc": True,
+            "mta_sts": False,
+            "tls_rpt": False,
+            "dane": False,
+            "bimi": False,
+        },
+        "guidance": [
+            {
+                "topic": "Gateway",
+                "text": (
+                    "Mimecast acts as a mail gateway. Ensure DKIM signing is "
+                    "configured in Mimecast to maintain alignment through the gateway."
+                ),
+            },
+        ],
+    },
+    "barracuda": {
+        "name": "Barracuda",
+        "category": "gateway",
+        "badge_class": "pi-badge-barracuda",
+        "capabilities": {
+            "dkim_2048": True,
+            "dkim_auto_rotation": False,
+            "arc": False,
+            "mta_sts": False,
+            "tls_rpt": False,
+            "dane": False,
+            "bimi": False,
+        },
+        "guidance": [
+            {
+                "topic": "Gateway",
+                "text": (
+                    "Barracuda acts as a mail gateway. Verify DKIM signing "
+                    "is configured to preserve alignment."
+                ),
+            },
+        ],
+    },
+    "zoho": {
+        "name": "Zoho Mail",
+        "category": "mailbox",
+        "badge_class": "pi-badge-zoho",
+        "capabilities": {
+            "dkim_2048": True,
+            "dkim_auto_rotation": False,
+            "arc": False,
+            "mta_sts": True,
+            "tls_rpt": True,
+            "dane": False,
+            "bimi": True,
+        },
+        "guidance": [
+            {
+                "topic": "DKIM",
+                "text": (
+                    "Zoho supports 2048-bit DKIM. Enable in Zoho Mail Admin > "
+                    "Email Authentication > DKIM."
+                ),
+            },
+        ],
+    },
+    "protonmail": {
+        "name": "ProtonMail",
+        "category": "mailbox",
+        "badge_class": "pi-badge-protonmail",
+        "capabilities": {
+            "dkim_2048": True,
+            "dkim_auto_rotation": True,
+            "arc": False,
+            "mta_sts": True,
+            "tls_rpt": True,
+            "dane": False,
+            "bimi": False,
+        },
+        "guidance": [
+            {
+                "topic": "DKIM",
+                "text": (
+                    "ProtonMail automatically manages DKIM signing with "
+                    "2048-bit keys for custom domains."
+                ),
+            },
+        ],
+    },
+    "fastmail": {
+        "name": "Fastmail",
+        "category": "mailbox",
+        "badge_class": "pi-badge-fastmail",
+        "capabilities": {
+            "dkim_2048": True,
+            "dkim_auto_rotation": True,
+            "arc": True,
+            "mta_sts": True,
+            "tls_rpt": True,
+            "dane": False,
+            "bimi": True,
+        },
+        "guidance": [
+            {
+                "topic": "DKIM",
+                "text": (
+                    "Fastmail automatically manages DKIM keys (fm1, fm2, fm3 selectors) "
+                    "and supports automatic key rotation."
+                ),
+            },
+        ],
+    },
+    "amazon_ses": {
+        "name": "Amazon SES",
+        "category": "sending",
+        "badge_class": "pi-badge-ses",
+        "capabilities": {
+            "dkim_2048": True,
+            "dkim_auto_rotation": True,
+            "arc": False,
+            "mta_sts": False,
+            "tls_rpt": False,
+            "dane": False,
+            "bimi": False,
+        },
+        "guidance": [
+            {
+                "topic": "DKIM",
+                "text": (
+                    "Amazon SES uses Easy DKIM with automatic 2048-bit key rotation. "
+                    "Enable in SES Console > Verified Identities > Authentication."
+                ),
+            },
+        ],
+    },
+    "sendgrid": {
+        "name": "SendGrid",
+        "category": "sending",
+        "badge_class": "pi-badge-sendgrid",
+        "capabilities": {
+            "dkim_2048": True,
+            "dkim_auto_rotation": True,
+            "arc": False,
+            "mta_sts": False,
+            "tls_rpt": False,
+            "dane": False,
+            "bimi": False,
+        },
+        "guidance": [
+            {
+                "topic": "DKIM",
+                "text": (
+                    "SendGrid supports automated domain authentication with DKIM. "
+                    "Configure in Settings > Sender Authentication."
+                ),
+            },
+        ],
+    },
+    "mailchimp": {
+        "name": "Mailchimp",
+        "category": "sending",
+        "badge_class": "pi-badge-mailchimp",
+        "capabilities": {
+            "dkim_2048": True,
+            "dkim_auto_rotation": False,
+            "arc": False,
+            "mta_sts": False,
+            "tls_rpt": False,
+            "dane": False,
+            "bimi": False,
+        },
+        "guidance": [
+            {
+                "topic": "DKIM",
+                "text": (
+                    "Mailchimp requires custom DKIM (k1 selector) for authenticated "
+                    "sending. Set up in Account > Domains > Verify."
+                ),
+            },
+        ],
+    },
+    "mailgun": {
+        "name": "Mailgun",
+        "category": "sending",
+        "badge_class": "pi-badge-mailgun",
+        "capabilities": {
+            "dkim_2048": True,
+            "dkim_auto_rotation": True,
+            "arc": False,
+            "mta_sts": False,
+            "tls_rpt": False,
+            "dane": False,
+            "bimi": False,
+        },
+        "guidance": [],
+    },
+    "mandrill": {
+        "name": "Mandrill",
+        "category": "sending",
+        "badge_class": "pi-badge-mandrill",
+        "capabilities": {
+            "dkim_2048": True,
+            "dkim_auto_rotation": False,
+            "arc": False,
+            "mta_sts": False,
+            "tls_rpt": False,
+            "dane": False,
+            "bimi": False,
+        },
+        "guidance": [],
+    },
+    "hubspot": {
+        "name": "HubSpot",
+        "category": "sending",
+        "badge_class": "pi-badge-hubspot",
+        "capabilities": {
+            "dkim_2048": True,
+            "dkim_auto_rotation": False,
+            "arc": False,
+            "mta_sts": False,
+            "tls_rpt": False,
+            "dane": False,
+            "bimi": False,
+        },
+        "guidance": [],
+    },
+    "salesforce": {
+        "name": "Salesforce",
+        "category": "sending",
+        "badge_class": "pi-badge-salesforce",
+        "capabilities": {
+            "dkim_2048": True,
+            "dkim_auto_rotation": False,
+            "arc": False,
+            "mta_sts": False,
+            "tls_rpt": False,
+            "dane": False,
+            "bimi": False,
+        },
+        "guidance": [],
+    },
+    "zendesk": {
+        "name": "Zendesk",
+        "category": "sending",
+        "badge_class": "pi-badge-zendesk",
+        "capabilities": {
+            "dkim_2048": True,
+            "dkim_auto_rotation": False,
+            "arc": False,
+            "mta_sts": False,
+            "tls_rpt": False,
+            "dane": False,
+            "bimi": False,
+        },
+        "guidance": [],
+    },
+    "freshdesk": {
+        "name": "Freshdesk",
+        "category": "sending",
+        "badge_class": "pi-badge-freshdesk",
+        "capabilities": {
+            "dkim_2048": True,
+            "dkim_auto_rotation": False,
+            "arc": False,
+            "mta_sts": False,
+            "tls_rpt": False,
+            "dane": False,
+            "bimi": False,
+        },
+        "guidance": [],
+    },
+    "constant_contact": {
+        "name": "Constant Contact",
+        "category": "sending",
+        "badge_class": "pi-badge-constantcontact",
+        "capabilities": {
+            "dkim_2048": True,
+            "dkim_auto_rotation": False,
+            "arc": False,
+            "mta_sts": False,
+            "tls_rpt": False,
+            "dane": False,
+            "bimi": False,
+        },
+        "guidance": [],
+    },
+    "campaign_monitor": {
+        "name": "Campaign Monitor",
+        "category": "sending",
+        "badge_class": "pi-badge-campaignmonitor",
+        "capabilities": {
+            "dkim_2048": True,
+            "dkim_auto_rotation": False,
+            "arc": False,
+            "mta_sts": False,
+            "tls_rpt": False,
+            "dane": False,
+            "bimi": False,
+        },
+        "guidance": [],
+    },
+}
+
+_CATEGORY_LABELS = {
+    "mailbox": "Email Provider",
+    "gateway": "Security Gateway",
+    "sending": "Sending Service",
+}
+
+_FEATURE_LABELS = {
+    "dkim_2048": "DKIM 2048-bit",
+    "dkim_auto_rotation": "DKIM auto-rotation",
+    "arc": "ARC (forwarding)",
+    "mta_sts": "MTA-STS",
+    "tls_rpt": "TLS-RPT",
+    "dane": "DANE",
+    "bimi": "BIMI",
+}
+
+
+def _detect_providers(raw_results: Dict) -> Dict[str, Dict]:
+    """Detect email providers from MX, SPF, and DKIM data.
+
+    Returns dict of provider_id -> {source: set of detection sources}.
+    """
+    detected: Dict[str, Dict] = {}
+
+    def _add(pid: str, source: str, category: str):
+        if pid not in detected:
+            detected[pid] = {"sources": set(), "category": category}
+        detected[pid]["sources"].add(source)
+
+    # MX records
+    mx_raw = raw_results.get("mx", {})
+    mx_records = mx_raw.get("records", []) or []
+    for rec in mx_records:
+        host = rec.split()[-1].lower() if rec else ""
+        for pattern, pid, cat in _PROVIDER_MX_PATTERNS:
+            if pattern in host:
+                _add(pid, "MX", cat)
+
+    # SPF record
+    spf_raw = raw_results.get("spf", {})
+    spf_record = (spf_raw.get("record") or "").lower()
+    for pattern, pid, cat in _PROVIDER_SPF_PATTERNS:
+        if pattern in spf_record:
+            _add(pid, "SPF", cat)
+
+    # Also check for Proofpoint macro-based SPF
+    if "pphosted.com" in spf_record:
+        _add("proofpoint", "SPF", "gateway")
+
+    # DKIM selectors
+    dkim_raw = raw_results.get("dkim", {})
+    found_selectors = dkim_raw.get("found_selectors", []) or []
+    for sel in found_selectors:
+        sel_name = (sel.get("selector") or "").lower()
+        if sel_name in _PROVIDER_DKIM_SELECTORS:
+            pid, cat = _PROVIDER_DKIM_SELECTORS[sel_name]
+            _add(pid, "DKIM", cat)
+        # Amazon SES pattern: selectors containing "ses"
+        if "ses" in sel_name and "amazon_ses" not in detected:
+            _add("amazon_ses", "DKIM", "sending")
+
+    return detected
+
+
+def _check_domain_features(raw_results: Dict, checks: List[Dict]) -> Dict[str, str]:
+    """Check which security features the domain has enabled.
+
+    Returns feature_id -> "yes" | "no" | "unknown".
+    """
+    result = {}
+    check_map = {(c.get("name") or "").upper(): c for c in checks}
+
+    # DKIM 2048-bit: check if any found key is >= 2048 bits
+    dkim_raw = raw_results.get("dkim", {})
+    found_selectors = dkim_raw.get("found_selectors", []) or []
+    has_2048 = False
+    has_any_dkim = bool(found_selectors)
+    for sel in found_selectors:
+        rec = sel.get("record", "")
+        if rec:
+            analysis = analyze_dkim_key_strength(rec)
+            if analysis.get("key_bits", 0) >= 2048:
+                has_2048 = True
+                break
+    if has_any_dkim:
+        result["dkim_2048"] = "yes" if has_2048 else "no"
+    else:
+        result["dkim_2048"] = "unknown"
+
+    # DKIM auto-rotation: cannot determine from DNS alone
+    result["dkim_auto_rotation"] = "unknown"
+
+    # ARC: cannot determine from DNS alone (header-based)
+    result["arc"] = "n/a"
+
+    # MTA-STS
+    mta_sts_check = check_map.get("MTA-STS", {})
+    mta_sts_status = mta_sts_check.get("status", "")
+    if mta_sts_status == "pass":
+        result["mta_sts"] = "yes"
+    elif mta_sts_status in ("fail", "warn"):
+        result["mta_sts"] = "no"
+    else:
+        result["mta_sts"] = "unknown"
+
+    # TLS-RPT
+    tls_rpt_check = check_map.get("TLS-RPT", {})
+    tls_rpt_status = tls_rpt_check.get("status", "")
+    if tls_rpt_status == "pass":
+        result["tls_rpt"] = "yes"
+    elif tls_rpt_status in ("fail", "warn"):
+        result["tls_rpt"] = "no"
+    else:
+        result["tls_rpt"] = "unknown"
+
+    # DANE
+    dane_check = check_map.get("DANE", {})
+    dane_status = dane_check.get("status", "")
+    if dane_status == "pass":
+        result["dane"] = "yes"
+    elif dane_status in ("fail", "warn"):
+        result["dane"] = "no"
+    else:
+        result["dane"] = "unknown"
+
+    # BIMI
+    bimi_check = check_map.get("BIMI", {})
+    bimi_status = bimi_check.get("status", "")
+    if bimi_status == "pass":
+        result["bimi"] = "yes"
+    elif bimi_status in ("fail", "warn"):
+        result["bimi"] = "no"
+    else:
+        result["bimi"] = "unknown"
+
+    return result
+
+
+def _build_provider_intelligence(
+    raw_results: Dict, checks: List[Dict]
+) -> Optional[Dict]:
+    """Build provider intelligence data for the frontend.
+
+    Identifies what email platform/provider the domain uses and provides
+    provider-specific guidance, detection sources, and a security scorecard.
+
+    Returns None if no providers are detected.
+    """
+    detected = _detect_providers(raw_results)
+    if not detected:
+        return None
+
+    domain_features = _check_domain_features(raw_results, checks)
+
+    # Separate into primary (mailbox/gateway) and sending services
+    primary_providers = []
+    sending_services = []
+
+    for pid, info in detected.items():
+        meta = _PROVIDER_META.get(pid)
+        if not meta:
+            continue
+
+        category = meta["category"]
+        sources = sorted(info["sources"])
+
+        # Build scorecard for this provider
+        scorecard = []
+        caps = meta.get("capabilities", {})
+        for feat_id, feat_label in _FEATURE_LABELS.items():
+            provider_supports = caps.get(feat_id, False)
+            domain_status = domain_features.get(feat_id, "unknown")
+
+            scorecard.append({
+                "feature": feat_label,
+                "provider_supports": provider_supports,
+                "domain_status": domain_status,
+            })
+
+        provider_data = {
+            "id": pid,
+            "name": meta["name"],
+            "category": category,
+            "category_label": _CATEGORY_LABELS.get(category, category),
+            "badge_class": meta.get("badge_class", ""),
+            "detected_via": sources,
+            "guidance": meta.get("guidance", []),
+            "scorecard": scorecard,
+        }
+
+        if category in ("mailbox", "gateway"):
+            primary_providers.append(provider_data)
+        else:
+            sending_services.append(provider_data)
+
+    if not primary_providers and not sending_services:
+        return None
+
+    # Detect gateway + upstream pattern (e.g., Proofpoint + Google Workspace)
+    gateway_upstream = None
+    gateways = [p for p in primary_providers if p["category"] == "gateway"]
+    mailboxes = [p for p in primary_providers if p["category"] == "mailbox"]
+    if gateways and mailboxes:
+        gateway_upstream = {
+            "gateway": gateways[0]["name"],
+            "upstream": mailboxes[0]["name"],
+            "note": (
+                f"{gateways[0]['name']} is routing mail to {mailboxes[0]['name']}. "
+                f"DKIM signing and SPF alignment must be configured at both layers."
+            ),
+        }
+
+    return {
+        "primary_providers": primary_providers,
+        "sending_services": sending_services,
+        "gateway_upstream": gateway_upstream,
     }

@@ -10,7 +10,10 @@ from audit_engine import run_full_audit
 
 
 def normalize_domain(value: str) -> str:
-    """Normalize a user-supplied string into a bare domain name."""
+    """Normalize a user-supplied string into a bare domain name.
+
+    Handles URLs, email addresses, trailing dots, ports, and IDN domains.
+    """
     if not value:
         return ""
     domain = str(value).strip().lower()
@@ -19,9 +22,24 @@ def normalize_domain(value: str) -> str:
     domain = (
         domain.removeprefix("http://")
         .removeprefix("https://")
-        .removeprefix("www.")
     )
-    return domain.split("/")[0].split("?")[0].split("#")[0].split(":")[0].rstrip(".")
+    domain = domain.split("/")[0].split("?")[0].split("#")[0]
+    # Strip port (e.g. example.com:443)
+    if ":" in domain:
+        domain = domain.rsplit(":", 1)[0]
+    domain = domain.rstrip(".")
+    # Handle internationalized domain names (IDN)
+    try:
+        domain = domain.encode("idna").decode("ascii")
+    except (UnicodeError, UnicodeDecodeError):
+        try:
+            labels = domain.split(".")
+            domain = ".".join(
+                label.encode("idna").decode("ascii") for label in labels
+            )
+        except (UnicodeError, UnicodeDecodeError):
+            pass
+    return domain
 
 
 def audit_dns_security(

@@ -34,10 +34,36 @@ const resultsSection = document.getElementById('results-section');
 // -- Scope selector --
 document.querySelectorAll('.scope-btn').forEach(btn => {
     btn.addEventListener('click', () => {
-        document.querySelectorAll('.scope-btn').forEach(b => b.classList.remove('active'));
+        document.querySelectorAll('.scope-btn').forEach(b => {
+            b.classList.remove('active');
+            b.setAttribute('aria-checked', 'false');
+            b.setAttribute('tabindex', '-1');
+        });
         btn.classList.add('active');
+        btn.setAttribute('aria-checked', 'true');
+        btn.setAttribute('tabindex', '0');
         currentScope = btn.dataset.scope;
     });
+});
+
+// Arrow key navigation for scope radio group
+document.getElementById('scope-selector').addEventListener('keydown', (e) => {
+    if (e.key !== 'ArrowRight' && e.key !== 'ArrowLeft') return;
+    const btns = Array.from(document.querySelectorAll('.scope-btn'));
+    const current = btns.findIndex(b => b.classList.contains('active'));
+    if (current === -1) return;
+    e.preventDefault();
+    const next = e.key === 'ArrowRight'
+        ? (current + 1) % btns.length
+        : (current - 1 + btns.length) % btns.length;
+    btns[current].classList.remove('active');
+    btns[current].setAttribute('aria-checked', 'false');
+    btns[current].setAttribute('tabindex', '-1');
+    btns[next].classList.add('active');
+    btns[next].setAttribute('aria-checked', 'true');
+    btns[next].setAttribute('tabindex', '0');
+    btns[next].focus();
+    currentScope = btns[next].dataset.scope;
 });
 
 // -- DKIM selector toggle --
@@ -47,6 +73,7 @@ document.getElementById('selector-toggle').addEventListener('click', (e) => {
     const toggle = document.getElementById('selector-toggle');
     field.classList.toggle('visible');
     toggle.classList.toggle('active');
+    toggle.setAttribute('aria-expanded', field.classList.contains('visible') ? 'true' : 'false');
     if (field.classList.contains('visible')) {
         document.getElementById('selector-input').focus();
     }
@@ -116,18 +143,58 @@ if (eduToggle && eduContent) {
 // -- Form submission --
 auditForm.addEventListener('submit', (e) => {
     e.preventDefault();
-    const domain = normalizeDomain(domainInput.value.trim());
-    if (!domain) return;
+    const raw = domainInput.value.trim();
+    if (!raw) {
+        _showInlineError('Please enter a domain name.');
+        return;
+    }
+    const domain = normalizeDomain(raw);
+    if (!domain) {
+        _showInlineError('Please enter a valid domain name.');
+        return;
+    }
+    // Basic format validation before sending to the server
+    const DOMAIN_RE = /^(?!-)[A-Za-z0-9-]{1,63}(?<!-)(\.(?!-)[A-Za-z0-9-]{1,63}(?<!-))*\.[A-Za-z]{2,}$/;
+    if (!DOMAIN_RE.test(domain)) {
+        _showInlineError(`"${domain}" does not look like a valid domain name.`);
+        return;
+    }
+    _clearInlineError();
     domainInput.value = domain;
     runAudit(domain);
 });
+
+function _showInlineError(msg) {
+    let errEl = document.getElementById('domain-inline-error');
+    if (!errEl) {
+        errEl = document.createElement('div');
+        errEl.id = 'domain-inline-error';
+        errEl.className = 'domain-inline-error';
+        domainInput.parentNode.insertBefore(errEl, domainInput.nextSibling);
+    }
+    errEl.textContent = msg;
+    errEl.style.display = 'block';
+    domainInput.classList.add('input-error');
+}
+
+function _clearInlineError() {
+    const errEl = document.getElementById('domain-inline-error');
+    if (errEl) errEl.style.display = 'none';
+    domainInput.classList.remove('input-error');
+}
+
+// Clear inline error when user starts typing
+domainInput.addEventListener('input', _clearInlineError);
 
 function normalizeDomain(input) {
     if (!input) return '';
     let d = input.toLowerCase().trim();
     if (d.includes('@')) d = d.split('@').pop();
-    d = d.replace(/^https?:\/\//, '').replace(/^www\./, '');
-    d = d.split('/')[0].split('?')[0].replace(/\.$/, '');
+    d = d.replace(/^https?:\/\//, '');
+    d = d.split('/')[0].split('?')[0].split('#')[0];
+    // Strip port (e.g. example.com:443)
+    if (d.includes(':')) d = d.split(':')[0];
+    d = d.replace(/\.$/, '');
     return d;
 }
 
@@ -277,6 +344,8 @@ function updateLoadingProgress(step, progressPct) {
     const status = document.getElementById('loading-status');
     const pct = Math.min(progressPct, 97);
     if (bar) bar.style.width = pct + '%';
+    const track = bar?.closest('.loading-bar-track');
+    if (track) track.setAttribute('aria-valuenow', Math.round(pct));
     if (status) status.textContent = STEP_MESSAGES[step] || `Checking ${step}...`;
     const topBar = document.querySelector('.top-progress-bar');
     if (topBar) topBar.style.width = pct + '%';
@@ -377,6 +446,25 @@ function renderResults(data) {
             esSlot.innerHTML = '';
             esSlot.style.display = 'none';
         }
+    }
+
+    // -- Advisories banner (www subdomain, partial results, etc.) --
+    const existingAdvisories = document.getElementById('advisories-banner');
+    if (existingAdvisories) existingAdvisories.remove();
+    if (data.advisories && data.advisories.length > 0) {
+        const advBanner = document.createElement('div');
+        advBanner.id = 'advisories-banner';
+        advBanner.className = 'advisories-banner';
+        advBanner.innerHTML = data.advisories.map(a => {
+            const cls = a.type === 'warning' ? 'advisory-warning' : 'advisory-info';
+            return `<div class="advisory ${cls}">
+                <strong>${escapeHtml(a.title)}</strong>
+                <span>${escapeHtml(a.message)}</span>
+            </div>`;
+        }).join('');
+        // Insert before the results list
+        const resultsList = document.getElementById('results-list');
+        resultsList.parentNode.insertBefore(advBanner, resultsList);
     }
 
     // -- Filter checks by scope --
@@ -652,6 +740,9 @@ function renderResults(data) {
         vendorsSection.style.display = 'none';
     }
 
+    // Provider Intelligence
+    renderProviderIntelligence(data.provider_intelligence);
+
     // Share button with dropdown
     _initShareDropdown();
 
@@ -706,15 +797,16 @@ function createResultCard(check, index) {
         ? `<div class="result-title"><span class="protocol-name-tip" tabindex="0">${escapeHtml(check.name)}<span class="protocol-tooltip">${escapeHtml(tooltipText)}</span></span></div>`
         : `<div class="result-title">${escapeHtml(check.name)}</div>`;
 
+    const bodyId = `body-${(check.name || '').toLowerCase().replace(/[^a-z0-9]/g, '-')}`;
     card.innerHTML = `
         <div class="result-header">
-            <div class="status-dot ${check.status}"></div>
+            <div class="status-dot ${check.status}" aria-hidden="true"></div>
             ${titleHtml}
             <span class="status-pill ${check.status}">${escapeHtml(statusLabel)}</span>
             <div class="result-verdict">${escapeHtml(check.verdict || '')}</div>
             <div class="result-chevron">&#9662;</div>
         </div>
-        <div class="result-body">
+        <div class="result-body" id="${bodyId}">
             <div class="result-body-inner">
                 ${renderCheckBody(check)}
             </div>
@@ -732,6 +824,7 @@ function createResultCard(check, index) {
     header.setAttribute('tabindex', '0');
     header.setAttribute('role', 'button');
     header.setAttribute('aria-expanded', isExpanded ? 'true' : 'false');
+    header.setAttribute('aria-controls', bodyId);
     header.addEventListener('keydown', (e) => {
         if (e.key === 'Enter' || e.key === ' ') {
             e.preventDefault();
@@ -844,7 +937,7 @@ function _renderDetailItem(d) {
     }[d.type] || '&#8250;';
     return `
         <div class="detail-item ${typeClass}">
-            <span class="detail-icon">${icon}</span>
+            <span class="detail-icon" aria-hidden="true">${icon}</span>
             <span>${escapeHtml(d.text || '')}</span>
         </div>
     `;
@@ -942,6 +1035,13 @@ function renderCheckBody(check) {
     if (check.record_builder) {
         html += `<div class="spec-dmarcbis">`;
         html += renderRecordBuilder(check.record_builder);
+        html += `</div>`;
+    }
+
+    // Comparison intelligence for "no record" case (top-level, not in tag_breakdown)
+    if (check.comparison_intelligence) {
+        html += `<div class="spec-dmarcbis">`;
+        html += renderComparisonIntelligence(check.comparison_intelligence);
         html += `</div>`;
     }
 
@@ -1056,9 +1156,9 @@ function renderSpecToggle(comparison) {
     return `
         <div class="st-toggle-bar">
             <div class="st-toggle-label">Validation Mode</div>
-            <div class="st-toggle-pills">
-                <button class="st-pill st-pill-legacy" data-mode="legacy">RFC 7489 (Legacy)</button>
-                <button class="st-pill st-pill-dmarcbis st-pill-active" data-mode="dmarcbis">DMARCbis (Strict)</button>
+            <div class="st-toggle-pills" role="radiogroup" aria-label="Validation mode">
+                <button class="st-pill st-pill-legacy" data-mode="legacy" role="radio" aria-checked="false">RFC 7489 (Legacy)</button>
+                <button class="st-pill st-pill-dmarcbis st-pill-active" data-mode="dmarcbis" role="radio" aria-checked="true">DMARCbis (Strict)</button>
             </div>
         </div>
         ${deltaDmarcbis}
@@ -1079,6 +1179,7 @@ document.addEventListener('click', function(e) {
     const bar = pill.closest('.st-toggle-bar');
     bar.querySelectorAll('.st-pill').forEach(p => p.classList.remove('st-pill-active'));
     pill.classList.add('st-pill-active');
+    bar.querySelectorAll('.st-pill').forEach(p => p.setAttribute('aria-checked', p === pill ? 'true' : 'false'));
 
     // Find the parent card
     const card = pill.closest('.result-card');
@@ -1249,6 +1350,11 @@ function renderDmarcTagBreakdown(bd) {
                 </div>
                 ${reasonsHtml ? `<div class="rb-verdict-reasons">${reasonsHtml}</div>` : ''}
             </div>`;
+
+        // Comparison intelligence callout inside verdict
+        if (bd.comparison_intelligence) {
+            verdictHtml += renderComparisonIntelligence(bd.comparison_intelligence);
+        }
     }
 
     // --- Tag rows ---
@@ -1402,6 +1508,26 @@ function renderDmarcTagBreakdown(bd) {
                     const active = v.status === sec.current_verdict ? ' wd-scale-active' : '';
                     body += `<span class="wd-scale-item wd-scale-${v.color}${active}">${escapeHtml(v.label)}</span>`;
                 });
+                body += '</div>';
+            }
+            // DMARCbis Adoption mini-stat block
+            if (sec.adoption_stats) {
+                body += '<div class="ci-adoption-block">';
+                body += '<div class="ci-adoption-title">DMARCbis Adoption Among Top 1000</div>';
+                sec.adoption_stats.forEach(stat => {
+                    const barWidth = Math.max(stat.pct, 0.5);
+                    body += `
+                        <div class="ci-adoption-row">
+                            <span class="ci-adoption-label">${escapeHtml(stat.tag)}</span>
+                            <div class="ci-adoption-bar-track">
+                                <div class="ci-adoption-bar-fill" style="width: ${barWidth}%"></div>
+                            </div>
+                            <span class="ci-adoption-pct">${stat.pct}%</span>
+                        </div>`;
+                });
+                if (sec.adoption_tagline) {
+                    body += `<div class="ci-adoption-tagline">${escapeHtml(sec.adoption_tagline)}</div>`;
+                }
                 body += '</div>';
             }
             sectionsHtml += `
@@ -1897,6 +2023,60 @@ function renderDmarcbisReadiness(readiness) {
             </div>
             <div class="dbis-checklist">${checklistHtml}</div>
             ${suggestedHtml}
+        </div>`;
+}
+
+// ============================================================
+// Domain Comparison Intelligence (Prompt 14)
+// ============================================================
+
+function renderComparisonIntelligence(ci) {
+    if (!ci) return '';
+
+    // Position bar: a thin indicator showing where this domain sits (0-100)
+    const pct = ci.position_pct;
+    const barColor = pct >= 75 ? 'var(--pass)' : pct >= 40 ? 'var(--warn)' : 'var(--fail)';
+
+    // Adoption mini-stats
+    let adoptionHtml = '';
+    if (ci.adoption_stats && ci.adoption_stats.length > 0) {
+        let rows = '';
+        ci.adoption_stats.forEach(stat => {
+            const w = Math.max(stat.adoption_pct, 0.5);
+            rows += `
+                <div class="ci-adoption-row">
+                    <span class="ci-adoption-label">${escapeHtml(stat.label)}</span>
+                    <div class="ci-adoption-bar-track">
+                        <div class="ci-adoption-bar-fill" style="width: ${w}%"></div>
+                    </div>
+                    <span class="ci-adoption-pct">${stat.adoption_pct}%</span>
+                </div>`;
+        });
+
+        adoptionHtml = `
+            <details class="ci-adoption-details">
+                <summary class="ci-adoption-summary">DMARCbis Adoption Among Top 1000</summary>
+                <div class="ci-adoption-block">
+                    ${rows}
+                    <div class="ci-adoption-tagline">${escapeHtml(ci.adoption_tagline)}</div>
+                </div>
+            </details>`;
+    }
+
+    return `
+        <div class="ci-block">
+            <div class="ci-statement">${escapeHtml(ci.position_statement)}</div>
+            <div class="ci-position">
+                <div class="ci-bar-track">
+                    <div class="ci-bar-marker" style="left: ${pct}%; background: ${barColor};"></div>
+                </div>
+                <div class="ci-bar-labels">
+                    <span class="ci-bar-label-left">No DMARC</span>
+                    <span class="ci-bar-label-mid">${escapeHtml(ci.position_label)}</span>
+                    <span class="ci-bar-label-right">DMARCbis Ready</span>
+                </div>
+            </div>
+            ${adoptionHtml}
         </div>`;
 }
 
@@ -2695,7 +2875,12 @@ function _buildShareDropdownItems() {
 function _copyToClipboard(text, feedbackEl, origLabel) {
     if (navigator.clipboard) {
         navigator.clipboard.writeText(text).then(() => {
-            if (feedbackEl) { feedbackEl.textContent = 'Copied!'; setTimeout(() => feedbackEl.textContent = origLabel, 2000); }
+            if (feedbackEl) {
+                feedbackEl.textContent = 'Copied!';
+                const btnEl = feedbackEl.closest('.copy-btn') || feedbackEl;
+                btnEl.classList.add('copied');
+                setTimeout(() => { feedbackEl.textContent = origLabel; btnEl.classList.remove('copied'); }, 2000);
+            }
         }).catch(() => _copyFallback(text, feedbackEl, origLabel));
     } else {
         _copyFallback(text, feedbackEl, origLabel);
@@ -2711,7 +2896,12 @@ function _copyFallback(text, feedbackEl, origLabel) {
     ta.select();
     try {
         document.execCommand('copy');
-        if (feedbackEl) { feedbackEl.textContent = 'Copied!'; setTimeout(() => feedbackEl.textContent = origLabel, 2000); }
+        if (feedbackEl) {
+            feedbackEl.textContent = 'Copied!';
+            const btnEl = feedbackEl.closest('.copy-btn') || feedbackEl;
+            btnEl.classList.add('copied');
+            setTimeout(() => { feedbackEl.textContent = origLabel; btnEl.classList.remove('copied'); }, 2000);
+        }
     } catch {
         if (feedbackEl) { feedbackEl.textContent = 'Failed'; setTimeout(() => feedbackEl.textContent = origLabel, 2000); }
     }
@@ -2768,5 +2958,127 @@ function sanitizeHtml(html) {
 
     clean(tmp);
     return tmp.innerHTML;
+}
+
+// ============================================================
+// Provider Intelligence (Prompt 19)
+// ============================================================
+
+function renderProviderIntelligence(pi) {
+    const section = document.getElementById('provider-intelligence-section');
+    const content = document.getElementById('provider-intelligence-content');
+    if (!section || !content) return;
+    content.innerHTML = '';
+
+    if (!pi || (!pi.primary_providers?.length && !pi.sending_services?.length)) {
+        section.style.display = 'none';
+        return;
+    }
+
+    section.style.display = 'block';
+    let html = '';
+
+    // Gateway + upstream note
+    if (pi.gateway_upstream) {
+        html += `<div class="pi-gateway-note">
+            <span class="pi-gateway-icon">&#8644;</span>
+            <span>${escapeHtml(pi.gateway_upstream.note)}</span>
+        </div>`;
+    }
+
+    // Primary providers
+    if (pi.primary_providers && pi.primary_providers.length > 0) {
+        for (const p of pi.primary_providers) {
+            html += _renderProviderCard(p, true);
+        }
+    }
+
+    // Sending services
+    if (pi.sending_services && pi.sending_services.length > 0) {
+        html += `<div class="pi-sending-header">Sending Services</div>`;
+        html += `<div class="pi-sending-grid">`;
+        for (const p of pi.sending_services) {
+            html += _renderProviderCard(p, false);
+        }
+        html += `</div>`;
+    }
+
+    content.innerHTML = html;
+
+    // Wire up collapsible guidance sections
+    content.querySelectorAll('.pi-guidance-toggle').forEach(btn => {
+        btn.addEventListener('click', () => {
+            const body = btn.nextElementSibling;
+            const expanded = btn.getAttribute('aria-expanded') === 'true';
+            btn.setAttribute('aria-expanded', String(!expanded));
+            body.style.display = expanded ? 'none' : 'block';
+            btn.querySelector('.pi-chevron').textContent = expanded ? '\u25B6' : '\u25BC';
+        });
+    });
+}
+
+function _renderProviderCard(provider, showScorecard) {
+    const categoryColors = {
+        mailbox: 'pi-cat-mailbox',
+        gateway: 'pi-cat-gateway',
+        sending: 'pi-cat-sending',
+    };
+    const catClass = categoryColors[provider.category] || 'pi-cat-sending';
+    const sources = provider.detected_via.map(s => escapeHtml(s)).join(', ');
+
+    let html = `<div class="pi-card ${showScorecard ? 'pi-card-primary' : 'pi-card-compact'}">
+        <div class="pi-card-header">
+            <div class="pi-provider-info">
+                <span class="pi-provider-name">${escapeHtml(provider.name)}</span>
+                <span class="pi-category-badge ${catClass}">${escapeHtml(provider.category_label)}</span>
+            </div>
+            <div class="pi-detected-via">Detected via ${sources}</div>
+        </div>`;
+
+    // Guidance (collapsible)
+    if (provider.guidance && provider.guidance.length > 0) {
+        html += `<button class="pi-guidance-toggle" aria-expanded="false">
+            <span class="pi-chevron">&#9654;</span> Platform Guidance
+        </button>
+        <div class="pi-guidance-body" style="display:none">`;
+        for (const g of provider.guidance) {
+            html += `<div class="pi-guidance-item">
+                <span class="pi-guidance-topic">${escapeHtml(g.topic)}</span>
+                <span class="pi-guidance-text">${escapeHtml(g.text)}</span>
+            </div>`;
+        }
+        html += `</div>`;
+    }
+
+    // Scorecard (only for primary providers)
+    if (showScorecard && provider.scorecard && provider.scorecard.length > 0) {
+        html += `<div class="pi-scorecard">
+            <table class="pi-scorecard-table">
+                <thead>
+                    <tr>
+                        <th>Feature</th>
+                        <th>Provider Supports</th>
+                        <th>Domain Enabled</th>
+                    </tr>
+                </thead>
+                <tbody>`;
+        for (const row of provider.scorecard) {
+            const supportsIcon = row.provider_supports ? '\u2705' : '\u274C';
+            let domainIcon;
+            if (row.domain_status === 'yes') domainIcon = '\u2705';
+            else if (row.domain_status === 'no') domainIcon = '\u26A0\uFE0F';
+            else if (row.domain_status === 'n/a') domainIcon = 'N/A';
+            else domainIcon = '\u2014';
+            html += `<tr>
+                <td>${escapeHtml(row.feature)}</td>
+                <td class="pi-sc-center">${supportsIcon}</td>
+                <td class="pi-sc-center">${domainIcon}</td>
+            </tr>`;
+        }
+        html += `</tbody></table></div>`;
+    }
+
+    html += `</div>`;
+    return html;
 }
 

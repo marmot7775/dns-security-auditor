@@ -7,5 +7,5 @@ from dns_tools import normalize_domain
 
 def test_normalize_domain_basic():
     assert normalize_domain("EXAMPLE.com") == "example.com"
-    assert normalize_domain("https://www.example.com/path") == "example.com"
+    assert normalize_domain("https://www.example.com/path") == "www.example.com"
     assert normalize_domain("example.com.") == "example.com"

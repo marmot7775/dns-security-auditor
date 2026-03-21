@@ -62,6 +62,7 @@ from result_transformer import (
     transform_blacklist,
     build_security_roadmap,
     build_executive_summary,
+    _build_provider_intelligence,
 )
 
 
@@ -154,6 +155,11 @@ def _get_dnssec_resolver(timeout: float = 8.0):
 
 
 def _lookup_txt(name: str) -> List[str]:
+    """Look up TXT records, correctly concatenating multi-string records.
+
+    Multi-string TXT records (split across 255-byte chunks) are joined
+    WITHOUT adding spaces, per RFC 7489 Section 6.1.
+    """
     try:
         resolver = _get_resolver()
         answers = resolver.resolve(name, "TXT")
@@ -162,13 +168,25 @@ def _lookup_txt(name: str) -> List[str]:
             parts = []
             for s in rdata.strings:
                 parts.append(s.decode("utf-8") if isinstance(s, bytes) else str(s))
+            # Concatenate WITHOUT spaces -- critical for split DMARC records
             txt = "".join(parts)
             # Some resolvers escape semicolons in TXT records (\;).
             # Normalize so downstream parsers split correctly.
             txt = txt.replace("\\;", ";")
             records.append(txt)
         return records
-    except dns.exception.DNSException:
+    except dns.resolver.NXDOMAIN:
+        return []
+    except dns.resolver.NoAnswer:
+        return []
+    except dns.resolver.NoNameservers:
+        log.debug("SERVFAIL/REFUSED for TXT lookup: %s", name)
+        return []
+    except dns.exception.Timeout:
+        log.debug("Timeout for TXT lookup: %s", name)
+        return []
+    except dns.exception.DNSException as e:
+        log.debug("DNS error for TXT lookup %s: %s", name, e)
         return []
 
 
@@ -517,9 +535,56 @@ def _raw_check_dmarc(domain: str) -> Dict[str, Any]:
             "fix": fix,
         })
 
+    # ── Step 0: CNAME detection ────────────────────────────────
+    dmarc_fqdn = f"_dmarc.{domain}"
+    try:
+        resolver = _get_resolver()
+        cname_answers = resolver.resolve(dmarc_fqdn, "CNAME")
+        cname_target = str(cname_answers[0].target).rstrip(".")
+        result["cname_target"] = cname_target
+        _add_issue(
+            "info",
+            f"DMARC record is aliased via CNAME to {cname_target}",
+            f"The DMARC record at {dmarc_fqdn} is a CNAME pointing to "
+            f"{cname_target}. This is a supported configuration commonly used "
+            "with managed DMARC services. The actual record is fetched from the "
+            "CNAME target.",
+            "No action needed. CNAME-based DMARC delegation is valid.",
+        )
+    except dns.exception.DNSException:
+        pass  # No CNAME -- normal case
+
     # ── Step 1: Lookup ──────────────────────────────────────────
-    dmarc_recs = _lookup_txt(f"_dmarc.{domain}")
+    dmarc_recs = _lookup_txt(dmarc_fqdn)
     dmarc_records = [r for r in dmarc_recs if r.strip().lower().startswith("v=dmarc")]
+
+    # Note any non-DMARC TXT records at the _dmarc subdomain
+    non_dmarc_txt = [r for r in dmarc_recs if not r.strip().lower().startswith("v=dmarc")]
+    if non_dmarc_txt:
+        result["non_dmarc_txt_count"] = len(non_dmarc_txt)
+        _add_issue(
+            "info",
+            f"{len(non_dmarc_txt)} non-DMARC TXT record(s) at {dmarc_fqdn}",
+            f"Found {len(non_dmarc_txt)} TXT record(s) at {dmarc_fqdn} that "
+            "do not start with 'v=DMARC1'. These are not DMARC records and "
+            "are ignored by DMARC processors. They may be misconfigured SPF "
+            "or other records accidentally placed at the wrong subdomain.",
+            f"Review the non-DMARC TXT records at {dmarc_fqdn} and remove "
+            "any that were placed there by mistake.",
+        )
+
+    # Detect wildcard DMARC records (not valid for DMARC)
+    if "*" in domain:
+        _add_issue(
+            "warning",
+            "Wildcard DMARC records are not supported",
+            "DMARC does not support wildcard records. A record at "
+            "_dmarc.*.example.com will not be discovered during DMARC "
+            "policy lookup. Each subdomain must have its own DMARC record "
+            "or inherit from the organizational domain.",
+            "Remove the wildcard and publish DMARC records on specific "
+            "subdomains, or rely on policy inheritance from the org domain.",
+        )
 
     if not dmarc_records:
         result["status"] = "error"
@@ -556,6 +621,20 @@ def _raw_check_dmarc(domain: str) -> Dict[str, Any]:
 
     record = dmarc_records[0]
     result["record"] = record
+
+    # ── Step 2b: Long record warning ────────────────────────────
+    if len(record) > 1000:
+        _add_issue(
+            "warning",
+            f"DMARC record is very long ({len(record)} characters)",
+            "This DMARC record exceeds 1000 characters. DNS responses over "
+            "512 bytes may be truncated when using UDP transport, which could "
+            "cause some resolvers to fail to retrieve the full record. Most "
+            "modern resolvers retry over TCP, but some older or misconfigured "
+            "resolvers may not.",
+            "Consider shortening the record by consolidating report addresses "
+            "or removing unnecessary tags.",
+        )
 
     # ── Step 3: Structural / formatting syntax checks ───────────
     # These run BEFORE tag parsing because they can make parsing unreliable.
@@ -3714,6 +3793,9 @@ def run_full_audit(domain: str, dkim_selector: Optional[str] = None,
     # --- Vendor list for frontend ---
     vendors = _format_vendors(fp_vendors)
 
+    # --- Provider Intelligence (Prompt 19) ---
+    provider_intelligence = _build_provider_intelligence(raw_results, checks)
+
     # --- Enrich SPF fix text with vendor-specific includes ---
     if vendors:
         current_spf = raw_results.get("spf", {}).get("record", "") or ""
@@ -3778,6 +3860,33 @@ def run_full_audit(domain: str, dkim_selector: Optional[str] = None,
         if not check.get("pill_label"):
             check["pill_label"] = _DEFAULT_PILLS.get(check.get("status"), check.get("status", ""))
 
+    # --- Advisories ---
+    advisories = []
+
+    # www subdomain advisory
+    labels = domain.split(".")
+    if labels[0] == "www" and len(labels) > 2:
+        root_domain = ".".join(labels[1:])
+        advisories.append({
+            "type": "info",
+            "title": "Auditing www subdomain",
+            "message": (
+                f"You are auditing the www subdomain. "
+                f"To audit the root domain, use {root_domain}."
+            ),
+        })
+
+    # Partial results warning (some checks timed out or errored)
+    if errors:
+        advisories.append({
+            "type": "warning",
+            "title": "Incomplete results",
+            "message": (
+                "Some DNS queries timed out or failed. Results may be incomplete. "
+                "Try again in a few minutes."
+            ),
+        })
+
     # --- Assemble final response ---
     elapsed = (datetime.now(timezone.utc) - start_time).total_seconds()
     _roadmap = build_security_roadmap(checks)
@@ -3799,6 +3908,7 @@ def run_full_audit(domain: str, dkim_selector: Optional[str] = None,
         "anomalies": anomalies,
         "remediation_plan": remediation_plan,
         "vendors": vendors,
+        "provider_intelligence": provider_intelligence,
         "tree_walk": tree_walk_result,
         "spf_execution": spf_execution,
         "dmarc_eval": dmarc_eval,
@@ -3810,6 +3920,7 @@ def run_full_audit(domain: str, dkim_selector: Optional[str] = None,
         "resilience": resilience_result,
         "security_roadmap": _roadmap,
         "executive_summary": build_executive_summary(checks, _roadmap),
+        "advisories": advisories if advisories else None,
         "errors": errors if errors else None,
     }
 

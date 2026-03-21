@@ -237,7 +237,10 @@ DOMAIN_PATTERN = re.compile(
 
 
 def _validate_domain(domain: str) -> str:
-    """Normalize and validate a domain string."""
+    """Normalize and validate a domain string.
+
+    Handles URLs, email addresses, trailing dots, ports, and IDN domains.
+    """
     if not domain:
         raise HTTPException(status_code=400, detail="Domain parameter is required")
 
@@ -245,11 +248,28 @@ def _validate_domain(domain: str) -> str:
     d = domain.strip().lower()
     if "@" in d:
         d = d.split("@")[-1]
-    d = d.removeprefix("http://").removeprefix("https://").removeprefix("www.")
-    d = d.split("/")[0].split("?")[0].rstrip(".")
+    d = d.removeprefix("http://").removeprefix("https://")
+    d = d.split("/")[0].split("?")[0].split("#")[0]
+    # Strip port (e.g. example.com:443)
+    if ":" in d:
+        d = d.rsplit(":", 1)[0]
+    d = d.rstrip(".")
 
     if not d:
         raise HTTPException(status_code=400, detail="Invalid domain")
+
+    # Handle internationalized domain names (IDN) -- convert to punycode
+    try:
+        d = d.encode("idna").decode("ascii")
+    except (UnicodeError, UnicodeDecodeError):
+        # If IDNA encoding fails, try encoding each label individually
+        try:
+            labels = d.split(".")
+            d = ".".join(
+                label.encode("idna").decode("ascii") for label in labels
+            )
+        except (UnicodeError, UnicodeDecodeError):
+            pass  # Fall through to regex validation below
 
     if not DOMAIN_PATTERN.match(d):
         raise HTTPException(
@@ -303,19 +323,26 @@ def _preflight_dns_check(domain: str) -> Optional[Dict]:
         return {
             **_err_base,
             "error": "domain_not_found",
-            "error_message": f"The domain '{domain}' does not exist in DNS (NXDOMAIN). Check for typos.",
+            "error_message": "This domain does not exist in DNS. Verify the spelling and try again.",
         }
     except dns.resolver.NoNameservers:
         return {
             **_err_base,
             "error": "dns_broken",
-            "error_message": f"DNS for '{domain}' is not responding. The nameservers may be misconfigured or unreachable.",
+            "error_message": (
+                f"The DNS servers for '{domain}' returned an error (SERVFAIL or REFUSED). "
+                "The nameservers may be misconfigured or temporarily unreachable. "
+                "Try again in a few minutes."
+            ),
         }
     except dns.exception.Timeout:
         return {
             **_err_base,
             "error": "timeout",
-            "error_message": f"DNS queries for '{domain}' timed out. The nameservers may be slow or unreachable. Try again in a moment.",
+            "error_message": (
+                f"DNS queries for '{domain}' timed out. The nameservers may be "
+                "slow or unreachable. Try again in a few minutes."
+            ),
         }
     except dns.exception.DNSException:
         pass  # Ambiguous, let the full audit try
