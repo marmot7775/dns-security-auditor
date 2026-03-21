@@ -51,9 +51,9 @@ TEXT_TER    = colors.HexColor("#6b6b6b")
 BORDER      = colors.HexColor("#dce1e6")
 
 GRADE_COLORS = {
-    "A": colors.HexColor("#10b981"), "B": colors.HexColor("#3b82f6"),
-    "C": colors.HexColor("#f59e0b"), "D": colors.HexColor("#f97316"),
-    "F": colors.HexColor("#ef4444"),
+    "A+": colors.HexColor("#059669"), "A": colors.HexColor("#10b981"),
+    "B": colors.HexColor("#3b82f6"), "C": colors.HexColor("#f59e0b"),
+    "D": colors.HexColor("#f97316"), "F": colors.HexColor("#ef4444"),
 }
 STATUS_CLR = {"pass": PASS_CLR, "warn": WARN_CLR, "fail": FAIL_CLR}
 STATUS_BG  = {"pass": PASS_BG,  "warn": WARN_BG,  "fail": FAIL_BG}

@@ -2664,9 +2664,9 @@ def _raw_check_blacklist(domain: str, raw_results: Dict[str, Any]) -> Dict[str, 
 _shared_executor = ThreadPoolExecutor(max_workers=8)
 
 
-def _run_with_timeout(func, *args, timeout=CHECK_TIMEOUT):
+def _run_with_timeout(func, *args, timeout=CHECK_TIMEOUT, **kwargs):
     """Run a check function with a timeout. Raises TimeoutError on expiry."""
-    future = _shared_executor.submit(func, *args)
+    future = _shared_executor.submit(func, *args, **kwargs)
     return future.result(timeout=timeout)
 
 
@@ -3404,6 +3404,11 @@ def _calculate_score(raw_results: Dict, domain: str, tree_walk: Optional[Dict] =
         bimi_configured = bool(raw_results.get("bimi", {}).get("record"))
         dane_configured = bool(raw_results.get("dane", {}).get("has_tlsa"))
 
+        # DNSSEC / CAA / Nameservers for best-practices scoring
+        raw_dnssec = raw_results.get("dnssec", {})
+        raw_caa = raw_results.get("caa", {})
+        raw_ns = raw_results.get("nameservers", {})
+
         # Assemble for scorer
         audit_input = {
             "dmarc_results": dmarc_for_scorer,
@@ -3415,6 +3420,9 @@ def _calculate_score(raw_results: Dict, domain: str, tree_walk: Optional[Dict] =
             "tls_rpt": {"configured": tls_rpt_configured},
             "bimi": {"configured": bimi_configured},
             "dane": {"configured": dane_configured},
+            "dnssec": raw_dnssec,
+            "caa": raw_caa,
+            "nameservers": raw_ns,
             "has_mx": has_mx,
         }
 

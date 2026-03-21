@@ -97,6 +97,18 @@ SPF_VENDOR_MAP = {
         'dkim_selectors': ['zendesk1', 'zendesk2', 'k1'],
         'category': 'support_platform'
     },
+
+    # Omnivery / Mailkit
+    'spf.mailkit.eu': {
+        'vendor': 'Omnivery/Mailkit',
+        'dkim_selectors': ['mailkit', 'mkt', 'omnivery', 'mk'],
+        'category': 'transactional_esp'
+    },
+    'mailkit.eu': {
+        'vendor': 'Omnivery/Mailkit',
+        'dkim_selectors': ['mailkit', 'mkt', 'omnivery', 'mk'],
+        'category': 'transactional_esp'
+    },
 }
 
 def parse_spf_record(spf_record: str) -> List[str]:
