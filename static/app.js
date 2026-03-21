@@ -367,6 +367,7 @@ function renderResults(data) {
         gradeEl.textContent = grade;
         gradeEl.style.fontSize = '';
         const gradeColors = {
+            'A+': { bg: '#ecfdf5', border: '#059669', text: '#064e3b' },
             'A': { bg: '#ecfdf5', border: '#10b981', text: '#065f46' },
             'B': { bg: '#eff6ff', border: '#3b82f6', text: '#1e40af' },
             'C': { bg: '#fffbeb', border: '#f59e0b', text: '#92400e' },

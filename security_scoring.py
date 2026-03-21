@@ -56,7 +56,8 @@ class EmailSecurityScorer:
         # 2. SPF Score (20 points)
         if has_mx:
             spf_score, spf_details = self._score_spf(
-                audit_results.get('spf_results', {})
+                audit_results.get('spf_results', {}),
+                audit_results.get('dmarc_results', {})
             )
         else:
             # No MX = no mail sending expected. Give full credit if there's
@@ -183,7 +184,7 @@ class EmailSecurityScorer:
             score += 2   # Monitoring only
             details['policy'] = 'none (monitoring only)'
 
-        # Percentage -- anything below 100 on an enforcement policy is a significant gap
+        # Percentage -- staged rollouts are industry best practice
         pct = dmarc.get('pct')
         if pct is None:
             pct = 100
@@ -191,14 +192,21 @@ class EmailSecurityScorer:
             score += 5
             details['percentage'] = '100% (full enforcement)'
         elif pct >= 75:
-            score += 2
-            details['percentage'] = f'{pct}% (nearly enforcing; raise to 100)'
+            score += 4
+            details['percentage'] = f'{pct}% (enforcement rollout in progress, nearly complete)'
         elif pct >= 50:
+            score += 3
+            details['percentage'] = f'{pct}% (enforcement rollout in progress)'
+        elif pct >= 25:
+            score += 2
+            details['percentage'] = f'{pct}% (early enforcement rollout)'
+        elif pct > 0:
             score += 1
-            details['percentage'] = f'{pct}% (half of spoofed mail still gets through)'
+            details['percentage'] = f'{pct}% (minimal enforcement; increase gradually)'
         else:
+            # pct=0 means policy is effectively disabled
             score += 0
-            details['percentage'] = f'{pct}% (negligible enforcement; effectively monitoring only)'
+            details['percentage'] = '0% (enforcement disabled; policy has no effect)'
 
         # Reporting configured
         if dmarc.get('rua') or dmarc.get('ruf'):
@@ -225,8 +233,10 @@ class EmailSecurityScorer:
 
         return min(score, 25), details
     
-    def _score_spf(self, spf: Dict) -> Tuple[float, Dict]:
+    def _score_spf(self, spf: Dict, dmarc: Dict = None) -> Tuple[float, Dict]:
         """Score SPF configuration (20 points max)"""
+        if dmarc is None:
+            dmarc = {}
         score = 0
         details = {}
 
@@ -239,12 +249,19 @@ class EmailSecurityScorer:
 
         # All mechanism (policy)
         all_mechanism = (spf.get('all') or '').lower()
+        dmarc_enforcing = (dmarc.get('policy') or '').lower() in ('quarantine', 'reject') or \
+                          (dmarc.get('inherited_policy') or '').lower() in ('quarantine', 'reject')
+
         if all_mechanism == '-all':
             score += 8  # Hard fail -- unauthorized mail rejected
             details['all_mechanism'] = '-all (hard fail, excellent)'
         elif all_mechanism == '~all':
-            score += 6   # Soft fail -- mail tagged but still delivered
-            details['all_mechanism'] = '~all (soft fail, standard with DMARC)'
+            if dmarc_enforcing:
+                score += 8  # ~all with DMARC enforcement is best practice
+                details['all_mechanism'] = '~all (softfail + DMARC enforcement, best practice)'
+            else:
+                score += 6   # Soft fail -- mail tagged but still delivered
+                details['all_mechanism'] = '~all (soft fail, standard with DMARC)'
         elif all_mechanism == '?all':
             score += 4  # Neutral
             details['all_mechanism'] = '?all (neutral, no protection)'
@@ -314,11 +331,13 @@ class EmailSecurityScorer:
 
         found_selectors = dkim.get('found_selectors', [])
         if not found_selectors:
-            # No selectors found. Give minimal credit (5/15) since DKIM may
-            # exist but we cannot verify without the selector name.  Awarding
-            # full marks here would mean "unknown" = "pass," undermining the
-            # grade for every domain that doesn't supply a selector.
-            return 5, {'reason': 'No DKIM selectors found. Provide a selector for accurate results.', 'impact': 'UNKNOWN'}
+            # DKIM selectors are private and cannot be enumerated from outside.
+            # Not finding keys does not mean they don't exist, but we cannot
+            # award full credit for something we cannot verify. Partial credit.
+            return 10, {
+                'reason': 'DKIM selectors are not publicly enumerable. Partial credit awarded.',
+                'impact': 'UNKNOWN'
+            }
 
         # Has at least one key: +6 points
         score += 6
@@ -368,8 +387,7 @@ class EmailSecurityScorer:
 
         found_selectors = dkim.get('found_selectors', [])
         if not found_selectors:
-            # Can't evaluate key security without visible keys.
-            return 3, {'reason': 'No keys detected to evaluate. Provide a selector for accurate results.'}
+            return 5, {'reason': 'No keys detected to evaluate (selectors are not publicly enumerable)'}
 
         # Key age/rotation status
         overdue = key_age.get('overdue', 0)
@@ -440,35 +458,56 @@ class EmailSecurityScorer:
         score = 0
         details = {}
 
-        # MTA-STS configured -- check for txt_record or configured flag
+        # MTA-STS configured (5 points)
         mta_sts = audit_results.get('mta_sts', {})
         if mta_sts.get('configured') or mta_sts.get('txt_record'):
-            score += 8
+            score += 5
             details['mta_sts'] = 'Configured'
 
-        # TLS-RPT configured -- check for record or configured flag
+        # TLS-RPT configured (5 points)
         tls_rpt = audit_results.get('tls_rpt', {})
         if tls_rpt.get('configured') or tls_rpt.get('record'):
-            score += 8
+            score += 5
             details['tls_rpt'] = 'Configured'
 
-        # DANE configured
+        # DANE configured (3 points)
         dane = audit_results.get('dane', {})
         if dane.get('configured'):
-            score += 4
+            score += 3
             details['dane'] = 'Configured'
+
+        # DNSSEC enabled (4 points)
+        dnssec = audit_results.get('dnssec', {})
+        if dnssec.get('has_dnssec'):
+            score += 4
+            details['dnssec'] = 'Enabled'
+
+        # CAA records published (2 points)
+        caa = audit_results.get('caa', {})
+        if (caa.get('record_count') or 0) > 0:
+            score += 2
+            details['caa'] = 'Configured'
+
+        # Nameserver diversity (1 point)
+        ns = audit_results.get('nameservers', {})
+        ns_count = ns.get('ns_count') or 0
+        if ns_count >= 3:
+            score += 1
+            details['ns_diversity'] = f'{ns_count} nameservers'
 
         return min(score, 20), details
     
     def _calculate_grade(self, score: float) -> str:
         """Convert score to letter grade"""
-        if score >= 85:
+        if score >= 90:
+            return 'A+'
+        elif score >= 80:
             return 'A'
-        elif score >= 70:
+        elif score >= 65:
             return 'B'
-        elif score >= 55:
+        elif score >= 50:
             return 'C'
-        elif score >= 40:
+        elif score >= 35:
             return 'D'
         else:
             return 'F'
@@ -600,6 +639,7 @@ class EmailSecurityScorer:
         grade = score_result['grade']
         
         grade_display = {
+            'A+': '🌟 A+ (Outstanding)',
             'A': '🌟 A (Excellent)',
             'B': '✓ B (Good)',
             'C': '⚠️  C (Fair)',
