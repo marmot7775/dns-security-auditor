@@ -1,819 +1,333 @@
 """
-PDF Audit Report Generator
-===========================
-Generates a professional branded PDF report from audit data.
-Uses FPDF2 (pure Python, zero system dependencies).
+PDF Report Generator for dns-audit.com
+
+Generates a professional, branded PDF audit report from the same JSON
+structure the frontend uses.
+
+Usage:
+    from pdf_report import generate_pdf
+    pdf_bytes = generate_pdf(audit_result_dict)
+
+Wire into server.py:
+    @app.get("/api/audit/{domain}/pdf")
+    async def audit_pdf(domain: str, scope: str = "complete", selector: str = None):
+        result = audit_dns_security(domain, scope=scope,
+                    dkim_selectors=[selector] if selector else None)
+        pdf = generate_pdf(result)
+        return Response(content=pdf, media_type="application/pdf",
+                        headers={"Content-Disposition":
+                            f'attachment; filename="dns-audit-{domain}.pdf"'})
 """
 
 import io
-import logging
-import math
+import re
 from datetime import datetime, timezone
-from pathlib import Path
-from typing import Any, Dict, List, Optional
 
-from fpdf import FPDF
+from reportlab.lib import colors
+from reportlab.lib.enums import TA_LEFT, TA_CENTER, TA_RIGHT
+from reportlab.lib.pagesizes import letter
+from reportlab.lib.styles import ParagraphStyle
+from reportlab.lib.units import inch
+from reportlab.platypus import (
+    SimpleDocTemplate, Paragraph, Spacer, Table, TableStyle,
+    KeepTogether, HRFlowable,
+)
 
-# Suppress verbose font subsetting logs from fonttools
-logging.getLogger("fontTools").setLevel(logging.WARNING)
-
-
-# ============================================================
-# Constants
-# ============================================================
-
-FONTS_DIR = Path(__file__).parent / "static" / "fonts"
-
-# Print-safe colors
-COLORS = {
-    "pass":       (5, 150, 105),     # #059669 emerald
-    "warn":       (217, 119, 6),     # #d97706 amber
-    "fail":       (220, 38, 38),     # #dc2626 red
-    "text":       (26, 26, 26),      # #1a1a1a
-    "text_sec":   (77, 77, 77),      # #4d4d4d
-    "text_dim":   (125, 125, 125),   # #7d7d7d
-    "border":     (220, 225, 230),   # #dce1e6
-    "bg":         (244, 246, 248),   # #f4f6f8
-    "surface":    (255, 255, 255),
-    "record_bg":  (26, 30, 36),      # #1a1e24
-    "record_txt": (223, 227, 235),   # #dfe3eb
-    "primary":    (10, 61, 107),     # #0a3d6b
-    "primary_lt": (26, 92, 148),     # #1a5c94
-}
+# -- Brand colors --
+NAVY        = colors.HexColor("#0a3d6b")
+PASS_CLR    = colors.HexColor("#1a8a6a")
+PASS_BG     = colors.HexColor("#edf8f4")
+WARN_CLR    = colors.HexColor("#7a6a1e")
+WARN_BG     = colors.HexColor("#f9f7ec")
+FAIL_CLR    = colors.HexColor("#9b4040")
+FAIL_BG     = colors.HexColor("#fdf3f3")
+FIX_BG      = colors.HexColor("#edf4f0")
+FIX_BORDER  = colors.HexColor("#1a8a6a")
+RECORD_BG   = colors.HexColor("#1b1e24")
+RECORD_FG   = colors.HexColor("#dfe3eb")
+TEXT_PRI    = colors.HexColor("#1a1a1a")
+TEXT_SEC    = colors.HexColor("#4d4d4d")
+TEXT_TER    = colors.HexColor("#6b6b6b")
+BORDER      = colors.HexColor("#dce1e6")
 
 GRADE_COLORS = {
-    "A": {"bg": (236, 253, 245), "border": (16, 185, 129), "text": (6, 95, 70)},
-    "B": {"bg": (239, 246, 255), "border": (59, 130, 246), "text": (30, 64, 175)},
-    "C": {"bg": (255, 251, 235), "border": (245, 158, 11), "text": (146, 64, 14)},
-    "D": {"bg": (255, 247, 237), "border": (249, 115, 22), "text": (154, 52, 18)},
-    "F": {"bg": (254, 242, 242), "border": (239, 68, 68), "text": (153, 27, 27)},
+    "A": colors.HexColor("#10b981"), "B": colors.HexColor("#3b82f6"),
+    "C": colors.HexColor("#f59e0b"), "D": colors.HexColor("#f97316"),
+    "F": colors.HexColor("#ef4444"),
 }
-
-
-# ============================================================
-# HTML tag stripping
-# ============================================================
-
-def _strip_html(text: str) -> str:
-    """Remove HTML tags and decode entities for PDF rendering."""
-    import re
-    import html as html_mod
-    text = re.sub(r"<br\s*/?>", "\n", text)
-    text = re.sub(r"<[^>]+>", "", text)
-    text = html_mod.unescape(text)
-    return text
-
-
-# ============================================================
-# PDF Report Class
-# ============================================================
-
-class AuditPDFReport(FPDF):
-    """Professional DNS security audit PDF report."""
-
-    def __init__(self, data: Dict[str, Any]):
-        super().__init__()
-        self.data = data
-        self.domain = data.get("domain", "unknown")
-        self.grade = data.get("score", {}).get("grade", "?")
-        self.score = data.get("score", {}).get("total", 0)
-        self.checks = data.get("checks", [])
-        self.priority_fixes = data.get("priority_fixes", [])
-        self.vendors = data.get("vendors", [])
-        self.anomalies = data.get("anomalies") or []
-        self.remediation_plan = data.get("remediation_plan") or {}
-        self.resilience = data.get("resilience") or {}
-        self.score_data = data.get("score", {})
-        self._records_for_appendix = []
-
-        # Register fonts
-        self._register_fonts()
-
-        # Page setup
-        self.set_auto_page_break(auto=True, margin=20)
-        self.set_margins(20, 15, 20)
-
-    def _register_fonts(self):
-        """Register bundled fonts, fallback to Helvetica."""
-        dm_regular = FONTS_DIR / "DMSans-Regular.ttf"
-        dm_bold = FONTS_DIR / "DMSans-Bold.ttf"
-        jb_mono = FONTS_DIR / "JetBrainsMono-Regular.ttf"
-
-        if dm_regular.exists():
-            self.add_font("DMSans", "", str(dm_regular), uni=True)
-        if dm_bold.exists():
-            self.add_font("DMSans", "B", str(dm_bold), uni=True)
-        if jb_mono.exists():
-            self.add_font("JBMono", "", str(jb_mono), uni=True)
-
-        # Set defaults
-        self._font_body = "DMSans" if dm_regular.exists() else "Helvetica"
-        self._font_mono = "JBMono" if jb_mono.exists() else "Courier"
-
-    def header(self):
-        """Page header with thin branded bar."""
-        # Skip header on page 1 (has its own branding)
-        if self.page_no() == 1:
-            return
-        self.set_fill_color(*COLORS["primary"])
-        self.rect(0, 0, 210, 3, "F")
-        self.set_y(8)
-        self.set_font(self._font_body, "B", 8)
-        self.set_text_color(*COLORS["primary"])
-        self.cell(0, 5, f"DNS Security Audit | {self.domain}", align="L")
-        self.ln(10)
-
-    def footer(self):
-        """Page footer with branding and page number."""
-        self.set_y(-15)
-        self.set_font(self._font_body, "", 7)
-        self.set_text_color(*COLORS["text_dim"])
-        self.cell(0, 5, f"Generated by dns-audit.com  |  Page {self.page_no()} of {{nb}}", align="C")
-
-    # ============================================================
-    # Page 1: Executive Summary
-    # ============================================================
-
-    def _render_executive_summary(self):
-        """Render the executive summary page."""
-        self.add_page()
-
-        # Top accent bar
-        self.set_fill_color(*COLORS["primary"])
-        self.rect(0, 0, 210, 4, "F")
-
-        # Logo area
-        self.set_y(14)
-        self.set_font(self._font_body, "B", 22)
-        self.set_text_color(*COLORS["primary"])
-        self.cell(0, 10, "DNS Security Audit Report", align="C", new_x="LMARGIN", new_y="NEXT")
-
-        # Branding
-        self.set_font(self._font_body, "", 9)
-        self.set_text_color(*COLORS["text_dim"])
-        self.cell(0, 5, "dns-audit.com", align="C", new_x="LMARGIN", new_y="NEXT")
-        self.ln(8)
-
-        # Domain name
-        self.set_font(self._font_body, "B", 18)
-        self.set_text_color(*COLORS["text"])
-        self.cell(0, 10, self.domain, align="C", new_x="LMARGIN", new_y="NEXT")
-
-        # Timestamp
-        self.set_font(self._font_body, "", 9)
-        self.set_text_color(*COLORS["text_dim"])
-        ts = datetime.now(timezone.utc).strftime("%B %d, %Y at %H:%M UTC")
-        self.cell(0, 5, f"Audited: {ts}", align="C", new_x="LMARGIN", new_y="NEXT")
-        self.ln(10)
-
-        # Grade circle
-        self._render_grade_circle()
-        self.ln(8)
-
-        # Summary stats bar
-        self._render_summary_bar()
-        self.ln(10)
-
-        # Risk level
-        self._render_risk_level()
-        self.ln(6)
-
-        # Category score breakdown
-        self._render_category_breakdown()
-        self.ln(6)
-
-        # Priority fixes
-        if self.priority_fixes:
-            self._render_priority_fixes()
-            self.ln(6)
-
-        # Vendors
-        if self.vendors:
-            self._render_vendors()
-
-    def _render_grade_circle(self):
-        """Draw a large grade indicator."""
-        gc = GRADE_COLORS.get(self.grade, GRADE_COLORS.get("F"))
-        cx = 105  # center of page
-        cy = self.get_y() + 22
-        r = 20
-
-        # Background circle
-        self.set_fill_color(*gc["bg"])
-        self.set_draw_color(*gc["border"])
-        self.set_line_width(1.5)
-        self.circle(cx, cy, r, style="FD")
-
-        # Grade letter
-        self.set_font(self._font_body, "B", 32)
-        self.set_text_color(*gc["text"])
-        self.set_y(cy - 10)
-        self.cell(0, 16, self.grade, align="C", new_x="LMARGIN", new_y="NEXT")
-
-        # Score below
-        self.set_font(self._font_body, "", 10)
-        self.set_text_color(*gc["text"])
-        self.cell(0, 6, f"{round(self.score)} / 100", align="C", new_x="LMARGIN", new_y="NEXT")
-
-        self.set_y(cy + r + 4)
-
-    def _render_summary_bar(self):
-        """Render pass/warn/fail summary as colored boxes in a row."""
-        pass_count = sum(1 for c in self.checks if c.get("status") == "pass")
-        warn_count = sum(1 for c in self.checks if c.get("status") == "warn")
-        fail_count = sum(1 for c in self.checks if c.get("status") == "fail")
-
-        box_w = 50
-        gap = 5
-        total_w = box_w * 3 + gap * 2
-        start_x = (210 - total_w) / 2
-        row_y = self.get_y()  # fixed y for entire row
-
-        for i, (label, count, color) in enumerate([
-            ("Passing", pass_count, COLORS["pass"]),
-            ("Warnings", warn_count, COLORS["warn"]),
-            ("Issues", fail_count, COLORS["fail"]),
-        ]):
-            x = start_x + i * (box_w + gap)
-
-            # Box background
-            self.set_fill_color(color[0], color[1], color[2])
-            self.rect(x, row_y, box_w, 22, "F")
-
-            # Count
-            self.set_font(self._font_body, "B", 16)
-            self.set_text_color(255, 255, 255)
-            self.set_xy(x, row_y + 2)
-            self.cell(box_w, 10, str(count), align="C")
-
-            # Label
-            self.set_font(self._font_body, "", 7)
-            self.set_xy(x, row_y + 12)
-            self.cell(box_w, 6, label.upper(), align="C")
-
-        self.set_y(row_y + 26)
-
-    def _render_priority_fixes(self):
-        """Render priority fixes section."""
-        self.set_font(self._font_body, "B", 11)
-        self.set_text_color(*COLORS["fail"])
-        self.cell(0, 7, "Priority Fixes", new_x="LMARGIN", new_y="NEXT")
-        self.ln(2)
-
-        for i, fix in enumerate(self.priority_fixes, 1):
-            self.set_font(self._font_body, "B", 9)
-            self.set_text_color(*COLORS["fail"])
-            num_w = 6
-            self.cell(num_w, 5, f"{i}.")
-
-            self.set_font(self._font_body, "", 9)
-            self.set_text_color(*COLORS["text"])
-            self.multi_cell(0, 5, _strip_html(fix), new_x="LMARGIN", new_y="NEXT")
-            self.ln(1)
-
-    def _render_vendors(self):
-        """Render detected email services."""
-        self.set_font(self._font_body, "B", 9)
-        self.set_text_color(*COLORS["text_dim"])
-        self.cell(0, 6, "DETECTED EMAIL SERVICES", new_x="LMARGIN", new_y="NEXT")
-        self.ln(2)
-
-        vendor_parts = []
-        for v in self.vendors:
-            name = v.get("name", "Unknown")
-            vendor_parts.append(name)
-
-        self.set_font(self._font_body, "", 9)
-        self.set_text_color(*COLORS["text_sec"])
-        self.multi_cell(0, 5, " · ".join(vendor_parts), new_x="LMARGIN", new_y="NEXT")
-
-    def _render_risk_level(self):
-        """Render risk level badge based on grade."""
-        risk_map = {
-            "A": ("Low", COLORS["pass"]),
-            "B": ("Low", COLORS["pass"]),
-            "C": ("Medium", COLORS["warn"]),
-            "D": ("High", COLORS["fail"]),
-            "F": ("Critical", COLORS["fail"]),
-        }
-        risk_label, risk_color = risk_map.get(self.grade, ("Unknown", COLORS["text_dim"]))
-
-        self.set_font(self._font_body, "B", 9)
-        self.set_text_color(*COLORS["text_dim"])
-        self.cell(0, 6, "RISK LEVEL", align="C", new_x="LMARGIN", new_y="NEXT")
-
-        self.set_font(self._font_body, "B", 12)
-        self.set_text_color(*risk_color)
-        self.cell(0, 7, risk_label, align="C", new_x="LMARGIN", new_y="NEXT")
-
-    def _render_category_breakdown(self):
-        """Render category score bars."""
-        category_scores = self.score_data.get("category_scores") or {}
-        if not category_scores:
-            return
-
-        weights = {
-            "dmarc": 25, "spf": 20, "dkim": 15,
-            "best_practices": 20, "key_security": 10, "vendor_intelligence": 10,
-        }
-        labels = {
-            "dmarc": "DMARC", "spf": "SPF", "dkim": "DKIM",
-            "best_practices": "Best Practices", "key_security": "Key Security",
-            "vendor_intelligence": "Vendor Intel",
-        }
-
-        self.set_font(self._font_body, "B", 9)
-        self.set_text_color(*COLORS["text_dim"])
-        self.cell(0, 6, "SCORE BREAKDOWN", new_x="LMARGIN", new_y="NEXT")
-        self.ln(2)
-
-        x = self.l_margin
-        bar_w = 100
-        label_w = 45
-        score_w = 25
-
-        for cat_key in ["dmarc", "spf", "dkim", "best_practices", "key_security", "vendor_intelligence"]:
-            cat_score = category_scores.get(cat_key, 0)
-            max_score = weights.get(cat_key, 10)
-            label = labels.get(cat_key, cat_key)
-            pct = min(cat_score / max_score, 1.0) if max_score > 0 else 0
-
-            # Label
-            self.set_font(self._font_body, "", 8)
-            self.set_text_color(*COLORS["text_sec"])
-            self.set_x(x)
-            self.cell(label_w, 5, label)
-
-            # Bar background
-            bar_y = self.get_y() + 0.5
-            self.set_fill_color(*COLORS["bg"])
-            self.rect(x + label_w, bar_y, bar_w, 4, "F")
-
-            # Bar fill
-            fill_color = COLORS["pass"] if pct >= 0.7 else COLORS["warn"] if pct >= 0.4 else COLORS["fail"]
-            self.set_fill_color(*fill_color)
-            if pct > 0:
-                self.rect(x + label_w, bar_y, bar_w * pct, 4, "F")
-
-            # Score text
-            self.set_font(self._font_body, "", 7)
-            self.set_text_color(*COLORS["text_dim"])
-            self.set_xy(x + label_w + bar_w + 3, self.get_y())
-            self.cell(score_w, 5, f"{cat_score:.0f}/{max_score}")
-
-            self.ln(6)
-
-    # ============================================================
-    # Authentication Resilience
-    # ============================================================
-
-    def _render_resilience(self):
-        """Render the authentication resilience section."""
-        if not self.resilience:
-            return
-
-        level = self.resilience.get("level", "")
-        summary = self.resilience.get("summary", "")
-        risk = self.resilience.get("risk", "")
-        mechanisms = self.resilience.get("mechanisms", {})
-
-        if not summary:
-            return
-
-        if self.get_y() > 240:
-            self.add_page()
-
-        # Header
-        self.set_font(self._font_body, "B", 11)
-        self.set_text_color(*COLORS["primary"])
-        self.cell(0, 7, "Authentication Resilience", new_x="LMARGIN", new_y="NEXT")
-        self.ln(2)
-
-        # Level badge + summary
-        level_colors = {
-            "high": COLORS["pass"],
-            "moderate": COLORS["warn"],
-            "low": COLORS["fail"],
-            "none": COLORS["fail"],
-        }
-        level_color = level_colors.get(level, COLORS["text_dim"])
-
-        self.set_font(self._font_body, "B", 9)
-        self.set_text_color(*level_color)
-        self.cell(20, 5, level.upper())
-        self.set_font(self._font_body, "", 9)
-        self.set_text_color(*COLORS["text"])
-        self.multi_cell(0, 5, summary, new_x="LMARGIN", new_y="NEXT")
-        self.ln(2)
-
-        # Mechanisms
-        x = self.l_margin
-        for name, info in mechanisms.items():
-            status = info.get("status", "")
-            note = info.get("note", "")
-            self.set_font(self._font_mono, "", 8)
-            self.set_text_color(*COLORS["text"])
-            self.set_x(x)
-            self.cell(15, 4.5, name.upper())
-            self.set_font(self._font_body, "B", 8)
-            # "not_detected" is neutral (DKIM selectors aren't enumerable), not a warning
-            s_color = COLORS["pass"] if status in ("pass", "detected", "reject", "quarantine", "not_detected") else COLORS["warn"] if status == "none" else COLORS["fail"]
-            self.set_text_color(*s_color)
-            # Map internal status strings to user-friendly labels
-            _status_labels = {"not_detected": "Unknown", "detected": "Configured"}
-            self.cell(25, 4.5, _status_labels.get(status, status))
-            if note:
-                self.set_font(self._font_body, "", 7)
-                self.set_text_color(*COLORS["text_dim"])
-                self.cell(0, 4.5, note[:80], new_x="LMARGIN", new_y="NEXT")
-            else:
-                self.ln(4.5)
-
-        # Risk text
-        if risk:
-            self.ln(2)
-            self.set_font(self._font_body, "", 8)
-            self.set_text_color(*COLORS["text_sec"])
-            self.set_x(x)
-            self.multi_cell(170, 4.5, risk, new_x="LMARGIN", new_y="NEXT")
-
-        self.ln(4)
-
-    # ============================================================
-    # Anomalies Section
-    # ============================================================
-
-    def _render_anomalies(self):
-        """Render the 'What's Unusual' anomaly section."""
-        if not self.anomalies:
-            return
-
-        if self.get_y() > 240:
-            self.add_page()
-
-        self.set_font(self._font_body, "B", 11)
-        self.set_text_color(*COLORS["primary"])
-        self.cell(0, 7, "What's Unusual", new_x="LMARGIN", new_y="NEXT")
-        self.ln(2)
-
-        severity_colors = {
-            "critical": COLORS["fail"],
-            "high": COLORS["warn"],
-            "medium": COLORS["text_dim"],
-        }
-
-        for anomaly in self.anomalies:
-            if self.get_y() > 265:
-                self.add_page()
-
-            sev = anomaly.get("severity", "medium")
-            sev_color = severity_colors.get(sev, COLORS["text_dim"])
-            x = self.l_margin
-            w = 210 - self.l_margin - self.r_margin
-
-            # Severity accent
-            self.set_fill_color(*sev_color)
-            self.rect(x, self.get_y(), 2.5, 12, "F")
-
-            # Title
-            self.set_font(self._font_body, "B", 8.5)
-            self.set_text_color(*sev_color)
-            sev_label = {"critical": "CRITICAL", "high": "HIGH", "medium": "MEDIUM"}.get(sev, sev.upper())
-            self.set_x(x + 5)
-            self.cell(18, 5, sev_label)
-
-            self.set_font(self._font_body, "B", 8.5)
-            self.set_text_color(*COLORS["text"])
-            self.cell(0, 5, anomaly.get("title", ""), new_x="LMARGIN", new_y="NEXT")
-
-            # Description
-            desc = anomaly.get("description", "")
-            if desc:
-                self.set_font(self._font_body, "", 8)
-                self.set_text_color(*COLORS["text_sec"])
-                self.set_x(x + 5)
-                self.multi_cell(w - 5, 4, desc, new_x="LMARGIN", new_y="NEXT")
-
-            # Recommendation
-            rec = anomaly.get("recommendation", "")
-            if rec:
-                self.set_font(self._font_body, "", 7.5)
-                self.set_text_color(*COLORS["pass"])
-                self.set_x(x + 5)
-                self.multi_cell(w - 5, 4, f"-> {rec}", new_x="LMARGIN", new_y="NEXT")
-
-            self.ln(3)
-
-    # ============================================================
-    # Remediation Plan
-    # ============================================================
-
-    def _render_remediation_plan(self):
-        """Render the remediation plan section."""
-        immediate = self.remediation_plan.get("immediate") or []
-        short_term = self.remediation_plan.get("short_term") or []
-        long_term = self.remediation_plan.get("long_term") or []
-
-        if not immediate and not short_term and not long_term:
-            return
-
-        self.add_page()
-
-        self.set_font(self._font_body, "B", 14)
-        self.set_text_color(*COLORS["primary"])
-        self.cell(0, 8, "Remediation Plan", new_x="LMARGIN", new_y="NEXT")
-        self.ln(4)
-
-        phases = [
-            ("Immediate Actions", immediate, COLORS["fail"]),
-            ("Short-Term (1-2 Weeks)", short_term, COLORS["warn"]),
-            ("Long-Term (1-3 Months)", long_term, COLORS["text_dim"]),
-        ]
-
-        for phase_title, steps, phase_color in phases:
-            if not steps:
-                continue
-
-            if self.get_y() > 255:
-                self.add_page()
-
-            # Phase header
-            self.set_font(self._font_body, "B", 10)
-            self.set_text_color(*phase_color)
-            self.cell(0, 7, phase_title, new_x="LMARGIN", new_y="NEXT")
-            self.ln(2)
-
-            x = self.l_margin
-            w = 210 - self.l_margin - self.r_margin
-
-            for i, step in enumerate(steps, 1):
-                if self.get_y() > 268:
-                    self.add_page()
-
-                # Step number + title
-                self.set_font(self._font_body, "B", 9)
-                self.set_text_color(*COLORS["text"])
-                self.set_x(x)
-                self.cell(8, 5, f"{i}.")
-
-                self.set_font(self._font_body, "B", 9)
-                self.cell(0, 5, step.get("title", ""), new_x="LMARGIN", new_y="NEXT")
-
-                # Description
-                desc = step.get("description", "")
-                if desc:
-                    self.set_font(self._font_body, "", 8)
-                    self.set_text_color(*COLORS["text_sec"])
-                    self.set_x(x + 8)
-                    self.multi_cell(w - 8, 4.2, desc, new_x="LMARGIN", new_y="NEXT")
-
-                # Effort + impact badges
-                effort = step.get("effort", "")
-                impact = step.get("impact", "")
-                if effort or impact:
-                    self.set_font(self._font_body, "", 7)
-                    self.set_text_color(*COLORS["text_dim"])
-                    self.set_x(x + 8)
-                    badge_text = []
-                    if effort:
-                        badge_text.append(f"Effort: {effort}")
-                    if impact:
-                        badge_text.append(f"Impact: {impact}")
-                    self.cell(0, 4, " | ".join(badge_text), new_x="LMARGIN", new_y="NEXT")
-
-                self.ln(3)
-
-            self.ln(3)
-
-    # ============================================================
-    # Appendix -- Raw DNS Records
-    # ============================================================
-
-    def _render_appendix(self):
-        """Render appendix with raw DNS records."""
-        if not self._records_for_appendix:
-            return
-
-        self.add_page()
-
-        self.set_font(self._font_body, "B", 14)
-        self.set_text_color(*COLORS["primary"])
-        self.cell(0, 8, "Appendix: Raw DNS Records", new_x="LMARGIN", new_y="NEXT")
-        self.ln(4)
-
-        x = self.l_margin
-        w = 210 - self.l_margin - self.r_margin
-
-        for entry in self._records_for_appendix:
-            if self.get_y() > 250:
-                self.add_page()
-
-            # Check name
-            self.set_font(self._font_body, "B", 9)
-            self.set_text_color(*COLORS["text"])
-            self.cell(0, 5, entry["name"], new_x="LMARGIN", new_y="NEXT")
-            self.ln(1)
-
-            # Record block
-            self._render_record_block(entry["record"], x, w)
-
-    # ============================================================
-    # Pages 2+: Detailed Findings
-    # ============================================================
-
-    def _render_check_cards(self):
-        """Render each check as a card block."""
-        self.add_page()  # Start checks on a fresh page
-
-        # Section heading
-        self.set_font(self._font_body, "B", 14)
-        self.set_text_color(*COLORS["primary"])
-        self.cell(0, 8, "Findings", new_x="LMARGIN", new_y="NEXT")
-        self.ln(4)
-
-        for check in self.checks:
-            self._render_check_card(check)
-
-    def _estimate_card_height(self, check: Dict) -> float:
-        """Estimate the height a card will occupy (approximate).
-        Records are now in the appendix, so not counted here."""
-        h = 14  # header
-        if check.get("explanation"):
-            text = _strip_html(check["explanation"])
-            chars_per_line = 85
-            h += max(1, math.ceil(len(text) / chars_per_line)) * 5 + 4
-        details = check.get("details", [])
-        h += len(details) * 5.5
-        return h
-
-    def _render_check_card(self, check: Dict):
-        """Render a single check card."""
-        estimated_h = self._estimate_card_height(check)
-
-        # Page break if card won't fit
-        if self.get_y() + estimated_h > 275:
-            self.add_page()
-
-        start_y = self.get_y()
-        x = self.l_margin
-        w = 210 - self.l_margin - self.r_margin
-
-        # Card background
-        self.set_fill_color(*COLORS["surface"])
-        self.set_draw_color(*COLORS["border"])
-        self.set_line_width(0.3)
-
-        # Status color for left accent
-        status = check.get("status", "pass")
-        status_color = COLORS.get(status, COLORS["pass"])
-
-        # Card header
-        self.set_fill_color(*status_color)
-        self.rect(x, start_y, 3, 12, "F")
-
-        self.set_xy(x + 6, start_y + 1)
-        self.set_font(self._font_body, "B", 11)
-        self.set_text_color(*COLORS["text"])
-        name = check.get("name", "")
-        self.cell(80, 6, name)
-
-        # Status pill
-        pill_label = check.get("pill_label") or {"pass": "Pass", "warn": "Warning", "fail": "Issue"}.get(status, "")
-        pill_color = status_color
-        self.set_font(self._font_body, "B", 7)
-        pill_w = self.get_string_width(pill_label) + 6
-        self.set_xy(x + 6 + 82, start_y + 2)
-        self.set_fill_color(*pill_color)
-        self.set_text_color(255, 255, 255)
-        self.cell(pill_w, 5, pill_label, fill=True, align="C")
-
-        # Verdict
-        verdict = check.get("verdict", "")
-        if verdict:
-            self.set_font(self._font_body, "", 8)
-            self.set_text_color(*COLORS["text_dim"])
-            self.set_xy(x + 6 + 82 + pill_w + 3, start_y + 2)
-            # Truncate if too long
-            max_verdict_w = w - 90 - pill_w - 6
-            if self.get_string_width(verdict) > max_verdict_w:
-                while self.get_string_width(verdict + "...") > max_verdict_w and len(verdict) > 5:
-                    verdict = verdict[:-1]
-                verdict += "..."
-            self.cell(0, 5, verdict)
-
-        self.set_y(start_y + 14)
-
-        # DNS record -- collect for appendix instead of inline
-        if check.get("record"):
-            self._records_for_appendix.append({
-                "name": check.get("name", ""),
-                "record": check["record"],
-            })
-
-        # Explanation
-        if check.get("explanation"):
-            self.set_font(self._font_body, "", 8.5)
-            self.set_text_color(*COLORS["text_sec"])
-            text = _strip_html(check["explanation"])
-            self.set_x(x)
-            self.multi_cell(w, 4.5, text, new_x="LMARGIN", new_y="NEXT")
-            self.ln(2)
-
-        # Detail items
-        for detail in check.get("details", []):
-            self._render_detail_item(detail, x, w)
-
-        self.ln(3)
-
-        # Bottom border
-        self.set_draw_color(*COLORS["border"])
-        self.set_line_width(0.2)
-        self.line(x, self.get_y(), x + w, self.get_y())
-        self.ln(4)
-
-    def _render_record_block(self, record: str, x: float, w: float):
-        """Render a DNS record in a dark terminal-style block."""
-        self.set_font(self._font_mono, "", 7)
-        content_w = w - 8
-
-        # Calculate wrapped height
-        lines = record.split("\n")
-        total_lines = 0
-        for line in lines:
-            line_w = self.get_string_width(line)
-            total_lines += max(1, math.ceil(line_w / content_w)) if line else 1
-        block_h = total_lines * 4.2 + 6
-
-        # Page break if needed
-        if self.get_y() + block_h > 275:
-            self.add_page()
-
-        y = self.get_y()
-        self.set_fill_color(*COLORS["record_bg"])
-        self.rect(x, y, w, block_h, "F")
-
-        self.set_text_color(*COLORS["record_txt"])
-        self.set_xy(x + 4, y + 3)
-        self.multi_cell(content_w, 4.2, record, align="L")
-
-        self.set_y(y + block_h + 3)
-
-    def _render_detail_item(self, detail: Dict, x: float, w: float):
-        """Render a single detail item with severity icon."""
-        dtype = detail.get("type", "info")
-        text = detail.get("text", "")
-
-        icon_map = {
-            "error": ("X", COLORS["fail"]),
-            "warning": ("!", COLORS["warn"]),
-            "good": ("+", COLORS["pass"]),
-            "info": ("-", COLORS["text_dim"]),
-        }
-        icon, color = icon_map.get(dtype, ("·", COLORS["text_dim"]))
-
-        self.set_font(self._font_body, "B", 8)
-        self.set_text_color(*color)
-        self.set_x(x + 2)
-        self.cell(5, 4.5, icon)
-
-        self.set_font(self._font_body, "", 8)
-        self.set_text_color(*color)
-        self.multi_cell(w - 10, 4.5, text, new_x="LMARGIN", new_y="NEXT")
-
-    # ============================================================
-    # Build
-    # ============================================================
-
-    def build(self) -> bytes:
-        """Generate the complete PDF and return as bytes."""
-        self.alias_nb_pages()
-
-        # Page 1: Executive Summary (enhanced with risk level + category breakdown)
-        self._render_executive_summary()
-
-        # Authentication Resilience
-        self._render_resilience()
-
-        # Anomalies -- "What's Unusual" (if any)
-        self._render_anomalies()
-
-        # Remediation Plan (if any steps)
-        self._render_remediation_plan()
-
-        # Detailed Findings (records moved to appendix)
-        self._render_check_cards()
-
-        # Appendix -- Raw DNS Records
-        self._render_appendix()
-
-        return self.output()
-
-
-# ============================================================
-# Public API
-# ============================================================
-
-def generate_audit_pdf(data: Dict[str, Any]) -> bytes:
-    """Generate a professional PDF audit report from audit data."""
-    report = AuditPDFReport(data)
-    return report.build()
+STATUS_CLR = {"pass": PASS_CLR, "warn": WARN_CLR, "fail": FAIL_CLR}
+STATUS_BG  = {"pass": PASS_BG,  "warn": WARN_BG,  "fail": FAIL_BG}
+STATUS_LBL = {"pass": "PASS",   "warn": "WARNING", "fail": "FAIL"}
+DETAIL_ICON = {"good": "\u2713", "error": "\u2717", "warning": "\u26A0", "info": "\u2022"}
+
+
+def _strip_html(t):
+    if not t: return ""
+    t = re.sub(r"<br\s*/?>", "\n", t, flags=re.IGNORECASE)
+    t = re.sub(r"<[^>]+>", "", t)
+    for old, new in [("&amp;","&"),("&lt;","<"),("&gt;",">"),("&quot;",'"'),("&#39;","'")]:
+        t = t.replace(old, new)
+    return t.strip()
+
+def _safe(t):
+    if not t: return ""
+    return str(t).replace("&","&amp;").replace("<","&lt;").replace(">","&gt;")
+
+def _sev(c):
+    return {"fail":0,"warn":1,"pass":2}.get(c.get("status","pass"),3)
+
+
+def _styles():
+    s = {}
+    s["title"]       = ParagraphStyle("T",  fontName="Helvetica-Bold",    fontSize=24, textColor=colors.white,     leading=30)
+    s["title_sub"]   = ParagraphStyle("TS", fontName="Helvetica",         fontSize=12, textColor=colors.HexColor("#b0c8e0"), leading=16)
+    s["heading"]     = ParagraphStyle("H",  fontName="Helvetica-Bold",    fontSize=15, textColor=TEXT_PRI, leading=21, spaceBefore=16, spaceAfter=5)
+    s["subheading"]  = ParagraphStyle("SH", fontName="Helvetica-Bold",    fontSize=11, textColor=NAVY,    leading=15, spaceBefore=10, spaceAfter=3)
+    s["body"]        = ParagraphStyle("B",  fontName="Helvetica",         fontSize=10.5,textColor=TEXT_SEC, leading=15, spaceBefore=2,  spaceAfter=2)
+    s["body_small"]  = ParagraphStyle("BS", fontName="Helvetica",         fontSize=9.5,textColor=TEXT_TER, leading=13, spaceBefore=1,  spaceAfter=1)
+    s["verdict"]     = ParagraphStyle("V",  fontName="Helvetica-Oblique", fontSize=10, textColor=TEXT_TER, leading=14, spaceAfter=4)
+    s["record"]      = ParagraphStyle("R",  fontName="Courier",           fontSize=8.5,textColor=RECORD_FG,leading=12.5)
+    s["fix_label"]   = ParagraphStyle("FL", fontName="Helvetica-Bold",    fontSize=8.5,textColor=PASS_CLR, leading=11, spaceAfter=2)
+    s["fix_text"]    = ParagraphStyle("FT", fontName="Helvetica",         fontSize=10.5,textColor=TEXT_PRI, leading=15)
+    s["pfix_num"]    = ParagraphStyle("PN", fontName="Helvetica-Bold",    fontSize=10.5,textColor=FAIL_CLR, leading=15)
+    s["pfix_txt"]    = ParagraphStyle("PT", fontName="Helvetica",         fontSize=10.5,textColor=TEXT_PRI, leading=15)
+    for k, clr in [("good",PASS_CLR),("warning",WARN_CLR),("error",FAIL_CLR),("info",TEXT_SEC)]:
+        s[f"d_{k}"] = ParagraphStyle(f"D{k}", fontName="Helvetica", fontSize=10, textColor=clr, leading=14, spaceBefore=1, spaceAfter=1, leftIndent=12)
+    return s
+
+
+class _PageTpl:
+    def __init__(self, domain, grade, score, ts):
+        self.domain, self.grade, self.score, self.ts = domain, grade, score, ts
+
+    def first(self, c, doc):
+        w, h = letter
+        c.setFillColor(NAVY); c.rect(0, h-100, w, 100, fill=1, stroke=0)
+        c.setFillColor(colors.white); c.setFont("Helvetica-Bold", 22)
+        c.drawString(54, h-40, "DNS Security Audit Report")
+        c.setFont("Helvetica", 12); c.setFillColor(colors.HexColor("#b0c8e0"))
+        c.drawString(54, h-60, self.domain)
+        c.setFont("Helvetica", 9.5); c.drawString(54, h-78, f"Generated {self.ts}")
+        c.setFont("Helvetica", 8.5); c.setFillColor(colors.HexColor("#6b91b5"))
+        c.drawRightString(w-54, h-78, "dns-audit.com")
+        gc = GRADE_COLORS.get(self.grade, NAVY)
+        cx, cy = w-100, h-50
+        c.setFillColor(gc); c.circle(cx, cy, 22, fill=1, stroke=0)
+        c.setFillColor(colors.white); c.setFont("Helvetica-Bold", 24)
+        c.drawCentredString(cx, cy-8, self.grade)
+        c.setFillColor(colors.HexColor("#b0c8e0")); c.setFont("Helvetica", 10)
+        c.drawCentredString(cx, cy-30, f"{self.score}/100")
+        self._foot(c, doc)
+
+    def later(self, c, doc):
+        self._foot(c, doc)
+
+    def _foot(self, c, doc):
+        w, _ = letter
+        c.setFont("Helvetica", 8); c.setFillColor(TEXT_TER)
+        c.drawString(54, 30, f"dns-audit.com  |  {self.domain}")
+        c.drawRightString(w-54, 30, f"Page {doc.page}")
+
+
+def _summary_table(data, S):
+    checks = data.get("checks", [])
+    pc = sum(1 for c in checks if c.get("status")=="pass")
+    wc = sum(1 for c in checks if c.get("status")=="warn")
+    fc = sum(1 for c in checks if c.get("status")=="fail")
+    def _c(label, val, clr):
+        return [Paragraph(f'<font color="{clr.hexval()}" size="20"><b>{val}</b></font>', S["body"]),
+                Paragraph(f'<font color="#6b6b6b" size="9">{label}</font>', S["body_small"])]
+    t = Table([[_c("Passing",str(pc),PASS_CLR), _c("Warnings",str(wc),WARN_CLR), _c("Issues",str(fc),FAIL_CLR)]],
+              colWidths=[2.1*inch]*3)
+    t.setStyle(TableStyle([("VALIGN",(0,0),(-1,-1),"TOP"),("TOPPADDING",(0,0),(-1,-1),10),
+        ("BOTTOMPADDING",(0,0),(-1,-1),10),("LEFTPADDING",(0,0),(-1,-1),12),
+        ("LINEAFTER",(0,0),(1,0),0.5,BORDER)]))
+    return [t, Spacer(1,12)]
+
+
+def _priority_fixes(data, S):
+    fixes = data.get("priority_fixes", [])
+    if not fixes: return []
+    els = [Paragraph("Priority Fixes", S["subheading"])]
+    for i, fix in enumerate(fixes, 1):
+        r = Table([[Paragraph(f"<b>{i}</b>",S["pfix_num"]), Paragraph(_safe(fix),S["pfix_txt"])]],
+                  colWidths=[0.3*inch, 6.2*inch])
+        r.setStyle(TableStyle([("VALIGN",(0,0),(-1,-1),"TOP"),("TOPPADDING",(0,0),(-1,-1),4),
+            ("BOTTOMPADDING",(0,0),(-1,-1),4),("BACKGROUND",(0,0),(-1,-1),FAIL_BG),
+            ("ROUNDEDCORNERS",[3,3,3,3])]))
+        els += [r, Spacer(1,4)]
+    els.append(Spacer(1,8))
+    return els
+
+
+def _check_section(check, S):
+    name   = check.get("name","Unknown")
+    status = check.get("status","pass")
+    verdict = check.get("verdict","")
+    record = check.get("record","")
+    details = check.get("details",[])
+    fix    = check.get("fix","")
+    s_clr  = STATUS_CLR.get(status, TEXT_SEC)
+    s_lbl  = STATUS_LBL.get(status, "INFO")
+    els = []
+
+    # Header: name + pill
+    hdr = Table([[Paragraph(f"<b>{_safe(name)}</b>", S["heading"]),
+                  Paragraph(f'<font color="{s_clr.hexval()}" size="9"><b> {s_lbl} </b></font>', S["body"])]],
+                colWidths=[5.5*inch, 1.5*inch])
+    hdr.setStyle(TableStyle([("VALIGN",(0,0),(-1,-1),"MIDDLE"),("ALIGN",(1,0),(1,0),"RIGHT"),
+        ("TOPPADDING",(0,0),(-1,-1),0),("BOTTOMPADDING",(0,0),(-1,-1),0)]))
+    els.append(hdr)
+
+    if verdict:
+        els.append(Paragraph(_safe(verdict), S["verdict"]))
+
+    # Record block
+    if record:
+        rec = _safe(record)
+        rt = Table([[Paragraph(rec, S["record"])]], colWidths=[6.7*inch])
+        rt.setStyle(TableStyle([("BACKGROUND",(0,0),(-1,-1),RECORD_BG),
+            ("TOPPADDING",(0,0),(-1,-1),8),("BOTTOMPADDING",(0,0),(-1,-1),8),
+            ("LEFTPADDING",(0,0),(-1,-1),10),("RIGHTPADDING",(0,0),(-1,-1),10),
+            ("ROUNDEDCORNERS",[4,4,4,4])]))
+        els += [Spacer(1,4), rt, Spacer(1,4)]
+
+    # Details
+    for d in details:
+        dt = d.get("type","info")
+        icon = DETAIL_ICON.get(dt, "\u2022")
+        sk = f"d_{dt}" if f"d_{dt}" in S else "d_info"
+        els.append(Paragraph(f"{icon}  {_safe(d.get('text',''))}", S[sk]))
+
+    # Fix block
+    if fix and status in ("warn","fail"):
+        fp = _strip_html(fix)
+        fs = _safe(fp).replace("\n","<br/>")
+        fc = [Paragraph("<b>RECOMMENDED FIX</b>", S["fix_label"]),
+              Paragraph(fs, S["fix_text"])]
+        ft = Table([[fc]], colWidths=[6.7*inch])
+        ft.setStyle(TableStyle([("BACKGROUND",(0,0),(-1,-1),FIX_BG),
+            ("TOPPADDING",(0,0),(-1,-1),8),("BOTTOMPADDING",(0,0),(-1,-1),8),
+            ("LEFTPADDING",(0,0),(-1,-1),10),("RIGHTPADDING",(0,0),(-1,-1),10),
+            ("LINEBEFORE",(0,0),(0,-1),2.5,FIX_BORDER),
+            ("ROUNDEDCORNERS",[0,4,4,0])]))
+        els += [Spacer(1,6), ft]
+
+    els += [Spacer(1,8), HRFlowable(width="100%", thickness=0.5, color=BORDER, spaceAfter=8)]
+    return [KeepTogether(els)]
+
+
+def _vendors(data, S):
+    vs = data.get("vendors", [])
+    if not vs: return []
+    els = [Paragraph("Detected Email Services", S["subheading"])]
+    rows = [[Paragraph(f"<b>{_safe(v.get('name',''))}</b>",S["body"]),
+             Paragraph(f"{v.get('confidence',0)}%",S["body_small"])] for v in vs]
+    if rows:
+        t = Table(rows, colWidths=[5.0*inch, 1.5*inch])
+        t.setStyle(TableStyle([("VALIGN",(0,0),(-1,-1),"MIDDLE"),
+            ("TOPPADDING",(0,0),(-1,-1),5),("BOTTOMPADDING",(0,0),(-1,-1),5),
+            ("LINEBELOW",(0,0),(-1,-2),0.3,BORDER),("ALIGN",(1,0),(1,-1),"RIGHT")]))
+        els.append(t)
+    els.append(Spacer(1,12))
+    return els
+
+
+def _methodology(S):
+    inner = [Spacer(1,16), HRFlowable(width="100%",thickness=0.5,color=BORDER,spaceAfter=12),
+           Paragraph("Methodology", S["subheading"]),
+           Paragraph(
+        "This report was generated by dns-audit.com using live DNS queries against "
+        "published DNS records. All checks use RFC-compliant evaluation logic. "
+        "DMARC policy discovery implements the DNS Tree Walk algorithm per DMARCbis "
+        "(draft-ietf-dmarc-dmarcbis-41, Section 4.10). SPF evaluation tracks lookup "
+        "counts against the RFC 7208 10-lookup limit including void lookup detection. "
+        "DANE validation checks TLSA records per RFC 7672 with DNSSEC dependency "
+        "verification.", S["body_small"]),
+           Spacer(1,6),
+           Paragraph(
+        "Scores are based on authentication configuration (DMARC 25, SPF 20, DKIM 25), "
+        "key security (15), vendor intelligence (10), and best practices (5). "
+        "Infrastructure checks (DNSSEC, CAA, DANE, Nameservers) are evaluated but "
+        "not scored, as their absence may be intentional.", S["body_small"])]
+    return [KeepTogether(inner)]
+
+
+def generate_audit_pdf(audit_result: dict) -> bytes:
+    domain = audit_result.get("domain", "unknown")
+    sc = audit_result.get("score", {})
+    grade = sc.get("grade", "?")
+    total = int(sc.get("total", 0))
+    now = datetime.now(timezone.utc).strftime("%B %d, %Y at %H:%M UTC")
+
+    buf = io.BytesIO()
+    S = _styles()
+    tpl = _PageTpl(domain, grade, total, now)
+
+    doc = SimpleDocTemplate(buf, pagesize=letter,
+        topMargin=1.4*inch, bottomMargin=0.65*inch,
+        leftMargin=0.75*inch, rightMargin=0.75*inch,
+        title=f"DNS Security Audit - {domain}",
+        author="dns-audit.com",
+        subject=f"Security audit report for {domain}")
+
+    story = []
+    story.extend(_summary_table(audit_result, S))
+    story.extend(_priority_fixes(audit_result, S))
+    story.append(Paragraph("Detailed Results", S["subheading"]))
+    story.append(Spacer(1,6))
+    for check in sorted(audit_result.get("checks",[]), key=_sev):
+        story.extend(_check_section(check, S))
+    story.extend(_vendors(audit_result, S))
+    story.extend(_methodology(S))
+
+    doc.build(story, onFirstPage=tpl.first, onLaterPages=tpl.later)
+    return buf.getvalue()
+
+
+if __name__ == "__main__":
+    sample = {
+        "domain": "example.com",
+        "score": {"grade": "B", "total": 72},
+        "priority_fixes": [
+            "Upgrade DMARC policy from p=none to p=reject",
+            "Add MTA-STS policy for transport encryption",
+        ],
+        "checks": [
+            {"name":"DMARC","status":"warn","verdict":"DMARC record found with p=none (monitoring only)",
+             "record":"v=DMARC1; p=none; rua=mailto:dmarc@example.com",
+             "details":[{"type":"good","text":"DMARC record published"},
+                        {"type":"warning","text":"Policy is p=none -- no enforcement"},
+                        {"type":"good","text":"Aggregate reporting configured"}],
+             "fix":"Upgrade to p=reject once monitoring confirms all legitimate sources pass."},
+            {"name":"SPF","status":"pass","verdict":"Valid SPF record with hardfail (-all)",
+             "record":"v=spf1 include:_spf.google.com -all",
+             "details":[{"type":"good","text":"SPF record is valid"},
+                        {"type":"good","text":"Uses -all (hardfail)"},
+                        {"type":"info","text":"3 of 10 DNS lookups used"}],
+             "fix":None},
+            {"name":"MTA-STS","status":"fail","verdict":"No MTA-STS policy found",
+             "record":None,
+             "details":[{"type":"error","text":"No _mta-sts TXT record found"},
+                        {"type":"error","text":"No policy file at /.well-known/mta-sts.txt"}],
+             "fix":"Add MTA-STS to enforce TLS. Create _mta-sts.example.com TXT record with v=STSv1; id=20260320."},
+            {"name":"DKIM","status":"pass","verdict":"Valid 2048-bit key found (selector: google)",
+             "record":"v=DKIM1; k=rsa; p=MIIBIjANBgkqhki...",
+             "details":[{"type":"good","text":"2048-bit RSA key"},
+                        {"type":"good","text":"Selector: google"}],
+             "fix":None},
+            {"name":"DNSSEC","status":"warn","verdict":"DNSSEC not enabled",
+             "record":None,
+             "details":[{"type":"warning","text":"No DNSKEY records found"},
+                        {"type":"info","text":"DNSSEC prevents DNS spoofing and cache poisoning"}],
+             "fix":"Enable DNSSEC through your domain registrar or DNS hosting provider."},
+        ],
+        "vendors": [
+            {"name": "Google Workspace", "confidence": 95},
+            {"name": "SendGrid", "confidence": 60},
+        ],
+    }
+    pdf = generate_audit_pdf(sample)
+    with open("/tmp/dns-audit-sample.pdf", "wb") as f:
+        f.write(pdf)
+    print(f"Written /tmp/dns-audit-sample.pdf ({len(pdf):,} bytes)")
