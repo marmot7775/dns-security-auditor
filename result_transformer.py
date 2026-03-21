@@ -74,6 +74,125 @@ def _first_fix(issues: List[Dict]) -> Optional[str]:
 
 
 # ============================================================
+# Email Security Roadmap (Prompt 11)
+# ============================================================
+
+def build_security_roadmap(checks: List[Dict]) -> Dict:
+    """Synthesize all check results into a prioritized action plan.
+
+    Takes the transformed checks list and returns a roadmap with
+    4 priority tiers: critical, high, medium, low.
+    """
+    items: List[Dict] = []
+    check_map = {c.get("name", ""): c for c in checks}
+
+    dmarc = check_map.get("DMARC", {})
+    spf = check_map.get("SPF", {})
+    dkim = check_map.get("DKIM", {})
+    mta_sts = check_map.get("MTA-STS", {})
+    tls_rpt = check_map.get("TLS-RPT", {})
+    dane = check_map.get("DANE", {})
+
+    # ── Critical ────────────────────────────────────────────
+    if dmarc.get("status") == "fail" and dmarc.get("pill_label") == "Missing":
+        items.append({"priority": "critical", "protocol": "DMARC",
+                      "action": "Publish a DMARC record",
+                      "impact": "Your domain has no DMARC protection. Anyone can send email as your domain."})
+
+    if spf.get("status") == "fail" and spf.get("pill_label") == "Missing":
+        items.append({"priority": "critical", "protocol": "SPF",
+                      "action": "Publish an SPF record",
+                      "impact": "No SPF record means receivers cannot verify your authorized mail servers."})
+
+    # +all in SPF
+    if spf.get("record") and "+all" in (spf.get("record") or ""):
+        items.append({"priority": "critical", "protocol": "SPF",
+                      "action": "Remove +all from your SPF record",
+                      "impact": "+all authorizes every server on the internet to send as your domain."})
+
+    # No rua at any policy
+    tb = dmarc.get("tag_breakdown", {})
+    if tb:
+        cw = tb.get("config_warnings", [])
+        for w in cw:
+            if w.get("level") == "critical" and w.get("title") == "No aggregate reporting":
+                items.append({"priority": "critical", "protocol": "DMARC",
+                              "action": "Add aggregate reporting (rua=)",
+                              "impact": "Zero visibility into email authentication results."})
+                break
+
+    # ── High ────────────────────────────────────────────────
+    # p=none with rua (monitoring)
+    health = tb.get("health", {}) if tb else {}
+    if health.get("status") == "monitoring":
+        items.append({"priority": "high", "protocol": "DMARC",
+                      "action": "Progress from p=none to enforcement",
+                      "impact": "Domain is in monitoring mode. Spoofed mail is still delivered."})
+
+    # DKIM weak keys
+    dkim_deep = dkim.get("dkim_deep", {})
+    if dkim_deep and dkim_deep.get("has_weak"):
+        items.append({"priority": "high", "protocol": "DKIM",
+                      "action": "Rotate weak DKIM keys to 2048-bit",
+                      "impact": "Weak keys can be factored, allowing forged DKIM signatures."})
+
+    # SPF near limit
+    spf_deep = spf.get("spf_deep", {})
+    if spf_deep and spf_deep.get("lookup_count", 0) >= 8:
+        items.append({"priority": "high", "protocol": "SPF",
+                      "action": f"Reduce SPF lookups ({spf_deep['lookup_count']}/10)",
+                      "impact": "Exceeding 10 lookups causes SPF to fail entirely."})
+
+    # ── Medium ──────────────────────────────────────────────
+    if mta_sts.get("pill_label") == "Not configured":
+        items.append({"priority": "medium", "protocol": "MTA-STS",
+                      "action": "Configure MTA-STS for TLS enforcement",
+                      "impact": "Without MTA-STS, email encryption can be silently stripped."})
+
+    if tls_rpt.get("status") == "fail" or tls_rpt.get("pill_label") == "Not configured":
+        items.append({"priority": "medium", "protocol": "TLS-RPT",
+                      "action": "Configure TLS-RPT for failure visibility",
+                      "impact": "TLS downgrade attacks go undetected."})
+
+    if dane.get("pill_label") == "Not configured":
+        items.append({"priority": "medium", "protocol": "DANE",
+                      "action": "Consider DANE TLSA records",
+                      "impact": "DANE provides CA-independent certificate verification."})
+
+    # DMARCbis readiness gaps
+    if health.get("status") in ("compatible", "attention"):
+        for reason in health.get("reasons", []):
+            items.append({"priority": "medium", "protocol": "DMARC",
+                          "action": f"Address: {reason}",
+                          "impact": "Record is not fully DMARCbis-ready."})
+
+    # ── Low ─────────────────────────────────────────────────
+    bimi = check_map.get("BIMI", {})
+    if bimi.get("status") != "pass":
+        items.append({"priority": "low", "protocol": "BIMI",
+                      "action": "Consider adding BIMI for brand visibility",
+                      "impact": "BIMI displays your logo in supported email clients."})
+
+    # Count by tier
+    tiers = {"critical": 0, "high": 0, "medium": 0, "low": 0}
+    for item in items:
+        tiers[item["priority"]] = tiers.get(item["priority"], 0) + 1
+
+    total = len(items)
+    if total == 0:
+        summary = "Your email security meets all current best practices across all protocols."
+    else:
+        summary = f"{total} recommendation{'s' if total != 1 else ''} across {sum(1 for v in tiers.values() if v > 0)} priority tier{'s' if sum(1 for v in tiers.values() if v > 0) != 1 else ''}."
+
+    return {
+        "items": items,
+        "tiers": tiers,
+        "total": total,
+        "summary": summary,
+    }
+
+
+# ============================================================
 # DMARC
 # ============================================================
 
@@ -509,6 +628,32 @@ def transform_dmarc(raw: Dict, tree_walk: Optional[Dict] = None) -> Dict:
     # address and understanding the enforcement path.
     fix_records = None
 
+    # Build tag-by-tag breakdown + combo warnings + health verdict
+    breakdown_record = display_record or record
+    tag_breakdown = None
+    if breakdown_record:
+        tags_list = _build_dmarc_tag_breakdown(breakdown_record, raw)
+        # Parse tags for combo detection
+        _parsed = {}
+        for part in breakdown_record.split(";"):
+            part = part.strip()
+            if "=" in part:
+                k, _, v = part.partition("=")
+                _parsed[k.strip().lower()] = v.strip()
+        _pol = _parsed.get("p", "").lower()
+        config_warnings = _detect_dangerous_combinations(_parsed, _pol)
+        health = _calculate_dmarcbis_health(_parsed, _pol, config_warnings)
+        _domain = raw.get("domain", "")
+        migration = _build_migration_path(_parsed, _pol, health["status"], domain=_domain)
+        why_dmarcbis = _build_why_dmarcbis(_parsed, _pol, health["status"], domain=_domain)
+        tag_breakdown = {
+            "health": health,
+            "tags": tags_list,
+            "config_warnings": config_warnings,
+            "migration": migration,
+            "why_dmarcbis": why_dmarcbis,
+        }
+
     return {
         "name": "DMARC",
         "status": status,
@@ -519,9 +664,1463 @@ def transform_dmarc(raw: Dict, tree_walk: Optional[Dict] = None) -> Dict:
         "details": details,
         "fix": fix,
         "fix_records": fix_records,
+        "strict_validation": _build_strict_validation(raw.get("strict_validation")),
+        "legacy_validation": _build_strict_validation(raw.get("legacy_validation")),
+        "spec_comparison": _build_spec_comparison(
+            raw.get("strict_validation"), raw.get("legacy_validation")
+        ),
+        "attack_surface": _build_attack_surface(raw, display_record or record),
+        "tag_breakdown": tag_breakdown,
         "dmarcbis_readiness": _build_dmarcbis_card_data(
             raw.get("dmarcbis_readiness"), raw.get("record")
         ),
+    }
+
+
+# ============================================================
+# DMARCbis Strict Validation
+# ============================================================
+
+_SV_CATEGORY_LABELS = {
+    "record_structure": "Record Structure",
+    "uri_validation": "URI Validation",
+    "external_auth": "External Authorization",
+    "tag_values": "Tag Values",
+    "dns_integrity": "DNS Integrity",
+}
+
+# Display order for categories
+_SV_CATEGORY_ORDER = ["record_structure", "uri_validation", "external_auth", "tag_values", "dns_integrity"]
+
+
+def _build_strict_validation(sv: Optional[Dict]) -> Optional[Dict]:
+    """Transform strict validation results for the frontend."""
+    if not sv:
+        return None
+
+    # Group checks by category
+    categories: Dict[str, List[Dict]] = {}
+    for check in sv.get("checks", []):
+        cat = check["category"]
+        if cat not in categories:
+            categories[cat] = []
+        categories[cat].append(check)
+
+    grouped = []
+    for cat_key in _SV_CATEGORY_ORDER:
+        if cat_key in categories:
+            grouped.append({
+                "key": cat_key,
+                "label": _SV_CATEGORY_LABELS.get(cat_key, cat_key),
+                "checks": categories[cat_key],
+            })
+    # Any categories not in the display order
+    for cat_key, checks in categories.items():
+        if cat_key not in _SV_CATEGORY_ORDER:
+            grouped.append({
+                "key": cat_key,
+                "label": _SV_CATEGORY_LABELS.get(cat_key, cat_key),
+                "checks": checks,
+            })
+
+    return {
+        "categories": grouped,
+        "pass_count": sv["pass_count"],
+        "fail_count": sv["fail_count"],
+        "warn_count": sv["warn_count"],
+        "total_count": sv["total_count"],
+        "summary": sv["summary"],
+        "has_structural_errors": sv["has_structural_errors"],
+    }
+
+
+def _build_spec_comparison(strict: Optional[Dict], legacy: Optional[Dict]) -> Optional[Dict]:
+    """Compare strict (DMARCbis) and legacy (RFC 7489) validation results.
+
+    Returns the delta: which issues are DMARCbis-only, which are in both,
+    and summary stats for the toggle UI.
+    """
+    if not strict or not legacy:
+        return None
+
+    strict_checks = strict.get("checks", [])
+    legacy_checks = legacy.get("checks", [])
+
+    # Build sets of failure/warn codes for comparison
+    strict_fails = {c["code"] + ":" + c["message"][:60] for c in strict_checks if c["status"] == "fail"}
+    legacy_fails = {c["code"] + ":" + c["message"][:60] for c in legacy_checks if c["status"] == "fail"}
+    strict_warns = {c["code"] + ":" + c["message"][:60] for c in strict_checks if c["status"] == "warn"}
+    legacy_warns = {c["code"] + ":" + c["message"][:60] for c in legacy_checks if c["status"] == "warn"}
+
+    strict_issues = strict_fails | strict_warns
+    legacy_issues = legacy_fails | legacy_warns
+
+    dmarcbis_only = strict_issues - legacy_issues
+    both = strict_issues & legacy_issues
+
+    # Build human-readable list of DMARCbis-only findings
+    dmarcbis_only_items = []
+    for c in strict_checks:
+        key = c["code"] + ":" + c["message"][:60]
+        if key in dmarcbis_only and c["status"] in ("fail", "warn"):
+            dmarcbis_only_items.append({
+                "code": c["code"],
+                "message": c["message"],
+                "status": c["status"],
+            })
+
+    # Determine if legacy passes but strict fails
+    legacy_passes = legacy.get("fail_count", 0) == 0
+    strict_fails_count = strict.get("fail_count", 0)
+    see_the_future = legacy_passes and strict_fails_count > 0
+
+    return {
+        "dmarcbis_only_count": len(dmarcbis_only_items),
+        "both_count": len(both),
+        "dmarcbis_only_items": dmarcbis_only_items,
+        "see_the_future": see_the_future,
+        "legacy_pass_count": legacy.get("pass_count", 0),
+        "legacy_fail_count": legacy.get("fail_count", 0),
+        "legacy_warn_count": legacy.get("warn_count", 0),
+        "legacy_total_count": legacy.get("total_count", 0),
+        "legacy_summary": legacy.get("summary", ""),
+        "strict_fail_count": strict_fails_count,
+        "strict_summary": strict.get("summary", ""),
+    }
+
+
+# ============================================================
+# Attack Surface View
+# ============================================================
+
+def _build_attack_surface(raw: Dict, record: Optional[str]) -> Optional[Dict]:
+    """Build the 4-vector email spoofing attack surface analysis."""
+    if not record:
+        return None
+
+    # Parse tags
+    tags: Dict[str, str] = {}
+    for part in record.split(";"):
+        part = part.strip()
+        if "=" in part:
+            k, _, v = part.partition("=")
+            tags[k.strip().lower()] = v.strip()
+
+    policy = tags.get("p", "").lower()
+    sp = tags.get("sp")
+    np_val = tags.get("np")
+    rua = tags.get("rua")
+    domain = raw.get("domain", "yourdomain.com")
+
+    vectors = []
+
+    # ── Vector 1: Direct Domain Spoofing ────────────────────
+    if policy == "reject":
+        v1 = {
+            "name": "Direct Domain Spoofing",
+            "status": "protected",
+            "color": "green",
+            "summary": "Mail failing authentication is blocked.",
+            "detail": f"An attacker attempting to send as user@{domain} would have their message rejected by receiving mail servers.",
+        }
+    elif policy == "quarantine":
+        v1 = {
+            "name": "Direct Domain Spoofing",
+            "status": "partial",
+            "color": "amber",
+            "summary": "Spoofed mail goes to spam but still reaches recipients.",
+            "detail": f"Spoofed messages land in spam/junk folders. Recipients may still see and interact with them.",
+        }
+    else:
+        v1 = {
+            "name": "Direct Domain Spoofing",
+            "status": "exposed",
+            "color": "red",
+            "summary": f"Spoofed mail is delivered normally (p={policy or 'none'}).",
+            "detail": f"An attacker could send an email appearing to be from ceo@{domain} to your employees requesting a wire transfer. Without enforcement, this email is delivered to their inbox with no warning.",
+        }
+    vectors.append(v1)
+
+    # ── Vector 2: Subdomain Spoofing ────────────────────────
+    effective_sp = sp if sp else policy
+    if effective_sp == "reject":
+        v2 = {
+            "name": "Subdomain Spoofing",
+            "status": "protected",
+            "color": "green",
+            "summary": f"Subdomains {'use' if sp else 'inherit'} reject policy.",
+            "detail": f"Spoofed mail from subdomains like mail.{domain} is blocked.",
+        }
+    elif effective_sp == "quarantine":
+        v2 = {
+            "name": "Subdomain Spoofing",
+            "status": "partial",
+            "color": "amber",
+            "summary": "Subdomain spoofed mail goes to spam.",
+            "detail": f"An attacker sending from support@helpdesk.{domain} would land in spam.",
+        }
+    else:
+        gap_note = ""
+        if sp == "none" and policy in ("reject", "quarantine"):
+            gap_note = f" Your root domain is protected but subdomains are not. Attackers will use subdomains to bypass your policy."
+        v2 = {
+            "name": "Subdomain Spoofing",
+            "status": "exposed",
+            "color": "red",
+            "summary": f"Subdomains have no enforcement.{gap_note}",
+            "detail": f"An attacker could send from support@helpdesk.{domain} to your customers requesting password resets. The subdomain looks legitimate but has no protection.",
+        }
+    vectors.append(v2)
+
+    # ── Vector 3: Non-Existent Subdomain Spoofing ───────────
+    np_effective = np_val if np_val else (sp if sp else policy)
+    np_fallback = np_val is None
+    if np_effective == "reject":
+        note = ""
+        if np_fallback:
+            note = " Protected by fallback, but not explicitly. DMARCbis recommends setting np= directly."
+        v3 = {
+            "name": "Non-Existent Subdomain Spoofing",
+            "status": "protected" if not np_fallback else "partial",
+            "color": "green" if not np_fallback else "amber",
+            "summary": f"Non-existent subdomains {'reject' if not np_fallback else 'inherit reject via fallback'}.{note}",
+            "detail": f"Invented subdomains like secure-login.{domain} are blocked.",
+        }
+    elif np_effective == "quarantine":
+        v3 = {
+            "name": "Non-Existent Subdomain Spoofing",
+            "status": "partial",
+            "color": "amber",
+            "summary": "Non-existent subdomain spoofed mail goes to spam.",
+            "detail": f"An attacker inventing secure-portal.{domain} would land in spam.",
+        }
+    else:
+        v3 = {
+            "name": "Non-Existent Subdomain Spoofing",
+            "status": "exposed",
+            "color": "red",
+            "summary": "Attackers can invent any subdomain.",
+            "detail": f"An attacker could create secure-portal.{domain}, a domain that doesn't exist, and send password phishing emails from it. Attackers prefer non-existent subdomains because they look convincing and many organizations don't realize they need to protect domains that don't exist in DNS.",
+        }
+    vectors.append(v3)
+
+    # ── Vector 4: Reporting Intelligence Leakage ────────────
+    report_dests = raw.get("report_destinations", [])
+    has_unauthorized = any(d.get("authorized") is False for d in report_dests)
+
+    if not rua:
+        v4 = {
+            "name": "Reporting Intelligence",
+            "status": "partial",
+            "color": "amber",
+            "summary": "No reporting configured. No leakage risk, but zero visibility.",
+            "detail": "No aggregate reporting means you have no visibility into authentication results, but also no risk of report data being sent to unauthorized parties.",
+        }
+    elif has_unauthorized:
+        v4 = {
+            "name": "Reporting Intelligence",
+            "status": "exposed",
+            "color": "red",
+            "summary": "Reports may be sent to an unauthorized destination.",
+            "detail": "An unauthorized party could be receiving your DMARC aggregate reports, learning which servers send email for your domain, your IP ranges, and your email volumes.",
+        }
+    else:
+        v4 = {
+            "name": "Reporting Intelligence",
+            "status": "protected",
+            "color": "green",
+            "summary": "Reports go to authorized destinations.",
+            "detail": "Aggregate reports are sent to verified destinations.",
+        }
+    vectors.append(v4)
+
+    # ── Overall Score ───────────────────────────────────────
+    exposed = [v for v in vectors if v["status"] == "exposed"]
+    partial = [v for v in vectors if v["status"] == "partial"]
+
+    if len(exposed) >= 2:
+        overall = {"level": "critical", "label": "Critical Risk", "color": "red",
+                   "summary": f"This domain has multiple paths for email spoofing attacks."}
+    elif len(exposed) == 1:
+        overall = {"level": "high", "label": "High Risk", "color": "red",
+                   "summary": f"This domain can be spoofed through {exposed[0]['name'].lower()}."}
+    elif partial:
+        overall = {"level": "moderate", "label": "Moderate Risk", "color": "amber",
+                   "summary": "Some attack vectors are exposed."}
+    else:
+        overall = {"level": "low", "label": "Low Risk", "color": "green",
+                   "summary": "This domain has strong email spoofing defenses."}
+
+    # Attacker perspective
+    weakest = exposed[0] if exposed else (partial[0] if partial else None)
+    attacker_path = ""
+    if weakest:
+        if weakest["name"] == "Direct Domain Spoofing":
+            attacker_path = f"If an attacker wanted to spoof this domain, they would send directly as user@{domain} since the policy is p={policy} and no mail is blocked."
+        elif weakest["name"] == "Subdomain Spoofing":
+            attacker_path = f"If an attacker wanted to spoof this domain, they would target subdomains like mail.{domain} since subdomain policy is weaker than the root."
+        elif weakest["name"] == "Non-Existent Subdomain Spoofing":
+            attacker_path = f"If an attacker wanted to spoof this domain, they would target non-existent subdomains like secure-login.{domain} since there is no np= policy to prevent it."
+        elif weakest["name"] == "Reporting Intelligence":
+            attacker_path = f"An unauthorized party may be receiving aggregate reports revealing your email infrastructure."
+
+    return {
+        "overall": overall,
+        "vectors": vectors,
+        "attacker_path": attacker_path,
+    }
+
+
+# ============================================================
+# DMARC Record Breakdown (tag-by-tag decoder)
+# ============================================================
+
+_TAG_ORDER = ["v", "p", "sp", "np", "adkim", "aspf", "fo", "rua", "ruf", "pct", "rf", "ri", "psd", "t"]
+
+
+def _explain_policy_value(value: str) -> str:
+    """Shared explanation for p=, sp=, np= policy values."""
+    return {
+        "reject": (
+            "Strongest enforcement. Mail that fails authentication is blocked entirely. "
+            "Your domain is protected against spoofing."
+        ),
+        "quarantine": (
+            "Mail that fails authentication is sent to spam. One step below full protection "
+            "-- spoofed mail still reaches recipients, just in their junk folder."
+        ),
+        "none": (
+            "Monitoring only -- no mail is blocked or quarantined. Spoofed and malicious email "
+            "claiming to be from your domain is still delivered to recipients. While monitoring is "
+            "the correct first step, the goal is to progress to an enforcing policy "
+            "(p=quarantine then p=reject). Without enforcement, your domain can be used to send "
+            "phishing or malware to your customers and partners, which can damage your domain's "
+            "sending reputation and erode trust with the people you do business with."
+        ),
+    }.get(value, f"Unknown policy value '{value}'.")
+
+
+def _build_dmarc_tag_breakdown(record: str, raw: Dict) -> Optional[List[Dict]]:
+    """Parse every tag in a DMARC record and return a structured breakdown.
+
+    Each entry:
+      tag, value, is_default, is_absent, label, explanation, dmarcbis, warnings
+    """
+    if not record:
+        return None
+
+    # Parse present tags
+    tags: Dict[str, str] = {}
+    for part in record.split(";"):
+        part = part.strip()
+        if "=" in part:
+            k, _, v = part.partition("=")
+            tags[k.strip().lower()] = v.strip()
+
+    policy = tags.get("p", "").lower()
+    breakdown: List[Dict] = []
+
+    # Determine which tags to show
+    shown_tags = list(_TAG_ORDER)
+    for tag_name in tags:
+        if tag_name not in shown_tags:
+            shown_tags.append(tag_name)
+
+    for tag_name in shown_tags:
+        present = tag_name in tags
+        value = tags.get(tag_name, "")
+
+        entry = _build_tag_entry(tag_name, value, present, tags, policy)
+        if entry:
+            breakdown.append(entry)
+
+    return breakdown
+
+
+def _build_tag_entry(tag: str, value: str, present: bool, tags: Dict, policy: str) -> Optional[Dict]:
+    """Build a single tag entry with explanation, warnings, and DMARCbis notes."""
+
+    # ── v= ──────────────────────────────────────────────────
+    if tag == "v":
+        if not present:
+            return None
+        return _entry(tag, value, False, False, "Version",
+                      "Valid DMARC version identifier. Required as the first tag.",
+                      "current",
+                      dmarcbis_note=(
+                          "DMARCbis tightens parsing. This MUST be the first tag. Records that place "
+                          "it elsewhere will be rejected by DMARCbis-compliant receivers, even though some "
+                          "legacy receivers were lenient about tag ordering."
+                      ))
+
+    # ── p= ──────────────────────────────────────────────────
+    if tag == "p":
+        if not present:
+            return None
+        e = _entry(tag, value, False, False, "Policy",
+                   _explain_policy_value(value), "current",
+                   dmarcbis_note=(
+                       "DMARCbis clarifies policy semantics and removes ambiguities in how receivers "
+                       "interpret these values. The biggest change is replacing pct with the binary t=y "
+                       "test mode for safer policy rollout."
+                   ))
+        if value == "none":
+            e["warnings"].append({
+                "level": "warning",
+                "text": "Monitoring only. No enforcement is applied to messages that fail authentication.",
+            })
+        return e
+
+    # ── sp= ─────────────────────────────────────────────────
+    if tag == "sp":
+        note = (
+            "DMARCbis clarifies inheritance behavior. The new np= tag extends subdomain protection "
+            "to cover non-existent subdomains, something RFC 7489 had no concept of."
+        )
+        if present:
+            e = _entry(tag, value, False, False, "Subdomain Policy",
+                       _explain_policy_value(value), "current", dmarcbis_note=note)
+            if value == "none" and policy in ("reject", "quarantine"):
+                e["warnings"].append({
+                    "level": "warning",
+                    "text": (
+                        "Your subdomains have weaker enforcement than your root domain. "
+                        "Attackers will spoof subdomains like mail.yourdomain.com to bypass your policy."
+                    ),
+                })
+            return e
+        else:
+            p_val = tags.get("p", "none")
+            return _entry(tag, None, False, True, "Subdomain Policy",
+                          f"Subdomains inherit the root policy (p={p_val}). "
+                          f"Setting sp= explicitly removes ambiguity.",
+                          "current", dmarcbis_note=note)
+
+    # ── np= (DMARCbis) ─────────────────────────────────────
+    if tag == "np":
+        note = (
+            "This tag is NEW in DMARCbis. RFC 7489 had no way to set policy for subdomains that "
+            "don't exist in DNS. Attackers exploit this by inventing subdomains. np= closes that gap. "
+            "Currently 0% of the top 1000 domains have adopted this tag."
+        )
+        if present:
+            e = _entry(tag, value, False, False, "Non-Existent Subdomain Policy",
+                       _explain_policy_value(value), "new", dmarcbis_note=note)
+            if value == "none" and policy == "reject":
+                e["warnings"].append({
+                    "level": "warning",
+                    "text": (
+                        "Critical gap. Non-existent subdomains have no enforcement while your root "
+                        "domain rejects. Attackers can invent subdomains like "
+                        "secure-login.yourdomain.com and spoof mail from them."
+                    ),
+                })
+            return e
+        else:
+            sp_val = tags.get("sp")
+            p_val = tags.get("p", "none")
+            resolved = sp_val if sp_val else p_val
+            resolved_via = "sp" if sp_val else "p"
+            e = _entry(tag, None, False, True, "Non-Existent Subdomain Policy",
+                       f"No non-existent subdomain policy. Falls back to sp= (if set), then p=. "
+                       f"Current effective policy for non-existent subdomains: {resolved_via}={resolved}.",
+                       "new", dmarcbis_note=note)
+            chain = [{"tag": "np", "value": None, "active": False}]
+            if sp_val:
+                chain.append({"tag": "sp", "value": sp_val, "active": True})
+                chain.append({"tag": "p", "value": p_val, "active": False})
+            else:
+                chain.append({"tag": "p", "value": p_val, "active": True})
+            e["fallback_chain"] = chain
+            e["resolved_value"] = resolved
+            if resolved != "reject":
+                e["warnings"].append({
+                    "level": "warning",
+                    "text": (
+                        f"Attackers can invent non-existent subdomains like "
+                        f"secure-login.yourdomain.com. Without np=, the policy for these is "
+                        f"{resolved_via}={resolved}. Consider adding np=reject."
+                    ),
+                })
+            return e
+
+    # ── adkim= ──────────────────────────────────────────────
+    if tag == "adkim":
+        note = (
+            "DMARCbis clarifies alignment edge cases, especially around subdomains and how "
+            "organizational domain is determined (now via tree walk instead of PSL)."
+        )
+        if present:
+            explanation = {
+                "r": (
+                    "Relaxed. Subdomains of the DKIM signing domain satisfy alignment. "
+                    "mail.example.com aligns with example.com."
+                ),
+                "s": (
+                    "Strict. The DKIM d= domain must exactly match the From domain. "
+                    "More secure but breaks mail signed by a subdomain."
+                ),
+            }.get(value, f"Unknown DKIM alignment value '{value}'.")
+            e = _entry(tag, value, False, False, "DKIM Alignment Mode",
+                       explanation, "current", dmarcbis_note=note)
+        else:
+            e = _entry(tag, "r", True, True, "DKIM Alignment Mode",
+                       "Defaults to relaxed (r). Subdomain alignment is permitted.",
+                       "current", dmarcbis_note=note)
+            value = "r"
+        if value == "r" and policy == "reject":
+            e["warnings"].append({
+                "level": "info",
+                "text": (
+                    "Consider strict alignment for tighter security at reject enforcement, "
+                    "but verify your mail flows first."
+                ),
+            })
+        return e
+
+    # ── aspf= ───────────────────────────────────────────────
+    if tag == "aspf":
+        note = (
+            "DMARCbis explicitly states that DMARC evaluates SPF against the MAIL FROM identity "
+            "only, not HELO. RFC 7489 was ambiguous about this."
+        )
+        if present:
+            explanation = {
+                "r": "Relaxed. Subdomains of the SPF-authenticated domain satisfy alignment.",
+                "s": "Strict. The MAIL FROM domain must exactly match the From domain.",
+            }.get(value, f"Unknown SPF alignment value '{value}'.")
+            e = _entry(tag, value, False, False, "SPF Alignment Mode",
+                       explanation, "current", dmarcbis_note=note)
+        else:
+            e = _entry(tag, "r", True, True, "SPF Alignment Mode",
+                       "Defaults to relaxed (r).",
+                       "current", dmarcbis_note=note)
+            value = "r"
+        if value == "r" and policy == "reject":
+            e["warnings"].append({
+                "level": "info",
+                "text": (
+                    "Consider strict alignment for tighter security at reject enforcement, "
+                    "but verify your mail flows first."
+                ),
+            })
+        return e
+
+    # ── fo= ─────────────────────────────────────────────────
+    if tag == "fo":
+        if present:
+            explanation = {
+                "0": (
+                    "Reports only when BOTH SPF and DKIM fail. You miss most failures. "
+                    "Set fo=1 for broader visibility."
+                ),
+                "1": "Reports when either mechanism fails. Recommended.",
+                "d": "Reports on DKIM failure regardless of alignment.",
+                "s": "Reports on SPF failure regardless of alignment.",
+            }.get(value, f"Failure reporting option: {value}.")
+            return _entry(tag, value, False, False, "Failure Reporting Options",
+                          explanation, "current")
+        else:
+            return _entry(tag, "0", True, True, "Failure Reporting Options",
+                          "Defaults to fo=0. Reports only on complete failure of both mechanisms.",
+                          "current")
+
+    # ── rua= ────────────────────────────────────────────────
+    if tag == "rua":
+        note = (
+            "DMARCbis splits reporting into separate RFCs and tightens URI validation. The mailto: "
+            "prefix is now strictly required. Bare email addresses are rejected. DMARCbis also "
+            "strengthens external reporting authorization checks."
+        )
+        if present:
+            base = (
+                f"Aggregate reports are sent to {value}. These show which sources send mail "
+                f"as your domain and whether they pass or fail authentication."
+            )
+            if policy == "reject":
+                base += (
+                    " These reports are the only way to know if legitimate mail is being silently rejected."
+                )
+            elif policy == "quarantine":
+                base += (
+                    " These show what's landing in spam. Check if legitimate senders are affected."
+                )
+            elif policy == "none":
+                base += (
+                    " These show every source sending as your domain. Review before moving to enforcement."
+                )
+            return _entry(tag, value, False, False, "Aggregate Report Recipients",
+                          base, "current", dmarcbis_note=note)
+        else:
+            if policy == "reject":
+                msg = (
+                    "No reporting. You are rejecting mail with zero visibility. "
+                    "Legitimate mail could be silently disappearing."
+                )
+            elif policy == "quarantine":
+                msg = "No reporting. Failing mail goes to spam and you cannot see what's affected."
+            else:
+                msg = (
+                    "No enforcement AND no monitoring. This record serves no purpose."
+                )
+            e = _entry(tag, None, False, True, "Aggregate Report Recipients",
+                       msg, "current", dmarcbis_note=note)
+            e["warnings"].append({"level": "warning", "text": msg})
+            return e
+
+    # ── ruf= ────────────────────────────────────────────────
+    if tag == "ruf":
+        note = (
+            "Failure reporting is now defined in its own separate RFC under DMARCbis, reflecting "
+            "that it's increasingly uncommon in practice."
+        )
+        if present:
+            return _entry(tag, value, False, False, "Forensic Report Recipients",
+                          f"Failure reports sent to {value}. Most providers including Google and "
+                          f"Microsoft no longer send failure reports due to PII concerns.",
+                          "current", dmarcbis_note=note)
+        else:
+            return _entry(tag, None, False, True, "Forensic Report Recipients",
+                          "No failure reporting. Common since most providers don't send them. "
+                          "Aggregate reports provide sufficient visibility.",
+                          "current", dmarcbis_note=note)
+
+    # ── pct= (deprecated) ──────────────────────────────────
+    if tag == "pct":
+        if present:
+            e = _entry(tag, value, False, False, "Percentage",
+                       f"Policy applies to {value}% of failing messages. "
+                       "The pct tag is deprecated in DMARCbis. Only values of 0 and 100 were reliably "
+                       "honored. DMARCbis replaces this with t=y/t=n for predictable testing. Current "
+                       "receivers still honor pct but DMARCbis receivers will ignore it. To migrate: "
+                       "use t=y for testing or remove pct for full enforcement.",
+                       "deprecated")
+            e["warnings"].append({
+                "level": "info",
+                "text": "Deprecated in DMARCbis. Use t=y for testing or remove pct for full enforcement.",
+            })
+            return e
+        else:
+            return _entry(tag, "100", True, True, "Percentage",
+                          "Defaults to 100. The pct tag is deprecated in DMARCbis.",
+                          "deprecated")
+
+    # ── rf= (deprecated) ───────────────────────────────────
+    if tag == "rf":
+        if present:
+            e = _entry(tag, value, False, False, "Report Format",
+                       "Only afrf was ever implemented. Removed in DMARCbis. Safe to remove.",
+                       "deprecated")
+            e["warnings"].append({"level": "info", "text": "Deprecated in DMARCbis. Safe to remove."})
+            return e
+        else:
+            return _entry(tag, "afrf", True, True, "Report Format",
+                          "Defaults to afrf. Deprecated in DMARCbis.",
+                          "deprecated")
+
+    # ── ri= (deprecated) ───────────────────────────────────
+    if tag == "ri":
+        if present:
+            suffix = f" ({int(value)//3600}h)" if value.isdigit() else ""
+            e = _entry(tag, value, False, False, "Report Interval",
+                       f"Requested interval: {value} seconds{suffix}. "
+                       "Report intervals were rarely respected. DMARCbis standardizes daily reports. "
+                       "Safe to remove.",
+                       "deprecated")
+            e["warnings"].append({"level": "info", "text": "Deprecated in DMARCbis. Safe to remove."})
+            return e
+        else:
+            return _entry(tag, "86400", True, True, "Report Interval",
+                          "Defaults to 86400s (24h). Deprecated in DMARCbis.",
+                          "deprecated")
+
+    # ── psd= (DMARCbis) ────────────────────────────────────
+    if tag == "psd":
+        note = (
+            "This tag is NEW in DMARCbis. It replaces reliance on the Public Suffix List (PSL) "
+            "for determining organizational domain boundaries. The PSL was maintained manually and "
+            "often outdated. psd= lets domain owners declare their own status directly in DNS. "
+            "Only 1 domain in the top 1000 has adopted this tag."
+        )
+        if present:
+            explanation = {
+                "y": (
+                    "This domain declares itself as a Public Suffix Domain (like .com or .co.uk). "
+                    "The DNS tree walk stops here and subdomains are treated as separate organizational "
+                    "domains that will NOT inherit this DMARC policy. If this domain is not actually a "
+                    "public suffix, this is a critical misconfiguration -- subdomains lose policy "
+                    "inheritance entirely."
+                ),
+                "n": (
+                    "Not a Public Suffix. Subdomains inherit policy normally. "
+                    "This is the correct value for most domains."
+                ),
+                "u": (
+                    "Undeclared. Different receivers may handle the DNS tree walk differently -- "
+                    "some continue walking, others stop. This creates inconsistent enforcement across "
+                    "Gmail, Microsoft, Yahoo, and others. Set psd=n explicitly."
+                ),
+            }.get(value, f"Unknown psd value '{value}'.")
+            e = _entry(tag, value, False, False, "Public Suffix Domain", explanation, "new",
+                       dmarcbis_note=note)
+            if value == "y":
+                e["warnings"].append({
+                    "level": "warning",
+                    "text": (
+                        "If this domain is not actually a public suffix, this misconfiguration "
+                        "breaks policy inheritance for all subdomains."
+                    ),
+                })
+            return e
+        else:
+            return _entry(tag, "u", True, True, "Public Suffix Domain",
+                          "Not declared. Receivers fall back to the Public Suffix List or their own "
+                          "implementation. Behavior varies. Consider adding psd=n.",
+                          "new", dmarcbis_note=note)
+
+    # ── t= (DMARCbis) ──────────────────────────────────────
+    if tag == "t":
+        note = (
+            "This tag is NEW in DMARCbis, replacing the unreliable pct tag. Under RFC 7489, "
+            "pct=50 meant 'apply to 50% of failing mail' but receivers implemented this "
+            "inconsistently. Only pct=0 and pct=100 were reliable. DMARCbis replaces this with a "
+            "clean binary flag: t=y (testing, drop policy one level) or t=n (enforce fully). This "
+            "gives domain owners a safe, predictable way to test stricter policies before committing. "
+            "0% of the top 1000 domains use this tag yet."
+        )
+        if present:
+            if value == "y":
+                explanation = (
+                    "Test mode ACTIVE. Your published policy is NOT enforced at full strength. "
+                    "p=reject becomes p=quarantine. p=quarantine becomes p=none. "
+                    "This also drops sp= and np= one level. Test mode is useful "
+                    "during migration but should be temporary."
+                )
+                e = _entry(tag, value, False, False, "Testing Mode", explanation, "new",
+                           dmarcbis_note=note)
+                if policy == "none":
+                    e["warnings"].append({
+                        "level": "info",
+                        "text": "t=y on p=none has no effect. p=none cannot drop further. Remove t=y.",
+                    })
+                return e
+            else:
+                return _entry(tag, value, False, False, "Testing Mode",
+                              "Normal enforcement. Policies applied as published.",
+                              "new", dmarcbis_note=note)
+        else:
+            return _entry(tag, None, False, True, "Testing Mode",
+                          "Normal enforcement. Policies applied as published.",
+                          "new", dmarcbis_note=note)
+
+    # ── Unknown tag ─────────────────────────────────────────
+    if present:
+        e = _entry(tag, value, False, False, f"Unknown Tag ({tag})",
+                   "This tag is not defined in RFC 7489 or DMARCbis. It may be ignored by receivers.",
+                   "current")
+        e["warnings"].append({
+            "level": "warning",
+            "text": f"Unrecognized tag '{tag}' may be ignored by mail receivers.",
+        })
+        return e
+
+    return None
+
+
+def _entry(tag: str, value, is_default: bool, is_absent: bool,
+           label: str, explanation: str, dmarcbis: str,
+           dmarcbis_note: str = None) -> Dict:
+    """Helper to build a tag breakdown entry."""
+    entry = {
+        "tag": tag,
+        "value": value,
+        "is_default": is_default,
+        "is_absent": is_absent,
+        "label": label,
+        "explanation": explanation,
+        "dmarcbis": dmarcbis,
+        "warnings": [],
+    }
+    if dmarcbis_note:
+        entry["dmarcbis_note"] = dmarcbis_note
+    return entry
+
+
+# ============================================================
+# Dangerous Combination Detection (Prompt 2)
+# ============================================================
+
+def _detect_dangerous_combinations(tags: Dict[str, str], policy: str) -> List[Dict]:
+    """Check for dangerous tag combinations. Returns a list of warnings
+    with level ("critical" or "advisory"), title, and text."""
+    warnings: List[Dict] = []
+    sp = tags.get("sp")
+    np_val = tags.get("np")
+    np_present = "np" in tags
+    t_val = tags.get("t")
+    psd = tags.get("psd")
+    fo = tags.get("fo", "0")
+    adkim = tags.get("adkim", "r")
+    aspf = tags.get("aspf", "r")
+    rua = tags.get("rua")
+    ruf = tags.get("ruf")
+    deprecated_present = [t for t in ("pct", "rf", "ri") if t in tags]
+
+    # Resolve np fallback
+    np_resolved = np_val if np_present else (sp if sp else policy)
+    np_resolved_via = "np" if np_present else ("sp" if sp else "p")
+
+    # ── RED: Critical ───────────────────────────────────────
+
+    # 1. Any policy + no rua
+    if not rua:
+        if policy == "reject":
+            msg = (
+                "No aggregate reporting configured. At p=reject, you are rejecting mail that "
+                "fails authentication with zero visibility. Legitimate mail could be silently "
+                "disappearing and you would never know. Add an rua= address immediately."
+            )
+        elif policy == "quarantine":
+            msg = (
+                "No aggregate reporting configured. At p=quarantine, failing mail goes to spam "
+                "and you cannot see what is being quarantined. Add an rua= address immediately."
+            )
+        else:
+            msg = (
+                "No aggregate reporting configured. At p=none, there is no enforcement and no "
+                "monitoring. This DMARC record serves no purpose. Add an rua= address immediately."
+            )
+        warnings.append({"level": "critical", "title": "No aggregate reporting", "text": msg, "tags": ["rua"]})
+
+    # 2. sp=none + p=reject
+    if sp == "none" and policy == "reject":
+        warnings.append({
+            "level": "critical",
+            "title": "Subdomain policy gap",
+            "text": (
+                "Subdomain policy gap. Your root domain rejects spoofed mail but subdomains allow "
+                "it through. Attackers will target subdomains like mail.yourdomain.com to bypass your policy."
+            ),
+            "tags": ["sp", "p"],
+        })
+
+    # 3. np=none + p=reject
+    if np_val == "none" and policy == "reject":
+        warnings.append({
+            "level": "critical",
+            "title": "Non-existent subdomain gap",
+            "text": (
+                "Non-existent subdomain gap. Invented subdomains like "
+                "secure-login.yourdomain.com have no enforcement while your root domain rejects."
+            ),
+            "tags": ["np", "p"],
+        })
+
+    # 4. np missing + sp=none + p=reject
+    if not np_present and sp == "none" and policy == "reject":
+        warnings.append({
+            "level": "critical",
+            "title": "Double policy gap",
+            "text": (
+                "Double policy gap. Both existing and non-existent subdomains fall back to sp=none. "
+                "Your p=reject only protects the root domain."
+            ),
+            "tags": ["np", "sp", "p"],
+        })
+
+    # 5. psd=y
+    if psd == "y":
+        warnings.append({
+            "level": "critical",
+            "title": "Public Suffix declaration",
+            "text": (
+                "This domain claims to be a Public Suffix Domain. If incorrect, the DNS tree walk "
+                "stops prematurely and subdomains lose policy inheritance entirely. This is likely a "
+                "misconfiguration -- set psd=n if this is a regular domain."
+            ),
+            "tags": ["psd"],
+        })
+
+    # 6. p=none + no rua (already covered by #1 but with specific text)
+    # Already handled above in the p=none branch of #1
+
+    # 7. np=reject + p=none
+    if np_val == "reject" and policy == "none":
+        warnings.append({
+            "level": "critical",
+            "title": "Contradictory np vs p policy",
+            "text": (
+                "Stricter policy on non-existent subdomains than the root domain. This is "
+                "contradictory -- attackers will spoof the root domain directly."
+            ),
+            "tags": ["np", "p"],
+        })
+
+    # 8. sp=reject + p=none
+    if sp == "reject" and policy == "none":
+        warnings.append({
+            "level": "critical",
+            "title": "Contradictory sp vs p policy",
+            "text": (
+                "Stricter policy on subdomains than the root domain. Same contradiction -- "
+                "the root domain is the easier target."
+            ),
+            "tags": ["sp", "p"],
+        })
+
+    # ── AMBER: Warnings ────────────────────────────────────
+
+    # 9. t=y + p=reject
+    if t_val == "y" and policy == "reject":
+        warnings.append({
+            "level": "advisory",
+            "title": "Test mode weakens reject",
+            "text": (
+                "Test mode reduces your effective policy to p=quarantine. Spoofed mail lands in "
+                "spam instead of being blocked. If testing is complete, remove t=y to enforce full rejection."
+            ),
+            "tags": ["t", "p"],
+        })
+
+    # 10. t=y + np=reject
+    if t_val == "y" and np_val == "reject":
+        warnings.append({
+            "level": "advisory",
+            "title": "Test mode weakens np=reject",
+            "text": (
+                "Test mode also drops np=reject to np=quarantine. Non-existent subdomain "
+                "spoofing lands in spam instead of being blocked."
+            ),
+            "tags": ["t", "np"],
+        })
+
+    # 11. t=y + p=none
+    if t_val == "y" and policy == "none":
+        warnings.append({
+            "level": "advisory",
+            "title": "Test mode on p=none",
+            "text": "Test mode on a policy that already permits everything. t=y has no effect here. Remove it.",
+            "tags": ["t", "p"],
+        })
+
+    # 12. psd=u or absent
+    if psd == "u" or "psd" not in tags:
+        warnings.append({
+            "level": "advisory",
+            "title": "Undeclared PSD status",
+            "text": (
+                "Undeclared PSD status. Different receivers handle the DNS tree walk differently, "
+                "creating inconsistent enforcement. Declare psd=n explicitly."
+            ),
+            "tags": ["psd"],
+        })
+
+    # 13. fo=0 + ruf configured
+    if fo == "0" and ruf:
+        warnings.append({
+            "level": "advisory",
+            "title": "Underutilized failure reporting",
+            "text": (
+                "Failure reporting is configured but set to report only when both SPF and DKIM fail. "
+                "You are missing most failure data. Set fo=1 to capture all failures."
+            ),
+            "tags": ["fo", "ruf"],
+        })
+
+    # 14. adkim=r + aspf=r + p=reject
+    if adkim == "r" and aspf == "r" and policy == "reject":
+        warnings.append({
+            "level": "advisory",
+            "title": "Relaxed alignment at reject",
+            "text": (
+                "Both alignment modes are relaxed at the strictest enforcement level. Consider "
+                "tightening at least one to strict for defense in depth, after verifying your mail "
+                "flows support it."
+            ),
+            "tags": ["adkim", "aspf", "p"],
+        })
+
+    # 15. Deprecated tags present
+    if deprecated_present:
+        warnings.append({
+            "level": "advisory",
+            "title": "Deprecated tags present",
+            "text": (
+                f"Deprecated tags found that will be ignored by DMARCbis-compliant receivers. "
+                f"Consider removing: {', '.join(deprecated_present)}."
+            ),
+            "tags": deprecated_present,
+        })
+
+    # 16. sp absent + p=reject
+    if sp is None and policy == "reject":
+        warnings.append({
+            "level": "advisory",
+            "title": "Implicit subdomain policy",
+            "text": (
+                "Subdomains inherit p=reject by default, which is correct. But setting sp=reject "
+                "explicitly removes ambiguity."
+            ),
+            "tags": ["sp", "p"],
+        })
+
+    # 16. np absent at enforcing policy
+    if not np_present and policy in ("reject", "quarantine"):
+        warnings.append({
+            "level": "advisory",
+            "title": "No explicit np= policy",
+            "text": (
+                f"No explicit non-existent subdomain policy. Falls back to "
+                f"{np_resolved_via}={np_resolved}. Consider adding np= to close potential gaps."
+            ),
+            "tags": ["np"],
+        })
+
+    # 17. p=none + rua configured
+    if policy == "none" and rua:
+        warnings.append({
+            "level": "advisory",
+            "title": "Monitoring mode",
+            "text": (
+                "Monitoring mode. Your domain is not protected against spoofing -- mail that fails "
+                "authentication is still delivered to recipients. Your domain can be used to send "
+                "phishing or malware to your customers and partners, which can damage your sending "
+                "reputation and erode trust with the people you do business with. Review your aggregate "
+                "reports and progress to p=quarantine then p=reject."
+            ),
+            "tags": ["p", "rua"],
+        })
+
+    # ── BLUE: Informational ────────────────────────────────
+
+    # 18. SPF evaluates MAIL FROM only under DMARCbis
+    warnings.append({
+        "level": "info",
+        "title": "SPF alignment under DMARCbis",
+        "text": "Under DMARCbis, SPF alignment is evaluated against the MAIL FROM (envelope sender) identity only, not HELO.",
+        "tags": [],
+    })
+
+    # 19. p=reject + mailing list risk
+    if policy == "reject":
+        warnings.append({
+            "level": "info",
+            "title": "Mailing list participation",
+            "text": (
+                "p=reject may cause issues with mailing lists that rewrite the From header. "
+                "ARC (Authenticated Received Chain) helps, but not all receivers support it yet."
+            ),
+            "tags": ["p"],
+        })
+
+    # 20. DMARCbis reporting split
+    warnings.append({
+        "level": "info",
+        "title": "DMARCbis reporting restructured",
+        "text": "DMARCbis splits the specification into three separate RFCs: core mechanism, aggregate reporting, and failure reporting.",
+        "tags": [],
+    })
+
+    # 21. External reporting destinations
+    if rua and "@" in rua:
+        # Check if any rua destination is external
+        rua_domains = []
+        for uri in rua.split(","):
+            uri = uri.strip()
+            if "mailto:" in uri:
+                email = uri.split("mailto:")[1].split("!")[0]
+                if "@" in email:
+                    rua_domains.append(email.split("@")[1])
+        if rua_domains:
+            warnings.append({
+                "level": "info",
+                "title": "External reporting destinations",
+                "text": f"Aggregate reports are sent to domain(s): {', '.join(set(rua_domains))}.",
+                "tags": ["rua"],
+            })
+
+    return warnings
+
+
+# ============================================================
+# DMARCbis Health Verdict (Prompt 3)
+# ============================================================
+
+def _calculate_dmarcbis_health(tags: Dict[str, str], policy: str, config_warnings: List[Dict]) -> Dict:
+    """Evaluate the record and return one of five verdicts with a badge color
+    and one-line summary.
+
+    Returns:
+      status   - "ready", "compatible", "monitoring", "attention", "misconfigured"
+      label    - display label
+      color    - "green", "blue", "amber", "red"
+      summary  - one-line explanation
+      reasons  - specific tags/combos that determined the verdict
+    """
+    critical = [w for w in config_warnings if w["level"] == "critical"]
+    advisory = [w for w in config_warnings if w["level"] == "advisory"]
+
+    deprecated_present = [t for t in ("pct", "rf", "ri") if t in tags]
+    np_present = "np" in tags
+    psd_val = tags.get("psd")
+    psd_declared = psd_val in ("y", "n")
+    t_val = tags.get("t")
+    rua = tags.get("rua")
+    sp = tags.get("sp")
+
+    # ── Misconfigured (red) ─────────────────────────────────
+    # Critical issues that actively undermine the record
+    if critical:
+        reasons = [w["title"] for w in critical]
+        # Build a specific summary from the worst issue
+        worst = critical[0]
+        return {
+            "status": "misconfigured",
+            "label": "Misconfigured",
+            "color": "red",
+            "summary": f"This record has critical issues. {worst['text'].split('.')[0]}.",
+            "reasons": reasons,
+        }
+
+    # ── Monitoring (amber) ──────────────────────────────────
+    # p=none with rua configured
+    if policy == "none" and rua:
+        return {
+            "status": "monitoring",
+            "label": "Monitoring",
+            "color": "amber",
+            "summary": (
+                "This domain is in monitoring mode. Mail that fails authentication is still "
+                "delivered -- your domain is not yet protected against spoofing. Review your "
+                "reports and progress toward an enforcing policy."
+            ),
+            "reasons": ["p=none (monitoring only)"],
+        }
+
+    # ── Needs Attention (amber) ─────────────────────────────
+    # Enforcing but has dangerous combinations that weaken protection
+    # These are the advisory warnings that actually weaken protection:
+    _attention_titles = {
+        "Test mode weakens reject", "Test mode weakens np=reject",
+        "Test mode on p=none", "Undeclared PSD status",
+        "Underutilized failure reporting", "Relaxed alignment at reject",
+    }
+    attention_triggers = [w["title"] for w in advisory if w["title"] in _attention_titles]
+
+    if attention_triggers and policy in ("reject", "quarantine"):
+        issues = ", ".join(attention_triggers[:3])
+        return {
+            "status": "attention",
+            "label": "Needs Attention",
+            "color": "amber",
+            "summary": f"This record has an enforcing policy but {issues} weaken its protection.",
+            "reasons": attention_triggers,
+        }
+
+    # ── DMARCbis Ready (green) ──────────────────────────────
+    # Clean record, fully compliant
+    if (policy in ("reject", "quarantine")
+            and not deprecated_present
+            and np_present
+            and psd_declared
+            and t_val != "y"
+            and rua
+            and not critical):
+        return {
+            "status": "ready",
+            "label": "DMARCbis Ready",
+            "color": "green",
+            "summary": "This record is fully DMARCbis-compliant with no issues detected.",
+            "reasons": [],
+        }
+
+    # ── DMARCbis Compatible (blue) ──────────────────────────
+    # Valid with minor gaps
+    reasons = []
+    if deprecated_present:
+        reasons.append(f"Deprecated tags: {', '.join(deprecated_present)}")
+    if not np_present:
+        reasons.append("np= not set")
+    if not psd_declared:
+        reasons.append("psd= not declared")
+    if sp is None and policy in ("reject", "quarantine"):
+        reasons.append("sp= not set (inherits correctly)")
+
+    improvements = ". ".join(reasons) if reasons else "Minor improvements available"
+
+    return {
+        "status": "compatible",
+        "label": "DMARCbis Compatible",
+        "color": "blue",
+        "summary": f"This record works under DMARCbis but has room for improvement. {improvements}.",
+        "reasons": reasons,
+    }
+
+
+# ============================================================
+# Migration Wizard
+# ============================================================
+
+def _build_why_dmarcbis(tags: Dict[str, str], policy: str, health_status: str, domain: str = "") -> Dict:
+    """Build the 'Why DMARCbis?' education section, personalized to this domain's record."""
+
+    sections = []
+
+    # Section 1: What is DMARCbis (always shown)
+    sections.append({
+        "title": "What is DMARCbis?",
+        "content": (
+            "DMARCbis is the next version of the DMARC email authentication standard, developed by "
+            "the IETF DMARC Working Group to replace RFC 7489. It addresses real-world problems "
+            "discovered over a decade of DMARC deployment: inconsistent parsing across receivers, "
+            "unreliable percentage-based rollout, no protection for non-existent subdomains, and "
+            "dependence on the manually-maintained Public Suffix List."
+        ),
+    })
+
+    # Section 2: What's new (conditional based on domain's record)
+    whats_new = []
+
+    if "pct" in tags:
+        whats_new.append(
+            "Your record uses the pct tag. DMARCbis deprecates pct because only values of 0 "
+            "and 100 were reliably enforced by receivers. It's replaced by t=y/t=n, a clean binary "
+            "test mode that predictably drops your policy one level for safe rollout."
+        )
+
+    if "np" not in tags:
+        whats_new.append(
+            f"Your record doesn't have an np= tag. This is a new DMARCbis tag that sets policy for "
+            f"non-existent subdomains, domains like secure-login.{domain or 'yourdomain.com'} that "
+            f"don't exist but can be spoofed. Under RFC 7489, there was no way to control this."
+        )
+
+    if "psd" not in tags:
+        whats_new.append(
+            "Your record doesn't declare psd=. DMARCbis introduces this tag to replace the Public "
+            "Suffix List for determining organizational domain boundaries. The PSL was a manually-maintained "
+            "list that was often outdated. psd= lets you declare your own domain's status directly in DNS."
+        )
+
+    dep_in_record = [t for t in ("rf", "ri") if t in tags]
+    if dep_in_record:
+        tag_list = " and ".join(dep_in_record)
+        whats_new.append(
+            f"Your record uses {tag_list} which {'is' if len(dep_in_record) == 1 else 'are'} deprecated in DMARCbis. "
+            f"rf was redundant (only afrf was ever implemented) and ri was rarely respected by receivers."
+        )
+
+    # Always-show items
+    whats_new.append(
+        "DMARCbis tightens record parsing significantly. Records with missing mailto: prefixes, "
+        "duplicate tags, empty values, or malformed URIs that older tools silently accepted will "
+        "be rejected by DMARCbis-compliant receivers."
+    )
+
+    whats_new.append(
+        "DMARCbis replaces the DNS tree walk's dependence on the Public Suffix List with the psd= "
+        "tag and an 8-query safety limit, making organizational domain resolution more reliable and DNS-native."
+    )
+
+    whats_new.append(
+        "DMARCbis splits the specification into three separate RFCs: the core mechanism, aggregate "
+        "reporting, and failure reporting, reflecting that these are distinct operational concerns."
+    )
+
+    sections.append({
+        "title": "What changed from RFC 7489?",
+        "items": whats_new,
+    })
+
+    # Section 3: How does this domain compare
+    verdict_scale = [
+        {"status": "misconfigured", "label": "Misconfigured", "color": "red"},
+        {"status": "monitoring", "label": "Monitoring", "color": "amber"},
+        {"status": "attention", "label": "Needs Attention", "color": "amber"},
+        {"status": "compatible", "label": "Compatible", "color": "blue"},
+        {"status": "ready", "label": "DMARCbis Ready", "color": "green"},
+    ]
+
+    sections.append({
+        "title": f"How does {domain or 'this domain'} compare?",
+        "content": (
+            "Based on analysis of the top 1000 internet domains: 0% have adopted DMARCbis-specific "
+            "tags (np=, psd=, t=). Many still use deprecated tags (pct, rf, ri). "
+            f"Your record is currently rated '{health_status}'. Adopting DMARCbis tags now puts you "
+            "ahead of the vast majority of the internet."
+        ),
+        "verdict_scale": verdict_scale,
+        "current_verdict": health_status,
+    })
+
+    # Section 4: Why does this matter
+    sections.append({
+        "title": "Why does this matter?",
+        "content": (
+            "Email authentication isn't just a technical checkbox. When your domain can be spoofed, "
+            "attackers can send phishing, malware, and fraudulent messages that appear to come from "
+            "your organization. Recipients, your customers, partners, and employees, receive malicious "
+            "email that carries your name. This damages your domain's sending reputation (causing "
+            "legitimate email to bounce or land in spam), erodes trust with the people you do business "
+            "with, and in the worst case can lead to ransomware, data breaches, or financial fraud "
+            "traced back to your brand. DMARCbis closes gaps that RFC 7489 left open, especially "
+            "around non-existent subdomain spoofing and inconsistent receiver behavior, making "
+            "enforcement more reliable and complete."
+        ),
+    })
+
+    # Section 5: What should I do
+    sections.append({
+        "title": "What should I do?",
+        "content": "See your personalized migration path above for step-by-step instructions to reach DMARCbis Ready status.",
+    })
+
+    return {"sections": sections}
+
+
+def _build_migration_path(tags: Dict[str, str], policy: str, health_status: str, domain: str = "") -> Optional[Dict]:
+    """Generate a personalized step-by-step migration path to DMARCbis Ready.
+
+    Returns None if already DMARCbis Ready.
+    """
+    if health_status == "ready":
+        return {"status": "ready", "steps": [], "message": "No migration needed. This record is DMARCbis Ready."}
+
+    steps = []
+    step_num = 0
+    rua = tags.get("rua")
+    sp = tags.get("sp")
+    np_val = tags.get("np")
+    psd = tags.get("psd")
+    fo = tags.get("fo", "0")
+    deprecated = [t for t in ("pct", "rf", "ri") if t in tags]
+
+    # Build the current record for before/after
+    current_parts = []
+    for part_key in ["v", "p", "sp", "np", "adkim", "aspf", "fo", "rua", "ruf", "pct", "rf", "ri", "psd", "t"]:
+        if part_key in tags:
+            current_parts.append(f"{part_key}={tags[part_key]}")
+
+    rua_placeholder = rua if rua else "mailto:dmarc@yourdomain.com"
+
+    # Step: Add reporting if missing
+    if not rua:
+        step_num += 1
+        steps.append({
+            "step": step_num,
+            "action": "Add aggregate reporting",
+            "why": "Without rua=, you have zero visibility into authentication results.",
+            "record_after": f"v=DMARC1; p={policy or 'none'}; rua={rua_placeholder}",
+            "tags_changed": ["rua"],
+        })
+
+    # Step: Review reports (for p=none)
+    if policy == "none":
+        step_num += 1
+        steps.append({
+            "step": step_num,
+            "action": "Review aggregate reports for 2-4 weeks",
+            "why": "Identify all legitimate senders and fix their SPF/DKIM alignment before enforcing.",
+            "tags_changed": [],
+        })
+
+        # Step: Test quarantine
+        step_num += 1
+        steps.append({
+            "step": step_num,
+            "action": "Test quarantine with t=y",
+            "why": "t=y drops the effective policy one level, so p=quarantine with t=y acts like p=none. Safe to test.",
+            "record_after": f"v=DMARC1; p=quarantine; t=y; rua={rua_placeholder}",
+            "tags_changed": ["p", "t"],
+        })
+
+        # Step: Enforce quarantine
+        step_num += 1
+        steps.append({
+            "step": step_num,
+            "action": "Enforce quarantine by removing t=y",
+            "why": "Once reports show no legitimate mail failures, enforce quarantine.",
+            "record_after": f"v=DMARC1; p=quarantine; rua={rua_placeholder}",
+            "tags_changed": ["t"],
+        })
+
+    # Step: Test reject (for quarantine or just-promoted)
+    if policy in ("none", "quarantine"):
+        step_num += 1
+        steps.append({
+            "step": step_num,
+            "action": "Test reject with t=y",
+            "why": "p=reject with t=y effectively acts as p=quarantine. Monitor for issues.",
+            "record_after": f"v=DMARC1; p=reject; t=y; rua={rua_placeholder}",
+            "tags_changed": ["p", "t"],
+        })
+
+        # Step: Enforce reject
+        step_num += 1
+        steps.append({
+            "step": step_num,
+            "action": "Enforce reject by removing t=y",
+            "why": "Full protection. Mail failing authentication is blocked.",
+            "record_after": f"v=DMARC1; p=reject; rua={rua_placeholder}",
+            "tags_changed": ["t"],
+        })
+
+    # Step: Fix sp=none gap if present
+    if sp == "none" and policy in ("reject", "quarantine"):
+        step_num += 1
+        steps.append({
+            "step": step_num,
+            "action": "Align subdomain policy: change sp=none to sp=reject",
+            "why": "Close the subdomain policy gap. Attackers target subdomains to bypass your root policy.",
+            "tags_changed": ["sp"],
+        })
+
+    # Step: Set fo=1 if needed
+    if fo == "0" or "fo" not in tags:
+        step_num += 1
+        steps.append({
+            "step": step_num,
+            "action": "Set fo=1 for full failure visibility",
+            "why": "fo=0 only reports when both SPF and DKIM fail. fo=1 captures all failures.",
+            "tags_changed": ["fo"],
+        })
+
+    # Step: Add DMARCbis tags
+    dmarcbis_needed = []
+    if not np_val:
+        dmarcbis_needed.append("np=reject")
+    if not sp or sp == "none":
+        dmarcbis_needed.append("sp=reject")
+    if not psd or psd not in ("y", "n"):
+        dmarcbis_needed.append("psd=n")
+
+    if dmarcbis_needed:
+        step_num += 1
+        steps.append({
+            "step": step_num,
+            "action": f"Add DMARCbis tags: {', '.join(dmarcbis_needed)}",
+            "why": "These tags close gaps in the old standard and prepare for DMARCbis.",
+            "tags_changed": [t.split("=")[0] for t in dmarcbis_needed],
+        })
+
+    # Step: Remove deprecated tags
+    if deprecated:
+        step_num += 1
+        steps.append({
+            "step": step_num,
+            "action": f"Remove deprecated tags: {', '.join(deprecated)}",
+            "why": "These tags are ignored by DMARCbis receivers. Removing them cleans up the record.",
+            "tags_changed": deprecated,
+        })
+
+    # Final target record
+    target = f"v=DMARC1; p=reject; sp=reject; np=reject; psd=n; fo=1; rua={rua_placeholder}"
+
+    return {
+        "status": "migration",
+        "steps": steps,
+        "total_steps": len(steps),
+        "target_record": target,
     }
 
 
@@ -763,6 +2362,211 @@ def transform_spf(raw: Dict, has_mx: bool = True) -> Dict:
         "details": details,
         "fix": fix,
         "fix_records": fix_records if fix_records else None,
+        "spf_deep": _build_spf_deep_analysis(raw) if record else None,
+    }
+
+
+# ============================================================
+# SPF Deep Analysis (Prompt 7)
+# ============================================================
+
+_SPF_PROVIDER_MAP = {
+    "_spf.google.com": "Google Workspace",
+    "spf.protection.outlook.com": "Microsoft 365",
+    "sendgrid.net": "SendGrid",
+    "amazonses.com": "Amazon SES",
+    "mailgun.org": "Mailgun",
+    "servers.mcsv.net": "Mailchimp",
+    "_spf.salesforce.com": "Salesforce",
+    "mail.zendesk.com": "Zendesk",
+    "spf.mandrillapp.com": "Mandrill",
+    "_spf.firebasemail.com": "Firebase",
+    "spf.messagelabs.com": "Symantec/Broadcom",
+    "_spf.intuit.com": "Intuit",
+    "hubspot.com": "HubSpot",
+    "aspmx.pardot.com": "Pardot/Salesforce",
+    "_spf.protonmail.ch": "ProtonMail",
+    "spf.constantcontact.com": "Constant Contact",
+    "_netblocks.mimecast.com": "Mimecast",
+    "pphosted.com": "Proofpoint",
+    "_spf.mx.cloudflare.net": "Cloudflare",
+    "zoho.com": "Zoho",
+    "mktomail.com": "Marketo",
+    "outbound.mailhop.org": "DuoCircle",
+    "spf.brevo.com": "Brevo",
+    "secureserver.net": "GoDaddy",
+}
+
+_ALL_EXPLANATIONS = {
+    "~all": (
+        "Unauthorized servers are flagged but mail is delivered. Under DMARC, the SPF result "
+        "feeds into alignment evaluation. The DMARC policy determines actual enforcement."
+    ),
+    "-all": "Unauthorized servers are explicitly rejected. Strongest SPF enforcement.",
+    "+all": (
+        "This authorizes EVERY server on the internet to send as your domain. "
+        "SPF provides zero protection. This is a critical misconfiguration."
+    ),
+    "?all": "No assertion about unauthorized servers. Provides no protection on its own.",
+}
+
+
+def _build_spf_deep_analysis(raw: Dict) -> Optional[Dict]:
+    """Build deep SPF analysis: mechanism breakdown, provider mapping, misconfigs, optimization."""
+    record = raw.get("record")
+    if not record:
+        return None
+
+    import re
+
+    parts = record.strip().split()
+    mechanisms = []
+    all_mechanism = None
+    lookups = raw.get("lookup_count", 0)
+    has_ptr = False
+
+    for part in parts:
+        if part.lower() == "v=spf1":
+            continue
+
+        # Determine type and lookup cost
+        p_lower = part.lower()
+        cost = 0
+        mech_type = "unknown"
+        provider = None
+        value = part
+
+        if p_lower.startswith("include:"):
+            mech_type = "include"
+            cost = 1
+            domain = part.split(":", 1)[1] if ":" in part else ""
+            value = domain
+            # Provider lookup
+            for pattern, name in _SPF_PROVIDER_MAP.items():
+                if pattern in domain.lower():
+                    provider = name
+                    break
+            if not provider:
+                provider = "Unknown service"
+        elif p_lower.startswith("ip4:"):
+            mech_type = "ip4"
+            value = part.split(":", 1)[1] if ":" in part else ""
+        elif p_lower.startswith("ip6:"):
+            mech_type = "ip6"
+            value = part.split(":", 1)[1] if ":" in part else ""
+        elif p_lower.startswith("redirect="):
+            mech_type = "redirect"
+            cost = 1
+            value = part.split("=", 1)[1] if "=" in part else ""
+        elif p_lower.startswith("exists:"):
+            mech_type = "exists"
+            cost = 1
+            value = part.split(":", 1)[1] if ":" in part else ""
+        elif p_lower in ("a", "+a") or p_lower.startswith("a:") or p_lower.startswith("a/"):
+            mech_type = "a"
+            cost = 1
+        elif p_lower in ("mx", "+mx") or p_lower.startswith("mx:") or p_lower.startswith("mx/"):
+            mech_type = "mx"
+            cost = 1
+        elif p_lower.startswith("ptr") or p_lower == "ptr":
+            mech_type = "ptr"
+            cost = 1
+            has_ptr = True
+        elif p_lower in ("-all", "~all", "+all", "?all"):
+            all_mechanism = part
+            continue
+        else:
+            mech_type = "other"
+
+        mechanisms.append({
+            "raw": part,
+            "type": mech_type,
+            "value": value,
+            "cost": cost,
+            "provider": provider,
+        })
+
+    # All-mechanism analysis
+    all_explanation = ""
+    all_severity = "info"
+    if all_mechanism:
+        all_explanation = _ALL_EXPLANATIONS.get(all_mechanism.lower(),
+                                                 f"Unknown all mechanism: {all_mechanism}")
+        if all_mechanism.lower() == "+all":
+            all_severity = "critical"
+    else:
+        all_explanation = ("No all mechanism found. Implicit default is ?all (neutral). "
+                          "SPF makes no assertion about unauthorized senders.")
+        all_severity = "warning"
+
+    # Misconfigurations
+    misconfigs = []
+
+    if has_ptr:
+        misconfigs.append({
+            "level": "warning",
+            "title": "Deprecated ptr mechanism",
+            "text": "The ptr mechanism is deprecated in RFC 7208. Slow, unreliable, stresses DNS infrastructure. Replace with explicit ip4: or ip6: mechanisms.",
+        })
+
+    if all_mechanism and all_mechanism.lower() == "+all":
+        misconfigs.append({
+            "level": "critical",
+            "title": "Open SPF (+all)",
+            "text": "This authorizes EVERY server on the internet to send as your domain. SPF provides zero protection.",
+        })
+
+    # Check for broad IP ranges
+    for mech in mechanisms:
+        if mech["type"] in ("ip4", "ip6") and "/" in mech["value"]:
+            cidr = mech["value"].split("/")[-1]
+            try:
+                prefix = int(cidr)
+                if mech["type"] == "ip4" and prefix < 16:
+                    hosts = 2 ** (32 - prefix)
+                    misconfigs.append({
+                        "level": "warning",
+                        "title": f"Broad IP range: {mech['value']}",
+                        "text": f"This range authorizes {hosts:,} addresses. Verify this is intentional.",
+                    })
+                elif mech["type"] == "ip6" and prefix < 48:
+                    misconfigs.append({
+                        "level": "warning",
+                        "title": f"Broad IPv6 range: {mech['value']}",
+                        "text": "This range is very broad. Verify this is intentional.",
+                    })
+            except ValueError:
+                pass
+
+    # Record length
+    if len(record) > 450:
+        misconfigs.append({
+            "level": "info",
+            "title": "Long SPF record",
+            "text": f"Record is {len(record)} characters. Long records may cause issues with DNS UDP packet size limits.",
+        })
+
+    # Optimization suggestions
+    optimizations = []
+    if lookups >= 8:
+        optimizations.append(
+            f"Your SPF record uses {lookups} of 10 allowed lookups. Consider SPF flattening "
+            f"where the included domain resolves to static IPs."
+        )
+
+    return {
+        "mechanisms": mechanisms,
+        "all_mechanism": all_mechanism,
+        "all_explanation": all_explanation,
+        "all_severity": all_severity,
+        "lookup_count": lookups,
+        "misconfigs": misconfigs,
+        "optimizations": optimizations,
+        "dmarcbis_note": (
+            "Under DMARCbis, SPF alignment is evaluated against the MAIL FROM (envelope sender) "
+            "identity only, not HELO. SPF pass alone does not guarantee DMARC pass. The MAIL FROM "
+            "domain must also align with the From header domain."
+        ),
     }
 
 
@@ -947,6 +2751,151 @@ def transform_dkim(raw: Dict, domain: str, has_mx: bool = True) -> Dict:
         "details": details,
         "fix": fix,
         "fix_records": None,  # DKIM keys are generated by email providers, not manually
+        "dkim_deep": _build_dkim_key_analysis(raw),
+    }
+
+
+# ============================================================
+# DKIM Key Strength & Rotation Advisory (Prompt 8)
+# ============================================================
+
+_DKIM_SELECTOR_PROVIDERS = {
+    "google": "Google Workspace", "gapps": "Google Workspace",
+    "selector1": "Microsoft 365", "selector2": "Microsoft 365",
+    "k1": "Mailchimp", "k2": "Mailchimp", "k3": "Mailchimp",
+    "mandrill": "Mandrill",
+    "s1": "Generic (Exchange)", "s2": "Generic (Exchange)",
+    "ses": "Amazon SES",
+    "cm": "Campaign Monitor",
+    "zendesk1": "Zendesk", "zendesk2": "Zendesk",
+    "hubspot": "HubSpot", "hs1": "HubSpot", "hs2": "HubSpot",
+    "sf": "Salesforce", "sf1": "Salesforce", "sf2": "Salesforce",
+    "protonmail": "ProtonMail", "protonmail2": "ProtonMail", "protonmail3": "ProtonMail",
+    "mg": "Mailgun",
+    "dkim": "Generic",
+    "default": "Generic",
+    "sendgrid": "SendGrid", "smtpapi": "SendGrid", "s1._domainkey": "SendGrid",
+    "fm1": "Fastmail", "fm2": "Fastmail", "fm3": "Fastmail",
+    "mimecast": "Mimecast",
+    "pphosted": "Proofpoint",
+    "everlytickey1": "Everlytic", "everlytickey2": "Everlytic",
+}
+
+
+def _build_dkim_key_analysis(raw: Dict) -> Optional[Dict]:
+    """Build DKIM key strength analysis, tag breakdown, provider mapping, rotation guidance."""
+    found = raw.get("found_selectors", [])
+    if not found:
+        return None
+
+    keys = []
+    has_weak = False
+    has_revoked = False
+    all_strong = True
+
+    for sel in found:
+        selector = sel.get("selector", "unknown")
+        sel_record = sel.get("record", "")
+        vendor = sel.get("vendor")
+        key_analysis = analyze_dkim_key_strength(sel_record)
+        bits = key_analysis.get("key_bits", 0)
+        key_type = key_analysis.get("key_type", "RSA")
+        strength = key_analysis.get("status", "unknown")
+
+        # Key strength rating
+        if key_type.lower() == "ed25519":
+            rating = "green"
+            rating_label = "Modern elliptic curve. Smaller, faster, more secure."
+        elif bits >= 2048:
+            rating = "green"
+            rating_label = "Meets current security recommendations."
+            if bits >= 4096:
+                rating_label = "Exceeds recommendations. Larger keys increase DNS response size."
+        elif bits >= 1024:
+            rating = "amber"
+            rating_label = "Weak by modern standards. NIST deprecated 1024-bit RSA in 2013. Rotate to 2048-bit."
+            has_weak = True
+            all_strong = False
+        elif bits > 0:
+            rating = "red"
+            rating_label = "Critical. This key can be factored and forged. Rotate immediately."
+            has_weak = True
+            all_strong = False
+        else:
+            rating = "amber"
+            rating_label = "Key strength could not be determined."
+            all_strong = False
+
+        # Parse DKIM record tags
+        dkim_tags = []
+        for part in sel_record.split(";"):
+            part = part.strip()
+            if "=" in part:
+                k, _, v = part.partition("=")
+                k = k.strip().lower()
+                v = v.strip()
+
+                tag_info = {"tag": k, "value": v}
+                if k == "v":
+                    tag_info["label"] = "Version"
+                elif k == "k":
+                    tag_info["label"] = "Key type"
+                elif k == "p":
+                    if not v:
+                        tag_info["label"] = "Public key (REVOKED)"
+                        tag_info["revoked"] = True
+                        has_revoked = True
+                    else:
+                        tag_info["label"] = "Public key"
+                        tag_info["truncated"] = v[:40] + "..." if len(v) > 40 else v
+                elif k == "t":
+                    if v == "y":
+                        tag_info["label"] = "Test mode"
+                    elif v == "s":
+                        tag_info["label"] = "Strict domain"
+                    else:
+                        tag_info["label"] = f"Flag: {v}"
+                elif k == "h":
+                    tag_info["label"] = "Hash algorithm"
+                elif k == "s":
+                    tag_info["label"] = "Service type"
+                else:
+                    tag_info["label"] = k
+
+                dkim_tags.append(tag_info)
+
+        # Provider from selector name
+        provider = vendor or _DKIM_SELECTOR_PROVIDERS.get(selector.lower())
+
+        keys.append({
+            "selector": selector,
+            "bits": bits,
+            "key_type": key_type,
+            "rating": rating,
+            "rating_label": rating_label,
+            "provider": provider,
+            "tags": dkim_tags,
+        })
+
+    # Rotation guidance
+    if all_strong:
+        rotation = "Keys meet standards. Best practice: rotate annually."
+    elif has_revoked:
+        rotation = "Revoked key detected. Messages signed with this selector fail DKIM."
+    elif has_weak:
+        weak_selectors = [k["selector"] for k in keys if k["rating"] in ("red", "amber")]
+        rotation = (
+            f"Rotate {', '.join(weak_selectors)} to 2048-bit. Steps: "
+            "1) Generate new key pair, 2) Publish new public key under new selector, "
+            "3) Configure mail server to sign with new selector, 4) Revoke old key by emptying p=."
+        )
+    else:
+        rotation = "Review key configuration."
+
+    return {
+        "keys": keys,
+        "rotation_guidance": rotation,
+        "has_weak": has_weak,
     }
 
 
@@ -1189,7 +3138,52 @@ def transform_mta_sts(raw: Dict, domain: str, has_mx: bool = True) -> Dict:
         "details": details,
         "fix": fix,
         "fix_records": None,
+        "mta_sts_deep": _build_mta_sts_deep(raw, domain) if txt_record else None,
     }
+
+
+def _build_mta_sts_deep(raw: Dict, domain: str) -> Optional[Dict]:
+    """MTA-STS deep analysis: mode breakdown, max age, setup guidance."""
+    mode = raw.get("policy_mode")
+    max_age = raw.get("max_age")
+    policy_file = raw.get("policy_file_content")
+
+    mode_explanations = {
+        "testing": (
+            "Senders attempt TLS but deliver even if it fails. Correct starting point. "
+            "Monitor TLS-RPT for failures before enforcing."
+        ),
+        "enforce": (
+            "Senders MUST establish TLS. If TLS fails, mail is NOT delivered. "
+            "Strongest downgrade protection. Ensure certificates stay valid."
+        ),
+        "none": (
+            "Explicitly disabled. Signals MTA-STS was previously configured but is now inactive."
+        ),
+    }
+
+    result: Dict = {
+        "mode": mode,
+        "mode_explanation": mode_explanations.get(mode, f"Unknown mode: {mode}") if mode else None,
+    }
+
+    # Max age analysis
+    if max_age is not None:
+        try:
+            age_secs = int(max_age)
+            if age_secs < 86400:
+                result["max_age_note"] = f"{age_secs}s ({age_secs//3600}h). Very short cache. DNS outage quickly removes protection."
+                result["max_age_level"] = "warning"
+            elif age_secs > 2592000:
+                result["max_age_note"] = f"{age_secs}s ({age_secs//86400}d). Long cache. Policy changes propagate slowly."
+                result["max_age_level"] = "info"
+            else:
+                result["max_age_note"] = f"{age_secs}s ({age_secs//86400}d). Good range."
+                result["max_age_level"] = "pass"
+        except (ValueError, TypeError):
+            pass
+
+    return result
 
 
 # ============================================================
@@ -1273,6 +3267,30 @@ def transform_tls_rpt(raw: Dict, domain: str, has_mx: bool = True) -> Dict:
         "details": details,
         "fix": fix,
         "fix_records": None,
+        "tls_rpt_deep": _build_tls_rpt_deep(raw) if record else None,
+    }
+
+
+def _build_tls_rpt_deep(raw: Dict) -> Optional[Dict]:
+    """TLS-RPT deep analysis: destinations, cross-protocol relationships."""
+    destinations = raw.get("destinations", [])
+
+    dest_types = []
+    for d in destinations:
+        if isinstance(d, str):
+            if d.startswith("mailto:"):
+                dest_types.append({"type": "mailto", "value": d})
+            elif d.startswith("https:"):
+                dest_types.append({"type": "https", "value": d})
+            else:
+                dest_types.append({"type": "unknown", "value": d})
+
+    return {
+        "destinations": dest_types,
+        "cross_protocol_note": (
+            "Without TLS-RPT, a man-in-the-middle stripping encryption from your inbound email "
+            "would go undetected."
+        ),
     }
 
 
@@ -1719,6 +3737,7 @@ def transform_dane(raw: Dict, domain: str) -> Dict:
             "details": details,
             "fix": fix,
             "fix_records": None,
+            "dane_deep": _build_dane_deep(tlsa_records, dnssec_ok),
         }
 
     # No TLSA, has MX
@@ -1763,6 +3782,93 @@ def transform_dane(raw: Dict, domain: str) -> Dict:
         "details": details,
         "fix": fix,
         "fix_records": None,
+        "dane_deep": _build_dane_deep(tlsa_records, dnssec_ok),
+    }
+
+
+# ============================================================
+# DANE Deep Analysis (Prompt 10)
+# ============================================================
+
+_TLSA_USAGE = {
+    0: ("PKIX-TA", "CA constraint with standard validation."),
+    1: ("PKIX-EE", "End entity with CA validation."),
+    2: ("DANE-TA", "Trust anchor. Specified cert trusted as CA without standard trust store."),
+    3: ("DANE-EE", "End entity. Pins the exact certificate. Most common for SMTP."),
+}
+
+_TLSA_SELECTOR = {
+    0: ("Full cert", "Full certificate matched."),
+    1: ("SPKI", "Public key only. Recommended. Allows cert renewal without TLSA update."),
+}
+
+_TLSA_MATCHING = {
+    0: ("Exact", "Exact match."),
+    1: ("SHA-256", "SHA-256 hash. Recommended."),
+    2: ("SHA-512", "SHA-512 hash."),
+}
+
+
+def _build_dane_deep(tlsa_records: List[Dict], dnssec_ok: bool) -> Optional[Dict]:
+    """DANE/TLSA deep analysis: field breakdown, DNSSEC dependency, MX coverage."""
+    if not tlsa_records:
+        return None
+
+    # DNSSEC gate
+    if dnssec_ok and any(r.get("found") for r in tlsa_records):
+        dnssec_status = {"status": "pass", "text": "DANE fully functional."}
+    elif not dnssec_ok and any(r.get("found") for r in tlsa_records):
+        dnssec_status = {"status": "fail", "text": (
+            "DANE is INEFFECTIVE. Without DNSSEC, attackers can forge TLSA records. "
+            "Senders implementing RFC 7672 will ignore non-DNSSEC TLSA records."
+        )}
+    elif dnssec_ok:
+        dnssec_status = {"status": "partial", "text": (
+            "DNSSEC active. Your domain supports DANE. Adding TLSA records provides "
+            "certificate verification independent of CAs."
+        )}
+    else:
+        dnssec_status = {"status": "info", "text": "Neither DNSSEC nor DANE configured."}
+
+    # MX coverage
+    hosts_with = [r["mx_host"] for r in tlsa_records if r.get("found")]
+    hosts_without = [r["mx_host"] for r in tlsa_records if not r.get("found") and not r.get("error")]
+
+    # Parse TLSA fields from records that were found
+    parsed_tlsa = []
+    for r in tlsa_records:
+        if not r.get("found") or not r.get("records"):
+            continue
+        for rec in r.get("records", []):
+            parts = rec.strip().split()
+            if len(parts) >= 4:
+                try:
+                    usage = int(parts[0])
+                    selector = int(parts[1])
+                    matching = int(parts[2])
+                    usage_info = _TLSA_USAGE.get(usage, ("Unknown", f"Usage {usage}"))
+                    sel_info = _TLSA_SELECTOR.get(selector, ("Unknown", f"Selector {selector}"))
+                    match_info = _TLSA_MATCHING.get(matching, ("Unknown", f"Matching {matching}"))
+
+                    is_best = usage == 3 and selector == 1 and matching == 1
+                    rotation_safe = selector == 1
+
+                    parsed_tlsa.append({
+                        "mx_host": r["mx_host"],
+                        "usage": usage, "usage_label": usage_info[0], "usage_desc": usage_info[1],
+                        "selector": selector, "selector_label": sel_info[0], "selector_desc": sel_info[1],
+                        "matching": matching, "matching_label": match_info[0], "matching_desc": match_info[1],
+                        "is_best_practice": is_best,
+                        "rotation_safe": rotation_safe,
+                    })
+                except (ValueError, IndexError):
+                    pass
+
+    return {
+        "dnssec_status": dnssec_status,
+        "hosts_with_tlsa": hosts_with,
+        "hosts_without_tlsa": hosts_without,
+        "parsed_records": parsed_tlsa,
     }
 
 

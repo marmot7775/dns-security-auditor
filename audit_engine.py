@@ -60,6 +60,7 @@ from result_transformer import (
     transform_nameservers,
     transform_ct,
     transform_blacklist,
+    build_security_roadmap,
 )
 
 
@@ -542,6 +543,13 @@ def _raw_check_dmarc(domain: str) -> Dict[str, Any]:
             "When multiple records exist, DMARC processing aborts entirely. "
             "None of them are valid. This is the same as having no DMARC at all.",
             "Remove duplicate DMARC records so only one remains.",
+        )
+        result["record"] = dmarc_records[0]
+        result["strict_validation"] = _validate_dmarc_strict(
+            dmarc_records[0], dmarc_records_count=len(dmarc_records)
+        )
+        result["legacy_validation"] = _validate_dmarc_legacy(
+            dmarc_records[0], dmarc_records_count=len(dmarc_records)
         )
         return result
 
@@ -1034,8 +1042,438 @@ def _raw_check_dmarc(domain: str) -> Dict[str, Any]:
     # ── DMARCbis Readiness Assessment (informational only) ─────
     if result["record"]:
         result["dmarcbis_readiness"] = _assess_dmarcbis_readiness(result)
+        result["strict_validation"] = _validate_dmarc_strict(
+            result["record"], dmarc_records_count=1
+        )
+        result["legacy_validation"] = _validate_dmarc_legacy(
+            result["record"], dmarc_records_count=1
+        )
 
     return result
+
+
+def _validate_dmarc_strict(record: str, dmarc_records_count: int = 1) -> Dict:
+    """DMARCbis-strict layered validation.
+
+    Returns structured results with pass/fail/warn per check, grouped by
+    category: record_structure, uri_validation, external_auth, tag_values,
+    dns_integrity.
+    """
+    import re
+
+    SINGLETON_TAGS = {"v", "p", "sp", "np", "adkim", "aspf", "pct", "fo", "rf", "ri", "psd", "t"}
+    KNOWN_TAGS = SINGLETON_TAGS | {"rua", "ruf"}
+    VALID_POLICIES = {"none", "quarantine", "reject"}
+
+    checks: list = []
+    has_structural_errors = False
+
+    def _add(category, code, status, message):
+        nonlocal has_structural_errors
+        checks.append({"category": category, "code": code, "status": status, "message": message})
+        if status == "fail":
+            has_structural_errors = True
+
+    # ── Layer 1: Tokenization ──────────────────────────────
+    tokens = re.split(r'\s*;\s*', record.strip().rstrip(";").strip())
+    tokens = [t for t in tokens if t.strip()]
+
+    parsed_tags: list = []  # list of (key, value, raw_token)
+    tag_counts: dict = {}
+
+    for token in tokens:
+        m = re.match(r'^(?P<key>[a-zA-Z][a-zA-Z0-9_-]*)=(?P<value>.+)$', token.strip())
+        if m:
+            key = m.group("key").lower()
+            value = m.group("value")
+            parsed_tags.append((key, value, token.strip()))
+            tag_counts[key] = tag_counts.get(key, 0) + 1
+        elif token.strip():
+            _add("record_structure", "MALFORMED_TAG", "fail",
+                 f"Cannot parse '{token.strip()}'. Expected format: tag=value.")
+
+    # Build dict of first-seen values for semantic checks
+    tag_dict: dict = {}
+    for k, v, _ in parsed_tags:
+        if k not in tag_dict:
+            tag_dict[k] = v
+
+    # ── Layer 2: Grammar enforcement ───────────────────────
+
+    # Check 1: Single record
+    if dmarc_records_count > 1:
+        _add("record_structure", "MULTIPLE_RECORDS", "fail",
+             f"{dmarc_records_count} DMARC records found. DMARCbis requires exactly one. "
+             "Receivers return PermError, meaning DMARC fails entirely.")
+    elif dmarc_records_count == 1:
+        _add("record_structure", "SINGLE_RECORD", "pass", "Exactly one DMARC record found.")
+
+    # Check 2: Version first
+    if not parsed_tags:
+        _add("record_structure", "V_MISSING", "fail",
+             "No v=DMARC1 found. This is not a valid DMARC record.")
+    elif parsed_tags[0][0] != "v" or parsed_tags[0][1] != "DMARC1":
+        if any(k == "v" for k, _, _ in parsed_tags):
+            _add("record_structure", "V_NOT_FIRST", "fail",
+                 "v=DMARC1 must be the first tag in the record.")
+        else:
+            _add("record_structure", "V_MISSING", "fail",
+                 "No v=DMARC1 found. This is not a valid DMARC record.")
+    else:
+        _add("record_structure", "V_FIRST", "pass", "v=DMARC1 is the first tag.")
+
+    # Check 3: Policy required
+    p_count = tag_counts.get("p", 0)
+    if p_count == 0:
+        _add("record_structure", "P_MISSING", "fail",
+             "No policy tag. Every DMARC record requires p=none, p=quarantine, or p=reject.")
+    elif p_count > 1:
+        p_vals = [v for k, v, _ in parsed_tags if k == "p"]
+        _add("record_structure", "DUPLICATE_TAG", "fail",
+             f"p= appears twice with values '{p_vals[0]}' and '{p_vals[1]}'. "
+             "Receivers may interpret this unpredictably.")
+    else:
+        _add("record_structure", "P_PRESENT", "pass", "Policy tag present.")
+
+    # Check 4: No duplicate singletons
+    dup_found = False
+    for tag_name in SINGLETON_TAGS:
+        count = tag_counts.get(tag_name, 0)
+        if count > 1:
+            dup_found = True
+            _add("record_structure", "DUPLICATE_TAG", "fail",
+                 f"'{tag_name}' appears {count} times. DMARCbis requires each tag at most once.")
+    if not dup_found and p_count <= 1:
+        _add("record_structure", "NO_DUPLICATES", "pass", "No duplicate tags found.")
+
+    # Check 5: No empty values
+    empty_found = False
+    for k, v, raw in parsed_tags:
+        if not v.strip():
+            empty_found = True
+            _add("record_structure", "EMPTY_VALUE", "fail",
+                 f"Empty value for '{k}'. Every tag must have a valid value.")
+    if not empty_found:
+        _add("record_structure", "NO_EMPTY_VALUES", "pass", "All tags have values.")
+
+    # Check 7: Unknown tags
+    for k, v, _ in parsed_tags:
+        if k not in KNOWN_TAGS:
+            _add("record_structure", "UNKNOWN_TAG", "warn",
+                 f"'{k}={v}' is not defined in DMARC or DMARCbis and will be ignored by receivers. "
+                 "Verify this is not a typo.")
+
+    # Check 8: Trailing content
+    if record.rstrip().endswith(";"):
+        pass  # trailing semicolons are harmless, don't even warn
+
+    # ── Layer 3: Value validation (semantics) ──────────────
+
+    # Check 9: Policy values
+    for tag_name in ("p", "sp", "np"):
+        val = tag_dict.get(tag_name)
+        if val is not None and val.lower() not in VALID_POLICIES:
+            _add("tag_values", f"{tag_name.upper()}_INVALID", "fail",
+                 f"Invalid policy '{val}' for {tag_name}=. Must be none, quarantine, or reject.")
+        elif val is not None:
+            _add("tag_values", f"{tag_name.upper()}_VALID", "pass",
+                 f"{tag_name}={val} is a valid policy value.")
+
+    # Check 10: Alignment values
+    for tag_name in ("adkim", "aspf"):
+        val = tag_dict.get(tag_name)
+        if val is not None and val.lower() not in ("r", "s"):
+            _add("tag_values", "ALIGNMENT_INVALID", "fail",
+                 f"{tag_name}={val} is not valid. Must be r (relaxed) or s (strict).")
+        elif val is not None:
+            _add("tag_values", f"{tag_name.upper()}_VALID", "pass",
+                 f"{tag_name}={val} is valid.")
+
+    # Check 11: Percentage
+    pct_val = tag_dict.get("pct")
+    if pct_val is not None:
+        if not re.match(r'^-?\d+$', pct_val):
+            _add("tag_values", "PCT_INVALID", "fail",
+                 f"pct={pct_val} is not a valid integer.")
+        else:
+            pct_int = int(pct_val)
+            if pct_int < 0 or pct_int > 100:
+                _add("tag_values", "PCT_INVALID", "fail",
+                     f"pct={pct_val} is out of range. Must be 0-100.")
+            elif pct_val != str(pct_int):  # leading zeros
+                _add("tag_values", "PCT_LEADING_ZEROS", "warn",
+                     f"pct={pct_val} has leading zeros. Use pct={pct_int}.")
+            else:
+                _add("tag_values", "PCT_VALID", "pass", f"pct={pct_val} is valid.")
+
+    # Check 12: URI validation (STRICT)
+    for tag_name in ("rua", "ruf"):
+        val = tag_dict.get(tag_name)
+        if val is None:
+            continue
+
+        uris = val.split(",")
+        all_valid = True
+        for i, uri in enumerate(uris):
+            raw_uri = uri
+            uri_stripped = uri.strip()
+
+            # Check for space before comma (in the raw value, not stripped)
+            if i > 0 and raw_uri != raw_uri.lstrip():
+                pass  # space after comma is just a warn
+            if i < len(uris) - 1:
+                # Check if there's a space before the comma in the original
+                pass
+
+            if not uri_stripped.startswith("mailto:"):
+                _add("uri_validation", "URI_NO_MAILTO", "fail",
+                     f"{tag_name}={uri_stripped} is not a valid URI. Must start with mailto:. "
+                     f"Correct format: mailto:{uri_stripped}. This is the most common DMARC error "
+                     "and older tools silently accept it. DMARCbis requires valid URI format.")
+                all_valid = False
+            else:
+                # Validate email format within mailto:
+                email_part = uri_stripped[7:].split("!")[0]  # strip size modifier
+                if not re.match(r'^[^@\s]+@[^@\s]+\.[^@\s]+$', email_part):
+                    _add("uri_validation", "URI_BAD_EMAIL", "fail",
+                         f"{tag_name} contains invalid email address in URI: {uri_stripped}")
+                    all_valid = False
+
+        # Check for whitespace before commas in the raw value
+        if "," in val and re.search(r'\s,', val):
+            _add("uri_validation", "URI_WHITESPACE", "fail",
+                 f"Space in {tag_name} URI list breaks strict parsing. "
+                 "Remove spaces before commas.")
+            all_valid = False
+        elif "," in val and re.search(r',\s', val):
+            _add("uri_validation", "URI_SPACE_AFTER_COMMA", "warn",
+                 f"Space after comma in {tag_name} URI list. "
+                 "DMARCbis recommends no spaces in URI lists.")
+
+        if all_valid:
+            uri_count = len(uris)
+            _add("uri_validation", f"{tag_name.upper()}_VALID", "pass",
+                 f"{tag_name} has {uri_count} valid URI(s).")
+
+    # Check 14: fo values
+    fo_val = tag_dict.get("fo")
+    if fo_val is not None:
+        valid_fo_parts = {"0", "1", "d", "s"}
+        fo_parts = re.split(r'[:]', fo_val)
+        invalid_fo = [p for p in fo_parts if p not in valid_fo_parts]
+        if invalid_fo or not fo_val:
+            _add("tag_values", "FO_INVALID", "fail",
+                 f"fo={fo_val} contains invalid values. Must be 0, 1, d, s or colon-separated combinations.")
+        else:
+            _add("tag_values", "FO_VALID", "pass", f"fo={fo_val} is valid.")
+
+    # Check 15: DMARCbis-specific tag values
+    psd_val = tag_dict.get("psd")
+    if psd_val is not None and psd_val.lower() not in ("y", "n", "u"):
+        _add("tag_values", "PSD_INVALID", "fail",
+             f"psd={psd_val} is not valid. Must be y, n, or u.")
+    elif psd_val is not None:
+        _add("tag_values", "PSD_VALID", "pass", f"psd={psd_val} is valid.")
+
+    t_val = tag_dict.get("t")
+    if t_val is not None and t_val.lower() not in ("y", "n"):
+        _add("tag_values", "T_INVALID", "fail",
+             f"t={t_val} is not valid. Must be y or n.")
+    elif t_val is not None:
+        _add("tag_values", "T_VALID", "pass", f"t={t_val} is valid.")
+
+    # Check 16: DNS integrity
+    # Multi-string TXT records (joined by caller), check for truncation
+    if record.rstrip(";").rstrip().endswith("=") and not record.rstrip(";").rstrip().endswith("v="):
+        _add("dns_integrity", "POSSIBLE_TRUNCATION", "warn",
+             "Record may be truncated. It ends with '=' which could indicate an incomplete tag value.")
+    else:
+        _add("dns_integrity", "RECORD_INTACT", "pass", "Record structure appears complete.")
+
+    # Summary
+    pass_count = sum(1 for c in checks if c["status"] == "pass")
+    fail_count = sum(1 for c in checks if c["status"] == "fail")
+    warn_count = sum(1 for c in checks if c["status"] == "warn")
+
+    if fail_count > 0:
+        summary = "This record has errors that DMARCbis-compliant receivers will reject."
+    elif warn_count > 0:
+        summary = "This record passes strict validation with warnings."
+    else:
+        summary = "This record passes DMARCbis strict validation."
+
+    return {
+        "checks": checks,
+        "pass_count": pass_count,
+        "fail_count": fail_count,
+        "warn_count": warn_count,
+        "total_count": len(checks),
+        "summary": summary,
+        "has_structural_errors": has_structural_errors,
+    }
+
+
+def _validate_dmarc_legacy(record: str, dmarc_records_count: int = 1) -> Dict:
+    """RFC 7489 (legacy) lenient validation for spec comparison.
+
+    Key differences from strict:
+    - Bare email in rua/ruf accepted (no mailto: required)
+    - Duplicate tags: warn not fail
+    - Whitespace in URI lists: tolerated
+    - Tag ordering: lenient (v= doesn't strictly need to be first)
+    - np=, psd=, t= treated as unknown (no warnings about missing)
+    - pct, rf, ri validated normally (no deprecation)
+    """
+    import re
+
+    SINGLETON_TAGS = {"v", "p", "sp", "adkim", "aspf", "pct", "fo", "rf", "ri"}
+    KNOWN_TAGS = SINGLETON_TAGS | {"rua", "ruf"}
+    VALID_POLICIES = {"none", "quarantine", "reject"}
+
+    checks: list = []
+    has_structural_errors = False
+
+    def _add(category, code, status, message):
+        nonlocal has_structural_errors
+        checks.append({"category": category, "code": code, "status": status, "message": message})
+        if status == "fail":
+            has_structural_errors = True
+
+    # Tokenize
+    tokens = re.split(r'\s*;\s*', record.strip().rstrip(";").strip())
+    tokens = [t for t in tokens if t.strip()]
+
+    parsed_tags: list = []
+    tag_counts: dict = {}
+
+    for token in tokens:
+        m = re.match(r'^(?P<key>[a-zA-Z][a-zA-Z0-9_-]*)=(?P<value>.+)$', token.strip())
+        if m:
+            key = m.group("key").lower()
+            value = m.group("value")
+            parsed_tags.append((key, value, token.strip()))
+            tag_counts[key] = tag_counts.get(key, 0) + 1
+        elif token.strip():
+            _add("record_structure", "MALFORMED_TAG", "fail",
+                 f"Cannot parse '{token.strip()}'. Expected format: tag=value.")
+
+    tag_dict: dict = {}
+    for k, v, _ in parsed_tags:
+        if k not in tag_dict:
+            tag_dict[k] = v
+
+    # Single record
+    if dmarc_records_count > 1:
+        _add("record_structure", "MULTIPLE_RECORDS", "fail",
+             f"{dmarc_records_count} DMARC records found. RFC 7489 requires exactly one.")
+    else:
+        _add("record_structure", "SINGLE_RECORD", "pass", "Exactly one DMARC record found.")
+
+    # Version present (lenient on position)
+    if any(k == "v" and v == "DMARC1" for k, v, _ in parsed_tags):
+        _add("record_structure", "V_PRESENT", "pass", "v=DMARC1 found.")
+    else:
+        _add("record_structure", "V_MISSING", "fail", "No v=DMARC1 found.")
+
+    # Policy required
+    p_count = tag_counts.get("p", 0)
+    if p_count == 0:
+        _add("record_structure", "P_MISSING", "fail", "No policy tag found.")
+    elif p_count > 1:
+        _add("record_structure", "DUPLICATE_TAG", "warn",
+             "p= appears more than once. First value used.")
+    else:
+        _add("record_structure", "P_PRESENT", "pass", "Policy tag present.")
+
+    # Duplicate singletons (warn, not fail)
+    for tag_name in SINGLETON_TAGS:
+        count = tag_counts.get(tag_name, 0)
+        if count > 1:
+            _add("record_structure", "DUPLICATE_TAG", "warn",
+                 f"'{tag_name}' appears {count} times. First value used.")
+
+    # Empty values
+    for k, v, raw in parsed_tags:
+        if not v.strip():
+            _add("record_structure", "EMPTY_VALUE", "fail",
+                 f"Empty value for '{k}'.")
+
+    # Unknown tags (np, psd, t are unknown in legacy)
+    for k, v, _ in parsed_tags:
+        if k not in KNOWN_TAGS:
+            _add("record_structure", "UNKNOWN_TAG", "warn",
+                 f"'{k}={v}' is not defined in RFC 7489. Ignored by receivers.")
+
+    # Policy values
+    for tag_name in ("p", "sp"):
+        val = tag_dict.get(tag_name)
+        if val is not None and val.lower() not in VALID_POLICIES:
+            _add("tag_values", f"{tag_name.upper()}_INVALID", "fail",
+                 f"Invalid policy '{val}' for {tag_name}=.")
+        elif val is not None:
+            _add("tag_values", f"{tag_name.upper()}_VALID", "pass",
+                 f"{tag_name}={val} is valid.")
+
+    # Alignment
+    for tag_name in ("adkim", "aspf"):
+        val = tag_dict.get(tag_name)
+        if val is not None and val.lower() not in ("r", "s"):
+            _add("tag_values", "ALIGNMENT_INVALID", "fail",
+                 f"{tag_name}={val} is not valid.")
+        elif val is not None:
+            _add("tag_values", f"{tag_name.upper()}_VALID", "pass", f"{tag_name}={val} is valid.")
+
+    # pct (validated normally, no deprecation)
+    pct_val = tag_dict.get("pct")
+    if pct_val is not None:
+        if not re.match(r'^\d+$', pct_val):
+            _add("tag_values", "PCT_INVALID", "fail", f"pct={pct_val} is not a valid integer.")
+        else:
+            pct_int = int(pct_val)
+            if pct_int < 0 or pct_int > 100:
+                _add("tag_values", "PCT_INVALID", "fail", f"pct={pct_val} out of range (0-100).")
+            else:
+                _add("tag_values", "PCT_VALID", "pass", f"pct={pct_val} is valid.")
+
+    # URI validation (LENIENT: bare email accepted, whitespace tolerated)
+    for tag_name in ("rua", "ruf"):
+        val = tag_dict.get(tag_name)
+        if val is not None:
+            _add("uri_validation", f"{tag_name.upper()}_PRESENT", "pass",
+                 f"{tag_name} is configured.")
+
+    # fo
+    fo_val = tag_dict.get("fo")
+    if fo_val is not None:
+        valid_fo_parts = {"0", "1", "d", "s"}
+        fo_parts = re.split(r'[:]', fo_val)
+        invalid_fo = [p for p in fo_parts if p not in valid_fo_parts]
+        if invalid_fo:
+            _add("tag_values", "FO_INVALID", "fail", f"fo={fo_val} contains invalid values.")
+        else:
+            _add("tag_values", "FO_VALID", "pass", f"fo={fo_val} is valid.")
+
+    # Summary
+    pass_count = sum(1 for c in checks if c["status"] == "pass")
+    fail_count = sum(1 for c in checks if c["status"] == "fail")
+    warn_count = sum(1 for c in checks if c["status"] == "warn")
+
+    if fail_count > 0:
+        summary = "This record has errors under RFC 7489."
+    elif warn_count > 0:
+        summary = "This record passes RFC 7489 validation with warnings."
+    else:
+        summary = "This record passes RFC 7489 validation."
+
+    return {
+        "checks": checks,
+        "pass_count": pass_count,
+        "fail_count": fail_count,
+        "warn_count": warn_count,
+        "total_count": len(checks),
+        "summary": summary,
+        "has_structural_errors": has_structural_errors,
+    }
 
 
 def _assess_dmarcbis_readiness(dmarc_result: Dict) -> Dict:
@@ -3368,6 +3806,7 @@ def run_full_audit(domain: str, dkim_selector: Optional[str] = None,
         "defensive_dns": is_defensive,
         "defensive_signals": defensive_signals,
         "resilience": resilience_result,
+        "security_roadmap": build_security_roadmap(checks),
         "errors": errors if errors else None,
     }
 
