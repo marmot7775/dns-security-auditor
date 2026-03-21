@@ -3002,6 +3002,20 @@ details.st-node>summary:hover {
 .footer-attribution {
     font-size: 0.87rem;
     color: var(--text-muted);
+    display: flex;
+    align-items: center;
+    gap: 0.35em;
+}
+.footer-linkedin {
+    color: var(--text-muted);
+    opacity: 0.7;
+    transition: opacity 0.15s ease;
+    display: inline-flex;
+    vertical-align: middle;
+}
+.footer-linkedin:hover {
+    opacity: 1;
+    color: var(--primary-light);
 }
 
 /* ==========================================================================
