@@ -6,7 +6,7 @@
 
 DNS and email security analysis for any domain. Enter a domain and get a scored assessment with technical findings, plain-language explanations, and copy-paste DNS fix records. The first tool to validate against the upcoming DMARCbis standard, showing domain owners what changes before their records break.
 
-Our analysis of the top 1000 internet domains found 0% adoption of DMARCbis-specific tags (`np=`, `psd=`, `t=`), 30.6% still using deprecated tags (`pct`, `rf`, `ri`), and 26% with no DMARC record at all.
+Our analysis of the top 1000 internet domains found 0% adoption of DMARCbis-specific tags (np=, psd=, t=), 30.6% still using deprecated tags (pct, rf, ri), and 26% with no DMARC record at all.
 
 Built for engineers, email administrators, and security consultants who need to evaluate a domain's authentication posture quickly and accurately.
 
@@ -19,7 +19,7 @@ Built for engineers, email administrators, and security consultants who need to 
 | Check | What It Does |
 |-------|-------------|
 | **DMARC + DMARCbis** | DMARCbis-strict record validation (16 layered checks), tag-by-tag decoder with DMARCbis education notes, dangerous combination detection (21 checks across 3 severity levels), 5-state DMARCbis health verdict, personalized migration wizard, attack surface visualization (4 spoofing vectors), RFC 7489 vs DMARCbis spec mode toggle with delta view, "Why DMARCbis?" education section. Implements the DMARCbis DNS Tree Walk ([draft-ietf-dmarc-dmarcbis](https://datatracker.ietf.org/doc/draft-ietf-dmarc-dmarcbis/), Section 4.10) for hierarchical policy discovery with animated visualization. |
-| **SPF** | Syntax validation, mechanism analysis, recursive evaluation with full lookup chain tracing, void lookup detection, and vendor-labeled include tree visualization. Flags `+all`, `?all`, missing `all`, `redirect`+`all` conflicts, deprecated `ptr`, overly broad CIDRs, and invalid IPs. |
+| **SPF** | Syntax validation, mechanism analysis, recursive evaluation with full lookup chain tracing, void lookup detection, and vendor-labeled include tree visualization. Flags +all, ?all, missing all, redirect+all conflicts, deprecated ptr, overly broad CIDRs, and invalid IPs. |
 | **DKIM** | Selector discovery across 1,100+ common patterns using SPF-based vendor fingerprinting. Key strength analysis for RSA (1024/2048/4096) and Ed25519. Key rotation age estimation. Direct lookup of user-supplied selectors. Wildcard DNS detection prevents false positives. |
 
 ### Mail and Transport
@@ -27,16 +27,16 @@ Built for engineers, email administrators, and security consultants who need to 
 | Check | What It Does |
 |-------|-------------|
 | **MX Records** | Mail exchanger discovery, vendor fingerprinting, FCrDNS validation, redundancy analysis, dangling MX detection, null MX (RFC 7505) recognition. Major providers recognized as internally redundant. |
-| **MTA-STS** | TXT record validation, HTTPS policy file retrieval and parsing, mode analysis (`enforce`/`testing`/`none`), MX pattern cross-referencing, `max_age` evaluation. |
-| **TLS-RPT** | SMTP TLS reporting record validation, report destination verification (`mailto` and HTTPS). |
-| **BIMI** | Record parsing, DMARC enforcement prerequisite check (including inherited policies), SVG logo fetch with Tiny PS profile validation, script element detection, external reference scanning, `viewBox` verification, file size check, VMC certificate tag analysis. |
+| **MTA-STS** | TXT record validation, HTTPS policy file retrieval and parsing, mode analysis (enforce/testing/none), MX pattern cross-referencing, max_age evaluation. |
+| **TLS-RPT** | SMTP TLS reporting record validation, report destination verification (mailto and HTTPS). |
+| **BIMI** | Record parsing, DMARC enforcement prerequisite check (including inherited policies), SVG logo fetch with Tiny PS profile validation, script element detection, external reference scanning, viewBox verification, file size check, VMC certificate tag analysis. |
 
 ### DNS and Cryptographic Controls
 
 | Check | What It Does |
 |-------|-------------|
 | **DNSSEC** | DNSKEY presence, DS record validation at parent zone (recursive + direct parent NS query), algorithm analysis per RFC 8624, chain of trust verification via AD flag and DS-to-DNSKEY digest matching. |
-| **CAA** | Certificate Authority Authorization records, issuer restrictions (`issue`), wildcard policy (`issuewild`), incident reporting (`iodef`). |
+| **CAA** | Certificate Authority Authorization records, issuer restrictions (issue), wildcard policy (issuewild), incident reporting (iodef). |
 | **DANE** | TLSA record lookup for each MX host, usage/selector/matching type analysis, DNSSEC dependency enforcement per RFC 7672. |
 
 ### Infrastructure and Reputation
@@ -56,7 +56,7 @@ Six categories sum to 100 points with a letter grade:
 | Category | Points | What It Measures |
 |----------|--------|-----------------|
 | DMARC | 25 | Policy strength, alignment mode, reporting, subdomain policy |
-| SPF | 20 | Record presence, `all` mechanism, lookup count, `include` complexity |
+| SPF | 20 | Record presence, all mechanism, lookup count, include complexity |
 | DKIM | 15 | Key discovery, key type, cryptographic strength |
 | Best Practices | 20 | MTA-STS (8 pts), TLS-RPT (8 pts), DANE (4 pts) |
 | Key Security | 10 | DKIM key strength, rotation hygiene, algorithm modernity |
@@ -73,17 +73,17 @@ Domains where DKIM selectors could not be detected receive full DKIM credit, sin
 
 ## Key Features
 
-### DMARC (RFC 7489)
+### DMARC (RFC 7849)
 
-When evaluating an inbound message, the receiver queries DNS for a TXT record at `_dmarc.<domain>`, where the domain is taken from the email's RFC 5322.From (Header From). If no record is found at the exact Author Domain, the receiver determines the Organizational Domain using a Public Suffix List (PSL) and performs a single fallback lookup at that level. No intermediate subdomains are checked.
+When evaluating an inbound message, the receiver queries DNS for a TXT record at _dmarc.<domain>, where the domain is taken from the email's RFC 5322.From (Header From). If no record is found at the exact Author Domain, the receiver determines the Organizational Domain using a Public Suffix List (PSL) and performs a single fallback lookup at that level. No intermediate subdomains are checked.
 
-If a valid record (beginning with `v=DMARC1`) is found at either level, its policy is applied. Otherwise, DMARC does not apply to the message.
+If a valid record (beginning with v=DMARC1) is found at either level, its policy is applied. Otherwise, DMARC does not apply to the message.
 
 ### DMARCbis DNS Tree Walk
 
 Starting from the Author Domain (RFC 5322.From), the tool queries for a DMARC Policy Record. If none is found, it initiates a DNS Tree Walk as described in DMARCbis (draft-ietf-dmarc-dmarcbis-41, Section 4.10), walking up the DNS hierarchy one label at a time to discover both an applicable policy and the Organizational Domain used for identifier alignment. The walk is capped at eight DNS queries to prevent abuse.
 
-Because DMARCbis is on the Standards Track and expected to be published as a Proposed Standard, these results are displayed alongside traditional RFC 7489 lookups. This lets domain owners compare how policy discovery, inheritance via `sp` and `np`, and new tags like `psd` and `t` will behave once receivers adopt the updated specification.
+Because DMARCbis is on the Standards Track and expected to be published as a Proposed Standard, these results are displayed alongside traditional RFC 7489 lookups. This lets domain owners compare how policy discovery, inheritance via sp and np, and new tags like psd and t will behave once receivers adopt the updated specification.
 
 ### Why DMARCbis Matters
 
@@ -95,11 +95,11 @@ The DMARCbis specification (draft-ietf-dmarc-dmarcbis-41) is currently in the RF
 
 ### SPF Evaluation Trace
 
-Full recursive SPF evaluation that traces the path through every `include`, `redirect`, and mechanism, showing the per-node lookup cost. Detected vendors are labeled inline so you can see exactly which services consume your 10-lookup budget.
+Full recursive SPF evaluation that traces the path through every include, redirect, and mechanism, showing the per-node lookup cost. Detected vendors are labeled inline so you can see exactly which services consume your 10-lookup budget.
 
 ### Defensive DNS Detection
 
-Domains configured to not send or receive email (null MX, null SPF, `p=reject`) are identified as defensive DNS configurations and scored appropriately rather than penalized for intentionally absent email infrastructure.
+Domains configured to not send or receive email (null MX, null SPF, DMARC reject) are identified as defensive DNS configurations and scored appropriately rather than penalized for intentionally absent email infrastructure.
 
 ### Authentication Resilience
 
@@ -126,16 +126,16 @@ One-click branded PDF with executive summary (grade, score breakdown, priority f
 
 ### Vendor Detection
 
-Identifies email service providers using multiple signals: MX hostnames, SPF `include` chains, DMARC reporting URIs (`rua`/`ruf`), and DKIM selectors. Multi-signal detection with confidence scoring.
+Identifies email service providers using multiple signals: MX hostnames, SPF includes, DMARC reporting URIs, and DKIM selectors. Multi-signal detection with confidence scoring.
 
 ### DMARCbis Checker
 
 The first tool to validate DMARC records against the upcoming DMARCbis standard (draft-ietf-dmarc-dmarcbis). Features that no other tool provides:
 
-- **Strict Record Validator**: 16 layered checks across tokenization, grammar, and semantics. Catches missing `mailto:` prefixes, duplicate tags, invalid URIs, and other issues that legacy tools silently accept.
+- **Strict Record Validator**: 16 layered checks across tokenization, grammar, and semantics. Catches missing mailto: prefixes, duplicate tags, invalid URIs, and other issues that legacy tools silently accept.
 - **Spec Mode Toggle**: Switch between RFC 7489 (legacy) and DMARCbis (strict) validation to see exactly what changes. The "See the Future" view shows domain owners which issues will break when receivers adopt DMARCbis.
 - **Tag Decoder with DMARCbis Education**: Every tag explained with security consequences and a DMARCbis note explaining what changed from RFC 7489 and why.
-- **Dangerous Combination Detection**: 21 checks for dangerous tag interactions (`sp=none` + `p=reject` policy gaps, contradictory policies, test mode weakening enforcement).
+- **Dangerous Combination Detection**: 21 checks for dangerous tag interactions (sp=none + p=reject policy gaps, contradictory policies, test mode weakening enforcement).
 - **Health Verdict**: 5-state classification (DMARCbis Ready, Compatible, Monitoring, Needs Attention, Misconfigured) with specific findings.
 - **Migration Wizard**: Personalized step-by-step path from current state to DMARCbis Ready, with before/after DNS records at every step and a copy-to-clipboard target record.
 - **Attack Surface View**: 4-vector spoofing risk map (direct domain, subdomain, non-existent subdomain, reporting leakage) with concrete attack scenarios.
