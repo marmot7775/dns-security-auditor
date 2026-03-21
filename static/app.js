@@ -260,6 +260,13 @@ function showError(message) {
 function renderResults(data) {
     lastAuditData = data;
 
+    // Handle preflight / server errors returned inside the result object
+    if (data.error && data.error_message) {
+        hideLoading();
+        showError(data.error_message);
+        return;
+    }
+
     // Finish loading animation
     const bar = document.getElementById('loading-bar');
     const status = document.getElementById('loading-status');

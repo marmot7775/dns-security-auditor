@@ -10,6 +10,7 @@ into the frontend's expected format.
 import logging
 import re
 import traceback
+from html import escape as _e
 from concurrent.futures import ThreadPoolExecutor, TimeoutError as FuturesTimeoutError, as_completed
 from datetime import datetime, timezone
 from typing import Any, Dict, List, Optional
@@ -60,6 +61,34 @@ from result_transformer import (
     transform_ct,
     transform_blacklist,
 )
+
+
+# ============================================================
+# Vendor SPF Include Mapping (for remediation suggestions)
+# ============================================================
+
+VENDOR_SPF_INCLUDES = {
+    "Google Workspace": "include:_spf.google.com",
+    "Microsoft 365": "include:spf.protection.outlook.com",
+    "Zoho Mail": "include:zoho.com",
+    "Fastmail": "include:spf.fastmail.com",
+    "ProtonMail": "include:_spf.protonmail.ch",
+    "Rackspace Email": "include:emailsrvr.com",
+    "SendGrid": "include:sendgrid.net",
+    "Mailchimp": "include:servers.mcsv.net",
+    "Mailgun": "include:mailgun.org",
+    "Amazon SES": "include:amazonses.com",
+    "Postmark": "include:spf.mtasv.net",
+    "SparkPost": "include:sparkpostmail.com",
+    "Brevo (Sendinblue)": "include:sendinblue.com",
+    "HubSpot": "include:hubspotemail.net",
+    "Salesforce": "include:_spf.salesforce.com",
+    "Zendesk": "include:mail.zendesk.com",
+    "Freshdesk": "include:email.freshdesk.com",
+    "Intercom": "include:intercom-mail.com",
+    "Mimecast": "include:_netblocks.mimecast.com",
+    "Barracuda": "include:spf.barracudanetworks.com",
+}
 
 
 # ============================================================
@@ -3201,6 +3230,37 @@ def run_full_audit(domain: str, dkim_selector: Optional[str] = None,
 
     # --- Vendor list for frontend ---
     vendors = _format_vendors(fp_vendors)
+
+    # --- Enrich SPF fix text with vendor-specific includes ---
+    if vendors:
+        current_spf = raw_results.get("spf", {}).get("record", "") or ""
+        missing_includes = []
+        matched_vendors = []
+        for v in vendors:
+            spf_inc = VENDOR_SPF_INCLUDES.get(v["name"])
+            if spf_inc and spf_inc not in current_spf:
+                missing_includes.append(spf_inc)
+                matched_vendors.append(v["name"])
+        if missing_includes:
+            for check in checks:
+                if check.get("name") != "SPF":
+                    continue
+                # Build suggested record
+                existing_includes = re.findall(r'include:\S+', current_spf)
+                all_includes = list(dict.fromkeys(existing_includes + missing_includes))
+                all_mech = raw_results.get("spf", {}).get("all_mechanism") or "-all"
+                suggested = f"v=spf1 {' '.join(all_includes)} {all_mech}"
+                vendor_list = ", ".join(matched_vendors)
+                vendor_hint = (
+                    f"<strong>Detected services:</strong> {_e(vendor_list)}<br><br>"
+                    f"<strong>Suggested SPF record:</strong><br>"
+                    f"<code>{_e(suggested)}</code>"
+                )
+                if check.get("fix"):
+                    check["fix"] = vendor_hint + "<br><br>" + check["fix"]
+                else:
+                    check["fix"] = vendor_hint
+                break
 
     # --- Priority Fixes ---
     raw_mx = raw_results.get("mx", {})
