@@ -1004,18 +1004,18 @@ main {
     margin: 0.75rem 0;
     word-break: break-all;
     position: relative;
-    color: #dfe3eb;
+    color: #f1f5f9;
     box-shadow: inset 0 1px 3px rgba(0,0,0,0.15);
 }
 
 /* Record syntax highlighting */
-.rec-keyword { color: #7cc4fa; }
-.rec-value { color: #b8d4a8; }
-.rec-safe { color: #4ade80; font-weight: 600; }
-.rec-neutral { color: #fbbf24; }
-.rec-warn { color: #f59e0b; font-weight: 600; }
-.rec-danger { color: #f87171; font-weight: 700; }
-.rec-muted { color: #6b7080; }
+.rec-keyword { color: #93d5ff; }
+.rec-value { color: #d4eecc; }
+.rec-safe { color: #6eff9e; font-weight: 600; }
+.rec-neutral { color: #ffe066; }
+.rec-warn { color: #ffb833; font-weight: 600; }
+.rec-danger { color: #ff8a8a; font-weight: 700; }
+.rec-muted { color: #9ca3b4; }
 
 .copy-btn {
     position: absolute;
@@ -1029,7 +1029,7 @@ main {
     font-family: var(--font-body);
     font-size: 0.65rem;
     font-weight: 500;
-    color: #8b92a0;
+    color: #b0b8c8;
     cursor: pointer;
     transition: all var(--duration) var(--ease);
 }
