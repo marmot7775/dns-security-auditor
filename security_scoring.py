@@ -331,11 +331,8 @@ class EmailSecurityScorer:
 
         found_selectors = dkim.get('found_selectors', [])
         if not found_selectors:
-            # DKIM selectors are private and cannot be enumerated from outside.
-            # Not finding keys does not mean they don't exist, but we cannot
-            # award full credit for something we cannot verify. Partial credit.
-            return 10, {
-                'reason': 'DKIM selectors are not publicly enumerable. Partial credit awarded.',
+            return 15, {
+                'reason': 'DKIM selectors are private and cannot be enumerated via DNS. Full credit awarded because absence of discoverable keys does not indicate absence of DKIM. Security-conscious organizations routinely use non-standard selector names. For a verified assessment, provide your selector directly.',
                 'impact': 'UNKNOWN'
             }
 
@@ -387,7 +384,7 @@ class EmailSecurityScorer:
 
         found_selectors = dkim.get('found_selectors', [])
         if not found_selectors:
-            return 5, {'reason': 'No keys detected to evaluate (selectors are not publicly enumerable)'}
+            return 10, {'reason': 'No keys detected to evaluate. Selectors are private and cannot be enumerated from outside. Full credit awarded.'}
 
         # Key age/rotation status
         overdue = key_age.get('overdue', 0)

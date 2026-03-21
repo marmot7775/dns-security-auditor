@@ -316,10 +316,12 @@
             </div>
 
             <p>
-                DKIM selectors are private and cannot be enumerated from outside.
-                When selectors are not detected, the tool cannot verify or deny DKIM configuration,
-                so it awards 10 of 15 points (partial credit) rather than penalizing the domain.
-                For a definitive check, provide your selector directly.
+                DKIM selectors are private by design and cannot be enumerated via DNS.
+                This tool tests 1,100+ common selector patterns, but organizations may use
+                custom names that are not discoverable from outside. When selectors are not
+                detected, full credit is awarded because the absence of discoverable keys does
+                not indicate the absence of DKIM. For a verified assessment, enter your selector
+                directly on the audit page.
             </p>
             <p>
                 DNSSEC, CAA, and nameserver diversity contribute to the Best Practices category (up to 7 of 20 points).
