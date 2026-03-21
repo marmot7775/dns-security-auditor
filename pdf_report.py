@@ -1,3 +1,5 @@
+
+
 """
 PDF Report Generator for dns-audit.com
 
@@ -51,9 +53,9 @@ TEXT_TER    = colors.HexColor("#6b6b6b")
 BORDER      = colors.HexColor("#dce1e6")
 
 GRADE_COLORS = {
-    "A+": colors.HexColor("#059669"), "A": colors.HexColor("#10b981"),
-    "B": colors.HexColor("#3b82f6"), "C": colors.HexColor("#f59e0b"),
-    "D": colors.HexColor("#f97316"), "F": colors.HexColor("#ef4444"),
+    "A": colors.HexColor("#10b981"), "B": colors.HexColor("#3b82f6"),
+    "C": colors.HexColor("#f59e0b"), "D": colors.HexColor("#f97316"),
+    "F": colors.HexColor("#ef4444"),
 }
 STATUS_CLR = {"pass": PASS_CLR, "warn": WARN_CLR, "fail": FAIL_CLR}
 STATUS_BG  = {"pass": PASS_BG,  "warn": WARN_BG,  "fail": FAIL_BG}
@@ -79,20 +81,20 @@ def _sev(c):
 
 def _styles():
     s = {}
-    s["title"]       = ParagraphStyle("T",  fontName="Helvetica-Bold",    fontSize=24, textColor=colors.white,     leading=30)
-    s["title_sub"]   = ParagraphStyle("TS", fontName="Helvetica",         fontSize=12, textColor=colors.HexColor("#b0c8e0"), leading=16)
-    s["heading"]     = ParagraphStyle("H",  fontName="Helvetica-Bold",    fontSize=15, textColor=TEXT_PRI, leading=21, spaceBefore=16, spaceAfter=5)
-    s["subheading"]  = ParagraphStyle("SH", fontName="Helvetica-Bold",    fontSize=11, textColor=NAVY,    leading=15, spaceBefore=10, spaceAfter=3)
-    s["body"]        = ParagraphStyle("B",  fontName="Helvetica",         fontSize=10.5,textColor=TEXT_SEC, leading=15, spaceBefore=2,  spaceAfter=2)
-    s["body_small"]  = ParagraphStyle("BS", fontName="Helvetica",         fontSize=9.5,textColor=TEXT_TER, leading=13, spaceBefore=1,  spaceAfter=1)
-    s["verdict"]     = ParagraphStyle("V",  fontName="Helvetica-Oblique", fontSize=10, textColor=TEXT_TER, leading=14, spaceAfter=4)
-    s["record"]      = ParagraphStyle("R",  fontName="Courier",           fontSize=8.5,textColor=RECORD_FG,leading=12.5)
-    s["fix_label"]   = ParagraphStyle("FL", fontName="Helvetica-Bold",    fontSize=8.5,textColor=PASS_CLR, leading=11, spaceAfter=2)
-    s["fix_text"]    = ParagraphStyle("FT", fontName="Helvetica",         fontSize=10.5,textColor=TEXT_PRI, leading=15)
-    s["pfix_num"]    = ParagraphStyle("PN", fontName="Helvetica-Bold",    fontSize=10.5,textColor=FAIL_CLR, leading=15)
-    s["pfix_txt"]    = ParagraphStyle("PT", fontName="Helvetica",         fontSize=10.5,textColor=TEXT_PRI, leading=15)
+    s["title"]       = ParagraphStyle("T",  fontName="Helvetica-Bold",    fontSize=26, textColor=colors.white,     leading=32)
+    s["title_sub"]   = ParagraphStyle("TS", fontName="Helvetica",         fontSize=13, textColor=colors.HexColor("#b0c8e0"), leading=17)
+    s["heading"]     = ParagraphStyle("H",  fontName="Helvetica-Bold",    fontSize=16, textColor=TEXT_PRI, leading=22, spaceBefore=18, spaceAfter=5)
+    s["subheading"]  = ParagraphStyle("SH", fontName="Helvetica-Bold",    fontSize=13, textColor=NAVY,    leading=17, spaceBefore=12, spaceAfter=3)
+    s["body"]        = ParagraphStyle("B",  fontName="Helvetica",         fontSize=12, textColor=TEXT_SEC, leading=17, spaceBefore=2,  spaceAfter=2)
+    s["body_small"]  = ParagraphStyle("BS", fontName="Helvetica",         fontSize=11, textColor=TEXT_TER, leading=15, spaceBefore=1,  spaceAfter=1)
+    s["verdict"]     = ParagraphStyle("V",  fontName="Helvetica-Oblique", fontSize=11.5,textColor=TEXT_TER, leading=16, spaceAfter=5)
+    s["record"]      = ParagraphStyle("R",  fontName="Courier",           fontSize=10, textColor=RECORD_FG,leading=14)
+    s["fix_label"]   = ParagraphStyle("FL", fontName="Helvetica-Bold",    fontSize=10, textColor=PASS_CLR, leading=13, spaceAfter=3)
+    s["fix_text"]    = ParagraphStyle("FT", fontName="Helvetica",         fontSize=12, textColor=TEXT_PRI, leading=17)
+    s["pfix_num"]    = ParagraphStyle("PN", fontName="Helvetica-Bold",    fontSize=12, textColor=FAIL_CLR, leading=17)
+    s["pfix_txt"]    = ParagraphStyle("PT", fontName="Helvetica",         fontSize=12, textColor=TEXT_PRI, leading=17)
     for k, clr in [("good",PASS_CLR),("warning",WARN_CLR),("error",FAIL_CLR),("info",TEXT_SEC)]:
-        s[f"d_{k}"] = ParagraphStyle(f"D{k}", fontName="Helvetica", fontSize=10, textColor=clr, leading=14, spaceBefore=1, spaceAfter=1, leftIndent=12)
+        s[f"d_{k}"] = ParagraphStyle(f"D{k}", fontName="Helvetica", fontSize=11.5, textColor=clr, leading=16, spaceBefore=1, spaceAfter=1, leftIndent=12)
     return s
 
 
@@ -103,19 +105,19 @@ class _PageTpl:
     def first(self, c, doc):
         w, h = letter
         c.setFillColor(NAVY); c.rect(0, h-100, w, 100, fill=1, stroke=0)
-        c.setFillColor(colors.white); c.setFont("Helvetica-Bold", 22)
+        c.setFillColor(colors.white); c.setFont("Helvetica-Bold", 24)
         c.drawString(54, h-40, "DNS Security Audit Report")
-        c.setFont("Helvetica", 12); c.setFillColor(colors.HexColor("#b0c8e0"))
+        c.setFont("Helvetica", 13); c.setFillColor(colors.HexColor("#b0c8e0"))
         c.drawString(54, h-60, self.domain)
-        c.setFont("Helvetica", 9.5); c.drawString(54, h-78, f"Generated {self.ts}")
-        c.setFont("Helvetica", 8.5); c.setFillColor(colors.HexColor("#6b91b5"))
+        c.setFont("Helvetica", 10); c.drawString(54, h-78, f"Generated {self.ts}")
+        c.setFont("Helvetica", 9); c.setFillColor(colors.HexColor("#6b91b5"))
         c.drawRightString(w-54, h-78, "dns-audit.com")
         gc = GRADE_COLORS.get(self.grade, NAVY)
         cx, cy = w-100, h-50
-        c.setFillColor(gc); c.circle(cx, cy, 22, fill=1, stroke=0)
-        c.setFillColor(colors.white); c.setFont("Helvetica-Bold", 24)
+        c.setFillColor(gc); c.circle(cx, cy, 24, fill=1, stroke=0)
+        c.setFillColor(colors.white); c.setFont("Helvetica-Bold", 26)
         c.drawCentredString(cx, cy-8, self.grade)
-        c.setFillColor(colors.HexColor("#b0c8e0")); c.setFont("Helvetica", 10)
+        c.setFillColor(colors.HexColor("#b0c8e0")); c.setFont("Helvetica", 11)
         c.drawCentredString(cx, cy-30, f"{self.score}/100")
         self._foot(c, doc)
 
@@ -124,7 +126,7 @@ class _PageTpl:
 
     def _foot(self, c, doc):
         w, _ = letter
-        c.setFont("Helvetica", 8); c.setFillColor(TEXT_TER)
+        c.setFont("Helvetica", 9); c.setFillColor(TEXT_TER)
         c.drawString(54, 30, f"dns-audit.com  |  {self.domain}")
         c.drawRightString(w-54, 30, f"Page {doc.page}")
 
@@ -135,8 +137,8 @@ def _summary_table(data, S):
     wc = sum(1 for c in checks if c.get("status")=="warn")
     fc = sum(1 for c in checks if c.get("status")=="fail")
     def _c(label, val, clr):
-        return [Paragraph(f'<font color="{clr.hexval()}" size="20"><b>{val}</b></font>', S["body"]),
-                Paragraph(f'<font color="#6b6b6b" size="9">{label}</font>', S["body_small"])]
+        return [Paragraph(f'<font color="{clr.hexval()}" size="22"><b>{val}</b></font>', S["body"]),
+                Paragraph(f'<font color="#6b6b6b" size="10">{label}</font>', S["body_small"])]
     t = Table([[_c("Passing",str(pc),PASS_CLR), _c("Warnings",str(wc),WARN_CLR), _c("Issues",str(fc),FAIL_CLR)]],
               colWidths=[2.1*inch]*3)
     t.setStyle(TableStyle([("VALIGN",(0,0),(-1,-1),"TOP"),("TOPPADDING",(0,0),(-1,-1),10),
@@ -173,7 +175,7 @@ def _check_section(check, S):
 
     # Header: name + pill
     hdr = Table([[Paragraph(f"<b>{_safe(name)}</b>", S["heading"]),
-                  Paragraph(f'<font color="{s_clr.hexval()}" size="9"><b> {s_lbl} </b></font>', S["body"])]],
+                  Paragraph(f'<font color="{s_clr.hexval()}" size="10"><b> {s_lbl} </b></font>', S["body"])]],
                 colWidths=[5.5*inch, 1.5*inch])
     hdr.setStyle(TableStyle([("VALIGN",(0,0),(-1,-1),"MIDDLE"),("ALIGN",(1,0),(1,0),"RIGHT"),
         ("TOPPADDING",(0,0),(-1,-1),0),("BOTTOMPADDING",(0,0),(-1,-1),0)]))
@@ -253,8 +255,8 @@ def _methodology(S):
     return [KeepTogether(inner)]
 
 
-def generate_audit_pdf(audit_result: dict) -> bytes:
-    domain = audit_result.get("domain", "unknown")
+def generate_pdf(audit_result: dict) -> bytes:
+    domain = re.sub(r'<[^>]+>', '', audit_result.get("domain", "unknown"))
     sc = audit_result.get("score", {})
     grade = sc.get("grade", "?")
     total = int(sc.get("total", 0))
@@ -267,9 +269,9 @@ def generate_audit_pdf(audit_result: dict) -> bytes:
     doc = SimpleDocTemplate(buf, pagesize=letter,
         topMargin=1.4*inch, bottomMargin=0.65*inch,
         leftMargin=0.75*inch, rightMargin=0.75*inch,
-        title=f"DNS Security Audit - {domain}",
+        title=f"DNS Security Audit - {_strip_html(domain)}",
         author="dns-audit.com",
-        subject=f"Security audit report for {domain}")
+        subject=f"Security audit report for {_strip_html(domain)}")
 
     story = []
     story.extend(_summary_table(audit_result, S))
@@ -327,7 +329,8 @@ if __name__ == "__main__":
             {"name": "SendGrid", "confidence": 60},
         ],
     }
-    pdf = generate_audit_pdf(sample)
+    pdf = generate_pdf(sample)
     with open("/tmp/dns-audit-sample.pdf", "wb") as f:
         f.write(pdf)
     print(f"Written /tmp/dns-audit-sample.pdf ({len(pdf):,} bytes)")
+

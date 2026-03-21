@@ -1347,37 +1347,12 @@ document.getElementById('export-btn').addEventListener('click', () => {
 // ============================================================
 
 document.getElementById('pdf-btn').addEventListener('click', () => {
-    if (!lastAuditData) return;
-    const btn = document.getElementById('pdf-btn');
-    const span = btn.querySelector('span');
-    const origText = span.textContent;
-    span.textContent = 'Generating...';
-    btn.disabled = true;
-
-    const url = `${API_BASE}/audit/pdf?domain=${encodeURIComponent(lastAuditData.domain)}`;
-    fetch(url)
-        .then(resp => {
-            if (!resp.ok) throw new Error(`PDF generation failed (${resp.status})`);
-            return resp.blob();
-        })
-        .then(blob => {
-            const blobUrl = URL.createObjectURL(blob);
-            const a = document.createElement('a');
-            a.href = blobUrl;
-            a.download = `dns-audit-${lastAuditData.domain}.pdf`;
-            document.body.appendChild(a);
-            a.click();
-            document.body.removeChild(a);
-            URL.revokeObjectURL(blobUrl);
-            span.textContent = origText;
-            btn.disabled = false;
-        })
-        .catch(err => {
-            console.error('PDF error:', err);
-            span.textContent = 'Failed';
-            btn.disabled = false;
-            setTimeout(() => { span.textContent = origText; }, 2000);
-        });
+    if (!lastAuditData || !lastAuditData.domain) return;
+    const domain = encodeURIComponent(lastAuditData.domain);
+    const scope = currentScope || 'complete';
+    const selectorVal = document.getElementById('selector-input')?.value?.trim() || '';
+    const selectorParam = selectorVal ? `&selector=${encodeURIComponent(selectorVal)}` : '';
+    window.open(`/api/audit/${domain}/pdf?scope=${scope}${selectorParam}`, '_blank');
 });
 
 // ============================================================
