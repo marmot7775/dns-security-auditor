@@ -22,6 +22,7 @@ const DEFAULT_TITLE = document.title;
 let currentScope = 'complete';
 let lastAuditData = null;
 let auditStartTime = 0;
+let auditController = null;
 
 // -- DOM References --
 const auditForm      = document.getElementById('audit-form');
@@ -100,6 +101,11 @@ function normalizeDomain(input) {
 
 // -- Main audit runner --
 async function runAudit(domain) {
+    // Abort any in-flight audit request
+    if (auditController) auditController.abort();
+    auditController = new AbortController();
+    const signal = auditController.signal;
+
     auditStartTime = performance.now();
     document.title = `Scanning ${domain}...`;
     showLoading();
@@ -111,7 +117,7 @@ async function runAudit(domain) {
     if (currentScope && currentScope !== 'complete') streamUrl += `&scope=${encodeURIComponent(currentScope)}`;
 
     try {
-        const resp = await fetch(streamUrl);
+        const resp = await fetch(streamUrl, { signal });
         if (!resp.ok) {
             const err = await resp.json().catch(() => ({}));
             throw new Error(err.detail || `Audit failed (HTTP ${resp.status})`);
@@ -153,13 +159,14 @@ async function runAudit(domain) {
         // If we got here without a done message, fall back to JSON endpoint
         throw new Error('Stream ended without results');
     } catch (err) {
+        if (err.name === 'AbortError') return;
         console.error('SSE audit error:', err);
         // Fall back to the regular JSON endpoint
         try {
             let auditUrl = `${API_BASE}/audit?domain=${encodeURIComponent(domain)}`;
             if (selectorVal) auditUrl += `&selector=${encodeURIComponent(selectorVal)}`;
             if (currentScope && currentScope !== 'complete') auditUrl += `&scope=${encodeURIComponent(currentScope)}`;
-            const resp = await fetch(auditUrl);
+            const resp = await fetch(auditUrl, { signal });
             if (!resp.ok) {
                 const fallbackErr = await resp.json().catch(() => ({}));
                 throw new Error(fallbackErr.detail || `Audit failed (HTTP ${resp.status})`);
@@ -167,6 +174,7 @@ async function runAudit(domain) {
             const data = await resp.json();
             renderResults(data);
         } catch (fallbackErr) {
+            if (fallbackErr.name === 'AbortError') return;
             console.error('Fallback audit error:', fallbackErr);
             hideLoading();
             showError(fallbackErr.message || 'Audit failed. Please check the domain and try again.');

@@ -156,7 +156,7 @@
     --warn: #6b5b1e;
     --warn-bg: #f9f7ec;
     --warn-border: #ddd6a0;
-    --fail: #9b4040;
+    --fail: #8b2d2d;
     --fail-bg: #fdf3f3;
     --fail-border: #d4a0a0;
 
@@ -1024,7 +1024,8 @@ main {
     background: #2a2d35;
     border: 1px solid #3a3d45;
     border-radius: 5px;
-    padding: 0.22rem 0.6rem;
+    padding: 0.5rem 0.8rem;
+    min-height: 44px;
     font-family: var(--font-body);
     font-size: 0.65rem;
     font-weight: 500;
@@ -3429,7 +3430,8 @@ html, body {
 
     .copy-btn {
         font-size: 0.6rem;
-        padding: 0.18rem 0.45rem;
+        padding: 0.5rem 0.8rem;
+        min-height: 44px;
     }
 }
 

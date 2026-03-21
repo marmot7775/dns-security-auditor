@@ -111,6 +111,8 @@ TRANSACTIONAL_ESP = [
     'elasticemail', 'ee', 'ee1',
     # Socket Labs
     'socketlabs', 'smtpcom',
+    # Omnivery / Mailkit
+    'mailkit', 'mkt', 'omnivery', 'mk',
     # Other transactional
     'pepipost', 'dyn', 'twilio',
     'smtp2go', 'turbosmtp',
@@ -401,6 +403,9 @@ COMPREHENSIVE_SPF_VENDOR_MAP = {
     'shops.shopify.com': {'vendor': 'Shopify', 'dkim_selectors': ['shopify', 'shops', 'myshopify']},
     # Intercom
     'intercom.io': {'vendor': 'Intercom', 'dkim_selectors': ['intercom', 'ic', 'ic1']},
+    # Omnivery / Mailkit
+    'spf.mailkit.eu': {'vendor': 'Omnivery/Mailkit', 'dkim_selectors': ['mailkit', 'mkt', 'omnivery', 'mk']},
+    'mailkit.eu': {'vendor': 'Omnivery/Mailkit', 'dkim_selectors': ['mailkit', 'mkt', 'omnivery', 'mk']},
 }
 
 # ============================================================================
