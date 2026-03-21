@@ -4840,7 +4840,6 @@ main .meth-page {
     font-weight: 700;
     padding: 0.15rem 0.5rem;
     border-radius: 4px;
-    text-transform: uppercase;
     letter-spacing: 0.04em;
 }
 
@@ -5144,7 +5143,6 @@ main .meth-page {
     font-weight: 700;
     padding: 0.08rem 0.4rem;
     border-radius: 3px;
-    text-transform: uppercase;
     letter-spacing: 0.03em;
     flex-shrink: 0;
 }
@@ -5324,7 +5322,6 @@ main .meth-page {
     background: #1a1e2e;
     padding: 0.05rem 0.35rem;
     border-radius: 3px;
-    text-transform: uppercase;
     letter-spacing: 0.03em;
     margin-right: 0.4rem;
 }
@@ -5611,7 +5608,6 @@ main .meth-page {
     font-weight: 700;
     padding: 0.15rem 0.5rem;
     border-radius: 4px;
-    text-transform: uppercase;
     letter-spacing: 0.04em;
 }
 
