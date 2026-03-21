@@ -3636,6 +3636,9 @@ _SPF_PROVIDER_MAP = {
     "outbound.mailhop.org": "DuoCircle",
     "spf.brevo.com": "Brevo",
     "secureserver.net": "GoDaddy",
+    "spf.mailkit.eu": "Omnivery/Mailkit",
+    "mailkit.eu": "Omnivery/Mailkit",
+    "omnivery.com": "Omnivery",
 }
 
 _ALL_EXPLANATIONS = {
