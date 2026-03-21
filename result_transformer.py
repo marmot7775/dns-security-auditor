@@ -656,7 +656,7 @@ def transform_dkim(raw: Dict, domain: str, has_mx: bool = True) -> Dict:
 
         return {
             "name": "DKIM",
-            "status": "pass",
+            "status": "warn",
             "pill_label": "Unknown",
             "verdict": "DKIM status cannot be determined externally",
             "record": None,

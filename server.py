@@ -22,7 +22,7 @@ import time
 from collections import defaultdict
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Optional
+from typing import Dict, Optional
 from urllib.parse import quote
 
 from fastapi import FastAPI, Query, HTTPException, Request
@@ -30,6 +30,9 @@ from fastapi.staticfiles import StaticFiles
 from fastapi.responses import FileResponse, JSONResponse, PlainTextResponse, Response, StreamingResponse
 from fastapi.middleware.cors import CORSMiddleware
 from starlette.middleware.base import BaseHTTPMiddleware
+
+import dns.resolver
+import dns.exception
 
 from audit_engine import run_full_audit
 from pdf_report import generate_audit_pdf
@@ -274,6 +277,49 @@ def _validate_scope(scope: Optional[str]) -> Optional[str]:
     return s
 
 
+def _preflight_dns_check(domain: str) -> Optional[Dict]:
+    """Quick DNS existence check before running the full audit.
+
+    Returns an error dict if the domain is clearly unreachable,
+    or None if it looks OK (or ambiguous) and the audit should proceed.
+    """
+    _err_base = {
+        "domain": domain,
+        "checks": [],
+        "priority_fixes": [],
+        "score": {"total": 0, "grade": "?"},
+    }
+    try:
+        resolver = dns.resolver.Resolver()
+        resolver.timeout = 5
+        resolver.lifetime = 10
+        try:
+            resolver.resolve(domain, "SOA")
+        except dns.resolver.NoAnswer:
+            resolver.resolve(domain, "NS")
+    except dns.resolver.NXDOMAIN:
+        return {
+            **_err_base,
+            "error": "domain_not_found",
+            "error_message": f"The domain '{domain}' does not exist in DNS (NXDOMAIN). Check for typos.",
+        }
+    except dns.resolver.NoNameservers:
+        return {
+            **_err_base,
+            "error": "dns_broken",
+            "error_message": f"DNS for '{domain}' is not responding. The nameservers may be misconfigured or unreachable.",
+        }
+    except dns.exception.Timeout:
+        return {
+            **_err_base,
+            "error": "timeout",
+            "error_message": f"DNS queries for '{domain}' timed out. The nameservers may be slow or unreachable. Try again in a moment.",
+        }
+    except dns.exception.DNSException:
+        pass  # Ambiguous, let the full audit try
+    return None
+
+
 # ============================================================
 # API Endpoint
 # ============================================================
@@ -319,13 +365,18 @@ async def audit_domain(
             log.info("Cache hit: %s", domain)
             return JSONResponse(content=cached)
 
+    # Pre-flight DNS check
+    preflight_err = _preflight_dns_check(domain)
+    if preflight_err:
+        log.info("Preflight failed for %s: %s", domain, preflight_err.get("error"))
+        return JSONResponse(content=preflight_err)
+
     # Run audit
     start = time.time()
     try:
         result = run_full_audit(domain, dkim_selector=selector, scope=scope)
     except Exception as e:
         log.error("Audit failed for %s: %s", domain, str(e)[:200], exc_info=True)
-        # Return a minimal error result instead of a 500 so the frontend can show something
         result = {
             "domain": domain,
             "timestamp": datetime.now(timezone.utc).isoformat(),
@@ -333,7 +384,8 @@ async def audit_domain(
             "checks": [],
             "priority_fixes": [],
             "vendors": [],
-            "error": "Audit could not complete. Please try again or check that the domain exists.",
+            "error": "server_error",
+            "error_message": "Audit could not complete. Please try again.",
         }
 
     elapsed = round(time.time() - start, 2)
@@ -389,6 +441,14 @@ async def audit_stream(
                 yield f"data: {json.dumps({'done': True, 'result': cached, 'cached': True})}\n\n"
             return StreamingResponse(_cached_stream(), media_type="text/event-stream")
 
+    # Pre-flight DNS check
+    preflight_err = _preflight_dns_check(domain)
+    if preflight_err:
+        log.info("SSE preflight failed for %s: %s", domain, preflight_err.get("error"))
+        async def _preflight_error():
+            yield f"data: {json.dumps({'done': True, 'result': preflight_err})}\n\n"
+        return StreamingResponse(_preflight_error(), media_type="text/event-stream")
+
     # Run audit in a background thread, streaming progress via a queue
     progress_q: queue.Queue = queue.Queue()
 
@@ -415,7 +475,8 @@ async def audit_stream(
                 "checks": [],
                 "priority_fixes": [],
                 "vendors": [],
-                "error": "Audit could not complete. Please try again or check that the domain exists.",
+                "error": "server_error",
+                "error_message": "Audit could not complete. Please try again.",
             }
             progress_q.put({"_done": True, "_result": error_result})
 
