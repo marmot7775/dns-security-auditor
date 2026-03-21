@@ -1,4 +1,3 @@
-```html
 <!DOCTYPE html>
 <html lang="en">
 <head>
@@ -8,7 +7,7 @@
     <meta name="description" content="How dns-audit.com works: DNS query methodology, security checks, scoring model, standards references, and limitations.">
     <link rel="stylesheet" href="/static/style.css">
     <style>
-        .meth-page { max-width: var(--max-width); margin: 0 auto; padding: 2.5rem 1.5rem 1.5rem; }
+        .meth-page { max-width: 680px; margin: 0 auto; padding: 2.5rem 1.5rem 1.5rem; }
         .meth-page h1 { font-size: 1.65rem; font-weight: 700; letter-spacing: -0.03em; color: var(--text-primary); margin-bottom: 0.35rem; }
         .meth-intro { font-size: 0.92rem; color: var(--text-secondary); line-height: 1.7; margin-bottom: 2rem; }
         .meth-page h2 { font-size: 1.15rem; font-weight: 700; color: var(--text-primary); margin-top: 2.25rem; margin-bottom: 0.75rem; padding-bottom: 0.4rem; border-bottom: 1px solid var(--border-light); }
@@ -19,7 +18,8 @@
         .meth-page li { margin-bottom: 0.4rem; }
         .meth-page li strong { color: var(--text-primary); }
 
-        .check-table { width: 100%; border-collapse: collapse; margin: 0.75rem 0 1.25rem; font-size: 0.82rem; }
+        .table-wrap { overflow-x: auto; -webkit-overflow-scrolling: touch; margin: 0.75rem 0 1.25rem; }
+        .check-table { width: 100%; border-collapse: collapse; font-size: 0.82rem; min-width: 540px; }
         .check-table th { background: var(--primary-subtle); color: var(--primary); font-weight: 700; text-align: left; padding: 0.55rem 0.75rem; border: 1px solid var(--border); font-size: 0.76rem; letter-spacing: 0.02em; }
         .check-table td { padding: 0.55rem 0.75rem; border: 1px solid var(--border-light); color: var(--text-secondary); line-height: 1.55; vertical-align: top; }
         .check-table td:first-child { font-weight: 600; color: var(--text-primary); white-space: nowrap; width: 100px; }
@@ -27,7 +27,8 @@
         .check-table a:hover { color: var(--primary); }
         .check-table .op-note { display: block; margin-top: 0.35rem; font-style: italic; color: var(--text-tertiary); font-size: 0.78rem; line-height: 1.5; }
 
-        .score-table { width: 100%; border-collapse: collapse; margin: 0.75rem 0 1.25rem; font-size: 0.82rem; }
+        .table-wrap-score { overflow-x: auto; -webkit-overflow-scrolling: touch; margin: 0.75rem 0 1.25rem; }
+        .score-table { width: 100%; border-collapse: collapse; font-size: 0.82rem; min-width: 400px; }
         .score-table th { background: var(--primary-subtle); color: var(--primary); font-weight: 700; text-align: left; padding: 0.55rem 0.75rem; border: 1px solid var(--border); font-size: 0.76rem; }
         .score-table td { padding: 0.5rem 0.75rem; border: 1px solid var(--border-light); color: var(--text-secondary); line-height: 1.55; vertical-align: top; }
         .score-table td:nth-child(2) { text-align: center; font-weight: 700; color: var(--text-primary); white-space: nowrap; }
@@ -48,11 +49,25 @@
         .audit-cta { display: inline-flex; align-items: center; gap: 0.5rem; margin-top: 0.75rem; padding: 0.65rem 1.25rem; background: var(--primary); color: var(--text-inverse); border-radius: var(--radius); font-family: var(--font-body); font-size: 0.88rem; font-weight: 600; text-decoration: none; transition: background var(--duration) var(--ease); }
         .audit-cta:hover { background: var(--primary-hover); }
 
-        @media (max-width: 640px) {
-            .meth-page { padding: 1.75rem 1rem 2.5rem; }
-            .meth-page h1 { font-size: 1.35rem; }
+        @media (max-width: 768px) {
+            .meth-page { padding: 2rem 1.25rem 1.5rem; }
+            .meth-page h1 { font-size: 1.45rem; }
             .check-table td:first-child { white-space: normal; }
+        }
+        @media (max-width: 640px) {
+            .meth-page { padding: 1.75rem 1rem 1.25rem; }
+            .meth-page h1 { font-size: 1.35rem; }
+            .meth-page h2 { font-size: 1.05rem; }
+            .meth-page p { font-size: 0.86rem; }
+            .check-table { font-size: 0.78rem; }
+            .check-table .op-note { font-size: 0.74rem; }
             .std-item { flex-direction: column; gap: 0.15rem; }
+            .limit-item { padding: 0.55rem 0.75rem; }
+        }
+        @media (max-width: 400px) {
+            .meth-page { padding: 1.5rem 0.85rem 1rem; }
+            .meth-page h1 { font-size: 1.2rem; }
+            .check-table td { padding: 0.4rem 0.5rem; }
         }
     </style>
 </head>
@@ -102,137 +117,139 @@
 
             <h2>What We Check</h2>
 
-            <table class="check-table">
-                <thead>
-                    <tr><th>Check</th><th>What We Do</th><th>Standard</th></tr>
-                </thead>
-                <tbody>
-                    <tr>
-                        <td>DMARC</td>
-                        <td>
-                            Query <code>_dmarc.{domain}</code> TXT record. Parse policy, reporting, alignment, and subdomain tags.
-                            Perform DMARCbis tree walk for policy discovery on subdomains.
-                            Validate syntax, detect deprecated tags (<code>pct</code>, <code>ri</code>, <code>rf</code>)
-                            and new tags (<code>t</code>, <code>np</code>, <code>psd</code>).
-                            Verify external report authorization per Section 7.1.
-                            <span class="op-note">External reporting URIs are verified to prevent data leaks to unauthorized destinations.</span>
-                        </td>
-                        <td><a href="https://datatracker.ietf.org/doc/draft-ietf-dmarc-dmarcbis/">DMARCbis</a></td>
-                    </tr>
-                    <tr>
-                        <td>SPF</td>
-                        <td>
-                            Query domain TXT records for <code>v=spf1</code>. Recursively resolve all
-                            <code>include</code> and <code>redirect</code> mechanisms. Count total DNS lookups against
-                            the 10-lookup limit. Detect void lookups (2-lookup limit). Flag multiple records,
-                            deprecated mechanisms (<code>ptr</code>), invalid IPs, and overly broad CIDRs.
-                            <span class="op-note">The 10-lookup limit is strictly enforced. Mechanisms like <code>+all</code> are flagged as dangerous.</span>
-                        </td>
-                        <td><a href="https://datatracker.ietf.org/doc/html/rfc7208">RFC 7208</a></td>
-                    </tr>
-                    <tr>
-                        <td>DKIM</td>
-                        <td>
-                            Query common selectors at <code>{selector}._domainkey.{domain}</code>.
-                            Analyze key type (RSA/Ed25519) and strength. Use SPF-based vendor detection
-                            to prioritize relevant selectors. Support direct lookup of user-supplied selectors.
-                            <span class="op-note">Selectors are private and cannot be enumerated. A "not detected" result does not mean DKIM is absent.</span>
-                        </td>
-                        <td><a href="https://datatracker.ietf.org/doc/html/rfc6376">RFC 6376</a></td>
-                    </tr>
-                    <tr>
-                        <td>MX</td>
-                        <td>
-                            Query MX records. Verify each host resolves. Detect null MX (RFC 7505),
-                            dangling hosts, and single-host configurations with no failover.
-                            <span class="op-note">Priority ordering and failover readiness are evaluated. Dangling hosts that do not resolve are flagged.</span>
-                        </td>
-                        <td><a href="https://datatracker.ietf.org/doc/html/rfc5321">RFC 5321</a></td>
-                    </tr>
-                    <tr>
-                        <td>MTA-STS</td>
-                        <td>
-                            Query <code>_mta-sts.{domain}</code> TXT record. Fetch and parse the HTTPS policy
-                            file at <code>/.well-known/mta-sts.txt</code>. Validate mode, MX pattern matching, and <code>max_age</code>.
-                            <span class="op-note">The HTTPS policy file must be served with a valid TLS certificate to be effective.</span>
-                        </td>
-                        <td><a href="https://datatracker.ietf.org/doc/html/rfc8461">RFC 8461</a></td>
-                    </tr>
-                    <tr>
-                        <td>TLS-RPT</td>
-                        <td>
-                            Query <code>_smtp._tls.{domain}</code> TXT record. Validate reporting
-                            destinations (mailto and HTTPS).
-                            <span class="op-note">Reporting destinations must be deliverable. Without TLS-RPT, encryption failures are invisible.</span>
-                        </td>
-                        <td><a href="https://datatracker.ietf.org/doc/html/rfc8460">RFC 8460</a></td>
-                    </tr>
-                    <tr>
-                        <td>BIMI</td>
-                        <td>
-                            Query <code>default._bimi.{domain}</code> TXT record. Check DMARC enforcement prerequisite.
-                            Fetch SVG logo and validate Tiny PS profile. Check for VMC certificate tag.
-                            <span class="op-note">BIMI is a brand feature, not a security control. Requires DMARC enforcement. Gmail requires a VMC or CMC for logo display.</span>
-                        </td>
-                        <td><a href="https://datatracker.ietf.org/doc/draft-brand-indicators-for-message-identification/">Draft (BIMI WG)</a></td>
-                    </tr>
-                    <tr>
-                        <td>DNSSEC</td>
-                        <td>
-                            Query DNSKEY records. Validate DS record at parent zone. Verify DS digest
-                            matches DNSKEY (chain of trust). Identify signing algorithm.
-                            <span class="op-note">Signature validity, algorithm strength, and chain-of-trust integrity are all verified.</span>
-                        </td>
-                        <td><a href="https://datatracker.ietf.org/doc/html/rfc4033">RFC 4033</a>/<a href="https://datatracker.ietf.org/doc/html/rfc4034">4034</a>/<a href="https://datatracker.ietf.org/doc/html/rfc4035">4035</a></td>
-                    </tr>
-                    <tr>
-                        <td>CAA</td>
-                        <td>
-                            Query Certificate Authority Authorization records. Check <code>issue</code>,
-                            <code>issuewild</code>, and <code>iodef</code> tags. Flag domains with no issuance restrictions.
-                            <span class="op-note">The <code>critical</code> flag is handled. Without CAA, any CA in the world may issue certificates for your domain.</span>
-                        </td>
-                        <td><a href="https://datatracker.ietf.org/doc/html/rfc8659">RFC 8659</a></td>
-                    </tr>
-                    <tr>
-                        <td>DANE</td>
-                        <td>
-                            Query TLSA records at <code>_25._tcp.{mx-host}</code> for each MX host.
-                            Validate usage, selector, and matching type fields. Verify DNSSEC is enabled
-                            (DANE is ineffective without it).
-                            <span class="op-note">DANE requires a validated DNSSEC chain to function. Without DNSSEC, TLSA records provide no security benefit.</span>
-                        </td>
-                        <td><a href="https://datatracker.ietf.org/doc/html/rfc7672">RFC 7672</a></td>
-                    </tr>
-                    <tr>
-                        <td>Nameservers</td>
-                        <td>
-                            Query NS records. Check SOA serial consistency, response times, network diversity
-                            across /24 ranges, and IPv6 availability.
-                            <span class="op-note">Delegation, glue records, and authority consistency are validated. IPv6 readiness is noted.</span>
-                        </td>
-                        <td><a href="https://datatracker.ietf.org/doc/html/rfc1034">RFC 1034</a>/<a href="https://datatracker.ietf.org/doc/html/rfc1035">1035</a></td>
-                    </tr>
-                    <tr>
-                        <td>CT</td>
-                        <td>
-                            Query Certificate Transparency logs via crt.sh. Report issuer breakdown,
-                            active certificate count, expiring certificates, wildcard usage, and subdomain discovery.
-                            <span class="op-note">CT log coverage may be incomplete. Do not assume full visibility into all issued certificates.</span>
-                        </td>
-                        <td><a href="https://datatracker.ietf.org/doc/html/rfc6962">RFC 6962</a></td>
-                    </tr>
-                    <tr>
-                        <td>Blocklist</td>
-                        <td>
-                            Check domain against Spamhaus DBL with return code interpretation
-                            (spam, phishing, malware, botnet C&amp;C).
-                            <span class="op-note">Single blocklist source. A clean result here does not guarantee clean reputation across all blocklists.</span>
-                        </td>
-                        <td></td>
-                    </tr>
-                </tbody>
-            </table>
+            <div class="table-wrap">
+                <table class="check-table">
+                    <thead>
+                        <tr><th>Check</th><th>What We Do</th><th>Standard</th></tr>
+                    </thead>
+                    <tbody>
+                        <tr>
+                            <td>DMARC</td>
+                            <td>
+                                Query <code>_dmarc.{domain}</code> TXT record. Parse policy, reporting, alignment, and subdomain tags.
+                                Perform DMARCbis tree walk for policy discovery on subdomains.
+                                Validate syntax, detect deprecated tags (<code>pct</code>, <code>ri</code>, <code>rf</code>)
+                                and new tags (<code>t</code>, <code>np</code>, <code>psd</code>).
+                                Verify external report authorization per Section 7.1.
+                                <span class="op-note">External reporting URIs are verified to prevent data leaks to unauthorized destinations.</span>
+                            </td>
+                            <td><a href="https://datatracker.ietf.org/doc/draft-ietf-dmarc-dmarcbis/">DMARCbis</a></td>
+                        </tr>
+                        <tr>
+                            <td>SPF</td>
+                            <td>
+                                Query domain TXT records for <code>v=spf1</code>. Recursively resolve all
+                                <code>include</code> and <code>redirect</code> mechanisms. Count total DNS lookups against
+                                the 10-lookup limit. Detect void lookups (2-lookup limit). Flag multiple records,
+                                deprecated mechanisms (<code>ptr</code>), invalid IPs, and overly broad CIDRs.
+                                <span class="op-note">The 10-lookup limit is strictly enforced. Mechanisms like <code>+all</code> are flagged as dangerous.</span>
+                            </td>
+                            <td><a href="https://datatracker.ietf.org/doc/html/rfc7208">RFC 7208</a></td>
+                        </tr>
+                        <tr>
+                            <td>DKIM</td>
+                            <td>
+                                Query common selectors at <code>{selector}._domainkey.{domain}</code>.
+                                Analyze key type (RSA/Ed25519) and strength. Use SPF-based vendor detection
+                                to prioritize relevant selectors. Support direct lookup of user-supplied selectors.
+                                <span class="op-note">Selectors are private and cannot be enumerated. A "not detected" result does not mean DKIM is absent.</span>
+                            </td>
+                            <td><a href="https://datatracker.ietf.org/doc/html/rfc6376">RFC 6376</a></td>
+                        </tr>
+                        <tr>
+                            <td>MX</td>
+                            <td>
+                                Query MX records. Verify each host resolves. Detect null MX (RFC 7505),
+                                dangling hosts, and single-host configurations with no failover.
+                                <span class="op-note">Priority ordering and failover readiness are evaluated. Dangling hosts that do not resolve are flagged.</span>
+                            </td>
+                            <td><a href="https://datatracker.ietf.org/doc/html/rfc5321">RFC 5321</a></td>
+                        </tr>
+                        <tr>
+                            <td>MTA-STS</td>
+                            <td>
+                                Query <code>_mta-sts.{domain}</code> TXT record. Fetch and parse the HTTPS policy
+                                file at <code>/.well-known/mta-sts.txt</code>. Validate mode, MX pattern matching, and <code>max_age</code>.
+                                <span class="op-note">The HTTPS policy file must be served with a valid TLS certificate to be effective.</span>
+                            </td>
+                            <td><a href="https://datatracker.ietf.org/doc/html/rfc8461">RFC 8461</a></td>
+                        </tr>
+                        <tr>
+                            <td>TLS-RPT</td>
+                            <td>
+                                Query <code>_smtp._tls.{domain}</code> TXT record. Validate reporting
+                                destinations (mailto and HTTPS).
+                                <span class="op-note">Reporting destinations must be deliverable. Without TLS-RPT, encryption failures are invisible.</span>
+                            </td>
+                            <td><a href="https://datatracker.ietf.org/doc/html/rfc8460">RFC 8460</a></td>
+                        </tr>
+                        <tr>
+                            <td>BIMI</td>
+                            <td>
+                                Query <code>default._bimi.{domain}</code> TXT record. Check DMARC enforcement prerequisite.
+                                Fetch SVG logo and validate Tiny PS profile. Check for VMC certificate tag.
+                                <span class="op-note">BIMI is a brand feature, not a security control. Requires DMARC enforcement. Gmail requires a VMC or CMC for logo display.</span>
+                            </td>
+                            <td><a href="https://datatracker.ietf.org/doc/draft-brand-indicators-for-message-identification/">Draft (BIMI WG)</a></td>
+                        </tr>
+                        <tr>
+                            <td>DNSSEC</td>
+                            <td>
+                                Query DNSKEY records. Validate DS record at parent zone. Verify DS digest
+                                matches DNSKEY (chain of trust). Identify signing algorithm.
+                                <span class="op-note">Signature validity, algorithm strength, and chain-of-trust integrity are all verified.</span>
+                            </td>
+                            <td><a href="https://datatracker.ietf.org/doc/html/rfc4033">RFC 4033</a>/<a href="https://datatracker.ietf.org/doc/html/rfc4034">4034</a>/<a href="https://datatracker.ietf.org/doc/html/rfc4035">4035</a></td>
+                        </tr>
+                        <tr>
+                            <td>CAA</td>
+                            <td>
+                                Query Certificate Authority Authorization records. Check <code>issue</code>,
+                                <code>issuewild</code>, and <code>iodef</code> tags. Flag domains with no issuance restrictions.
+                                <span class="op-note">The <code>critical</code> flag is handled. Without CAA, any CA in the world may issue certificates for your domain.</span>
+                            </td>
+                            <td><a href="https://datatracker.ietf.org/doc/html/rfc8659">RFC 8659</a></td>
+                        </tr>
+                        <tr>
+                            <td>DANE</td>
+                            <td>
+                                Query TLSA records at <code>_25._tcp.{mx-host}</code> for each MX host.
+                                Validate usage, selector, and matching type fields. Verify DNSSEC is enabled
+                                (DANE is ineffective without it).
+                                <span class="op-note">DANE requires a validated DNSSEC chain to function. Without DNSSEC, TLSA records provide no security benefit.</span>
+                            </td>
+                            <td><a href="https://datatracker.ietf.org/doc/html/rfc7672">RFC 7672</a></td>
+                        </tr>
+                        <tr>
+                            <td>Nameservers</td>
+                            <td>
+                                Query NS records. Check SOA serial consistency, response times, network diversity
+                                across /24 ranges, and IPv6 availability.
+                                <span class="op-note">Delegation, glue records, and authority consistency are validated. IPv6 readiness is noted.</span>
+                            </td>
+                            <td><a href="https://datatracker.ietf.org/doc/html/rfc1034">RFC 1034</a>/<a href="https://datatracker.ietf.org/doc/html/rfc1035">1035</a></td>
+                        </tr>
+                        <tr>
+                            <td>CT</td>
+                            <td>
+                                Query Certificate Transparency logs via crt.sh. Report issuer breakdown,
+                                active certificate count, expiring certificates, wildcard usage, and subdomain discovery.
+                                <span class="op-note">CT log coverage may be incomplete. Do not assume full visibility into all issued certificates.</span>
+                            </td>
+                            <td><a href="https://datatracker.ietf.org/doc/html/rfc6962">RFC 6962</a></td>
+                        </tr>
+                        <tr>
+                            <td>Blocklist</td>
+                            <td>
+                                Check domain against Spamhaus DBL with return code interpretation
+                                (spam, phishing, malware, botnet C&amp;C).
+                                <span class="op-note">Single blocklist source. A clean result here does not guarantee clean reputation across all blocklists.</span>
+                            </td>
+                            <td></td>
+                        </tr>
+                    </tbody>
+                </table>
+            </div>
 
             <h2>What We Cannot Check</h2>
             <p>
@@ -271,19 +288,21 @@
                 Authentication (DMARC, SPF, DKIM) accounts for 70 of 100 points.
             </p>
 
-            <table class="score-table">
-                <thead>
-                    <tr><th>Category</th><th>Weight</th><th>What It Measures</th></tr>
-                </thead>
-                <tbody>
-                    <tr><td>DMARC</td><td>25</td><td>Policy strength, alignment mode, reporting configuration, subdomain policy</td></tr>
-                    <tr><td>SPF</td><td>20</td><td>Record presence, all-mechanism qualifier, lookup count, include complexity</td></tr>
-                    <tr><td>DKIM</td><td>25</td><td>Key discovery, key type, cryptographic strength</td></tr>
-                    <tr><td>Best Practices</td><td>5</td><td>MTA-STS, TLS-RPT</td></tr>
-                    <tr><td>Key Security</td><td>15</td><td>DKIM key strength, rotation hygiene, algorithm modernity</td></tr>
-                    <tr><td>Vendor Intelligence</td><td>10</td><td>Email service provider detection confidence</td></tr>
-                </tbody>
-            </table>
+            <div class="table-wrap-score">
+                <table class="score-table">
+                    <thead>
+                        <tr><th>Category</th><th>Weight</th><th>What It Measures</th></tr>
+                    </thead>
+                    <tbody>
+                        <tr><td>DMARC</td><td>25</td><td>Policy strength, alignment mode, reporting configuration, subdomain policy</td></tr>
+                        <tr><td>SPF</td><td>20</td><td>Record presence, all-mechanism qualifier, lookup count, include complexity</td></tr>
+                        <tr><td>DKIM</td><td>25</td><td>Key discovery, key type, cryptographic strength</td></tr>
+                        <tr><td>Best Practices</td><td>5</td><td>MTA-STS, TLS-RPT</td></tr>
+                        <tr><td>Key Security</td><td>15</td><td>DKIM key strength, rotation hygiene, algorithm modernity</td></tr>
+                        <tr><td>Vendor Intelligence</td><td>10</td><td>Email service provider detection confidence</td></tr>
+                    </tbody>
+                </table>
+            </div>
 
             <p>
                 DKIM scoring does not penalize domains where selectors were not detected.
@@ -417,4 +436,3 @@
 
 </body>
 </html>
-```
