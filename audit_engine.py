@@ -1031,7 +1031,102 @@ def _raw_check_dmarc(domain: str) -> Dict[str, Any]:
     elif "warning" in severities:
         result["status"] = "warning"
 
+    # ── DMARCbis Readiness Assessment (informational only) ─────
+    if result["record"]:
+        result["dmarcbis_readiness"] = _assess_dmarcbis_readiness(result)
+
     return result
+
+
+def _assess_dmarcbis_readiness(dmarc_result: Dict) -> Dict:
+    """Assess readiness for DMARCbis (draft-ietf-dmarc-dmarcbis).
+
+    Purely informational. Does NOT affect scoring or status.
+    """
+    deprecated_tags = []
+    record = dmarc_result.get("record", "")
+    policy = (dmarc_result.get("policy") or "").lower()
+
+    # Check for deprecated tags by scanning the raw record
+    # (the parser already stored values in result dict)
+    tags_in_record = {}
+    for part in record.split(";"):
+        part = part.strip()
+        if "=" in part:
+            k, v = part.split("=", 1)
+            tags_in_record[k.strip().lower()] = v.strip()
+
+    if "pct" in tags_in_record:
+        pct_val = tags_in_record["pct"]
+        t_present = "t" in tags_in_record
+        action = "Remove. If testing enforcement, use t=y instead."
+        if t_present:
+            action = "Remove. You already have t= set, making pct redundant."
+        deprecated_tags.append({"tag": "pct", "value": pct_val, "action": action})
+
+    if "rf" in tags_in_record:
+        deprecated_tags.append({
+            "tag": "rf", "value": tags_in_record["rf"],
+            "action": "Remove. Only 'afrf' was ever defined, making this tag redundant.",
+        })
+
+    if "ri" in tags_in_record:
+        deprecated_tags.append({
+            "tag": "ri", "value": tags_in_record["ri"],
+            "action": "Remove. Receivers send daily reports regardless of this setting.",
+        })
+
+    # New DMARCbis tags
+    np_val = dmarc_result.get("np")
+    t_val = dmarc_result.get("t")
+    psd_val = dmarc_result.get("psd")
+
+    np_info = {"present": bool(np_val), "value": np_val, "recommendation": None}
+    if not np_val:
+        if policy == "reject":
+            np_info["recommendation"] = "Add np=reject to block mail from non-existent subdomains."
+        elif policy == "quarantine":
+            np_info["recommendation"] = "Add np=reject to block mail from non-existent subdomains."
+        elif policy == "none":
+            np_info["recommendation"] = "Add np=quarantine to flag mail from non-existent subdomains."
+        else:
+            np_info["recommendation"] = "Add np= once you have an enforcement policy."
+
+    t_info = {"present": bool(t_val), "value": t_val}
+    psd_info = {"present": bool(psd_val), "value": psd_val}
+
+    # Determine readiness tier
+    has_deprecated = len(deprecated_tags) > 0
+    has_np = bool(np_val)
+
+    if not has_deprecated and has_np:
+        status = "ready"
+    elif has_deprecated and not has_np:
+        status = "needs_update"
+    else:
+        status = "compatible"
+
+    # Build summary
+    parts = []
+    parts.append("Your DMARC record is valid and works under both RFC 7489 and DMARCbis.")
+    if has_deprecated:
+        tag_names = ", ".join(t["tag"] for t in deprecated_tags)
+        parts.append(f"Remove the deprecated {tag_names} tag{'s' if len(deprecated_tags) > 1 else ''}.")
+    if not has_np and np_info["recommendation"]:
+        parts.append(np_info["recommendation"])
+    if not has_deprecated and has_np:
+        parts.append("No changes needed for DMARCbis compliance.")
+
+    return {
+        "status": status,
+        "deprecated_tags": deprecated_tags,
+        "new_tags": {
+            "np": np_info,
+            "t": t_info,
+            "psd": psd_info,
+        },
+        "summary": " ".join(parts),
+    }
 
 
 def _raw_check_spf(domain: str) -> Dict[str, Any]:
