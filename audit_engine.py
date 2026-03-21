@@ -2307,6 +2307,7 @@ def _raw_check_dnssec(domain: str) -> Dict[str, Any]:
     elif "warning" in severities:
         result["status"] = "warning"
 
+    result["ttl"] = _lookup_ttl(domain, "DNSKEY")
     return result
 
 
@@ -2452,6 +2453,7 @@ def _raw_check_caa(domain: str) -> Dict[str, Any]:
     elif result["record_count"] > 0 and result["has_issue"]:
         result["status"] = "ok"
 
+    result["ttl"] = _lookup_ttl(domain, "CAA")
     return result
 
 
@@ -2743,6 +2745,7 @@ def _raw_check_nameservers(domain: str) -> Dict[str, Any]:
     elif "warning" in severities:
         result["status"] = "warning"
 
+    result["ttl"] = _lookup_ttl(domain, "NS")
     return result
 
 
@@ -4056,7 +4059,7 @@ def run_full_audit(domain: str, dkim_selector: Optional[str] = None,
 
     # Build TTL map from raw results
     ttl_map = {}
-    for check_key in ("dmarc", "spf"):
+    for check_key in ("dmarc", "spf", "mta_sts", "tls_rpt", "bimi", "dnssec", "caa", "nameservers", "mx"):
         raw = raw_results.get(check_key, {})
         if raw.get("ttl") is not None:
             ttl_map[check_key] = raw["ttl"]

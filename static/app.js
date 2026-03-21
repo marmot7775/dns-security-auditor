@@ -877,6 +877,21 @@ function createResultCard(check, index) {
         });
     });
 
+    // Change history collapse/expand
+    card.querySelectorAll('.cd-header').forEach(hdr => {
+        const toggle = () => {
+            const body = hdr.nextElementSibling;
+            const expanded = body.style.display !== 'none';
+            body.style.display = expanded ? 'none' : 'block';
+            hdr.setAttribute('aria-expanded', expanded ? 'false' : 'true');
+            hdr.querySelector('.cd-chevron').style.transform = expanded ? '' : 'rotate(180deg)';
+        };
+        hdr.addEventListener('click', (e) => { e.stopPropagation(); toggle(); });
+        hdr.addEventListener('keydown', (e) => {
+            if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); e.stopPropagation(); toggle(); }
+        });
+    });
+
     return card;
 }
 
@@ -1000,6 +1015,11 @@ function renderCheckBody(check) {
         html += _renderDetailItem(d);
     });
 
+    // Deliverability callout (Prompt 37)
+    if (check.deliverability) {
+        html += renderDeliverabilityCallout(check.deliverability);
+    }
+
     // TTL freshness badge (Prompt 18, Part 2)
     if (check.ttl_info) {
         html += renderTtlBadge(check.ttl_info);
@@ -1113,6 +1133,11 @@ function renderCheckBody(check) {
         html += renderSpfTree(check._spf_tree);
     }
 
+    // Propagation warning (Prompt 18, Part 3)
+    if (check.ttl_info && check.fix_records && check.fix_records.length > 0) {
+        html += renderPropagationWarning(check.ttl_info, check.name);
+    }
+
     // Fix preview -- before/after DNS records
     if (check.fix_records && check.fix_records.length > 0) {
         html += renderFixPreview(check.fix_records);
@@ -1165,6 +1190,140 @@ function renderFixPreview(fixRecords) {
     }
 
     html += '</div>';
+    return html;
+}
+
+// ============================================================
+// Deliverability Callout (Prompt 37)
+// ============================================================
+
+function renderDeliverabilityCallout(text) {
+    if (!text) return '';
+    return `
+        <div class="deliv-callout">
+            <div class="deliv-header">
+                <span class="deliv-icon">&#9993;</span>
+                <span class="deliv-label">Email Deliverability</span>
+            </div>
+            <div class="deliv-text">${escapeHtml(text)}</div>
+        </div>
+    `;
+}
+
+// ============================================================
+// TTL Freshness Badge (Prompt 18, Part 2)
+// ============================================================
+
+function renderTtlBadge(ttlInfo) {
+    if (!ttlInfo) return '';
+    const categoryClass = {
+        very_short: 'ttl-very-short',
+        short: 'ttl-short',
+        standard: 'ttl-standard',
+        long: 'ttl-long',
+    }[ttlInfo.category] || 'ttl-standard';
+
+    return `
+        <div class="ttl-badge ${categoryClass}">
+            <span class="ttl-value">TTL: ${escapeHtml(String(ttlInfo.ttl))}s (${escapeHtml(ttlInfo.human)})</span>
+            <span class="ttl-detail">${escapeHtml(ttlInfo.detail)}</span>
+        </div>
+    `;
+}
+
+// ============================================================
+// Change History Timeline (Prompt 18, Part 1)
+// ============================================================
+
+function renderChangeHistory(changes) {
+    if (!changes || changes.length === 0) return '';
+
+    let html = `<div class="cd-section">
+        <div class="cd-header" role="button" tabindex="0" aria-expanded="false">
+            <span class="cd-header-icon">&#8635;</span>
+            <span class="cd-header-title">Change History</span>
+            <span class="cd-header-count">${changes.length} change${changes.length !== 1 ? 's' : ''} detected</span>
+            <span class="cd-chevron">&#9662;</span>
+        </div>
+        <div class="cd-body" style="display:none;">`;
+
+    for (const change of changes) {
+        const dateStr = change.timestamp ? new Date(change.timestamp + 'Z').toLocaleDateString('en-US', {
+            year: 'numeric', month: 'long', day: 'numeric'
+        }) : 'Unknown date';
+
+        const improvementClass = change.is_improvement === true ? 'cd-improvement'
+            : change.is_improvement === false ? 'cd-regression' : 'cd-neutral';
+        const improvementIcon = change.is_improvement === true ? '&#10003;'
+            : change.is_improvement === false ? '&#9888;' : '&#8226;';
+
+        html += `
+            <div class="cd-change ${improvementClass}">
+                <div class="cd-change-header">
+                    <span class="cd-change-label">${escapeHtml(change.record_label || change.record_type)} Record Changed</span>
+                    <span class="cd-change-date">${escapeHtml(dateStr)}</span>
+                </div>
+                <div class="cd-diff">
+                    <div class="cd-diff-line cd-diff-old"><span class="cd-diff-prefix">Before:</span> ${escapeHtml(change.old_value || '')}</div>
+                    <div class="cd-diff-line cd-diff-new"><span class="cd-diff-prefix">After:</span>&nbsp; ${escapeHtml(change.new_value || '')}</div>
+                </div>
+                <div class="cd-change-desc">
+                    <span class="cd-change-icon">${improvementIcon}</span>
+                    ${escapeHtml(change.description || 'Record value changed')}
+                </div>
+            </div>`;
+    }
+
+    html += `</div></div>`;
+    return html;
+}
+
+// ============================================================
+// Propagation Warning (Prompt 18, Part 3)
+// ============================================================
+
+function renderPropagationWarning(ttlInfo, checkName) {
+    if (!ttlInfo) return '';
+    const ttl = ttlInfo.ttl;
+    const human = ttlInfo.human;
+
+    let extra = '';
+    const name = (checkName || '').toUpperCase();
+    if (name === 'DMARC' && ttl > 300) {
+        extra = ' Consider lowering your TTL to 300 seconds before making policy changes, then raising it back after propagation completes.';
+    }
+
+    return `
+        <div class="prop-warning">
+            <span class="prop-warning-icon">&#8505;</span>
+            <span class="prop-warning-text">
+                Your current ${escapeHtml(checkName || 'DNS')} record has a TTL of ${ttl}s (${escapeHtml(human)}).
+                After publishing changes, it may take up to ${escapeHtml(human)} for all DNS resolvers to pick up the new record.
+                During this window, some receivers will see the old record and some will see the new one.${extra}
+            </span>
+        </div>
+    `;
+}
+
+// ============================================================
+// Consistency Findings (Prompt 18, Part 4)
+// ============================================================
+
+function renderConsistencyFindings(findings) {
+    if (!findings || findings.length === 0) return '';
+
+    let html = '';
+    for (const finding of findings) {
+        const badgeClass = finding.badge === 'Configuration Drift' ? 'cf-badge-drift' : 'cf-badge-info';
+        html += `
+            <div class="cf-finding">
+                <div class="cf-finding-header">
+                    <span class="cf-badge ${badgeClass}">${escapeHtml(finding.badge || 'Note')}</span>
+                    <span class="cf-finding-title">${escapeHtml(finding.title)}</span>
+                </div>
+                <div class="cf-finding-detail">${escapeHtml(finding.detail)}</div>
+            </div>`;
+    }
     return html;
 }
 
@@ -2285,6 +2444,11 @@ function renderExecutiveSummary(es) {
             <div class="es-risk-text">${escapeHtml(es.biggest_risk)}</div>
         </div>
 
+        ${es.deliverability_summary ? `<div class="es-deliverability">
+            <span class="deliv-icon">&#9993;</span>
+            <span><strong>Email deliverability:</strong> ${escapeHtml(es.deliverability_summary)}</span>
+        </div>` : ''}
+
         <div class="es-actions">${actions}</div>
     </div>`;
 }
@@ -3228,3 +3392,524 @@ function _renderProviderCard(provider, showScorecard) {
     return html;
 }
 
+
+// ============================================================
+// Email Header Analyzer (Prompt 24)
+// ============================================================
+
+let headerAnalyzerIntent = null;
+
+// -- Tab switching: /headers route --
+(function initHeaderAnalyzer() {
+    const isHeadersPage = window.location.pathname === '/headers';
+    if (isHeadersPage) {
+        _switchToHeadersView();
+    }
+
+    // Handle nav click without full page reload
+    const navLink = document.getElementById('nav-headers');
+    if (navLink) {
+        navLink.addEventListener('click', (e) => {
+            e.preventDefault();
+            history.pushState(null, '', '/headers');
+            _switchToHeadersView();
+        });
+    }
+
+    // Handle popstate (back button)
+    window.addEventListener('popstate', () => {
+        if (window.location.pathname === '/headers') {
+            _switchToHeadersView();
+        } else {
+            _switchToAuditView();
+        }
+    });
+
+    // Intent buttons
+    document.querySelectorAll('.ha-intent-btn').forEach(btn => {
+        btn.addEventListener('click', () => {
+            document.querySelectorAll('.ha-intent-btn').forEach(b => b.classList.remove('active'));
+            btn.classList.add('active');
+            headerAnalyzerIntent = btn.dataset.intent;
+        });
+    });
+
+    // How-to toggle
+    const howToggle = document.getElementById('ha-how-toggle');
+    const howContent = document.getElementById('ha-how-content');
+    if (howToggle && howContent) {
+        howToggle.addEventListener('click', () => {
+            const open = howContent.style.display !== 'none';
+            howContent.style.display = open ? 'none' : 'block';
+            howToggle.setAttribute('aria-expanded', open ? 'false' : 'true');
+        });
+    }
+
+    // Analyze button
+    const analyzeBtn = document.getElementById('ha-analyze-btn');
+    if (analyzeBtn) {
+        analyzeBtn.addEventListener('click', () => {
+            const input = document.getElementById('ha-input');
+            if (!input || !input.value.trim()) return;
+            _runHeaderAnalysis(input.value);
+        });
+    }
+
+    // Sample headers button
+    const sampleBtn = document.getElementById('ha-sample-btn');
+    if (sampleBtn) {
+        sampleBtn.addEventListener('click', async () => {
+            try {
+                const resp = await fetch('/api/sample-headers');
+                if (resp.ok) {
+                    const text = await resp.text();
+                    const input = document.getElementById('ha-input');
+                    if (input) input.value = text;
+                }
+            } catch (e) { /* ignore */ }
+        });
+    }
+})();
+
+function _switchToHeadersView() {
+    // Update nav active state
+    document.querySelectorAll('.nav-link').forEach(l => l.classList.remove('nav-link-active'));
+    const navHeaders = document.getElementById('nav-headers');
+    if (navHeaders) navHeaders.classList.add('nav-link-active');
+
+    // Hide audit sections, show header section
+    const auditInput = document.querySelector('.audit-input-section');
+    const loadingSection = document.getElementById('loading-section');
+    const resultsSection = document.getElementById('results-section');
+    const headerSection = document.getElementById('header-section');
+    const eduSection = document.getElementById('edu-section');
+
+    if (auditInput) auditInput.style.display = 'none';
+    if (loadingSection) loadingSection.style.display = 'none';
+    if (resultsSection) resultsSection.style.display = 'none';
+    if (headerSection) headerSection.style.display = 'block';
+    if (eduSection) eduSection.style.display = 'none';
+
+    document.title = 'Email Header Analyzer | dns-audit.com';
+}
+
+function _switchToAuditView() {
+    document.querySelectorAll('.nav-link').forEach(l => l.classList.remove('nav-link-active'));
+    const homeLink = document.querySelector('.nav-link[href="/"]');
+    if (homeLink) homeLink.classList.add('nav-link-active');
+
+    const auditInput = document.querySelector('.audit-input-section');
+    const headerSection = document.getElementById('header-section');
+    const eduSection = document.getElementById('edu-section');
+
+    if (auditInput) auditInput.style.display = '';
+    if (headerSection) headerSection.style.display = 'none';
+    if (eduSection) eduSection.style.display = '';
+
+    document.title = DEFAULT_TITLE;
+}
+
+async function _runHeaderAnalysis(rawHeaders) {
+    const btn = document.getElementById('ha-analyze-btn');
+    const resultsDiv = document.getElementById('ha-results');
+    if (!btn || !resultsDiv) return;
+
+    btn.disabled = true;
+    btn.classList.add('is-loading');
+    resultsDiv.style.display = 'none';
+    resultsDiv.innerHTML = '';
+
+    try {
+        const resp = await fetch('/api/analyze-headers', {
+            method: 'POST',
+            headers: { 'Content-Type': 'text/plain' },
+            body: rawHeaders,
+        });
+
+        if (resp.status === 429) {
+            resultsDiv.innerHTML = '<div class="ha-error">Rate limit reached. Please wait a minute and try again.</div>';
+            resultsDiv.style.display = 'block';
+            return;
+        }
+
+        if (!resp.ok) {
+            const detail = await resp.text();
+            resultsDiv.innerHTML = `<div class="ha-error">${escapeHtml(detail || 'Analysis failed')}</div>`;
+            resultsDiv.style.display = 'block';
+            return;
+        }
+
+        const data = await resp.json();
+        if (data.error) {
+            resultsDiv.innerHTML = `<div class="ha-error">${escapeHtml(data.error_message || 'Could not parse headers')}</div>`;
+            resultsDiv.style.display = 'block';
+            return;
+        }
+
+        resultsDiv.innerHTML = renderHeaderAnalysis(data);
+        resultsDiv.style.display = 'block';
+
+        // Wire up glossary toggles
+        resultsDiv.querySelectorAll('.ha-glossary-toggle').forEach(toggle => {
+            toggle.addEventListener('click', (e) => {
+                e.stopPropagation();
+                const desc = toggle.nextElementSibling;
+                if (desc) desc.style.display = desc.style.display === 'none' ? 'block' : 'none';
+            });
+        });
+
+        // Wire up audit button
+        const auditBtn = resultsDiv.querySelector('.ha-audit-btn');
+        if (auditBtn) {
+            auditBtn.addEventListener('click', () => {
+                const domain = auditBtn.dataset.domain;
+                if (domain) {
+                    history.pushState(null, '', '/?d=' + encodeURIComponent(domain));
+                    _switchToAuditView();
+                    domainInput.value = domain;
+                    runAudit(domain);
+                    window.scrollTo({ top: 0, behavior: 'smooth' });
+                }
+            });
+        }
+
+        // Smooth scroll to results
+        resultsDiv.scrollIntoView({ behavior: 'smooth', block: 'start' });
+
+    } catch (e) {
+        resultsDiv.innerHTML = '<div class="ha-error">Network error. Please check your connection and try again.</div>';
+        resultsDiv.style.display = 'block';
+    } finally {
+        btn.disabled = false;
+        btn.classList.remove('is-loading');
+    }
+}
+
+
+// ============================================================
+// Header Analysis Rendering
+// ============================================================
+
+function renderHeaderAnalysis(data) {
+    let html = '';
+
+    // --- Diagnosis verdict banner ---
+    if (data.diagnosis && data.diagnosis.verdict) {
+        html += _renderDiagnosisBanner(data.diagnosis.verdict);
+    }
+
+    // --- "Run audit" callout ---
+    if (data.from_domain) {
+        html += `
+            <div class="ha-audit-callout">
+                <span>This email claims to be from <strong>${escapeHtml(data.from_domain)}</strong>. Want to see their full DNS security profile?</span>
+                <button class="audit-btn ha-audit-btn" data-domain="${escapeHtml(data.from_domain)}" type="button">Run Full Audit on ${escapeHtml(data.from_domain)}</button>
+            </div>`;
+    }
+
+    // --- Authentication Summary ---
+    if (data.auth_summary) {
+        html += _renderAuthSummary(data.auth_summary, data.dkim_signatures, data.arc_chain);
+    }
+
+    // --- Identity Check ---
+    if (data.identity) {
+        html += _renderIdentityCheck(data.identity);
+    }
+
+    // --- Mail Journey ---
+    if (data.journey && data.journey.hops && data.journey.hops.length > 0) {
+        html += _renderJourney(data.journey);
+    }
+
+    // --- Problems & Indicators ---
+    if (data.diagnosis) {
+        html += _renderProblems(data.diagnosis);
+    }
+
+    // --- DMARCbis Note ---
+    if (data.dmarcbis_note) {
+        html += _renderDmarcbisNote(data.dmarcbis_note);
+    }
+
+    // --- Header Glossary ---
+    if (data.glossary && data.glossary.length > 0) {
+        html += _renderGlossary(data.glossary);
+    }
+
+    // --- Metadata ---
+    html += _renderMetadata(data);
+
+    return html;
+}
+
+
+function _renderDiagnosisBanner(verdict) {
+    const levelClass = {
+        healthy: 'ha-verdict-healthy',
+        info: 'ha-verdict-info',
+        caution: 'ha-verdict-caution',
+        warning: 'ha-verdict-warning',
+        danger: 'ha-verdict-danger',
+    }[verdict.level] || 'ha-verdict-info';
+
+    return `
+        <div class="ha-verdict-banner ${levelClass}">
+            <div class="ha-verdict-title">${escapeHtml(verdict.title)}</div>
+            <div class="ha-verdict-summary">${escapeHtml(verdict.summary)}</div>
+        </div>`;
+}
+
+
+function _renderAuthSummary(auth, dkimSigs, arcChain) {
+    const spf = auth.spf || {};
+    const dkim = auth.dkim || {};
+    const dmarc = auth.dmarc || {};
+
+    const resultIcon = (r) => {
+        if (r === 'pass') return '<span class="ha-result-pass">PASS</span>';
+        if (r === 'fail') return '<span class="ha-result-fail">FAIL</span>';
+        if (r === 'softfail') return '<span class="ha-result-softfail">SOFTFAIL</span>';
+        if (r === 'none') return '<span class="ha-result-none">NONE</span>';
+        return `<span class="ha-result-other">${escapeHtml(r.toUpperCase())}</span>`;
+    };
+
+    let spfDetail = '';
+    if (spf.mailfrom) spfDetail = ` (${escapeHtml(spf.mailfrom)})`;
+
+    let dkimDetail = '';
+    if (dkim.domain) dkimDetail += ` signed by ${escapeHtml(dkim.domain)}`;
+    if (dkim.selector) dkimDetail += `, selector: ${escapeHtml(dkim.selector)}`;
+    if (dkimSigs && dkimSigs.length > 0 && dkimSigs[0].a) {
+        dkimDetail += `, ${escapeHtml(dkimSigs[0].a)}`;
+    }
+    if (dkimDetail) dkimDetail = ` (${dkimDetail.replace(/^ /, '')})`;
+
+    let dmarcDetail = '';
+    if (dmarc.policy) dmarcDetail += `policy: p=${escapeHtml(dmarc.policy.toLowerCase())}`;
+    if (dmarc.disposition && dmarc.disposition !== 'NONE') dmarcDetail += `, action: ${escapeHtml(dmarc.disposition.toLowerCase())}`;
+    if (dmarcDetail) dmarcDetail = ` (${dmarcDetail})`;
+
+    let arcHtml = '';
+    if (arcChain && arcChain.present) {
+        const arcStatus = arcChain.chain_valid ? 'Valid' : 'Broken';
+        const arcClass = arcChain.chain_valid ? 'ha-result-pass' : 'ha-result-fail';
+        arcHtml = `<div class="ha-auth-row"><span class="ha-auth-label">ARC:</span> <span class="${arcClass}">${arcStatus}</span> <span class="ha-auth-detail">(${arcChain.hops} hop${arcChain.hops !== 1 ? 's' : ''}, chain ${arcChain.status})</span></div>`;
+    }
+
+    return `
+        <div class="ha-section">
+            <div class="ha-section-title">Authentication Results</div>
+            <div class="ha-auth-tree">
+                <div class="ha-auth-row"><span class="ha-auth-label">SPF:</span> ${resultIcon(spf.result)} <span class="ha-auth-detail">${spfDetail}</span></div>
+                <div class="ha-auth-row"><span class="ha-auth-label">DKIM:</span> ${resultIcon(dkim.result)} <span class="ha-auth-detail">${dkimDetail}</span></div>
+                <div class="ha-auth-row"><span class="ha-auth-label">DMARC:</span> ${resultIcon(dmarc.result)} <span class="ha-auth-detail">${dmarcDetail}</span></div>
+                ${arcHtml}
+            </div>
+        </div>`;
+}
+
+
+function _renderIdentityCheck(identity) {
+    const checkMark = (passed) => passed
+        ? '<span class="ha-check-pass">&#10003;</span>'
+        : '<span class="ha-check-fail">&#10007;</span>';
+
+    let dkimDomainsStr = (identity.dkim_domains || []).join(', ') || '(none)';
+
+    let alignmentHtml = '';
+    if (identity.dmarc_result === 'pass' && identity.alignment_method) {
+        alignmentHtml = `<div class="ha-id-alignment ha-id-aligned">DMARC alignment: PASS (${escapeHtml(identity.alignment_method)})</div>`;
+    } else if (identity.dmarc_result === 'fail') {
+        alignmentHtml = '<div class="ha-id-alignment ha-id-misaligned">DMARC alignment: FAIL (neither SPF nor DKIM aligned with From domain)</div>';
+    }
+
+    return `
+        <div class="ha-section">
+            <div class="ha-section-title">Identity Check</div>
+            <div class="ha-identity">
+                <div class="ha-id-row"><span class="ha-id-label">RFC 5321.MailFrom (envelope):</span> <span class="ha-id-value">${escapeHtml(identity.mail_from)}</span></div>
+                <div class="ha-id-row"><span class="ha-id-label">RFC 5322.From (header):</span> <span class="ha-id-value">${escapeHtml(identity.header_from)}</span></div>
+                <div class="ha-id-row"><span class="ha-id-label">DKIM d= (signing domain):</span> <span class="ha-id-value">${escapeHtml(dkimDomainsStr)}</span></div>
+                <div class="ha-id-spacer"></div>
+                <div class="ha-id-row">SPF authenticated: ${identity.spf_authenticated ? escapeHtml(identity.spf_authenticated) + ' ' + checkMark(true) : checkMark(false) + ' not authenticated'}</div>
+                <div class="ha-id-row">DKIM authenticated: ${identity.dkim_authenticated ? escapeHtml(identity.dkim_authenticated) + ' ' + checkMark(true) : checkMark(false) + ' not authenticated'}</div>
+                ${alignmentHtml}
+            </div>
+        </div>`;
+}
+
+
+function _renderJourney(journey) {
+    const hops = journey.hops;
+    const total = journey.total_seconds;
+
+    let totalStr = '';
+    if (total !== null && total !== undefined) {
+        if (total < 60) totalStr = `${total}s`;
+        else if (total < 3600) totalStr = `${Math.round(total / 60)}m`;
+        else totalStr = `${Math.round(total / 3600)}h`;
+    }
+
+    let headerText = `This email's journey (${hops.length} hop${hops.length !== 1 ? 's' : ''}`;
+    if (totalStr) headerText += `, ${totalStr}`;
+    headerText += ')';
+
+    let html = `
+        <div class="ha-section">
+            <div class="ha-section-title">${escapeHtml(headerText)}</div>
+            <div class="ha-journey">`;
+
+    for (const hop of hops) {
+        const delayClass = hop.delay_level === 'red' ? 'ha-hop-red'
+            : hop.delay_level === 'amber' ? 'ha-hop-amber' : '';
+        const internalClass = hop.internal ? ' ha-hop-internal' : '';
+
+        let hopDesc = escapeHtml(hop.description || `Hop ${hop.hop}`);
+
+        let hostInfo = '';
+        const byHost = hop.by_host || hop.from_host || '';
+        const ip = hop.ip || '';
+        if (byHost || ip) {
+            let parts = [];
+            if (byHost) parts.push(escapeHtml(byHost));
+            if (ip) parts.push(`(${escapeHtml(ip)})`);
+            hostInfo = `<div class="ha-hop-host">${parts.join(' ')}</div>`;
+        }
+
+        let timeStr = '';
+        if (hop.timestamp) {
+            try {
+                const d = new Date(hop.timestamp);
+                timeStr = d.toLocaleString();
+            } catch (e) {
+                timeStr = hop.timestamp_raw || '';
+            }
+        }
+
+        let deltaStr = '';
+        if (hop.delta_seconds !== undefined && hop.delta_seconds !== null) {
+            const ds = hop.delta_seconds;
+            if (ds < 60) deltaStr = `(+${ds}s)`;
+            else deltaStr = `(+${Math.round(ds / 60)}m)`;
+        }
+
+        let delayNote = '';
+        if (hop.delay_note) {
+            delayNote = `<div class="ha-hop-delay">${escapeHtml(hop.delay_note)}</div>`;
+        }
+
+        let tlsNote = '';
+        if (hop.tls === true) {
+            tlsNote = '<span class="ha-hop-tls">TLS</span>';
+        } else if (hop.protocol && !hop.tls) {
+            tlsNote = '<span class="ha-hop-notls">No TLS</span>';
+        }
+
+        html += `
+            <div class="ha-hop ${delayClass}${internalClass}">
+                <div class="ha-hop-number">${hop.hop}</div>
+                <div class="ha-hop-content">
+                    <div class="ha-hop-desc">${hopDesc} ${tlsNote}</div>
+                    ${hostInfo}
+                    <div class="ha-hop-time">${escapeHtml(timeStr)} ${escapeHtml(deltaStr)}</div>
+                    ${delayNote}
+                </div>
+            </div>`;
+    }
+
+    if (total !== null && total !== undefined) {
+        html += `<div class="ha-journey-total">Total transit time: ${escapeHtml(totalStr)}</div>`;
+    }
+
+    html += '</div></div>';
+    return html;
+}
+
+
+function _renderProblems(diagnosis) {
+    const problems = diagnosis.problems || [];
+    const indicators = diagnosis.indicators || [];
+
+    if (problems.length === 0 && indicators.length === 0) return '';
+
+    let html = '<div class="ha-section"><div class="ha-section-title">Detailed Findings</div>';
+
+    for (const p of problems) {
+        const sevClass = {
+            critical: 'ha-finding-critical',
+            high: 'ha-finding-high',
+            medium: 'ha-finding-medium',
+        }[p.severity] || 'ha-finding-medium';
+
+        html += `
+            <div class="ha-finding ${sevClass}">
+                <div class="ha-finding-title">${escapeHtml(p.title)}</div>
+                <div class="ha-finding-detail">${escapeHtml(p.detail)}</div>
+                ${p.fix ? `<div class="ha-finding-fix">Fix: ${escapeHtml(p.fix)}</div>` : ''}
+            </div>`;
+    }
+
+    for (const ind of indicators) {
+        html += `
+            <div class="ha-finding ha-finding-indicator">
+                <div class="ha-finding-title">${escapeHtml(ind.title)}</div>
+                <div class="ha-finding-detail">${escapeHtml(ind.detail)}</div>
+            </div>`;
+    }
+
+    html += '</div>';
+    return html;
+}
+
+
+function _renderDmarcbisNote(note) {
+    if (!note || !note.notes || note.notes.length === 0) return '';
+
+    let html = `
+        <div class="ha-section ha-dmarcbis-note">
+            <div class="ha-section-title">${escapeHtml(note.title)}</div>`;
+
+    for (const n of note.notes) {
+        html += `<div class="ha-dmarcbis-item">${escapeHtml(n)}</div>`;
+    }
+
+    html += '</div>';
+    return html;
+}
+
+
+function _renderGlossary(glossary) {
+    let html = `
+        <div class="ha-section">
+            <div class="ha-section-title">Header Glossary</div>
+            <div class="ha-glossary">`;
+
+    for (const entry of glossary) {
+        html += `
+            <div class="ha-glossary-entry">
+                <button class="ha-glossary-toggle" type="button">${escapeHtml(entry.header)} <span class="ha-glossary-q">?</span></button>
+                <div class="ha-glossary-desc" style="display:none">${escapeHtml(entry.description)}</div>
+            </div>`;
+    }
+
+    html += '</div></div>';
+    return html;
+}
+
+
+function _renderMetadata(data) {
+    let items = [];
+    if (data.subject) items.push(`<span class="ha-meta-label">Subject:</span> ${escapeHtml(data.subject)}`);
+    if (data.date) items.push(`<span class="ha-meta-label">Date:</span> ${escapeHtml(data.date)}`);
+    if (data.message_id) items.push(`<span class="ha-meta-label">Message-ID:</span> ${escapeHtml(data.message_id)}`);
+    if (data.mailer) items.push(`<span class="ha-meta-label">Mailer:</span> ${escapeHtml(data.mailer)}`);
+
+    if (items.length === 0) return '';
+
+    return `
+        <div class="ha-section ha-metadata">
+            <div class="ha-section-title">Message Info</div>
+            <div class="ha-meta-list">${items.map(i => `<div class="ha-meta-item">${i}</div>`).join('')}</div>
+        </div>`;
+}

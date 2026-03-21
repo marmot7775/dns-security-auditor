@@ -213,6 +213,50 @@ def build_executive_summary(checks: List[Dict], roadmap: Dict) -> Dict:
     # ── Part 4: has_record_builder flag ──────────────────────
     has_record_builder = dmarc.get("record_builder") is not None
 
+    # ── Part 5: Deliverability summary ────────────────────────
+    dkim_check = check_map.get("DKIM", {})
+    spf_check = check_map.get("SPF", {})
+    blocklist_check = check_map.get("Blocklist", {})
+
+    deliverability_issues = []
+    if dmarc_status == "fail" and dmarc.get("pill_label") == "Missing":
+        deliverability_issues.append("no DMARC record")
+    elif health_status == "monitoring":
+        deliverability_issues.append("DMARC is in monitoring mode (p=none)")
+
+    if spf_status == "fail" and spf_check.get("pill_label") == "Missing":
+        deliverability_issues.append("no SPF record")
+
+    spf_lookups = None
+    for d in spf_check.get("details", []):
+        text = d.get("text", "")
+        if "DNS lookups" in text and ("near" in text or "at" in text or "invalid" in text.lower()):
+            deliverability_issues.append("SPF lookup count is at or near the limit")
+            break
+
+    if blocklist_check.get("status") == "fail":
+        deliverability_issues.append("domain is listed on a blocklist")
+
+    if dkim_check.get("status") == "warn" and dkim_check.get("pill_label") == "Unknown":
+        pass  # Can't confirm, don't alarm
+
+    if deliverability_issues:
+        top_issue = deliverability_issues[0]
+        if "blocklist" in top_issue:
+            deliverability_summary = f"Your domain is listed on a blocklist. This is likely causing delivery failures right now."
+        elif "no DMARC" in top_issue:
+            deliverability_summary = "Without DMARC, your business emails may be landing in spam. Gmail and Yahoo now require DMARC for reliable delivery."
+        elif "p=none" in top_issue:
+            deliverability_summary = "Your DMARC policy is monitoring only (p=none). Gmail, Yahoo, and Outlook may treat your email with more suspicion until you enforce."
+        elif "no SPF" in top_issue:
+            deliverability_summary = "Without SPF, receivers cannot verify your sending servers. This is a common cause of emails going to spam."
+        elif "SPF lookup" in top_issue:
+            deliverability_summary = "Your SPF record is near the 10-lookup limit. Adding one more email service could break SPF for all your email."
+        else:
+            deliverability_summary = f"Your configuration has {len(deliverability_issues)} issue{'s' if len(deliverability_issues) != 1 else ''} that may affect inbox placement."
+    else:
+        deliverability_summary = "Your configuration looks solid. SPF, DKIM, and DMARC are properly set up, giving you the best chance of reaching inboxes."
+
     return {
         "verdict": verdict,
         "spoofing_protection": spoofing_protection,
@@ -220,6 +264,7 @@ def build_executive_summary(checks: List[Dict], roadmap: Dict) -> Dict:
         "protocol_coverage": protocol_coverage,
         "biggest_risk": biggest_risk,
         "has_record_builder": has_record_builder,
+        "deliverability_summary": deliverability_summary,
     }
 
 
@@ -534,6 +579,11 @@ def build_change_detection(
         "dmarc": ("dmarc", lambda r: r.get("record")),
         "spf": ("spf", lambda r: r.get("record")),
         "mx": ("mx", lambda r: "; ".join(sorted(r.get("records") or []))),
+        "mta_sts": ("mta-sts", lambda r: r.get("txt_record")),
+        "tls_rpt": ("tls-rpt", lambda r: r.get("record")),
+        "dnssec": ("dnssec", lambda r: r.get("dnskey_record")),
+        "caa": ("caa", lambda r: "; ".join(sorted(r.get("records") or []))),
+        "nameservers": ("nameservers", lambda r: "; ".join(sorted(r.get("nameservers") or []))),
     }
 
     for check_key, (record_type, extract_fn) in record_map.items():
@@ -701,6 +751,22 @@ def build_consistency_findings(
                         ),
                         "severity": "info",
                     })
+
+    # 5. CAA vs MTA-STS certificate providers
+    caa_raw = raw_results.get("caa", {})
+    caa_cas = [ca.lower() for ca in caa_raw.get("authorized_cas", [])]
+    if caa_cas and mta_sts_raw.get("policy_mode") == "enforce":
+        findings.append({
+            "protocol": "CAA",
+            "badge": "Informational",
+            "title": "CAA records may affect MTA-STS certificate renewal",
+            "detail": (
+                f"Your CAA records restrict certificate issuance to: {', '.join(caa_raw.get('authorized_cas', []))}. "
+                f"Ensure your MTA-STS mail server certificates are issued by one of these authorized CAs, "
+                f"or renewal failures could break MTA-STS enforcement."
+            ),
+            "severity": "info",
+        })
 
     return findings if findings else None
 
@@ -1391,6 +1457,44 @@ def transform_dmarc(raw: Dict, tree_walk: Optional[Dict] = None) -> Dict:
         no_record_builder = None
         no_record_comparison = None
 
+    # Deliverability context
+    if not record and not inherited:
+        _deliverability = (
+            "Without DMARC, Gmail, Yahoo, and Outlook increasingly penalize your domain. "
+            "Since February 2024, Google and Yahoo require DMARC for bulk senders. Even non-bulk "
+            "senders benefit because DMARC tells receivers you take your email reputation seriously. "
+            "If you send marketing emails, sales outreach, or business communications, this gap "
+            "is likely hurting your inbox placement right now."
+        )
+    elif inherited and inherited_policy == "none":
+        _deliverability = (
+            "Your inherited p=none policy means receivers make their own judgment about suspicious "
+            "email from your domain. Gmail and Yahoo may filter or delay messages that fail "
+            "authentication. Moving toward enforcement protects your sending reputation."
+        )
+    elif policy == "none":
+        _deliverability = (
+            "With p=none, Gmail, Yahoo, and Microsoft decide on their own how to handle "
+            "emails that fail authentication from your domain. They often treat unaligned "
+            "mail with suspicion. Since February 2024, Google and Yahoo require DMARC for "
+            "bulk senders. Moving to p=quarantine or p=reject signals that you control your "
+            "email and generally improves inbox placement."
+        )
+    elif policy == "quarantine":
+        _deliverability = (
+            "Good for deliverability. Receivers know to quarantine spoofed emails, which "
+            "protects your domain's sending reputation. Spoofed emails will not drag down "
+            "your legitimate mail's reputation."
+        )
+    elif policy == "reject":
+        _deliverability = (
+            "Excellent for deliverability. This is the strongest signal to receivers that "
+            "you control your email. Domains with p=reject generally see better inbox placement "
+            "because receivers trust them more."
+        )
+    else:
+        _deliverability = None
+
     return {
         "name": "DMARC",
         "status": status,
@@ -1414,6 +1518,7 @@ def transform_dmarc(raw: Dict, tree_walk: Optional[Dict] = None) -> Dict:
             raw.get("dmarcbis_readiness"), raw.get("record")
         ),
         "ttl_info": format_ttl(raw.get("ttl")),
+        "deliverability": _deliverability,
     }
 
 
@@ -3447,6 +3552,45 @@ def transform_spf(raw: Dict, has_mx: bool = True) -> Dict:
         })
     # No copy-paste for starter SPF -- user must identify their authorized senders first
 
+    # Deliverability context
+    _deliverability = None
+    if null_spf or (not record and not has_mx):
+        pass  # No deliverability concern for non-mail domains
+    elif not record:
+        _deliverability = (
+            "Without SPF, receivers cannot verify that your email server is authorized "
+            "to send for your domain. This is one of the most common causes of emails "
+            "landing in spam. Every major email provider checks SPF."
+        )
+    elif record:
+        _lookups = raw.get("lookup_count", 0)
+        _all = raw.get("all_mechanism", "")
+        if _all == "+all":
+            _deliverability = (
+                "DANGER: +all authorizes the entire internet to send email as your domain. "
+                "This effectively disables SPF and will severely damage your deliverability. "
+                "Fix this immediately."
+            )
+        elif _lookups and _lookups > 10:
+            _deliverability = (
+                f"Your SPF record requires {_lookups} DNS lookups, exceeding the 10-lookup limit. "
+                f"This means SPF fails completely for all your email, which can cause messages "
+                f"to bounce or go to spam. Every email platform you add (Mailchimp, Salesforce, "
+                f"HubSpot, SendGrid) consumes lookups. Remove services you no longer use or "
+                f"consider an SPF flattening service."
+            )
+        elif _lookups and _lookups > 8:
+            _deliverability = (
+                f"Your SPF record uses {_lookups} of 10 allowed DNS lookups. "
+                f"{'You are at the limit. Adding one more email service will break SPF for all your email.' if _lookups == 10 else 'You are close to the limit. Plan carefully before adding new sending services like Mailchimp, HubSpot, or SendGrid.'}"
+            )
+        elif _all == "~all":
+            _deliverability = (
+                "Softfail (~all) means unauthorized servers are flagged but not blocked. "
+                "This is fine during setup, but for production email, consider -all (hard fail) "
+                "once you have confirmed all legitimate senders are included."
+            )
+
     return {
         "name": "SPF",
         "status": status,
@@ -3459,6 +3603,7 @@ def transform_spf(raw: Dict, has_mx: bool = True) -> Dict:
         "fix_records": fix_records if fix_records else None,
         "spf_deep": _build_spf_deep_analysis(raw) if record else None,
         "ttl_info": format_ttl(raw.get("ttl")),
+        "deliverability": _deliverability,
     }
 
 
@@ -3694,6 +3839,7 @@ def transform_dkim(raw: Dict, domain: str, has_mx: bool = True) -> Dict:
                 ],
                 "fix": None,
                 "fix_records": None,
+                "deliverability": None,
             }
 
         # User provided a specific selector that wasn't found
@@ -3720,6 +3866,7 @@ def transform_dkim(raw: Dict, domain: str, has_mx: bool = True) -> Dict:
                     f"TXT record is published at <strong>{_e(selector_not_found)}._domainkey.{_e(domain)}</strong>."
                 ),
                 "fix_records": None,
+                "deliverability": None,
             }
 
         return {
@@ -3747,6 +3894,12 @@ def transform_dkim(raw: Dict, domain: str, has_mx: bool = True) -> Dict:
             ],
             "fix": None,
             "fix_records": None,
+            "deliverability": (
+                "DKIM is the single most important signal for Gmail's spam filters. "
+                "Without a confirmed DKIM key, your emails are significantly more likely to be "
+                "flagged as spam, even if SPF passes. Most email providers (Google Workspace, "
+                "Microsoft 365, Mailchimp, SendGrid) can set up DKIM for you."
+            ),
         }
 
     # Build details for each found key
@@ -3838,6 +3991,23 @@ def transform_dkim(raw: Dict, domain: str, has_mx: bool = True) -> Dict:
     elif raw.get("issues"):
         fix = _first_fix(raw.get("issues", []))
 
+    # Deliverability context
+    if found:
+        if weak_keys:
+            _deliverability = (
+                "Your DKIM keys work but some use 1024-bit strength. Google recommends 2048-bit keys. "
+                "While 1024-bit keys will not directly hurt deliverability today, upgrading signals "
+                "that you maintain your email infrastructure."
+            )
+        else:
+            _deliverability = (
+                "DKIM signing is active, which helps build your domain's sending reputation. "
+                "Each signed email that recipients engage with (open, reply, mark as not spam) "
+                "strengthens your reputation with that receiver."
+            )
+    else:
+        _deliverability = None
+
     return {
         "name": "DKIM",
         "status": status,
@@ -3848,6 +4018,7 @@ def transform_dkim(raw: Dict, domain: str, has_mx: bool = True) -> Dict:
         "fix": fix,
         "fix_records": None,  # DKIM keys are generated by email providers, not manually
         "dkim_deep": _build_dkim_key_analysis(raw),
+        "deliverability": _deliverability,
     }
 
 
@@ -4120,6 +4291,29 @@ def transform_mx(raw: Dict) -> Dict:
 
     fix = _first_fix(raw.get("issues", []))
 
+    # Deliverability context
+    _deliverability = None
+    if count == 1 and not _is_major_provider:
+        _deliverability = (
+            "You have only one mail server. If it goes down, incoming emails will queue at "
+            "the sender's server for hours or days, and some senders give up after a few retries. "
+            "A second MX host provides failover for incoming mail."
+        )
+    if providers:
+        _prov_lower = providers[0].lower() if providers else ""
+        if "google" in _prov_lower:
+            _deliverability = (_deliverability or "") + (
+                " You are using Google Workspace. Check your Postmaster Tools dashboard "
+                "(postmaster.google.com) for reputation data and delivery error details."
+            )
+        elif "microsoft" in _prov_lower or "outlook" in _prov_lower:
+            _deliverability = (_deliverability or "") + (
+                " You are using Microsoft 365. Verify DKIM is enabled in the Exchange admin "
+                "center, as it is not always turned on by default."
+            )
+    if _deliverability:
+        _deliverability = _deliverability.strip()
+
     return {
         "name": "MX Records",
         "status": status,
@@ -4129,6 +4323,8 @@ def transform_mx(raw: Dict) -> Dict:
         "details": details,
         "fix": fix,
         "fix_records": None,
+        "ttl_info": format_ttl(raw.get("ttl")),
+        "deliverability": _deliverability,
     }
 
 
@@ -4166,6 +4362,7 @@ def transform_mta_sts(raw: Dict, domain: str, has_mx: bool = True) -> Dict:
                 ],
                 "fix": None,
                 "fix_records": None,
+                "deliverability": None,
             }
 
         sts_id = datetime.now(timezone.utc).strftime('%Y%m%d')
@@ -4189,6 +4386,11 @@ def transform_mta_sts(raw: Dict, domain: str, has_mx: bool = True) -> Dict:
                 f"The policy file specifies your MX hosts and the TLS enforcement mode."
             ),
             "fix_records": None,
+            "deliverability": (
+                "Without MTA-STS, the TLS encryption between mail servers can be silently stripped. "
+                "While this does not directly affect spam filtering, some enterprise recipients flag "
+                "inbound email that was not delivered over verified TLS."
+            ),
         }
 
     # Has record
@@ -4235,6 +4437,8 @@ def transform_mta_sts(raw: Dict, domain: str, has_mx: bool = True) -> Dict:
         "fix": fix,
         "fix_records": None,
         "mta_sts_deep": _build_mta_sts_deep(raw, domain) if txt_record else None,
+        "ttl_info": format_ttl(raw.get("ttl")),
+        "deliverability": None,
     }
 
 
@@ -4364,6 +4568,7 @@ def transform_tls_rpt(raw: Dict, domain: str, has_mx: bool = True) -> Dict:
         "fix": fix,
         "fix_records": None,
         "tls_rpt_deep": _build_tls_rpt_deep(raw) if record else None,
+        "ttl_info": format_ttl(raw.get("ttl")),
     }
 
 
@@ -4419,6 +4624,7 @@ def transform_bimi(raw: Dict, domain: str, has_mx: bool = True) -> Dict:
                 ],
                 "fix": None,
                 "fix_records": None,
+                "deliverability": None,
             }
 
         # BIMI is optional, so "not found" is a soft warning, not a failure
@@ -4446,6 +4652,11 @@ def transform_bimi(raw: Dict, domain: str, has_mx: bool = True) -> Dict:
                 f"Gmail requires a VMC (registered trademark) or CMC (domain-validated) certificate."
             ),
             "fix_records": None,
+            "deliverability": (
+                "BIMI displays your brand logo next to emails in Gmail, Apple Mail, and Yahoo Mail. "
+                "It does not directly affect whether email reaches the inbox, but branded emails "
+                "see higher open rates. BIMI requires DMARC at p=quarantine or p=reject first."
+            ),
         }
 
     logo_url = raw.get("logo_url")
@@ -4498,6 +4709,8 @@ def transform_bimi(raw: Dict, domain: str, has_mx: bool = True) -> Dict:
         "details": details,
         "fix": fix,
         "fix_records": None,
+        "ttl_info": format_ttl(raw.get("ttl")),
+        "deliverability": None,
     }
 
 
@@ -4541,6 +4754,7 @@ def transform_dnssec(raw: Dict) -> Dict:
                 "Many registrars and DNS hosts support this through their control panels."
             ),
             "fix_records": None,  # DNSSEC requires registrar/DNS provider activation, not manual DNS records
+            "ttl_info": format_ttl(raw.get("ttl")),
         }
 
     # Has DNSSEC
@@ -4608,6 +4822,7 @@ def transform_dnssec(raw: Dict) -> Dict:
         "details": details,
         "fix": fix,
         "fix_records": None,
+        "ttl_info": format_ttl(raw.get("ttl")),
     }
 
 
@@ -4716,6 +4931,7 @@ def transform_caa(raw: Dict, domain: str) -> Dict:
         "details": details,
         "fix": fix,
         "fix_records": None,
+        "ttl_info": format_ttl(raw.get("ttl")),
     }
 
 
@@ -4781,6 +4997,7 @@ def transform_dane(raw: Dict, domain: str) -> Dict:
             "details": details,
             "fix": "Enable DNSSEC for your domain before relying on DANE. Once DNSSEC is active, your existing TLSA records will become effective.",
             "fix_records": None,  # DNSSEC activation required first; TLSA records already exist
+            "ttl_info": format_ttl(raw.get("ttl")),
         }
 
     # Has TLSA + DNSSEC
@@ -4834,6 +5051,7 @@ def transform_dane(raw: Dict, domain: str) -> Dict:
             "fix": fix,
             "fix_records": None,
             "dane_deep": _build_dane_deep(tlsa_records, dnssec_ok),
+            "ttl_info": format_ttl(raw.get("ttl")),
         }
 
     # No TLSA, has MX
@@ -4879,6 +5097,7 @@ def transform_dane(raw: Dict, domain: str) -> Dict:
         "fix": fix,
         "fix_records": None,
         "dane_deep": _build_dane_deep(tlsa_records, dnssec_ok),
+        "ttl_info": format_ttl(raw.get("ttl")),
     }
 
 
@@ -5133,6 +5352,7 @@ def transform_nameservers(raw: Dict, domain: str = "") -> Dict:
         "details": details,
         "fix": fix,
         "fix_records": None,
+        "ttl_info": format_ttl(raw.get("ttl")),
     }
 
 
@@ -5400,6 +5620,21 @@ def transform_blacklist(raw: Dict, domain: str) -> Dict:
         else:
             fix = "Review the listing reason with each blocklist operator and request removal once the underlying issue is resolved."
 
+    # Deliverability context
+    if total_listings > 0:
+        _deliverability = (
+            "CRITICAL: Your domain is on a blocklist. This is likely causing widespread delivery "
+            "failures right now. Emails may be bouncing or going directly to spam at major providers. "
+            "This often happens when a compromised account or aggressive outreach triggers spam reports. "
+            "Investigate the root cause before requesting delisting."
+        )
+    else:
+        _deliverability = (
+            "Your domain is clean on the blocklists we check. Note that Gmail, Outlook, and Yahoo "
+            "maintain their own internal reputation systems that are not publicly visible. "
+            "Blocklist clearance is a good baseline but does not guarantee inbox placement."
+        )
+
     return {
         "name": "Blocklist",
         "status": status,
@@ -5410,6 +5645,7 @@ def transform_blacklist(raw: Dict, domain: str) -> Dict:
         "details": details,
         "fix": fix,
         "fix_records": None,
+        "deliverability": _deliverability,
     }
 
 

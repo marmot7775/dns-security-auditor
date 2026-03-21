@@ -178,6 +178,7 @@
                 <p><strong>Audit results</strong> are cached in server memory for 5 minutes to reduce redundant DNS queries. After that, they are discarded. We do not store audit results in any database.</p>
                 <p><strong>Server logs</strong> (domain queried, grade, duration, browser identifier) are retained in a local audit log file. IP addresses are not included. Log files rotate automatically and are not retained beyond what the operating system manages.</p>
                 <p><strong>Rate limit data</strong> (IP address and request timestamps) is held in memory only and cleared when the service restarts.</p>
+                <p><strong>DNS snapshots.</strong> We store snapshots of public DNS records to track changes over time. This data is already publicly available — we make it easier to see what changed. No personal data is collected.</p>
 
                 <h2>Third Parties</h2>
                 <p>We use one external service:</p>

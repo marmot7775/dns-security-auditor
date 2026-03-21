@@ -62,6 +62,7 @@
             </a>
             <nav class="site-nav">
                 <a href="/" class="nav-link nav-link-active">Home</a>
+                <a href="/headers" class="nav-link" id="nav-headers">Header Analyzer</a>
                 <a href="/dmarcbis" class="nav-link">DMARCbis Guide</a>
                 <a href="/methodology" class="nav-link">Methodology</a>
                 <a href="/privacy" class="nav-link">Privacy</a>
@@ -244,6 +245,64 @@
                 <h2 class="results-label">Your Email Platform</h2>
                 <div id="provider-intelligence-content"></div>
             </div>
+        </section>
+
+        <!-- Header Analyzer -->
+        <section id="header-section" class="header-analyzer-section" style="display:none">
+            <div class="ha-card">
+                <h2 class="ha-title">Email Header Analyzer</h2>
+                <p class="ha-subtitle">Paste raw email headers to see authentication results, mail journey, and deliverability diagnosis.</p>
+
+                <div class="ha-intent-buttons">
+                    <button class="ha-intent-btn" data-intent="spam">My emails are going to spam</button>
+                    <button class="ha-intent-btn" data-intent="bounce">An email bounced</button>
+                    <button class="ha-intent-btn" data-intent="suspicious">I got a suspicious email</button>
+                </div>
+
+                <div class="ha-how-to">
+                    <button class="ha-how-toggle" id="ha-how-toggle" aria-expanded="false">How to get email headers</button>
+                    <div class="ha-how-content" id="ha-how-content" style="display:none">
+                        <div class="ha-how-grid">
+                            <div class="ha-how-item">
+                                <strong>Gmail</strong>
+                                <p>Open the email, click the three dots menu, select "Show original"</p>
+                            </div>
+                            <div class="ha-how-item">
+                                <strong>Outlook (Web)</strong>
+                                <p>Open the email, click the three dots, select "View message source"</p>
+                            </div>
+                            <div class="ha-how-item">
+                                <strong>Apple Mail</strong>
+                                <p>Open the email, go to View menu, select "Message" then "All Headers"</p>
+                            </div>
+                            <div class="ha-how-item">
+                                <strong>Thunderbird</strong>
+                                <p>Open the email, go to View menu, select "Message Source" (Ctrl+U)</p>
+                            </div>
+                            <div class="ha-how-item">
+                                <strong>Yahoo Mail</strong>
+                                <p>Open the email, click the three dots, select "View raw message"</p>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="ha-input-area">
+                    <textarea id="ha-input" class="ha-textarea" rows="10" placeholder="Paste your email headers here..." spellcheck="false" aria-label="Raw email headers"></textarea>
+                    <div class="ha-actions">
+                        <button class="audit-btn ha-analyze-btn" id="ha-analyze-btn" type="button">
+                            <span class="btn-text">Analyze Headers</span>
+                            <span class="btn-loading">
+                                <svg class="spinner" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10" stroke="currentColor" stroke-width="3" fill="none" stroke-dasharray="31.4 31.4" stroke-linecap="round"/></svg>
+                                Analyzing...
+                            </span>
+                        </button>
+                        <button class="ha-sample-btn" id="ha-sample-btn" type="button">Try sample headers</button>
+                    </div>
+                </div>
+            </div>
+
+            <div id="ha-results" style="display:none"></div>
         </section>
 
         <!-- DMARCbis Teaser -->

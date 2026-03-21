@@ -229,6 +229,7 @@ def check_mx(domain: str, deep_scan: bool = False) -> Dict[str, Any]:
 
     try:
         answers = resolver.resolve(domain, "MX")
+        result["ttl"] = answers.rrset.ttl if answers.rrset else None
         for rdata in answers:
             priority = rdata.preference
             host = str(rdata.exchange).rstrip(".")
