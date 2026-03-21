@@ -354,6 +354,7 @@ def transform_dmarc(raw: Dict, tree_walk: Optional[Dict] = None) -> Dict:
         "details": details,
         "fix": fix,
         "fix_records": fix_records,
+        "dmarcbis_readiness": raw.get("dmarcbis_readiness"),
     }
 
 
