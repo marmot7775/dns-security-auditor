@@ -1041,7 +1041,7 @@ function renderCheckBody(check) {
         html += `
             <div class="record-block">
                 <span class="record-text">${highlighted}</span>
-                <button class="copy-btn">Copy</button>
+                <button class="copy-btn" aria-label="Copy to clipboard">Copy</button>
             </div>
         `;
     }
@@ -1191,7 +1191,7 @@ function renderFixPreview(fixRecords) {
         html += `<div class="fix-preview-host">${escapeHtml(fr.type)} record at <strong>${escapeHtml(fr.host)}</strong></div>`;
         html += `<div class="fix-record-block">
             <span class="fix-record-value">${escapeHtml(value)}</span>
-            <button class="copy-btn">Copy</button>
+            <button class="copy-btn" aria-label="Copy to clipboard">Copy</button>
         </div>`;
         if (fr.comment) {
             html += `<div class="fix-comment">${escapeHtml(fr.comment)}</div>`;
@@ -1791,7 +1791,7 @@ function renderDmarcTagBreakdown(bd) {
                     <div class="mw-target-label">Target DMARCbis-Ready Record</div>
                     <div class="record-block" style="margin: 0.4rem 0;">
                         <span class="record-text">${escapeHtml(bd.migration.target_record)}</span>
-                        <button class="copy-btn">Copy</button>
+                        <button class="copy-btn" aria-label="Copy to clipboard">Copy</button>
                     </div>
                 </div>
             </div>`;
@@ -2014,7 +2014,7 @@ function renderRecordBuilder(rb) {
                 <div class="rcb-result-label">${isFirst ? 'Recommended starting record' : 'Recommended DMARCbis-Ready record'}</div>
                 <div class="rcb-result-record record-block" style="margin: 0.4rem 0;">
                     <span class="record-text">${escapeHtml(rb.recommended_record)}</span>
-                    <button class="copy-btn">Copy</button>
+                    <button class="copy-btn" aria-label="Copy to clipboard">Copy</button>
                 </div>
             </div>
             ${deployHtml}
