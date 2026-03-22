@@ -3296,7 +3296,7 @@ def _raw_check_blacklist(domain: str, raw_results: Dict[str, Any]) -> Dict[str, 
 # Main Audit Orchestrator
 # ============================================================
 
-_shared_executor = ThreadPoolExecutor(max_workers=8)
+_shared_executor = ThreadPoolExecutor(max_workers=20)
 
 
 # ============================================================

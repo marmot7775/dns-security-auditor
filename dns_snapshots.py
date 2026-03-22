@@ -156,14 +156,20 @@ def store_audit_snapshots(domain: str, raw_results: Dict[str, Any]):
     caa = raw_results.get("caa", {})
     caa_records = caa.get("records") or []
     if caa_records:
-        caa_str = "; ".join(sorted(caa_records))
+        caa_str = "; ".join(sorted(
+            c["raw"] if isinstance(c, dict) else str(c)
+            for c in caa_records
+        ))
         store_snapshot(domain, "caa", caa_str)
 
     # Nameservers
     ns = raw_results.get("nameservers", {})
     ns_list = ns.get("nameservers") or []
     if ns_list:
-        ns_str = "; ".join(sorted(ns_list))
+        ns_str = "; ".join(sorted(
+            n["hostname"] if isinstance(n, dict) else str(n)
+            for n in ns_list
+        ))
         store_snapshot(domain, "nameservers", ns_str)
 
 
