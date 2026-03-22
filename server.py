@@ -222,8 +222,8 @@ def _set_cached(cache_key: str, data: dict):
         _cache[cache_key] = {"data": data, "ts": time.time()}
         # Evict oldest entries if cache grows too large
         if len(_cache) > CACHE_MAX_SIZE:
-            oldest = sorted(_cache.items(), key=lambda x: x[1]["ts"])[:100]
-            for key, _ in oldest:
+            oldest_keys = sorted(_cache, key=lambda k: _cache[k]["ts"])[:100]
+            for key in oldest_keys:
                 _cache.pop(key, None)
 
 

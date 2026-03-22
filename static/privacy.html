@@ -148,8 +148,8 @@
                 <p>When you run an audit, we process the following:</p>
                 <p><strong>The domain you enter.</strong> We query public DNS records on your behalf. DNS records are public by design. This is not personal data.</p>
                 <p><strong>Your IP address, temporarily.</strong> We hold it in memory for rate limiting. It is not written to disk, not logged, and is cleared when the server restarts.</p>
-                <p><strong>An audit log entry.</strong> We record which domain was queried, how long the audit took, the resulting grade, and a truncated browser identifier. This helps us monitor service health. IP addresses are not included in the log.</p>
-                <p><strong>DNS snapshots.</strong> We store snapshots of public DNS records to track changes over time. This is public data. No personal information is attached to snapshots.</p>
+                <p><strong>An audit log entry.</strong> We record which domain was queried, how long the audit took, the resulting grade, and a truncated browser identifier (the first 50 characters of the User-Agent header). This helps us monitor service health. IP addresses are not included in the log.</p>
+                <p><strong>DNS snapshots.</strong> We store snapshots of public DNS records to track changes over time. Snapshots are retained for 90 days, then automatically deleted. This is public data. No personal information is attached to snapshots.</p>
                 <p>If you provide a custom DKIM selector, we use it for that audit only.</p>
 
                 <h2>Data Retention</h2>

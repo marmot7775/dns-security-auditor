@@ -120,11 +120,7 @@ def detect_anomalies(raw_results: dict, score_result: dict, has_mx: bool, is_def
     # Not detecting keys is not an anomaly -- DKIM selectors are not publicly
     # enumerable, so absence from our test list means nothing.
     if dmarc_present and dmarc_enforced and has_mx:
-        found_selectors = dkim.get("found_selectors") or []
-        wildcard_detected = dkim.get("wildcard_detected", False)
-        if False:  # Disabled: heuristic DKIM detection cannot confirm absence
-            anomalies.append({
-            })
+        pass  # DKIM absence is not an anomaly: selectors are not publicly enumerable
 
     # 3. SPF near lookup limit (9/10 -- not already over)
     if spf:
