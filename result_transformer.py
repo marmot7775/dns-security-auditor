@@ -2003,7 +2003,7 @@ def _build_tag_entry(tag: str, value: str, present: bool, tags: Dict, policy: st
                 ),
                 "s": (
                     "Strict. The DKIM d= domain must exactly match the From domain. "
-                    "More secure but breaks mail signed by a subdomain."
+                    "More secure but rejects mail signed by a subdomain."
                 ),
             }.get(value, f"Unknown DKIM alignment value '{value}'.")
             e = _entry(tag, value, False, False, "DKIM Alignment Mode",
@@ -2213,7 +2213,7 @@ def _build_tag_entry(tag: str, value: str, present: bool, tags: Dict, policy: st
                     "level": "warning",
                     "text": (
                         "If this domain is not actually a public suffix, this misconfiguration "
-                        "breaks policy inheritance for all subdomains."
+                        "disrupts policy inheritance for all subdomains."
                     ),
                 })
             return e
@@ -3420,7 +3420,7 @@ def transform_spf(raw: Dict, has_mx: bool = True) -> Dict:
                 f" <strong>Critical:</strong> This SPF record has a PermError because it requires "
                 f"{lookups} DNS lookups, exceeding the 10-lookup limit "
                 f"(<a href=\"https://datatracker.ietf.org/doc/html/rfc7208#section-4.6.4\" target=\"_blank\" rel=\"noopener\">RFC 7208 Section 4.6.4</a>). "
-                f"Receiving servers treat a broken SPF record as if it does not exist, which "
+                f"Receiving servers treat an SPF PermError as if no SPF record exists, which "
                 f"damages sender reputation. Audit your includes and remove services you no longer use."
             )
         elif lookups and lookups > 8:
@@ -4773,7 +4773,7 @@ def transform_dnssec(raw: Dict) -> Dict:
         if chain_valid is True:
             details.append({"type": "good", "text": "DS digest matches DNSKEY (chain of trust verified)"})
         elif chain_valid is False:
-            details.append({"type": "error", "text": "DS digest does NOT match any DNSKEY (broken chain; validating resolvers will return SERVFAIL)"})
+            details.append({"type": "error", "text": "DS digest does NOT match any DNSKEY (chain of trust not valid; validating resolvers will return SERVFAIL)"})
     else:
         details.append({"type": "warning", "text": "No DS record at parent zone (chain may not validate)"})
 
