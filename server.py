@@ -15,6 +15,7 @@ Usage:
 import asyncio
 import json
 import logging
+import logging.handlers
 import queue
 import re
 import threading
@@ -50,6 +51,17 @@ logging.basicConfig(
     datefmt="%Y-%m-%d %H:%M:%S",
 )
 log = logging.getLogger("dns-auditor")
+
+error_file_handler = logging.handlers.RotatingFileHandler(
+    '/var/log/dns-auditor/errors.log',
+    maxBytes=10_000_000,  # 10MB
+    backupCount=5,
+)
+error_file_handler.setLevel(logging.ERROR)
+error_file_handler.setFormatter(logging.Formatter(
+    '%(asctime)s %(levelname)s %(message)s'
+))
+log.addHandler(error_file_handler)
 
 
 # ============================================================
@@ -138,11 +150,13 @@ class SecurityHeadersMiddleware(BaseHTTPMiddleware):
         response.headers["Referrer-Policy"] = "strict-origin-when-cross-origin"
         response.headers["Permissions-Policy"] = "camera=(), microphone=(), geolocation=()"
         response.headers["Content-Security-Policy"] = self.CSP
-        if request.url.path.startswith("/api/"):
+        path = request.url.path
+        if path.startswith("/api/"):
             response.headers["Cache-Control"] = "no-store"
-        elif request.url.path in ("/", "/index.html"):
-            # Don't let Cloudflare cache the HTML -- cache-bust params need to reach the browser
-            response.headers["Cache-Control"] = "no-cache, must-revalidate"
+        elif any(path.endswith(ext) for ext in ('.css', '.js', '.png', '.jpg', '.svg', '.woff2', '.woff', '.ico')):
+            response.headers["Cache-Control"] = "public, max-age=14400"  # 4 hours
+        elif path in ('/', '/dmarcbis', '/methodology', '/privacy'):
+            response.headers["Cache-Control"] = "public, max-age=300"  # 5 minutes for HTML
         return response
 
 app.add_middleware(SecurityHeadersMiddleware)
