@@ -2969,12 +2969,18 @@ def _raw_check_ct(domain: str, raw_results: Dict[str, Any]) -> Dict[str, Any]:
         else:
             certs = resp.json()
     except requests.exceptions.Timeout:
-        _add_issue("warning", "crt.sh timed out", "Certificate Transparency log query timed out.")
+        _add_issue("warning", "CT data temporarily unavailable",
+                   "Certificate Transparency data is sourced from crt.sh, which was temporarily unavailable. "
+                   "This does not affect your security grade.")
         result["status"] = "warning"
+        result["unavailable_reason"] = "timeout"
         return result
     except (requests.exceptions.RequestException, ValueError) as e:
-        _add_issue("warning", f"crt.sh query failed: {type(e).__name__}", "Could not query Certificate Transparency logs.")
+        _add_issue("warning", "CT data temporarily unavailable",
+                   "Certificate Transparency data is sourced from crt.sh, which was temporarily unavailable. "
+                   "This does not affect your security grade.")
         result["status"] = "warning"
+        result["unavailable_reason"] = "request_error"
         return result
 
     if not certs:
@@ -4278,8 +4284,8 @@ def _build_resilience_analysis(
         spf_status = "broken"
         spf_note = (
             f"SPF record exceeds the 10-lookup limit ({spf_lookup_count} lookups). "
-            "Receivers will return PermError, which means SPF is effectively non-functional. "
-            "This leaves DKIM as the only viable authentication path."
+            "Receivers will return PermError, which means SPF cannot provide a DMARC alignment path. "
+            "This leaves DKIM as the only viable authentication mechanism."
         )
     elif spf_record:
         spf_status = "pass"

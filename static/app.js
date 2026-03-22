@@ -144,6 +144,8 @@ if (eduToggle && eduContent) {
 // -- Form submission --
 auditForm.addEventListener('submit', (e) => {
     e.preventDefault();
+    // Prevent concurrent audits from rapid submissions
+    if (auditController && !auditController.signal.aborted) return;
     const raw = domainInput.value.trim();
     if (!raw) {
         _showInlineError('Please enter a domain name.');

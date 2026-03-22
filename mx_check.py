@@ -173,19 +173,22 @@ def _check_starttls(hostname: str, port: int = 25, timeout: float = 10.0) -> Dic
             result["tls_version"] = server.sock.version()
             cert = server.sock.getpeercert(binary_form=False)
             if cert:
-                subj = cert.get("subject", ())
-                for rdn in subj:
-                    for attr_type, attr_val in rdn:
-                        if attr_type == "commonName":
-                            result["cert_subject"] = attr_val
-                issuer = cert.get("issuer", ())
-                for rdn in issuer:
-                    for attr_type, attr_val in rdn:
-                        if attr_type in ("organizationName", "commonName"):
-                            result["cert_issuer"] = attr_val
+                try:
+                    subj = cert.get("subject", ())
+                    for rdn in subj:
+                        for attr_type, attr_val in rdn:
+                            if attr_type == "commonName":
+                                result["cert_subject"] = attr_val
+                    issuer = cert.get("issuer", ())
+                    for rdn in issuer:
+                        for attr_type, attr_val in rdn:
+                            if attr_type in ("organizationName", "commonName"):
+                                result["cert_issuer"] = attr_val
+                                break
+                        if result.get("cert_issuer"):
                             break
-                    if result["cert_issuer"]:
-                        break
+                except (ValueError, TypeError):
+                    pass
                 not_after = cert.get("notAfter")
                 if not_after:
                     from email.utils import parsedate_to_datetime

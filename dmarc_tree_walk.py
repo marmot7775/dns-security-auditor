@@ -287,7 +287,7 @@ def dmarc_tree_walk(domain: str) -> Dict[str, Any]:
     #   - Else if sp tag exists → use sp
     #   - Else → fall back to p
     # ------------------------------------------------------------------
-    tags = policy_record["tags"]
+    tags = policy_record.get("tags", {})
     sp = tags.get("sp")
     np_tag = tags.get("np")
     p = tags.get("p", "none")
