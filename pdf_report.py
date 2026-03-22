@@ -127,15 +127,12 @@ def _clr(color_name):
     return METRIC_COLORS.get(color_name, TEXT_SEC)
 
 
-def _alt_rows(cmds, row_count, even=None, odd=None):
+def _alt_rows(cmds, row_count):
     """Add alternating row backgrounds to table style commands (skip header)."""
-    if even is None:
-        even = colors.HexColor("#f8fafc")
-    if odd is None:
-        odd = colors.white
+    shaded = colors.HexColor("#f0f4f8")
     for i in range(1, row_count):
-        bg = even if i % 2 == 0 else odd
-        cmds.append(("BACKGROUND", (0, i), (-1, i), bg))
+        if i % 2 == 0:
+            cmds.append(("BACKGROUND", (0, i), (-1, i), shaded))
     return cmds
 
 
@@ -1354,7 +1351,7 @@ def _dkim_deep_section(dkim_deep, S):
                 Paragraph(f'<font color="{r_clr.hexval()}">{_safe(k.get("rating_label", ""))}</font>', S["body_small"]),
                 Paragraph(_safe(k.get("rotation_status", "")), S["body_small"]),
             ])
-        kt = Table(rows, colWidths=[80, 70, 50, 40, 140, 80])
+        kt = Table(rows, colWidths=[60, 70, 70, 40, 140, 80])
         cmds = [
             ("VALIGN", (0,0), (-1,-1), "TOP"),
             ("TOPPADDING", (0,0), (-1,-1), 3),
