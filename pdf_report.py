@@ -37,6 +37,8 @@ from reportlab.platypus import (
     SimpleDocTemplate, Paragraph, Spacer, Table, TableStyle,
     KeepTogether, HRFlowable, PageBreak,
 )
+from reportlab.graphics.shapes import Drawing, Wedge, Circle, String, Group
+from reportlab.graphics import renderPDF
 
 # ================================================================
 # Brand colors
@@ -123,6 +125,53 @@ def _get_check(data, name):
 
 def _clr(color_name):
     return METRIC_COLORS.get(color_name, TEXT_SEC)
+
+
+def _score_gauge(score, grade, grade_color):
+    """Build a circular donut gauge showing score/grade.
+
+    Returns a Drawing flowable: filled arc for the score percentage,
+    light gray track for the remainder, grade letter centered inside.
+    """
+    size = 120
+    cx, cy = size / 2, size / 2
+    outer_r = 52
+    inner_r = 36
+    track_clr = colors.HexColor("#e2e8f0")
+
+    pct = max(0, min(score, 100)) / 100.0
+    score_angle = pct * 360
+
+    d = Drawing(size, size)
+
+    # Background track (full circle)
+    d.add(Wedge(cx, cy, outer_r, 0, 360, radius1=inner_r,
+                fillColor=track_clr, strokeColor=None, strokeWidth=0))
+
+    # Score arc (counter-clockwise from 12 o'clock = 90 degrees)
+    if score_angle > 0:
+        start = 90
+        end = 90 - score_angle
+        if end < -270:
+            end = -270
+        d.add(Wedge(cx, cy, outer_r, end, start, radius1=inner_r,
+                     fillColor=grade_color, strokeColor=None, strokeWidth=0))
+
+    # Inner white circle for clean donut hole
+    d.add(Circle(cx, cy, inner_r - 0.5,
+                 fillColor=SURFACE_BG, strokeColor=None, strokeWidth=0))
+
+    # Grade letter centered
+    d.add(String(cx, cy - 10, grade,
+                 fontSize=26, fontName="Helvetica-Bold",
+                 fillColor=grade_color, textAnchor="middle"))
+
+    # Score underneath
+    d.add(String(cx, cy - 24, f"{score}/100",
+                 fontSize=9, fontName="Helvetica",
+                 fillColor=TEXT_TER, textAnchor="middle"))
+
+    return d
 
 
 # ================================================================
@@ -236,14 +285,8 @@ def _cover_page(data, S):
     els.append(sub_tbl)
     els.append(Spacer(1, 16))
 
-    # Grade + Score card
-    grade_text = f'<font color="{gc.hexval()}" size="36"><b>{_safe(grade)}</b></font>'
-    score_text = f'<font color="#6b6b6b" size="12">{total}/100</font>'
-
-    grade_cell = [
-        Paragraph(grade_text, ParagraphStyle("GC", alignment=TA_CENTER, leading=44)),
-        Paragraph(score_text, ParagraphStyle("SC", alignment=TA_CENTER, leading=16)),
-    ]
+    # Grade + Score gauge (donut chart)
+    gauge = _score_gauge(total, grade, gc)
 
     verdict_text = es.get("verdict", "")
     verdict_cell = [
@@ -252,7 +295,7 @@ def _cover_page(data, S):
         Paragraph(_safe(verdict_text), S["body_large"]),
     ]
 
-    grade_row = Table([[grade_cell, verdict_cell]], colWidths=[1.5*inch, 5.0*inch])
+    grade_row = Table([[gauge, verdict_cell]], colWidths=[1.8*inch, 4.7*inch])
     grade_row.setStyle(TableStyle([
         ("VALIGN", (0,0), (-1,-1), "MIDDLE"),
         ("BACKGROUND", (0,0), (-1,-1), SURFACE_BG),
