@@ -71,7 +71,7 @@
             <div class="dbis-section" id="what-is-dmarcbis">
                 <h2>What is DMARCbis?</h2>
                 <p>DMARCbis is the IETF's update to the DMARC email authentication standard. It replaces the original RFC 7489, published in 2015 as an Informational RFC, with a Standards Track specification. That status change matters: it signals that DMARC is no longer an experimental protocol but a formal standard with stronger expectations for vendor compliance.</p>
-                <p>The name stands for "DMARC bis" (Latin for "twice" or "again"). It is the second iteration of the specification, and it also obsoletes RFC 9091, which defined Public Suffix Domain DMARC policies.</p>
+                <p>The name stands for "DMARC bis" (Latin for "twice" or "again"). It is the second iteration of the specification, and it also obsoletes RFC 9091, which defined Public Suffix Domain DMARC policies. RFC 9091 (published in 2021) was an experimental standard that defined how public suffix domains could publish DMARC policies. DMARCbis incorporates RFC 9091's goals through the <code>psd=</code> tag while providing a more robust mechanism via the DNS tree walk. With DMARCbis, RFC 9091 is no longer needed and is formally obsoleted.</p>
                 <p>The update addresses problems that surfaced over a decade of real-world DMARC deployment. Receivers parsed records inconsistently. The percentage-based rollout tag was unreliable. Non-existent subdomains had no dedicated protection. And organizational domain boundaries depended entirely on the Public Suffix List, a manually-maintained external file that different receivers updated on different schedules.</p>
                 <p>DMARCbis maintains backward compatibility. It still uses <code>v=DMARC1</code> as the version tag, and existing DMARC records continue to work. But records that relied on lenient parsing or deprecated features will need attention as receivers adopt the stricter rules.</p>
             </div>
@@ -158,7 +158,7 @@
                                 <td>External Reporting</td>
                                 <td>Advisory</td>
                                 <td>Stricter validation</td>
-                                <td>Cross-domain reporting (rua=/ruf= pointing to external domains) requires explicit authorization. The receiving domain must publish a DMARC record authorizing the reporting domain, or the report destination is rejected</td>
+                                <td>Under RFC 7489, cross-domain reporting authorization (where rua= or ruf= points to a different domain) was advisory and inconsistently enforced. DMARCbis makes verification mandatory: the receiving domain must publish an explicit authorization record at <code>&lt;selector&gt;._report._dmarc.&lt;destination-domain&gt;</code> for the report destination to be accepted. Reports sent to unauthorized domains are silently dropped</td>
                             </tr>
                             <tr>
                                 <td>Spec Structure</td>
@@ -176,7 +176,7 @@
                                 <td>SPF Evaluation</td>
                                 <td>MAIL FROM + HELO</td>
                                 <td>MAIL FROM only</td>
-                                <td>Under RFC 7489, SPF could be checked against both the MAIL FROM identity and the HELO identity. DMARCbis restricts SPF alignment to MAIL FROM only, eliminating ambiguity. Organizations relying on HELO-based SPF checking should verify their configurations still pass DMARC alignment</td>
+                                <td>Under RFC 7489, SPF could be checked against both the MAIL FROM identity and the HELO identity. DMARCbis restricts SPF alignment to MAIL FROM only, eliminating ambiguity. If your SPF deployment relies on HELO identity matching (uncommon but possible with null reverse-path senders), verify your configuration still achieves DMARC alignment under the updated rules</td>
                             </tr>
                         </tbody>
                     </table>
@@ -193,7 +193,7 @@
                         <span class="dbis-tag-badge">NEW in DMARCbis</span>
                     </div>
                     <p><strong>Non-Existent Subdomain Policy.</strong> This tag controls what happens when someone sends email from a subdomain that does not exist in DNS, like <code>secure-login.yourdomain.com</code> or <code>invoice.yourdomain.com</code>. Attackers prefer non-existent subdomains because they look legitimate and most organizations do not realize they need protection for domains that are not real.</p>
-                    <p>Values: <code>none</code>, <code>quarantine</code>, <code>reject</code>. Receivers apply a fallback chain: if <code>np=</code> is absent, they use <code>sp=</code> (subdomain policy); if <code>sp=</code> is also absent, they use <code>p=</code> (root policy). This means <code>np=</code> is only needed when you want non-existent subdomains treated differently from existing subdomains.</p>
+                    <p>Values: <code>none</code>, <code>quarantine</code>, <code>reject</code>. Policy for non-existent subdomains follows a defined fallback chain: <code>np=</code> (if present) takes precedence. If <code>np=</code> is absent, <code>sp=</code> applies. If <code>sp=</code> is also absent, <code>p=</code> is used. This hierarchy allows administrators to set a strict reject policy for non-existent subdomains (via <code>np=reject</code>) while maintaining a more permissive policy for legitimate subdomains (via <code>sp=none</code> or <code>sp=quarantine</code>).</p>
                     <p>Before adding <code>np=reject</code>, review whether any third-party services send mail from dynamically generated subdomains on your behalf. An <code>np=reject</code> policy applies to all non-existent subdomains without exception.</p>
                 </div>
 
@@ -203,7 +203,7 @@
                         <span class="dbis-tag-badge">NEW in DMARCbis</span>
                     </div>
                     <p><strong>Public Suffix Domain indicator.</strong> Declares whether a domain is a Public Suffix Domain (like <code>.com</code>, <code>.co.uk</code>, or <code>.gov.au</code>) so the DNS tree walk knows where to stop.</p>
-                    <p>Three values: <code>psd=y</code> means the domain is a PSD and subdomains should be treated as separate organizational domains. <code>psd=n</code> means the domain is not a PSD and is the organizational domain for itself and its subdomains (the walk stops here). <code>psd=u</code> (the default if the tag is absent) means the domain does not declare its own status; the tree walk continues upward to find a domain that does declare a boundary via <code>psd=y</code> or <code>psd=n</code>.</p>
+                    <p>Three values: <code>psd=y</code> means the domain is a PSD and subdomains should be treated as separate organizational domains. <code>psd=n</code> means the domain is not a PSD and is the organizational domain for itself and its subdomains (the walk stops here). <code>psd=u</code> (the default when the tag is absent) means the domain has not declared whether it is a public suffix. The tree walk continues upward to find a domain that explicitly declares <code>psd=y</code> (this is a public suffix) or <code>psd=n</code> (this is not a public suffix, stop here). If neither is found within 8 queries, DMARC does not apply.</p>
                     <p>Most domains should use <code>psd=n</code>. Only operators of actual public suffixes (registries, ccTLDs) should use <code>psd=y</code>. If you are unsure, <code>psd=n</code> is almost certainly correct for your domain.</p>
                 </div>
 
@@ -272,7 +272,8 @@
                     </div>
                 </div>
 
-                <p>The first record found becomes the effective policy. The walk stops when it hits a domain with <code>psd=y</code> or <code>psd=n</code>, or after a maximum of 8 DNS queries (a safety limit to prevent abuse from deeply nested domain names). If no DMARC record is found after 8 queries or upon reaching the DNS root, DMARC evaluation stops and the domain is treated as having no DMARC policy.</p>
+                <p>The first record found becomes the effective policy. The walk stops when it hits a domain with <code>psd=y</code> or <code>psd=n</code>, or after a maximum of 8 DNS queries (a safety limit to prevent abuse from deeply nested domain names).</p>
+                <p>If no DMARC record is found after 8 queries, or if the walk reaches the DNS root without encountering a record with <code>psd=y</code> or <code>psd=n</code>, DMARC evaluation concludes that no policy applies. The domain is treated as having no DMARC record, and receivers apply their default handling.</p>
                 <p>This matters because a DMARC record published at an intermediate level, like <code>_dmarc.marketing.example.com</code>, is discovered by DMARCbis but invisible to RFC 7489. During the transition period where some receivers use the old algorithm and some use the new one, the same domain can have different effective policies depending on which standard the receiver implements.</p>
             </div>
 

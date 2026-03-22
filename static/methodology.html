@@ -144,7 +144,7 @@
                                     enforcement. Gmail requires a VMC or CMC for logo display.</span>
                             </td>
                             <td><a
-                                    href="https://datatracker.ietf.org/doc/draft-brand-indicators-for-message-identification/">Draft
+                                    href="https://datatracker.ietf.org/doc/draft-ietf-bimi-overview/">Draft
                                     (BIMI WG)</a></td>
                         </tr>
                         <tr>
@@ -179,7 +179,7 @@
                                 <span class="op-note">DANE requires a validated DNSSEC chain to function. Without
                                     DNSSEC, TLSA records provide no security benefit.</span>
                             </td>
-                            <td><a href="https://datatracker.ietf.org/doc/html/rfc7672">RFC 7672</a></td>
+                            <td><a href="https://datatracker.ietf.org/doc/html/rfc7672">RFC 7672</a> (builds on <a href="https://datatracker.ietf.org/doc/html/rfc6698">RFC 6698</a>)</td>
                         </tr>
                         <tr>
                             <td>Nameservers</td>
@@ -321,7 +321,7 @@
                 to the numeric score.
             </p>
             <p>
-                A broken SPF record (PermError from exceeding the 10-lookup limit) receives zero
+                An SPF record that produces a PermError (from exceeding the 10-lookup limit) receives zero
                 points in the SPF category regardless of other mechanisms.
             </p>
             <p>
@@ -352,18 +352,13 @@
             </p>
             <ul>
                 <li>
-                    <strong>High:</strong> Both SPF and DKIM are functional and DMARC is enforcing.
-                    Either mechanism can independently satisfy DMARC alignment, so authentication
-                    survives both forwarding (where SPF breaks) and content modification (where DKIM breaks).
+                    <strong>High:</strong> Both SPF and DKIM provide independent paths to DMARC alignment, and DMARC is enforcing. Either mechanism can independently satisfy alignment, so authentication survives both forwarding (where SPF typically fails) and content modification (where DKIM can fail).
                 </li>
                 <li>
-                    <strong>Moderate:</strong> SPF is functional and DMARC is enforcing, but DKIM
-                    could not be confirmed. DKIM may exist but was not detectable. Also applies when
-                    DKIM is functional but SPF is broken, or when DMARC is not yet enforcing.
+                    <strong>Moderate:</strong> One authentication mechanism is confirmed and DMARC is enforcing, but the second could not be verified. This also applies when both mechanisms are present but DMARC is not yet enforcing. Authentication depends on a single path or is not yet being acted on by receivers.
                 </li>
                 <li>
-                    <strong>Low:</strong> Broken SPF and no detected DKIM, or no DMARC record at all.
-                    The domain has minimal protection against spoofing.
+                    <strong>Low:</strong> No confirmed authentication paths to DMARC alignment, or no DMARC policy is published. The domain has minimal protection against email spoofing.
                 </li>
             </ul>
 
@@ -399,7 +394,7 @@
                 </div>
                 <div class="std-item">
                     <a href="https://datatracker.ietf.org/doc/html/rfc7672">RFC 7672</a>
-                    <span>SMTP Security via DANE (TLSA). DNS-based certificate pinning for mail servers.</span>
+                    <span>SMTP Security via DANE (TLSA). DNS-based certificate pinning for mail servers. Builds on <a href="https://datatracker.ietf.org/doc/html/rfc6698">RFC 6698</a>, the original DANE specification.</span>
                 </div>
                 <div class="std-item">
                     <a href="https://datatracker.ietf.org/doc/html/rfc4033">RFC 4033/4034/4035</a>
