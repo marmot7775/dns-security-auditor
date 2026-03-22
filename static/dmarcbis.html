@@ -74,6 +74,22 @@
                 <p>DMARCbis maintains backward compatibility. It still uses <code>v=DMARC1</code> as the version tag, and existing DMARC records continue to work. But records that relied on lenient parsing or deprecated features will need attention as receivers adopt the stricter rules.</p>
             </div>
 
+            <!-- Section: Why DMARCbis? -->
+            <div class="dbis-section" id="why-dmarcbis">
+                <h2>Why DMARCbis?</h2>
+                <p>DMARC was published in 2015 as an Informational RFC. It worked, mostly, but a decade of deployment exposed real problems that could not be fixed with implementation guidance alone. The IETF working group spent several years working through these issues. Here is what they were solving.</p>
+
+                <p><strong>Subdomain spoofing had no answer.</strong> RFC 7489 let you set a policy for your domain and a subdomain policy with <code>sp=</code>. But attackers learned to spoof from subdomains that do not exist in DNS, like <code>secure-login.yourbank.com</code>. There was no tag to address this. DMARCbis adds <code>np=</code> to let domain owners set a policy specifically for non-existent subdomains.</p>
+
+                <p><strong>The Public Suffix List was a single point of fragility.</strong> DMARC needed to know where one organization's domain ends and the public suffix begins. It relied on the PSL, a community-maintained text file hosted on GitHub. Different receivers updated their copy on different schedules. A new TLD could go weeks without being recognized. DMARCbis replaces this with the DNS Tree Walk, where receivers walk up the DNS hierarchy and domain owners declare their own boundaries with the <code>psd=</code> tag. The answer lives in DNS, not in a file someone has to remember to update.</p>
+
+                <p><strong>Percentage rollout was unreliable.</strong> The <code>pct=</code> tag was meant to let domain owners gradually enforce their policy on a percentage of failing mail. In practice, receivers implemented it inconsistently. Some honored it exactly, some rounded, some ignored it entirely. A domain owner setting <code>pct=50</code> had no reliable way to predict what would happen. DMARCbis replaces this with <code>t=y</code>, a simple binary: you are either testing or you are enforcing. No ambiguity.</p>
+
+                <p><strong>Parsing rules were too loose.</strong> RFC 7489 was lenient about record syntax. Some receivers accepted malformed records that others rejected, which meant the same DMARC record could produce different results depending on who was reading it. DMARCbis tightens parsing so that a valid record is valid everywhere and a broken record fails everywhere.</p>
+
+                <p><strong>The standard needed real authority.</strong> As an Informational RFC, DMARC was technically a suggestion. Vendors could implement it however they saw fit, and they did. Promoting DMARC to Standards Track gives the specification formal weight and sets clearer expectations for how receivers should behave.</p>
+            </div>
+
             <!-- Section 2: What Changed -->
             <div class="dbis-section" id="whats-new">
                 <h2>What Changed</h2>
@@ -264,8 +280,6 @@
                 <p>The changes in DMARCbis are backward-compatible. Your existing DMARC record with <code>v=DMARC1</code> will continue to work. But there are things worth reviewing, and what matters depends on your specific configuration.</p>
                 <p>The simplest approach: run an audit on your domain. The results include a DMARCbis readiness assessment that checks your record against the updated specification and flags exactly what applies to you.</p>
 
-                <p style="text-align: center; margin: 2rem 0;"><a href="/">Audit your domain</a></p>
-
                 <h3>The short version</h3>
                 <p>For most domains, the key changes are: remove <code>pct=</code>, <code>rf=</code>, and <code>ri=</code> if present, since these tags are deprecated and will be ignored. Add <code>np=reject</code> if you already enforce <code>p=reject</code> and want to close the non-existent subdomain loophole. Add <code>psd=n</code> to declare that your domain is not a public suffix. And confirm that all <code>rua=</code> and <code>ruf=</code> URIs include the <code>mailto:</code> prefix, since bare email addresses are no longer accepted.</p>
                 <p>A word of caution on <code>np=</code>: this tag applies to all non-existent subdomains. If you use services that send email from dynamically created subdomains, or if marketing teams spin up campaign-specific subdomains without creating DNS records first, an <code>np=reject</code> policy will cause that mail to fail DMARC. Audit your sending infrastructure before adding this tag.</p>
@@ -282,11 +296,6 @@
                     <li><a href="https://dmarcian.com/dmarcbis/" target="_blank" rel="noopener">dmarcian's DMARCbis Overview</a></li>
                     <li><a href="/methodology">dns-audit.com Methodology</a></li>
                 </ul>
-            </div>
-
-            <!-- Footer CTA -->
-            <div class="dbis-section" style="text-align: center; margin-top: 2rem;">
-                <p style="color: var(--text-muted, #888);"><a href="/" style="color: var(--text-muted, #888); text-decoration: underline;">Run an audit on your domain</a></p>
             </div>
 
         </div>
