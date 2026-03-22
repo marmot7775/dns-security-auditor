@@ -142,62 +142,36 @@
                 <h1>Privacy &amp; Terms</h1>
                 <div class="last-updated">Last updated: March 2026</div>
 
-                <p>dns-audit.com is a security tool built with privacy as a core principle, not an afterthought. There are no accounts, no cookies, no analytics, and no tracking. We do not store your data in a database. We designed the platform to collect as little as possible and keep it for as short as possible.</p>
-
-                <p>This page explains exactly what we process, how long we keep it, and who else is involved.</p>
-
                 <h2>What We Collect</h2>
-                <p>When you run an audit, here is what we process:</p>
-                <ul>
-                    <li><strong>Domain name.</strong> The domain you enter in the search box. We use it to query public DNS records on your behalf. This is not personal data; DNS records are public by design.</li>
-                    <li><strong>IP address.</strong> Your IP address is held in memory for rate limiting only and is cleared when the server restarts. It is not written to our audit log or stored in any database.</li>
-                    <li><strong>Timestamp and request metadata.</strong> We log when each audit runs, how long it takes, the resulting grade, and a truncated browser identifier (user-agent). This helps us monitor service health and detect abuse.</li>
-                    <li><strong>DKIM selector (optional).</strong> If you provide a custom DKIM selector, we use it for that audit only.</li>
-                </ul>
-
-                <h2>What We Do Not Collect</h2>
-                <ul>
-                    <li>No personal information (name, email, phone)</li>
-                    <li>No account or login data</li>
-                    <li>No cookies or browser fingerprinting</li>
-                    <li>No analytics scripts (no Google Analytics, no tracking pixels)</li>
-                    <li>No advertising or marketing data</li>
-                </ul>
+                <p>When you run an audit, we process the following:</p>
+                <p><strong>The domain you enter.</strong> We query public DNS records on your behalf. DNS records are public by design. This is not personal data.</p>
+                <p><strong>Your IP address, temporarily.</strong> We hold it in memory for rate limiting. It is not written to disk, not logged, and is cleared when the server restarts.</p>
+                <p><strong>An audit log entry.</strong> We record which domain was queried, how long the audit took, the resulting grade, and a truncated browser identifier. This helps us monitor service health. IP addresses are not included in the log.</p>
+                <p><strong>DNS snapshots.</strong> We store snapshots of public DNS records to track changes over time. This is public data. No personal information is attached to snapshots.</p>
+                <p>If you provide a custom DKIM selector, we use it for that audit only.</p>
 
                 <h2>Data Retention</h2>
-                <p><strong>Audit results</strong> are cached in server memory for 5 minutes to reduce redundant DNS queries. After that, they are discarded. We do not store audit results in any database.</p>
-                <p><strong>Server logs</strong> (domain queried, grade, duration, browser identifier) are retained in a local audit log file. IP addresses are not included. Log files rotate automatically and are not retained beyond what the operating system manages.</p>
-                <p><strong>Rate limit data</strong> (IP address and request timestamps) is held in memory only and cleared when the service restarts.</p>
-                <p><strong>DNS snapshots.</strong> We store snapshots of public DNS records to track changes over time. This data is already publicly available — we make it easier to see what changed. No personal data is collected.</p>
+                <p>Audit results are cached in server memory for 5 minutes to reduce redundant DNS queries, then discarded.</p>
+                <p>Audit log files rotate automatically and are managed by the operating system. They do not contain IP addresses.</p>
+                <p>Rate limit data is held in memory only and cleared on restart.</p>
+                <p>DNS snapshots are retained to enable change tracking. They contain only public DNS record data.</p>
 
                 <h2>Third Parties</h2>
-                <p>We use one external service:</p>
-                <ul>
-                    <li><strong>Cloudflare.</strong> All traffic to dns-audit.com passes through Cloudflare, which provides CDN and DDoS protection. Cloudflare processes your IP address and request headers as part of its service. Their privacy policy is at <a href="https://www.cloudflare.com/privacypolicy/" target="_blank" rel="noopener">cloudflare.com/privacypolicy</a>.</li>
-                </ul>
-                <p>We do not share, sell, or transfer any data to anyone else.</p>
+                <p>All traffic passes through Cloudflare, which provides CDN and DDoS protection. Cloudflare processes your IP address and request headers as part of its service. Their privacy policy is at <a href="https://www.cloudflare.com/privacypolicy/" target="_blank" rel="noopener">cloudflare.com/privacypolicy</a>.</p>
+                <p>We do not share data with anyone else.</p>
 
                 <h2>How Audits Work</h2>
-                <p>When you run an audit, our server queries public DNS infrastructure (authoritative nameservers, public resolvers, Certificate Transparency logs, and DNS-based blocklists) for the domain you entered. All of this information is publicly available to anyone with a DNS client. We do not access any private systems, internal networks, or authenticated services. The audit is read-only and non-intrusive.</p>
+                <p>When you run an audit, our server queries public DNS infrastructure: authoritative nameservers, public resolvers, Certificate Transparency logs, and DNS-based blocklists. All of this information is publicly available to anyone with a DNS client. The audit is read-only and non-intrusive.</p>
 
                 <h2>Terms of Use</h2>
                 <p>By using dns-audit.com, you agree to the following:</p>
-                <ul>
-                    <li><strong>Informational only.</strong> Audit results are provided for informational purposes. We do our best to be accurate, but DNS configurations are complex and we cannot guarantee that every result is correct in every situation.</li>
-                    <li><strong>Fair use.</strong> The service is rate-limited to 10 requests per minute per IP address. Automated bulk queries, scraping, and any activity intended to degrade the service are not permitted.</li>
-                    <li><strong>No warranty.</strong> dns-audit.com is provided as-is, free of charge. There is no SLA, no uptime guarantee, and no warranty of any kind.</li>
-                    <li><strong>Your responsibility.</strong> You are responsible for how you use the audit results. We provide findings, but acting on them is your decision.</li>
-                </ul>
+                <p><strong>Informational only.</strong> Audit results are provided for informational purposes. DNS configurations are complex and we cannot guarantee that every result is correct in every situation.</p>
+                <p><strong>Fair use.</strong> The service is rate-limited to 10 requests per minute per IP address. Automated bulk queries, scraping, and activity intended to degrade the service are not permitted.</p>
+                <p><strong>No warranty.</strong> dns-audit.com is provided as-is, free of charge. There is no SLA, no uptime guarantee, and no warranty of any kind.</p>
+                <p><strong>Your responsibility.</strong> You are responsible for how you use the audit results. We provide findings, but acting on them is your decision.</p>
 
                 <h2>Contact</h2>
                 <p>dns-audit.com is operated by Neil Anuskiewicz, an email security and deliverability consultant. You can reach me on <a href="https://www.linkedin.com/in/neilanuskiewicz/" target="_blank" rel="noopener">LinkedIn</a>.</p>
-
-                <a href="/" class="privacy-cta">
-                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" width="16" height="16">
-                        <circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/>
-                    </svg>
-                    Run an Audit
-                </a>
 
             </div>
         </section>
