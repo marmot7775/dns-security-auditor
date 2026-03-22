@@ -74,7 +74,8 @@
                         <tr>
                             <td>DMARCbis</td>
                             <td>
-                                Additionally perform DNS tree walk for subdomain policy discovery. Detect new tags (<code>t</code>, <code>np</code>, <code>psd</code>) and flag deprecated tags (<code>pct</code>, <code>ri</code>, <code>rf</code>). Results note where DMARCbis behavior differs from RFC 7489.
+                                Perform DNS tree walk for policy discovery, replacing the Public Suffix List lookup used by RFC 7489. Detect new tags (<code>t</code>, <code>np</code>, <code>psd</code>) and flag deprecated tags (<code>pct</code>, <code>ri</code>, <code>rf</code>). Results note where behavior differs from RFC 7489.
+                                <span class="op-note">The tree walk eliminates dependency on the Public Suffix List, which is maintained externally and updated on different schedules by different receivers.</span>
                             </td>
                             <td><a href="https://datatracker.ietf.org/doc/draft-ietf-dmarc-dmarcbis/">draft-ietf-dmarc-dmarcbis</a></td>
                         </tr>
@@ -374,7 +375,7 @@
                 </div>
                 <div class="std-item">
                     <a href="https://datatracker.ietf.org/doc/draft-ietf-dmarc-dmarcbis/">DMARCbis (draft-ietf-dmarc-dmarcbis)</a>
-                    <span>The in-progress update to DMARC, advancing through the IETF standards process. Extends DMARC with DNS tree walk for policy discovery (replacing Public Suffix List dependency), new tags (<code>t</code>, <code>np</code>, <code>psd</code>), and deprecates several tags (<code>pct</code>, <code>ri</code>, <code>rf</code>). Where DMARCbis behavior differs from RFC 7489, the audit results note the distinction.</span>
+                    <span>The in-progress update to DMARC, advancing through the IETF standards process. Replaces the Public Suffix List with a DNS tree walk for organizational domain discovery, which eliminates the dependency on an externally maintained list that receivers updated on different schedules. Introduces new tags (<code>t</code>, <code>np</code>, <code>psd</code>) and deprecates several tags (<code>pct</code>, <code>ri</code>, <code>rf</code>). Where DMARCbis behavior differs from RFC 7489, the audit results note the distinction.</span>
                 </div>
                 <div class="std-item">
                     <a href="https://datatracker.ietf.org/doc/html/rfc7208">RFC 7208</a>
