@@ -66,17 +66,17 @@
                         <tr>
                             <td>DMARC</td>
                             <td>
-                                Query <code>_dmarc.{domain}</code> TXT record. Parse policy, reporting, alignment, and
-                                subdomain tags.
-                                Perform DMARCbis tree walk for policy discovery on subdomains.
-                                Validate syntax, detect deprecated tags (<code>pct</code>, <code>ri</code>,
-                                <code>rf</code>)
-                                and new tags (<code>t</code>, <code>np</code>, <code>psd</code>).
-                                Verify external report authorization per Section 7.1.
-                                <span class="op-note">External reporting URIs are verified to prevent data leaks to
-                                    unauthorized destinations.</span>
+                                Query <code>_dmarc.{domain}</code> TXT record. Parse policy (<code>p</code>, <code>sp</code>), reporting URIs (<code>rua</code>, <code>ruf</code>), alignment settings (<code>adkim</code>, <code>aspf</code>), and enforcement options. Discover organizational domain using the Public Suffix List. Validate record syntax and verify external report authorization per Section 7.1.
+                                <span class="op-note">External reporting URIs are verified to prevent unauthorized data collection.</span>
                             </td>
-                            <td><a href="https://datatracker.ietf.org/doc/draft-ietf-dmarc-dmarcbis/">DMARCbis</a></td>
+                            <td><a href="https://datatracker.ietf.org/doc/html/rfc7489">RFC 7489</a></td>
+                        </tr>
+                        <tr>
+                            <td>DMARCbis</td>
+                            <td>
+                                Additionally perform DNS tree walk for subdomain policy discovery. Detect new tags (<code>t</code>, <code>np</code>, <code>psd</code>) and flag deprecated tags (<code>pct</code>, <code>ri</code>, <code>rf</code>). Results note where DMARCbis behavior differs from RFC 7489.
+                            </td>
+                            <td><a href="https://datatracker.ietf.org/doc/draft-ietf-dmarc-dmarcbis/">draft-ietf-dmarc-dmarcbis</a></td>
                         </tr>
                         <tr>
                             <td>SPF</td>
@@ -369,11 +369,12 @@
 
             <div class="std-list">
                 <div class="std-item">
-                    <a href="https://datatracker.ietf.org/doc/draft-ietf-dmarc-dmarcbis/">DMARCbis</a>
-                    <span>Domain-based Message Authentication, Reporting, and Conformance. The current DMARC standard
-                        (Proposed Standard, replaces RFC 7489). Implements DNS Tree Walk for policy discovery (Section
-                        4.10), new tags (<code>t</code>, <code>np</code>, <code>psd</code>), and deprecated tag
-                        detection (<code>pct</code>, <code>ri</code>, <code>rf</code>).</span>
+                    <a href="https://datatracker.ietf.org/doc/html/rfc7489">DMARC (RFC 7489)</a>
+                    <span>Domain-based Message Authentication, Reporting, and Conformance. The current DMARC standard, published in 2015. Defines email authentication policy discovery using the Public Suffix List, SPF and DKIM alignment checking, and aggregate and failure reporting. The foundation of email authentication policy, deployed by the majority of receivers.</span>
+                </div>
+                <div class="std-item">
+                    <a href="https://datatracker.ietf.org/doc/draft-ietf-dmarc-dmarcbis/">DMARCbis (draft-ietf-dmarc-dmarcbis)</a>
+                    <span>The in-progress update to DMARC, advancing through the IETF standards process. Extends DMARC with DNS tree walk for policy discovery (replacing Public Suffix List dependency), new tags (<code>t</code>, <code>np</code>, <code>psd</code>), and deprecates several tags (<code>pct</code>, <code>ri</code>, <code>rf</code>). Where DMARCbis behavior differs from RFC 7489, the audit results note the distinction.</span>
                 </div>
                 <div class="std-item">
                     <a href="https://datatracker.ietf.org/doc/html/rfc7208">RFC 7208</a>
@@ -411,10 +412,6 @@
                 </div>
             </div>
 
-            <p>
-                Where DMARCbis behavior differs from RFC 7489, the audit results note the distinction.
-                Both legacy and current semantics are evaluated.
-            </p>
 
             <h2>Open Source</h2>
             <p>
@@ -424,7 +421,7 @@
                 under the MIT License.
             </p>
 
-            <a href="/" class="audit-cta">Run an Audit</a>
+            <p><a href="/">Run an audit</a></p>
 
             <div class="meth-footer">
                 Last updated March 2026.
