@@ -58,14 +58,14 @@ Six categories sum to 100 points with a letter grade:
 | DMARC | 25 | Policy strength, alignment mode, reporting, subdomain policy |
 | SPF | 20 | Record presence, `all` mechanism, lookup count, `include` complexity |
 | DKIM | 15 | Key discovery, key type, cryptographic strength |
-| Best Practices | 20 | MTA-STS (5 pts), TLS-RPT (5 pts), DNSSEC (4 pts), DANE (3 pts), CAA (2 pts), nameserver diversity (1 pt) |
+| Best Practices | 20 | MTA-STS, TLS-RPT, DNSSEC, DANE, CAA, nameserver diversity |
 | Key Security | 10 | DKIM key strength, rotation hygiene, algorithm modernity |
 | Vendor Intelligence | 10 | Email service provider detection confidence |
 *Note: DKIM selectors cannot be enumerated via DNS. For best results, provide your selector directly.*
 
 DMARC, SPF, and DKIM account for 60% of the score. Infrastructure checks (DNSSEC, CAA, DANE, Nameservers, Certificate Transparency, Blocklist) are evaluated and displayed but do not contribute to the numeric score, since their absence is often intentional.
 
-Grade thresholds: **A+** 90+, **A** 80+, **B** 65+, **C** 50+, **D** 35+, **F** below 35. See the [Methodology](https://dns-audit.com/methodology) page for full scoring details.
+Domains receive a letter grade (A+ through F) based on a 100-point scoring system. See the [Methodology](https://dns-audit.com/methodology) page for detailed scoring criteria and grade thresholds.
 
 Domains where DKIM selectors could not be detected receive full DKIM credit, since selectors are private and cannot be verified from outside.
 
