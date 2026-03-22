@@ -1557,10 +1557,10 @@ def _about_page(data, S):
     ))
     els.append(Spacer(1, 6))
     els.append(Paragraph(
-        "Scores are based on authentication configuration (DMARC 25, SPF 20, DKIM 25), "
-        "key security (15), vendor intelligence (10), and best practices (5). "
-        "Infrastructure checks (DNSSEC, CAA, DANE, Nameservers) are evaluated but "
-        "not scored, as their absence may be intentional.", S["body_small"]
+        "Scores are based on authentication configuration (DMARC 25, SPF 20, DKIM 15), "
+        "best practices (20), key security (10), and vendor intelligence (10). "
+        "DNSSEC, CAA, and nameserver diversity contribute to the Best Practices category. "
+        "Certificate Transparency and Blocklist checks are non-scoring.", S["body_small"]
     ))
     els.append(Spacer(1, 14))
 
