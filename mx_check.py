@@ -158,6 +158,7 @@ def _check_starttls(hostname: str, port: int = 25, timeout: float = 10.0) -> Dic
         "cert_valid": None,
         "error": None,
     }
+    server = None
     try:
         server = smtplib.SMTP(timeout=timeout)
         server.connect(hostname, port)
@@ -194,7 +195,6 @@ def _check_starttls(hostname: str, port: int = 25, timeout: float = 10.0) -> Dic
                         result["cert_valid"] = expiry > datetime.now(expiry.tzinfo)
                     except (ValueError, TypeError, OverflowError):
                         result["cert_expiry"] = not_after
-        server.quit()
     except smtplib.SMTPServerDisconnected:
         result["error"] = "Server disconnected"
     except socket.timeout:
@@ -203,6 +203,12 @@ def _check_starttls(hostname: str, port: int = 25, timeout: float = 10.0) -> Dic
         result["error"] = "Connection refused (port 25 blocked)"
     except Exception as e:
         result["error"] = str(e)[:200]
+    finally:
+        if server:
+            try:
+                server.quit()
+            except Exception:
+                pass
     return result
 
 

@@ -171,10 +171,14 @@ def _decode_rsa_key_bits(b64_data: str) -> Optional[int]:
 
 
 def _asn1_length(data: bytes, idx: int) -> Tuple[int, int]:
+    if idx >= len(data):
+        raise ValueError("Truncated ASN.1 data")
     b = data[idx]
     if b < 0x80:
         return idx + 1, b
     num_bytes = b & 0x7F
+    if idx + 1 + num_bytes > len(data):
+        raise ValueError("Truncated ASN.1 length")
     length = int.from_bytes(data[idx + 1: idx + 1 + num_bytes], "big")
     return idx + 1 + num_bytes, length
 

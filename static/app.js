@@ -23,6 +23,7 @@ let currentScope = 'complete';
 let lastAuditData = null;
 let auditStartTime = 0;
 let auditController = null;
+let auditReader = null;
 
 // -- DOM References --
 const auditForm = document.getElementById('audit-form');
@@ -200,6 +201,11 @@ function normalizeDomain(input) {
 
 // -- Main audit runner --
 async function runAudit(domain) {
+    // Cancel any in-flight reader
+    if (auditReader) {
+        try { auditReader.cancel(); } catch(e) {}
+        auditReader = null;
+    }
     // Abort any in-flight audit request
     if (auditController) auditController.abort();
     auditController = new AbortController();
@@ -223,6 +229,7 @@ async function runAudit(domain) {
         }
 
         const reader = resp.body.getReader();
+        auditReader = reader;
         const decoder = new TextDecoder();
         let buffer = '';
 
@@ -246,6 +253,7 @@ async function runAudit(domain) {
                 }
 
                 if (msg.done) {
+                    auditReader = null;
                     renderResults(msg.result);
                     return;
                 }
@@ -3071,7 +3079,7 @@ function _initShareDropdown() {
         dropdown.querySelector('[data-action="linkedin"]').addEventListener('click', () => {
             const url = _getShareUrl();
             window.open('https://www.linkedin.com/sharing/share-offsite/?url=' + encodeURIComponent(url), '_blank', 'noopener');
-            dropdown.remove();
+            removeDropdown();
         });
 
         dropdown.querySelector('[data-action="twitter"]').addEventListener('click', () => {
@@ -3082,22 +3090,23 @@ function _initShareDropdown() {
             const text = `DNS security audit for ${domain}: Grade ${grade} (${score}/100)`;
             const url = _getShareUrl();
             window.open('https://twitter.com/intent/tweet?text=' + encodeURIComponent(text) + '&url=' + encodeURIComponent(url), '_blank', 'noopener');
-            dropdown.remove();
+            removeDropdown();
         });
 
         // Close on click outside or Escape
+        function removeDropdown() {
+            dropdown.remove();
+            document.removeEventListener('click', closeDropdown);
+            document.removeEventListener('keydown', closeOnEsc);
+        }
         const closeDropdown = (ev) => {
             if (!dropdown.contains(ev.target) && ev.target !== shareBtn) {
-                dropdown.remove();
-                document.removeEventListener('click', closeDropdown);
-                document.removeEventListener('keydown', closeOnEsc);
+                removeDropdown();
             }
         };
         const closeOnEsc = (ev) => {
             if (ev.key === 'Escape') {
-                dropdown.remove();
-                document.removeEventListener('click', closeDropdown);
-                document.removeEventListener('keydown', closeOnEsc);
+                removeDropdown();
             }
         };
         setTimeout(() => {
