@@ -582,8 +582,8 @@ def build_change_detection(
         "mta_sts": ("mta-sts", lambda r: r.get("txt_record")),
         "tls_rpt": ("tls-rpt", lambda r: r.get("record")),
         "dnssec": ("dnssec", lambda r: r.get("dnskey_record")),
-        "caa": ("caa", lambda r: "; ".join(sorted(r.get("records") or []))),
-        "nameservers": ("nameservers", lambda r: "; ".join(sorted(r.get("nameservers") or []))),
+        "caa": ("caa", lambda r: "; ".join(sorted(c["raw"] if isinstance(c, dict) else str(c) for c in (r.get("records") or [])))),
+        "nameservers": ("nameservers", lambda r: "; ".join(sorted(n["hostname"] if isinstance(n, dict) else str(n) for n in (r.get("nameservers") or [])))),
     }
 
     for check_key, (record_type, extract_fn) in record_map.items():
