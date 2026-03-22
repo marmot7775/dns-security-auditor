@@ -35,7 +35,7 @@ from reportlab.lib.styles import ParagraphStyle
 from reportlab.lib.units import inch
 from reportlab.platypus import (
     SimpleDocTemplate, Paragraph, Spacer, Table, TableStyle,
-    KeepTogether, HRFlowable, PageBreak,
+    KeepTogether, HRFlowable, PageBreak, CondPageBreak,
 )
 from reportlab.graphics.shapes import Drawing, Wedge, Circle, String, Group
 from reportlab.graphics import renderPDF
@@ -125,6 +125,18 @@ def _get_check(data, name):
 
 def _clr(color_name):
     return METRIC_COLORS.get(color_name, TEXT_SEC)
+
+
+def _alt_rows(cmds, row_count, even=None, odd=None):
+    """Add alternating row backgrounds to table style commands (skip header)."""
+    if even is None:
+        even = colors.HexColor("#f8fafc")
+    if odd is None:
+        odd = colors.white
+    for i in range(1, row_count):
+        bg = even if i % 2 == 0 else odd
+        cmds.append(("BACKGROUND", (0, i), (-1, i), bg))
+    return cmds
 
 
 def _score_gauge(score, grade, grade_color):
@@ -492,14 +504,16 @@ def _executive_summary_page(data, S):
                     Paragraph(_safe(v.get("summary", "")), S["body_small"]),
                 ])
             vt = Table(rows, colWidths=[1.7*inch, 1.0*inch, 3.8*inch])
-            vt.setStyle(TableStyle([
+            cmds = [
                 ("VALIGN", (0,0), (-1,-1), "TOP"),
                 ("TOPPADDING", (0,0), (-1,-1), 5),
                 ("BOTTOMPADDING", (0,0), (-1,-1), 5),
                 ("LINEBELOW", (0,0), (-1,0), 0.5, NAVY),
                 ("LINEBELOW", (0,1), (-1,-2), 0.3, BORDER),
                 ("BACKGROUND", (0,0), (-1,0), SURFACE_BG),
-            ]))
+            ]
+            _alt_rows(cmds, len(rows))
+            vt.setStyle(TableStyle(cmds))
             els.append(vt)
         els.append(Spacer(1, 14))
 
@@ -570,7 +584,7 @@ def _roadmap_page(data, S):
     """Build the email security roadmap page."""
     roadmap = data.get("security_roadmap", {})
     items = roadmap.get("items", [])
-    els = [PageBreak()]
+    els = [CondPageBreak(4*inch)]
     els.extend(_section_header("2", "Email Security Roadmap", S))
 
     # Summary
@@ -626,14 +640,16 @@ def _roadmap_page(data, S):
                 Paragraph(_safe(item.get("impact", "")), S["body_small"]),
             ])
         rt = Table(rows, colWidths=[0.3*inch, 0.8*inch, 0.8*inch, 2.1*inch, 2.5*inch])
-        rt.setStyle(TableStyle([
+        cmds = [
             ("VALIGN", (0,0), (-1,-1), "TOP"),
             ("TOPPADDING", (0,0), (-1,-1), 5),
             ("BOTTOMPADDING", (0,0), (-1,-1), 5),
             ("LINEBELOW", (0,0), (-1,0), 0.5, NAVY),
             ("LINEBELOW", (0,1), (-1,-2), 0.3, BORDER),
             ("BACKGROUND", (0,0), (-1,0), SURFACE_BG),
-        ]))
+        ]
+        _alt_rows(cmds, len(rows))
+        rt.setStyle(TableStyle(cmds))
         els.append(rt)
     else:
         els.append(Paragraph("No action items. Your email security meets all current best practices.", S["body"]))
@@ -794,14 +810,16 @@ def _dmarc_deep_dive(data, S):
             ])
 
         tt = Table(rows, colWidths=[0.5*inch, 1.3*inch, 0.9*inch, 3.8*inch])
-        tt.setStyle(TableStyle([
+        cmds = [
             ("VALIGN", (0,0), (-1,-1), "TOP"),
             ("TOPPADDING", (0,0), (-1,-1), 4),
             ("BOTTOMPADDING", (0,0), (-1,-1), 4),
             ("LINEBELOW", (0,0), (-1,0), 0.5, NAVY),
             ("LINEBELOW", (0,1), (-1,-2), 0.3, BORDER),
             ("BACKGROUND", (0,0), (-1,0), SURFACE_BG),
-        ]))
+        ]
+        _alt_rows(cmds, len(rows))
+        tt.setStyle(TableStyle(cmds))
         els.append(tt)
 
     # Dangerous combinations
@@ -984,14 +1002,16 @@ def _attack_surface_page(data, S):
                     Paragraph(_safe(policy_val) if policy_val else "-", S["body_small"]),
                 ])
             st = Table(rows, colWidths=[3.0*inch, 1.0*inch, 2.5*inch])
-            st.setStyle(TableStyle([
+            cmds = [
                 ("VALIGN", (0,0), (-1,-1), "TOP"),
                 ("TOPPADDING", (0,0), (-1,-1), 4),
                 ("BOTTOMPADDING", (0,0), (-1,-1), 4),
                 ("LINEBELOW", (0,0), (-1,0), 0.5, NAVY),
                 ("LINEBELOW", (0,1), (-1,-2), 0.3, BORDER),
                 ("BACKGROUND", (0,0), (-1,0), SURFACE_BG),
-            ]))
+            ]
+            _alt_rows(cmds, len(rows))
+            st.setStyle(TableStyle(cmds))
             els.append(st)
 
     # Subdomain audit results
@@ -1054,14 +1074,16 @@ def _attack_surface_page(data, S):
             ])
 
         st = Table(rows, colWidths=[1.7*inch, 0.5*inch, 0.6*inch, 0.7*inch, 1.5*inch, 1.0*inch])
-        st.setStyle(TableStyle([
+        cmds = [
             ("VALIGN", (0,0), (-1,-1), "TOP"),
             ("TOPPADDING", (0,0), (-1,-1), 3),
             ("BOTTOMPADDING", (0,0), (-1,-1), 3),
             ("LINEBELOW", (0,0), (-1,0), 0.5, NAVY),
             ("LINEBELOW", (0,1), (-1,-2), 0.3, BORDER),
             ("BACKGROUND", (0,0), (-1,0), SURFACE_BG),
-        ]))
+        ]
+        _alt_rows(cmds, len(rows))
+        st.setStyle(TableStyle(cmds))
         els.append(st)
 
     return els
@@ -1262,14 +1284,16 @@ def _spf_deep_section(spf_deep, S):
                 Paragraph(str(m.get("cost", 0)), S["body_small"]),
             ])
         mt = Table(rows, colWidths=[2.5*inch, 0.8*inch, 1.7*inch, 0.7*inch])
-        mt.setStyle(TableStyle([
+        cmds = [
             ("VALIGN", (0,0), (-1,-1), "TOP"),
             ("TOPPADDING", (0,0), (-1,-1), 3),
             ("BOTTOMPADDING", (0,0), (-1,-1), 3),
             ("LINEBELOW", (0,0), (-1,0), 0.5, NAVY),
             ("LINEBELOW", (0,1), (-1,-2), 0.3, BORDER),
             ("BACKGROUND", (0,0), (-1,0), SURFACE_BG),
-        ]))
+        ]
+        _alt_rows(cmds, len(rows))
+        mt.setStyle(TableStyle(cmds))
         els.append(mt)
 
     # Lookup count
@@ -1330,15 +1354,17 @@ def _dkim_deep_section(dkim_deep, S):
                 Paragraph(f'<font color="{r_clr.hexval()}">{_safe(k.get("rating_label", ""))}</font>', S["body_small"]),
                 Paragraph(_safe(k.get("rotation_status", "")), S["body_small"]),
             ])
-        kt = Table(rows, colWidths=[1.1*inch, 1.1*inch, 0.7*inch, 0.5*inch, 1.0*inch, 1.1*inch])
-        kt.setStyle(TableStyle([
+        kt = Table(rows, colWidths=[80, 70, 50, 40, 140, 80])
+        cmds = [
             ("VALIGN", (0,0), (-1,-1), "TOP"),
             ("TOPPADDING", (0,0), (-1,-1), 3),
             ("BOTTOMPADDING", (0,0), (-1,-1), 3),
             ("LINEBELOW", (0,0), (-1,0), 0.5, NAVY),
             ("LINEBELOW", (0,1), (-1,-2), 0.3, BORDER),
             ("BACKGROUND", (0,0), (-1,0), SURFACE_BG),
-        ]))
+        ]
+        _alt_rows(cmds, len(rows))
+        kt.setStyle(TableStyle(cmds))
         els.append(kt)
 
     # Rotation guidance
@@ -1382,7 +1408,7 @@ def _vendors(data, S):
             Paragraph(f'<font color="{c_clr.hexval()}">{conf}%</font>', S["body"]),
         ])
     vt = Table(rows, colWidths=[4.5*inch, 2.0*inch])
-    vt.setStyle(TableStyle([
+    cmds = [
         ("VALIGN", (0,0), (-1,-1), "MIDDLE"),
         ("TOPPADDING", (0,0), (-1,-1), 4),
         ("BOTTOMPADDING", (0,0), (-1,-1), 4),
@@ -1390,7 +1416,9 @@ def _vendors(data, S):
         ("LINEBELOW", (0,1), (-1,-2), 0.3, BORDER),
         ("BACKGROUND", (0,0), (-1,0), SURFACE_BG),
         ("ALIGN", (1,0), (1,-1), "RIGHT"),
-    ]))
+    ]
+    _alt_rows(cmds, len(rows))
+    vt.setStyle(TableStyle(cmds))
     els.append(vt)
     els.append(Spacer(1, 8))
     return els
@@ -1408,7 +1436,7 @@ def _migration_page(data, S):
     if not migration:
         return []
 
-    els = [PageBreak()]
+    els = [CondPageBreak(4*inch)]
     els.extend(_section_header("6", "Migration Path to DMARCbis Ready", S))
 
     status = migration.get("status", "")
