@@ -137,6 +137,13 @@ document.addEventListener('DOMContentLoaded', () => {
     }, { passive: true });
 });
 
+// -- Clear input on bfcache restore (iOS back-forward cache) --
+window.addEventListener('pageshow', function(event) {
+    if (!new URLSearchParams(window.location.search).get('d')) {
+        document.getElementById('domain-input').value = '';
+    }
+});
+
 // -- Educational section toggle --
 const eduToggle = document.getElementById('edu-toggle');
 const eduContent = document.getElementById('edu-content');
