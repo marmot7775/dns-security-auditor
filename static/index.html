@@ -4,19 +4,18 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>DNS Security Auditor | dns-audit.com</title>
-    <meta name="description" content="Free DNS security audit tool. Scan any domain for DMARC, SPF, DKIM, MTA-STS, DNSSEC, DANE, CAA, TLS-RPT, and BIMI. Get a security score, letter grade, and PDF report.">
+    <meta name="description" content="Free DNS security audit tool. Check DMARC, SPF, DKIM, MTA-STS, DNSSEC, DANE, CAA, BIMI, and TLS-RPT with a 100-point security score and actionable roadmap.">
     <meta name="keywords" content="DNS audit, DMARC check, SPF validator, DKIM checker, email security, MTA-STS, BIMI, DNSSEC, domain security">
     <meta name="author" content="Neil Anuskiewicz">
     <meta property="og:type" content="website" />
-    <meta property="og:site_name" content="dns-audit.com" />
+    <meta property="og:site_name" content="DNS Security Auditor" />
     <meta property="og:url" content="https://dns-audit.com/" />
     <meta property="og:title" content="DNS Security Auditor | dns-audit.com" />
-    <meta property="og:description" content="Free DNS security audit tool. Scan any domain for DMARC, SPF, DKIM, MTA-STS, DNSSEC, DANE, CAA, TLS-RPT, and BIMI. Get a security score, letter grade, and PDF report." />
+    <meta property="og:description" content="Free DNS security audit tool. Check DMARC, SPF, DKIM, MTA-STS, DNSSEC, DANE, CAA, BIMI, and TLS-RPT with a 100-point security score and actionable roadmap." />
     <meta property="og:image" content="https://dns-audit.com/static/og-image.png" />
-    <meta name="twitter:card" content="summary_large_image">
-    <meta name="twitter:image" content="https://dns-audit.com/static/og-image.png">
+    <meta name="twitter:card" content="summary">
     <meta name="twitter:title" content="DNS Security Auditor | dns-audit.com">
-    <meta name="twitter:description" content="Free DNS security audit tool. Scan any domain for DMARC, SPF, DKIM, MTA-STS, DNSSEC, DANE, CAA, TLS-RPT, and BIMI. Get a security score, letter grade, and PDF report.">
+    <meta name="twitter:description" content="Free DNS security audit tool. Check DMARC, SPF, DKIM, MTA-STS, DNSSEC, DANE, CAA, BIMI, and TLS-RPT with a 100-point security score and actionable roadmap.">
     <link rel="canonical" href="https://dns-audit.com/" />
     <link rel="icon" type="image/svg+xml" href="/static/favicon.svg">
     <link rel="preconnect" href="https://fonts.googleapis.com">
@@ -29,18 +28,13 @@
         "@type": "WebApplication",
         "name": "DNS Security Auditor",
         "url": "https://dns-audit.com",
-        "description": "Free DNS and email security audit tool. Check DMARC, SPF, DKIM, DNSSEC, MTA-STS, and more. Get a security grade and detailed findings.",
+        "description": "Free DNS and email security audit tool checking DMARC, SPF, DKIM, MTA-STS, DNSSEC, DANE, CAA, BIMI, and TLS-RPT with 100-point scoring",
         "applicationCategory": "SecurityApplication",
         "operatingSystem": "Any",
         "offers": {
             "@type": "Offer",
             "price": "0",
             "priceCurrency": "USD"
-        },
-        "author": {
-            "@type": "Person",
-            "name": "Neil Anuskiewicz",
-            "url": "https://www.linkedin.com/in/neilanuskiewicz/"
         }
     }
     </script>
@@ -51,21 +45,47 @@
         "mainEntity": [
             {
                 "@type": "Question",
-                "name": "What does dns-audit.com do?",
+                "name": "What does this DNS security audit check?",
                 "acceptedAnswer": {
                     "@type": "Answer",
-                    "text": "dns-audit.com is a free DNS security auditing tool that scans any domain for DMARC, SPF, DKIM, MTA-STS, TLS-RPT, DANE, DNSSEC, CAA, and BIMI configuration. It generates a 100-point security score with letter grade and provides a detailed PDF report with specific remediation guidance."
+                    "text": "It checks 9 email and DNS security protocols: DMARC, SPF, DKIM, MTA-STS, DNSSEC, DANE, CAA, BIMI, and TLS-RPT, producing a 100-point security score with prioritized recommendations."
                 }
             },
             {
                 "@type": "Question",
-                "name": "What protocols does dns-audit.com check?",
+                "name": "What is DMARCbis?",
                 "acceptedAnswer": {
                     "@type": "Answer",
-                    "text": "dns-audit.com evaluates nine email security and DNS protocols: DMARC (domain policy), SPF (sender authorization), DKIM (message signing), MTA-STS (transport encryption), TLS-RPT (TLS failure reporting), DANE (certificate pinning via DNSSEC), DNSSEC (DNS integrity), CAA (certificate authority restrictions), and BIMI (brand indicators)."
+                    "text": "DMARCbis is the next version of DMARC, replacing RFC 7489. It introduces DNS tree walk, the np= and psd= tags, and deprecates the pct tag. This tool includes a DMARCbis readiness assessment."
+                }
+            },
+            {
+                "@type": "Question",
+                "name": "Is this tool free?",
+                "acceptedAnswer": {
+                    "@type": "Answer",
+                    "text": "Yes, dns-audit.com is completely free with no account required. It is also open source."
+                }
+            },
+            {
+                "@type": "Question",
+                "name": "What is a good DNS security score?",
+                "acceptedAnswer": {
+                    "@type": "Answer",
+                    "text": "A score of 90+ (A or A+) indicates strong email security. The most impactful improvements are DMARC with p=reject, valid SPF, DKIM signing, and MTA-STS."
                 }
             }
         ]
+    }
+    </script>
+    <script type="application/ld+json">
+    {
+        "@context": "https://schema.org",
+        "@type": "WebPage",
+        "speakable": {
+            "@type": "SpeakableSpecification",
+            "cssSelector": [".hero-description", ".faq-section"]
+        }
     }
     </script>
     <script type="application/ld+json">

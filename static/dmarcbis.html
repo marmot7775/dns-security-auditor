@@ -4,19 +4,18 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>DMARCbis Explained | dns-audit.com</title>
-    <meta name="description" content="DMARCbis (draft-ietf-dmarc-dmarcbis) is the IESG-approved successor to DMARC RFC 7489. Learn about the DNS tree walk, new tags (np, psd, t), deprecated tags, and how to prepare.">
+    <meta name="description" content="DMARCbis migration guide. Understand the new DMARC standard replacing RFC 7489, including DNS tree walk, np= tag, psd= tag, and deprecated pct tag.">
     <meta name="keywords" content="DMARCbis, DMARC, email authentication, RFC 7489, DNS tree walk, np tag, psd tag, email security standard">
     <meta name="author" content="Neil Anuskiewicz">
     <meta property="og:type" content="website" />
-    <meta property="og:site_name" content="dns-audit.com" />
+    <meta property="og:site_name" content="DNS Security Auditor" />
     <meta property="og:url" content="https://dns-audit.com/dmarcbis" />
     <meta property="og:title" content="DMARCbis Explained | dns-audit.com" />
-    <meta property="og:description" content="DMARCbis (draft-ietf-dmarc-dmarcbis) is the IESG-approved successor to DMARC RFC 7489. Learn about the DNS tree walk, new tags (np, psd, t), deprecated tags, and how to prepare." />
+    <meta property="og:description" content="DMARCbis migration guide. Understand the new DMARC standard replacing RFC 7489, including DNS tree walk, np= tag, psd= tag, and deprecated pct tag." />
     <meta property="og:image" content="https://dns-audit.com/static/og-image.png" />
-    <meta name="twitter:card" content="summary_large_image" />
-    <meta name="twitter:image" content="https://dns-audit.com/static/og-image.png" />
+    <meta name="twitter:card" content="summary" />
     <meta name="twitter:title" content="DMARCbis Explained | dns-audit.com" />
-    <meta name="twitter:description" content="DMARCbis (draft-ietf-dmarc-dmarcbis) is the IESG-approved successor to DMARC RFC 7489. Learn about the DNS tree walk, new tags (np, psd, t), deprecated tags, and how to prepare." />
+    <meta name="twitter:description" content="DMARCbis migration guide. Understand the new DMARC standard replacing RFC 7489, including DNS tree walk, np= tag, psd= tag, and deprecated pct tag." />
     <link rel="canonical" href="https://dns-audit.com/dmarcbis">
     <link rel="icon" type="image/svg+xml" href="/static/favicon.svg">
     <link rel="preconnect" href="https://fonts.googleapis.com">
@@ -27,27 +26,11 @@
     {
         "@context": "https://schema.org",
         "@type": "TechArticle",
-        "headline": "DMARCbis Explained: What's Changing in Email Authentication",
-        "description": "DMARCbis replaces RFC 7489 with stricter parsing, new subdomain protections, and a DNS-native discovery mechanism.",
-        "datePublished": "2025-06-01",
-        "dateModified": "2026-03-23",
-        "proficiencyLevel": "Intermediate",
-        "dependencies": "Basic understanding of DMARC, SPF, and DKIM",
-        "author": {
-            "@type": "Person",
-            "name": "Neil Anuskiewicz",
-            "url": "https://www.linkedin.com/in/neilanuskiewicz/"
-        },
-        "publisher": {
-            "@type": "Organization",
-            "name": "dns-audit.com",
-            "url": "https://dns-audit.com"
-        },
-        "mainEntityOfPage": "https://dns-audit.com/dmarcbis",
-        "speakable": {
-            "@type": "SpeakableSpecification",
-            "cssSelector": ["h1", ".faq-answer", ".key-takeaways"]
-        }
+        "headline": "DMARCbis: The Next DMARC Standard",
+        "description": "Complete guide to DMARCbis (draft-ietf-dmarc-dmarcbis), the replacement for DMARC RFC 7489",
+        "url": "https://dns-audit.com/dmarcbis",
+        "proficiencyLevel": "Beginner",
+        "dependencies": "Basic understanding of email authentication (SPF, DKIM, DMARC)"
     }
     </script>
     <script type="application/ld+json">
@@ -57,50 +40,26 @@
         "mainEntity": [
             {
                 "@type": "Question",
-                "name": "What is DMARCbis?",
-                "acceptedAnswer": {
-                    "@type": "Answer",
-                    "text": "DMARCbis is the IESG-approved revision of DMARC that upgrades RFC 7489 from Informational to Standards Track status. It replaces Public Suffix List dependency with DNS-based tree walk discovery, adds new tags (np, psd, t), and deprecates unreliable tags (pct, rf, ri)."
-                }
-            },
-            {
-                "@type": "Question",
-                "name": "What is the DNS tree walk in DMARCbis?",
-                "acceptedAnswer": {
-                    "@type": "Answer",
-                    "text": "The DNS tree walk is DMARCbis's method for discovering DMARC policy by querying DNS from the specific subdomain upward through the hierarchy. For example, for mail.sales.eu.example.com, it queries _dmarc.mail.sales.eu.example.com, then _dmarc.sales.eu.example.com, then _dmarc.eu.example.com, then _dmarc.example.com, stopping when a record is found or after a maximum of 9 queries."
-                }
-            },
-            {
-                "@type": "Question",
-                "name": "What tags does DMARCbis deprecate?",
-                "acceptedAnswer": {
-                    "@type": "Answer",
-                    "text": "DMARCbis deprecates three tags: pct (percentage sampling, replaced by the binary t= flag), rf (report format, only afrf was ever implemented), and ri (report interval, receivers rarely respected custom intervals)."
-                }
-            },
-            {
-                "@type": "Question",
-                "name": "What new tags does DMARCbis introduce?",
-                "acceptedAnswer": {
-                    "@type": "Answer",
-                    "text": "DMARCbis introduces three new tags: np= (policy for non-existent subdomains, with values none/quarantine/reject), psd= (declares whether a domain is a public suffix with values y/n/u), and t= (binary test mode flag replacing the unreliable pct= tag)."
-                }
-            },
-            {
-                "@type": "Question",
-                "name": "Do I need to update my DMARC record for DMARCbis?",
-                "acceptedAnswer": {
-                    "@type": "Answer",
-                    "text": "No immediate action is required. Existing DMARC records (v=DMARC1) continue to work without modification. To prepare, remove deprecated tags (pct, rf, ri), consider adding np=reject if enforcing p=reject, add psd=n to declare non-public-suffix status, and verify rua/ruf URIs include the mailto: prefix."
-                }
-            },
-            {
-                "@type": "Question",
                 "name": "When will DMARCbis be published?",
                 "acceptedAnswer": {
                     "@type": "Answer",
-                    "text": "DMARCbis (draft-ietf-dmarc-dmarcbis, version 41) was approved by the IESG and is in the RFC Editor Queue as of 2025. It is expected to be published as a Proposed Standard RFC in 2026."
+                    "text": "DMARCbis (draft-ietf-dmarc-dmarcbis) has been approved by the IESG and is in the RFC Editor Queue. Publication as an RFC is expected in 2026."
+                }
+            },
+            {
+                "@type": "Question",
+                "name": "Will DMARCbis break my existing DMARC record?",
+                "acceptedAnswer": {
+                    "@type": "Answer",
+                    "text": "No. DMARCbis is backward compatible. Existing valid DMARC records will continue to work. The pct tag is deprecated but ignored rather than causing errors."
+                }
+            },
+            {
+                "@type": "Question",
+                "name": "What is DNS tree walk in DMARCbis?",
+                "acceptedAnswer": {
+                    "@type": "Answer",
+                    "text": "DNS tree walk replaces the Public Suffix List for organizational domain discovery. It walks up the DNS tree checking for DMARC records, making the process more reliable and not dependent on a third-party maintained list."
                 }
             }
         ]
