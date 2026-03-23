@@ -4,18 +4,18 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>DMARCbis Explained | dns-audit.com</title>
-    <meta name="description" content="DMARCbis is an upcoming revision to DMARC progressing through the IETF standardization process. Learn what's changing in domain discovery, subdomain protection, and tag updates.">
+    <meta name="description" content="DMARCbis has been approved by the IESG and is in the RFC Editor Queue for publication as a Proposed Standard in 2026. Learn what's changing in domain discovery, subdomain protection, and tag updates.">
     <meta name="keywords" content="DMARCbis, DMARC, email authentication, RFC 7489, DNS tree walk, np tag, psd tag, email security standard">
     <meta name="author" content="Neil Anuskiewicz">
     <meta property="og:title" content="DMARCbis Explained | dns-audit.com">
-    <meta property="og:description" content="DMARCbis is an upcoming revision to DMARC progressing through the IETF standardization process. Learn what's changing in domain discovery, subdomain protection, and tag updates.">
+    <meta property="og:description" content="DMARCbis has been approved by the IESG and is in the RFC Editor Queue for publication as a Proposed Standard in 2026. Learn what's changing in domain discovery, subdomain protection, and tag updates.">
     <meta property="og:type" content="article">
     <meta property="og:url" content="https://dns-audit.com/dmarcbis">
     <meta property="og:image" content="https://dns-audit.com/static/og-image.png">
     <meta name="twitter:card" content="summary_large_image">
     <meta name="twitter:image" content="https://dns-audit.com/static/og-image.png">
     <meta name="twitter:title" content="DMARCbis Explained | dns-audit.com">
-    <meta name="twitter:description" content="DMARCbis is an upcoming revision to DMARC progressing through the IETF standardization process. Learn what's changing in domain discovery, subdomain protection, and tag updates.">
+    <meta name="twitter:description" content="DMARCbis has been approved by the IESG and is in the RFC Editor Queue for publication as a Proposed Standard in 2026. Learn what's changing in domain discovery, subdomain protection, and tag updates.">
     <link rel="canonical" href="https://dns-audit.com/dmarcbis">
     <link rel="icon" type="image/svg+xml" href="/static/favicon.svg">
     <link rel="preconnect" href="https://fonts.googleapis.com">
@@ -65,7 +65,7 @@
             <!-- Hero -->
             <div class="dbis-hero">
                 <h1><span>DMARCbis:</span> The Next DMARC Standard</h1>
-                <p class="dbis-hero-sub">DMARCbis is an upcoming revision to DMARC currently progressing through the IETF standardization process. It is not yet universally adopted, but reflects the future direction of DMARC implementations.</p>
+                <p class="dbis-hero-sub">DMARCbis (draft-ietf-dmarc-dmarcbis, version 41) has been approved by the IESG and is currently in the RFC Editor Queue. It is expected to be published as a Proposed Standard in 2026.</p>
             </div>
 
             <!-- Section: Why DMARCbis Matters -->
@@ -83,7 +83,7 @@
             <!-- Section 1: What is DMARCbis? -->
             <div class="dbis-section" id="what-is-dmarcbis">
                 <h2>What is DMARCbis?</h2>
-                <p>DMARCbis is the IETF's update to the DMARC email authentication standard. It is currently progressing through the IETF standardization process as a Standards Track specification. When published, DMARCbis will obsolete RFC 7489 (published in 2015 as an Informational RFC), replacing it as the authoritative DMARC specification. That status change matters: it signals that DMARC is moving from an experimental protocol to a formal standard with stronger expectations for vendor compliance.</p>
+                <p>DMARCbis is the IETF's update to the DMARC email authentication standard. The draft (version 41) was approved by the IESG in 2025 and is now in the RFC Editor Queue, with publication as a Proposed Standard expected in 2026. When published, DMARCbis will obsolete RFC 7489 (published in 2015 as an Informational RFC), replacing it as the authoritative DMARC specification. That status change matters: it signals that DMARC is moving from an experimental protocol to a formal standard with stronger expectations for vendor compliance.</p>
                 <p>The name stands for "DMARC bis" (Latin for "twice" or "again"). It is the second iteration of the specification, and it also obsoletes RFC 9091, which defined Public Suffix Domain DMARC policies.</p>
                 <p>RFC 9091 (published in 2021) was an experimental standard that defined how public suffix domains could publish DMARC policies. DMARCbis incorporates RFC 9091's goals through the <code>psd=</code> tag while providing a more robust mechanism via the DNS tree walk. With DMARCbis, RFC 9091 is no longer needed and is formally obsoleted.</p>
                 <p>DMARCbis refines and clarifies existing DMARC behavior rather than replacing it wholesale. It uses the same record format (<code>v=DMARC1</code>), the same authentication model (SPF + DKIM + alignment), and existing DMARC records continue to work without modification. The most significant refinement is in how organizational domains are discovered — moving from the Public Suffix List to a DNS-based tree walk method.</p>
@@ -95,6 +95,18 @@
                     <li>Organizational domain boundaries depended entirely on the Public Suffix List, a manually-maintained external file that different receivers updated on different schedules</li>
                 </ul>
                 <p>Records that relied on lenient parsing or deprecated features will need attention as receivers adopt the stricter rules.</p>
+            </div>
+
+            <!-- Section: Three-Document Split -->
+            <div class="dbis-section" id="document-split">
+                <h2>Three-Document Split</h2>
+                <p>RFC 7489 defined DMARC as a single document covering the core protocol, aggregate reporting, and failure reporting. DMARCbis splits the specification into three separate RFCs:</p>
+                <ul>
+                    <li><strong>Core specification</strong> (draft-ietf-dmarc-dmarcbis) — protocol mechanics, policy discovery, and identifier alignment</li>
+                    <li><strong>Aggregate reporting</strong> (draft-ietf-dmarc-aggregate-reporting) — <code>rua=</code> report format and delivery</li>
+                    <li><strong>Failure reporting</strong> (draft-ietf-dmarc-failure-reporting) — <code>ruf=</code> forensic report format and delivery</li>
+                </ul>
+                <p>Separating concerns allows each specification to be updated independently. It also makes implementation clearer for different audiences: domain owners primarily need the core spec, while report processors can focus on the reporting documents without tracking unrelated protocol changes.</p>
             </div>
 
             <!-- Section: Why DMARCbis? -->
@@ -284,6 +296,24 @@
                             <tr><td>np</td><td>New</td><td>Policy for non-existent subdomains</td></tr>
                             <tr><td>psd</td><td>New</td><td>Public suffix domain declaration, replaces PSL reliance</td></tr>
                             <tr><td>t</td><td>New</td><td>Binary testing flag (t=y or t=n), replaces pct</td></tr>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+
+            <!-- Section: Terminology Updates -->
+            <div class="dbis-section" id="terminology">
+                <h2>Terminology Updates</h2>
+                <p>DMARCbis introduces clearer terminology for concepts that were informally described in RFC 7489:</p>
+                <div class="dbis-table-wrap">
+                    <table class="dbis-table">
+                        <thead>
+                            <tr><th>DMARCbis Term</th><th>Replaces / Clarifies</th><th>Meaning</th></tr>
+                        </thead>
+                        <tbody>
+                            <tr><td>Report Consumer</td><td>Report receiver</td><td>The entity that processes DMARC aggregate or failure reports</td></tr>
+                            <tr><td>Monitoring Mode</td><td>p=none</td><td>Policy is set to <code>none</code> — receivers observe and report, but do not alter mail handling</td></tr>
+                            <tr><td>Enforcement</td><td>p=quarantine or p=reject</td><td>Policy instructs receivers to quarantine or reject messages that fail DMARC evaluation</td></tr>
                         </tbody>
                     </table>
                 </div>
