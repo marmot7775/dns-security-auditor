@@ -7,16 +7,17 @@
     <meta name="description" content="Free DNS and email security auditing. Check your domain's DMARC, SPF, DKIM, MTA-STS, TLS-RPT, BIMI, DNSSEC, CAA, and more. Get a security grade and detailed findings.">
     <meta name="keywords" content="DNS audit, DMARC check, SPF validator, DKIM checker, email security, MTA-STS, BIMI, DNSSEC, domain security">
     <meta name="author" content="Neil Anuskiewicz">
-    <meta property="og:title" content="DNS Security Auditor | dns-audit.com">
-    <meta property="og:description" content="Free DNS and email security audit. Check DMARC, SPF, DKIM, MTA-STS, DNSSEC, and more.">
-    <meta property="og:type" content="website">
-    <meta property="og:url" content="https://dns-audit.com">
-    <meta property="og:image" content="https://dns-audit.com/static/og-image.png">
+    <meta property="og:type" content="website" />
+    <meta property="og:site_name" content="dns-audit.com" />
+    <meta property="og:url" content="https://dns-audit.com/" />
+    <meta property="og:title" content="DNS Security Auditor | dns-audit.com" />
+    <meta property="og:description" content="Free DNS and email security audit. Check DMARC, SPF, DKIM, MTA-STS, DNSSEC, and more." />
+    <meta property="og:image" content="https://dns-audit.com/static/og-image.png" />
     <meta name="twitter:card" content="summary_large_image">
     <meta name="twitter:image" content="https://dns-audit.com/static/og-image.png">
     <meta name="twitter:title" content="DNS Security Auditor | dns-audit.com">
     <meta name="twitter:description" content="Free DNS and email security audit. Check DMARC, SPF, DKIM, MTA-STS, DNSSEC, and more.">
-    <link rel="canonical" href="https://dns-audit.com">
+    <link rel="canonical" href="https://dns-audit.com/" />
     <link rel="icon" type="image/svg+xml" href="/static/favicon.svg">
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -41,6 +42,30 @@
             "name": "Neil Anuskiewicz",
             "url": "https://www.linkedin.com/in/neilanuskiewicz/"
         }
+    }
+    </script>
+    <script type="application/ld+json">
+    {
+        "@context": "https://schema.org",
+        "@type": "FAQPage",
+        "mainEntity": [
+            {
+                "@type": "Question",
+                "name": "What does dns-audit.com do?",
+                "acceptedAnswer": {
+                    "@type": "Answer",
+                    "text": "dns-audit.com is a free DNS security auditing tool that scans any domain for DMARC, SPF, DKIM, MTA-STS, TLS-RPT, DANE, DNSSEC, CAA, and BIMI configuration. It generates a 100-point security score with letter grade and provides a detailed PDF report with specific remediation guidance."
+                }
+            },
+            {
+                "@type": "Question",
+                "name": "What protocols does dns-audit.com check?",
+                "acceptedAnswer": {
+                    "@type": "Answer",
+                    "text": "dns-audit.com evaluates nine email security and DNS protocols: DMARC (domain policy), SPF (sender authorization), DKIM (message signing), MTA-STS (transport encryption), TLS-RPT (TLS failure reporting), DANE (certificate pinning via DNSSEC), DNSSEC (DNS integrity), CAA (certificate authority restrictions), and BIMI (brand indicators)."
+                }
+            }
+        ]
     }
     </script>
 </head>
@@ -69,7 +94,7 @@
         <section class="audit-input-section">
             <div class="audit-input-card">
                 <h1 class="audit-title">DNS &amp; Email Security Audit</h1>
-                <p class="audit-subtitle">Analysis of your email authentication and DNS security configuration.</p>
+                <p class="audit-subtitle">Analysis of your email authentication and DNS security configuration. <a href="/dmarcbis" style="color:var(--primary-light);font-weight:500">Check your domain's DMARCbis readiness</a>.</p>
 
                 <!-- Scope Selector -->
                 <div class="scope-selector" id="scope-selector" role="radiogroup" aria-label="Audit scope selection">
