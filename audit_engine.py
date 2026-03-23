@@ -20,6 +20,7 @@ log = logging.getLogger(__name__)
 # Per-check timeout in seconds (prevents hung DNS queries from blocking the audit)
 CHECK_TIMEOUT = 15
 
+import ipaddress
 import dns.resolver
 import dns.flags
 import dns.exception
@@ -28,6 +29,15 @@ import dns.query
 import dns.rdatatype
 import dns.dnssec
 import dns.name
+
+
+def _is_private_ip(ip_str: str) -> bool:
+    """Check if an IP address is private/loopback/reserved."""
+    try:
+        addr = ipaddress.ip_address(ip_str)
+        return addr.is_private or addr.is_loopback or addr.is_reserved or addr.is_link_local
+    except ValueError:
+        return True  # Reject unparseable IPs
 
 from checks_extra import check_mta_sts, check_tls_rpt, check_bimi
 from mx_check import check_mx
@@ -2183,6 +2193,8 @@ def _raw_check_dnssec(domain: str) -> Dict[str, Any]:
                     for ns_ip in parent_ns_ips[:4]:
                         if ds_found:
                             break
+                        if _is_private_ip(ns_ip):
+                            continue
                         try:
                             response = dns.query.udp(ds_query, ns_ip, timeout=8.0)
                             # Check for DS records in the answer section
@@ -2200,6 +2212,8 @@ def _raw_check_dnssec(domain: str) -> Dict[str, Any]:
                         for ns_ip in parent_ns_ips[:2]:
                             if ds_found:
                                 break
+                            if _is_private_ip(ns_ip):
+                                continue
                             try:
                                 response = dns.query.tcp(ds_query, ns_ip, timeout=10.0)
                                 for rrset in response.answer:
@@ -2579,7 +2593,7 @@ def _raw_check_nameservers(domain: str) -> Dict[str, Any]:
             continue
         # Use first IPv4 address for the query
         ns_ip = ns_info["ipv4"][0] if ns_info["ipv4"] else (ns_info["ipv6"][0] if ns_info["ipv6"] else None)
-        if not ns_ip:
+        if not ns_ip or _is_private_ip(ns_ip):
             continue
         try:
             soa_query = dns.message.make_query(domain, dns.rdatatype.SOA)

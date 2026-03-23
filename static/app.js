@@ -110,9 +110,13 @@ document.addEventListener('DOMContentLoaded', () => {
         });
     }
     if (domain) {
-        domainInput.value = domain;
-        runAudit(domain);
-    } else {
+        const normalized = normalizeDomain(domain);
+        const DOMAIN_RE_URL = /^(?!-)[A-Za-z0-9-]{1,63}(?<!-)(\.(?!-)[A-Za-z0-9-]{1,63}(?<!-))*\.[A-Za-z]{2,}$/;
+        if (DOMAIN_RE_URL.test(normalized)) {
+            domainInput.value = normalized;
+            runAudit(normalized);
+        }
+    } else if (!domain) {
         // Ensure focus after all DOM mutations complete
         requestAnimationFrame(() => domainInput.focus());
     }
@@ -591,7 +595,7 @@ function renderResults(data) {
         const levelClass = levelColors[res.level] || 'info';
 
         document.getElementById('resilience-summary').innerHTML = `
-            <span class="resilience-level resilience-${levelClass}">${res.level.toUpperCase()}</span>
+            <span class="resilience-level resilience-${levelClass}">${escapeHtml(res.level.toUpperCase())}</span>
             <span class="resilience-text">${escapeHtml(res.summary)}</span>
         `;
 
@@ -1425,7 +1429,7 @@ function renderAttackSurface(as) {
     const statusIcons = { protected: '&#9632;', partial: '&#9650;', exposed: '&#9679;' };
 
     // Overall score
-    const overallClass = `as-overall-${as.overall.color}`;
+    const overallClass = `as-overall-${safeClass(as.overall.color)}`;
 
     // Vectors
     let vectorsHtml = '';
@@ -1433,10 +1437,10 @@ function renderAttackSurface(as) {
         const statusLabel = statusLabels[v.status] || v.status;
         const icon = statusIcons[v.status] || '';
         vectorsHtml += `
-            <div class="as-vector as-vector-${v.color}">
+            <div class="as-vector as-vector-${safeClass(v.color)}">
                 <div class="as-vector-header">
                     <span class="as-vector-name">${escapeHtml(v.name)}</span>
-                    <span class="as-vector-badge as-badge-${v.color}">${icon} ${escapeHtml(statusLabel)}</span>
+                    <span class="as-vector-badge as-badge-${safeClass(v.color)}">${icon} ${escapeHtml(statusLabel)}</span>
                 </div>
                 <div class="as-vector-summary">${escapeHtml(v.summary)}</div>
                 <div class="as-vector-detail">${escapeHtml(v.detail)}</div>
@@ -1496,7 +1500,7 @@ function renderSubdomainAudit(sa) {
         const dmarcText = s.exists ? (s.has_own_dmarc ? 'Yes' : 'No') : '\u2014';
 
         rowsHtml += `
-            <tr class="sua-row sua-row-${s.color}">
+            <tr class="sua-row sua-row-${safeClass(s.color)}">
                 <td class="sua-cell-sub">
                     <span class="sua-sub-name">${escapeHtml(s.subdomain)}</span>
                 </td>
@@ -1821,7 +1825,7 @@ function renderDmarcTagBreakdown(bd) {
                 body += '<div class="wd-scale">';
                 sec.verdict_scale.forEach(v => {
                     const active = v.status === sec.current_verdict ? ' wd-scale-active' : '';
-                    body += `<span class="wd-scale-item wd-scale-${v.color}${active}">${escapeHtml(v.label)}</span>`;
+                    body += `<span class="wd-scale-item wd-scale-${safeClass(v.color)}${active}">${escapeHtml(v.label)}</span>`;
                 });
                 body += '</div>';
             }
@@ -2435,12 +2439,12 @@ function renderExecutiveSummary(es) {
 
         <div class="es-metrics">
             <div class="es-metric">
-                <div class="es-metric-value es-color-${sp.color}">${escapeHtml(sp.label)}</div>
+                <div class="es-metric-value es-color-${safeClass(sp.color)}">${escapeHtml(sp.label)}</div>
                 <div class="es-metric-label">Spoofing Protection</div>
                 <div class="es-metric-detail">${escapeHtml(sp.detail)}</div>
             </div>
             <div class="es-metric">
-                <div class="es-metric-value es-color-${dr.color}">${escapeHtml(dr.label)}</div>
+                <div class="es-metric-value es-color-${safeClass(dr.color)}">${escapeHtml(dr.label)}</div>
                 <div class="es-metric-label">DMARCbis Readiness</div>
             </div>
             <div class="es-metric">
@@ -2523,7 +2527,7 @@ function renderDkimKeyAnalysis(dk) {
 
     let keysHtml = '';
     dk.keys.forEach(k => {
-        const ratingClass = `dk-rating-${k.rating}`;
+        const ratingClass = `dk-rating-${safeClass(k.rating)}`;
         const providerBadge = k.provider ? `<span class="spfd-provider">${escapeHtml(k.provider)}</span>` : '';
 
         let tagsHtml = '';
@@ -2543,7 +2547,7 @@ function renderDkimKeyAnalysis(dk) {
                     <code class="dk-selector">${escapeHtml(k.selector)}</code>
                     <span class="dk-key-info">${k.bits > 0 ? k.bits + '-bit ' : ''}${escapeHtml(k.key_type)}</span>
                     ${providerBadge}
-                    <span class="as-vector-badge as-badge-${k.rating}">${escapeHtml(k.rating_label.split('.')[0])}</span>
+                    <span class="as-vector-badge as-badge-${safeClass(k.rating)}">${escapeHtml(k.rating_label.split('.')[0])}</span>
                 </div>
                 <div class="dk-key-detail">${escapeHtml(k.rating_label)}</div>
                 ${tagsHtml}
@@ -3247,6 +3251,12 @@ function escapeHtml(text) {
     return div.innerHTML;
 }
 
+/** Sanitize a server value for use in a CSS class name. Only allows [a-z0-9-]. */
+function safeClass(value) {
+    if (!value) return 'default';
+    return String(value).toLowerCase().replace(/[^a-z0-9-]/g, '') || 'default';
+}
+
 /**
  * Sanitize trusted HTML from the backend (fix/explanation fields).
  * Only allows a whitelist of safe tags; strips everything else.
@@ -3281,6 +3291,9 @@ function sanitizeHtml(html) {
                         if (href && !/^https?:\/\//i.test(href)) {
                             child.removeAttribute('href');
                         }
+                        // Force safe link behavior
+                        child.setAttribute('rel', 'noopener noreferrer');
+                        child.setAttribute('target', '_blank');
                     }
                     clean(child);
                 }

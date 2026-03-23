@@ -10,6 +10,7 @@ uvicorn[standard]==0.40.0
 python-dateutil==2.9.0.post0
 requests==2.32.5
 fpdf2==2.8.7
+defusedxml==0.7.1
 
 # Optional: DNSSEC RRSIG signature verification
 # cryptography>=42.0.0

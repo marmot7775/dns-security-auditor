@@ -110,8 +110,8 @@ app = FastAPI(
         "Checks DMARC, SPF, DKIM, MX, MTA-STS, TLS-RPT, BIMI, DNSSEC, CAA, DANE, Nameservers, Certificate Transparency, and Blocklist."
     ),
     version="2.0.0",
-    docs_url="/docs",
-    redoc_url="/redoc",
+    docs_url=None,
+    redoc_url=None,
 )
 
 app.add_middleware(
@@ -119,8 +119,6 @@ app.add_middleware(
     allow_origins=[
         "https://dns-audit.com",
         "https://www.dns-audit.com",
-        "http://localhost:8000",
-        "http://127.0.0.1:8000",
     ],
     allow_methods=["GET", "POST"],
     allow_headers=["Content-Type", "Accept"],
@@ -170,21 +168,32 @@ _rate_limits: dict = defaultdict(list)
 _rate_lock = threading.Lock()
 RATE_LIMIT_MAX = 10       # max requests
 RATE_LIMIT_WINDOW = 60    # per 60 seconds
+_RATE_LIMIT_MAX_IPS = 10000  # cap dict size to prevent memory exhaustion
 
 # DKIM selector validation (DNS label characters only)
 SELECTOR_PATTERN = re.compile(r'^[A-Za-z0-9._-]{1,63}$')
 
+# Cap concurrent audit threads to prevent DoS via SSE connection flooding
+_active_audits = 0
+_active_audits_lock = threading.Lock()
+_MAX_CONCURRENT_AUDITS = 8
+
 
 def _get_client_ip(request: Request) -> str:
-    """Get real client IP behind Cloudflare/reverse proxy."""
-    # Cloudflare sets CF-Connecting-IP to the real visitor IP
-    cf_ip = request.headers.get("CF-Connecting-IP")
-    if cf_ip:
-        return cf_ip.strip()
-    # Standard proxy header (first IP in chain is the client)
-    xff = request.headers.get("X-Forwarded-For")
-    if xff:
-        return xff.split(",")[0].strip()
+    """Get real client IP behind nginx reverse proxy.
+
+    Trust chain: Client -> Cloudflare -> nginx -> uvicorn
+    nginx sets X-Real-IP from the connecting Cloudflare edge IP's
+    CF-Connecting-IP header. We only trust X-Real-IP because nginx
+    is the only thing that can reach uvicorn (bound to 127.0.0.1).
+    Client-sent headers like CF-Connecting-IP and X-Forwarded-For
+    are NOT trusted directly (trivially spoofable for rate limit bypass).
+    """
+    # X-Real-IP is set by nginx from the trusted upstream connection
+    real_ip = request.headers.get("X-Real-IP")
+    if real_ip:
+        return real_ip.strip()
+    # Fallback: direct connection IP (should be 127.0.0.1 in production)
     return request.client.host if request.client else "unknown"
 
 
@@ -192,6 +201,20 @@ def _check_rate_limit(client_ip: str) -> bool:
     """Return True if the request is allowed, False if rate-limited."""
     now = time.time()
     with _rate_lock:
+        # Evict stale entries if dict grows too large
+        if len(_rate_limits) > _RATE_LIMIT_MAX_IPS:
+            stale = [
+                ip for ip, ts_list in _rate_limits.items()
+                if not ts_list or now - ts_list[-1] > RATE_LIMIT_WINDOW
+            ]
+            for ip in stale:
+                _rate_limits.pop(ip, None)
+            # If still too large, drop oldest half
+            if len(_rate_limits) > _RATE_LIMIT_MAX_IPS:
+                to_drop = list(_rate_limits.keys())[:len(_rate_limits) // 2]
+                for ip in to_drop:
+                    _rate_limits.pop(ip, None)
+
         # Prune old timestamps
         timestamps = [
             ts for ts in _rate_limits[client_ip]
@@ -373,7 +396,6 @@ async def audit_domain(
     domain: str = Query(..., description="Domain to audit (e.g., example.com)"),
     selector: Optional[str] = Query(None, description="DKIM selector (e.g., google, s1)"),
     scope: Optional[str] = Query(None, description="Audit scope: complete, email_full, dmarc, transport, dns_infra, security_scan"),
-    nocache: bool = Query(False, description="Bypass cache"),
 ):
     """
     Run a comprehensive DNS and email security audit.
@@ -401,12 +423,11 @@ async def audit_domain(
 
     cache_key = f"{domain}:{selector or ''}:{scope or 'complete'}"
 
-    # Check cache
-    if not nocache:
-        cached = _get_cached(cache_key)
-        if cached:
-            log.info("Cache hit: %s", domain)
-            return JSONResponse(content=cached)
+    # Check cache (always; nocache removed from public API to prevent abuse)
+    cached = _get_cached(cache_key)
+    if cached:
+        log.info("Cache hit: %s", domain)
+        return JSONResponse(content=cached)
 
     # Pre-flight DNS check
     preflight_err = _preflight_dns_check(domain)
@@ -456,13 +477,11 @@ async def audit_stream(
     domain: str = Query(..., description="Domain to audit"),
     selector: Optional[str] = Query(None, description="DKIM selector"),
     scope: Optional[str] = Query(None, description="Audit scope"),
-    nocache: bool = Query(False, description="Bypass cache"),
 ):
     """Stream audit progress via Server-Sent Events."""
     # Rate limiting
     client_ip = _get_client_ip(request)
     if not _check_rate_limit(client_ip):
-        # SSE can't return 429 cleanly, so stream an error event
         async def _rate_error():
             yield f"data: {json.dumps({'error': 'Rate limit exceeded. Please wait a minute before trying again.'})}\n\n"
         return StreamingResponse(_rate_error(), media_type="text/event-stream")
@@ -473,16 +492,23 @@ async def audit_stream(
         raise HTTPException(status_code=400, detail="Invalid DKIM selector")
     log.info("SSE audit requested: %s (scope=%s, ip=%s)", domain, scope or "complete", client_ip)
 
+    # Reject if too many concurrent audits (DoS protection)
+    global _active_audits
+    with _active_audits_lock:
+        if _active_audits >= _MAX_CONCURRENT_AUDITS:
+            async def _busy_error():
+                yield f"data: {json.dumps({'error': 'Server is busy. Please try again in a moment.'})}\n\n"
+            return StreamingResponse(_busy_error(), media_type="text/event-stream")
+
     cache_key = f"{domain}:{selector or ''}:{scope or 'complete'}"
 
     # Check cache -- if cached, send result immediately
-    if not nocache:
-        cached = _get_cached(cache_key)
-        if cached:
-            log.info("SSE cache hit: %s", domain)
-            async def _cached_stream():
-                yield f"data: {json.dumps({'done': True, 'result': cached, 'cached': True})}\n\n"
-            return StreamingResponse(_cached_stream(), media_type="text/event-stream")
+    cached = _get_cached(cache_key)
+    if cached:
+        log.info("SSE cache hit: %s", domain)
+        async def _cached_stream():
+            yield f"data: {json.dumps({'done': True, 'result': cached, 'cached': True})}\n\n"
+        return StreamingResponse(_cached_stream(), media_type="text/event-stream")
 
     # Pre-flight DNS check
     preflight_err = _preflight_dns_check(domain)
@@ -494,8 +520,11 @@ async def audit_stream(
 
     # Run audit in a background thread, streaming progress via a queue
     progress_q: queue.Queue = queue.Queue()
+    cancel_event = threading.Event()
 
     def _progress_callback(step_name, completed, total):
+        if cancel_event.is_set():
+            raise InterruptedError("Audit cancelled: client disconnected")
         progress_pct = int((completed / total) * 100) if total else 0
         progress_q.put({
             "step": step_name,
@@ -505,10 +534,16 @@ async def audit_stream(
         })
 
     def _run_audit():
+        global _active_audits
+        with _active_audits_lock:
+            _active_audits += 1
         try:
             result = run_full_audit(domain, dkim_selector=selector, scope=scope,
                                     progress_callback=_progress_callback)
             progress_q.put({"_done": True, "_result": result})
+        except InterruptedError:
+            log.info("SSE audit cancelled (client disconnect): %s", domain)
+            progress_q.put({"_done": True, "_result": {"error": "cancelled"}})
         except Exception as e:
             log.error("SSE audit failed for %s: %s", domain, str(e)[:200], exc_info=True)
             error_result = {
@@ -522,6 +557,9 @@ async def audit_stream(
                 "error_message": "Audit could not complete. Please try again.",
             }
             progress_q.put({"_done": True, "_result": error_result})
+        finally:
+            with _active_audits_lock:
+                _active_audits -= 1
 
     sse_start_time = time.time()
     audit_thread = threading.Thread(target=_run_audit, daemon=True)
@@ -529,32 +567,36 @@ async def audit_stream(
 
     async def _event_stream():
         loop = asyncio.get_running_loop()
-        while True:
-            try:
-                msg = await loop.run_in_executor(None, lambda: progress_q.get(timeout=0.2))
-            except queue.Empty:
-                # Check if client disconnected
-                if await request.is_disconnected():
-                    log.info("SSE client disconnected: %s", domain)
-                    return
-                continue
+        try:
+            while True:
+                try:
+                    msg = await loop.run_in_executor(None, lambda: progress_q.get(timeout=0.2))
+                except queue.Empty:
+                    # Check if client disconnected
+                    if await request.is_disconnected():
+                        log.info("SSE client disconnected: %s", domain)
+                        cancel_event.set()  # Signal audit thread to stop
+                        return
+                    continue
 
-            if "_done" in msg:
-                result = msg["_result"]
-                # Skip caching errors -- they may be transient
-                if "error" not in result:
-                    _set_cached(cache_key, result)
-                elapsed = round(time.time() - sse_start_time, 2)
-                log.info("SSE audit complete: %s -- %.2fs, grade=%s",
-                         domain, elapsed, result.get("score", {}).get("grade", "?"))
-                # Audit log (GDPR-safe)
-                _log_audit(request, domain, scope,
-                           result.get("score", {}).get("grade", "?"),
-                           elapsed, len(result.get("checks", [])), source="sse")
-                yield f"data: {json.dumps({'done': True, 'result': result})}\n\n"
-                return
-            else:
-                yield f"data: {json.dumps(msg)}\n\n"
+                if "_done" in msg:
+                    result = msg["_result"]
+                    # Skip caching errors -- they may be transient
+                    if "error" not in result:
+                        _set_cached(cache_key, result)
+                    elapsed = round(time.time() - sse_start_time, 2)
+                    log.info("SSE audit complete: %s -- %.2fs, grade=%s",
+                             domain, elapsed, result.get("score", {}).get("grade", "?"))
+                    # Audit log (GDPR-safe)
+                    _log_audit(request, domain, scope,
+                               result.get("score", {}).get("grade", "?"),
+                               elapsed, len(result.get("checks", [])), source="sse")
+                    yield f"data: {json.dumps({'done': True, 'result': result})}\n\n"
+                    return
+                else:
+                    yield f"data: {json.dumps(msg)}\n\n"
+        finally:
+            cancel_event.set()  # Ensure thread stops if generator exits for any reason
 
     return StreamingResponse(
         _event_stream(),
@@ -653,16 +695,7 @@ async def audit_pdf(
 @app.get("/api/health", tags=["System"])
 async def health():
     """Health check endpoint for monitoring."""
-    return {
-        "status": "ok",
-        "version": "2.0.0",
-        "cache_size": len(_cache),
-        "checks": [
-            "DMARC", "SPF", "DKIM", "MX", "MTA-STS",
-            "TLS-RPT", "BIMI", "DNSSEC", "CAA", "DANE",
-            "Nameservers", "Certificate Transparency", "Blocklist",
-        ],
-    }
+    return {"status": "ok"}
 
 
 # ============================================================
