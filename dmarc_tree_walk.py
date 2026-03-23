@@ -42,7 +42,7 @@ def _query_dmarc(domain: str) -> Optional[str]:
         answers = dns.resolver.resolve(target, "TXT")
         dmarc_records = []
         for rdata in answers:
-            txt = " ".join(
+            txt = "".join(
                 s.decode() if isinstance(s, bytes) else s for s in rdata.strings
             )
             if txt.strip().lower().startswith("v=dmarc1"):

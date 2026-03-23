@@ -68,8 +68,10 @@ class AdvancedVendorFingerprinter:
         try:
             answers = dns.resolver.resolve(self.domain, 'TXT')
             for rdata in answers:
-                txt = b" ".join(rdata.strings).decode("utf-8", errors="replace")
+                txt = b"".join(rdata.strings).decode("utf-8", errors="replace")
                 if txt.startswith('v=spf1'):
+                    from spf_recursive import repair_spf_missing_spaces
+                    txt, _ = repair_spf_missing_spaces(txt)
                     # Extract includes
                     includes = re.findall(r'include:([^\s]+)', txt)
                     
@@ -129,7 +131,7 @@ class AdvancedVendorFingerprinter:
         try:
             answers = dns.resolver.resolve(f'_dmarc.{self.domain}', 'TXT')
             for rdata in answers:
-                record = b" ".join(rdata.strings).decode("utf-8", errors="replace")
+                record = b"".join(rdata.strings).decode("utf-8", errors="replace")
                 
                 # Policy analysis
                 policy_match = re.search(r'p=([^;]+)', record)
@@ -169,7 +171,7 @@ class AdvancedVendorFingerprinter:
         try:
             answers = dns.resolver.resolve(f'_smtp._tls.{self.domain}', 'TXT')
             for rdata in answers:
-                record = b" ".join(rdata.strings).decode("utf-8", errors="replace")
+                record = b"".join(rdata.strings).decode("utf-8", errors="replace")
                 rua_match = re.search(r'rua=mailto:([^;,\s]+)', record)
                 if rua_match:
                     rua_email = rua_match.group(1)
@@ -214,7 +216,7 @@ class AdvancedVendorFingerprinter:
         try:
             answers = dns.resolver.resolve(f'default._bimi.{self.domain}', 'TXT')
             for rdata in answers:
-                record = b" ".join(rdata.strings).decode("utf-8", errors="replace")
+                record = b"".join(rdata.strings).decode("utf-8", errors="replace")
                 if 'v=BIMI1' in record:
                     self.signals.append({
                         'technique': 'BIMI',
