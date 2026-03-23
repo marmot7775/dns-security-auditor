@@ -4,18 +4,19 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>DMARCbis Explained | dns-audit.com</title>
-    <meta name="description" content="DMARCbis has been approved by the IESG and is in the RFC Editor Queue for publication as a Proposed Standard in 2026. Learn what's changing in domain discovery, subdomain protection, and tag updates.">
+    <meta name="description" content="DMARCbis (draft-ietf-dmarc-dmarcbis) is the IESG-approved successor to DMARC RFC 7489. Learn about the DNS tree walk, new tags (np, psd, t), deprecated tags, and how to prepare.">
     <meta name="keywords" content="DMARCbis, DMARC, email authentication, RFC 7489, DNS tree walk, np tag, psd tag, email security standard">
     <meta name="author" content="Neil Anuskiewicz">
-    <meta property="og:title" content="DMARCbis Explained | dns-audit.com">
-    <meta property="og:description" content="DMARCbis has been approved by the IESG and is in the RFC Editor Queue for publication as a Proposed Standard in 2026. Learn what's changing in domain discovery, subdomain protection, and tag updates.">
-    <meta property="og:type" content="article">
-    <meta property="og:url" content="https://dns-audit.com/dmarcbis">
-    <meta property="og:image" content="https://dns-audit.com/static/og-image.png">
-    <meta name="twitter:card" content="summary_large_image">
-    <meta name="twitter:image" content="https://dns-audit.com/static/og-image.png">
-    <meta name="twitter:title" content="DMARCbis Explained | dns-audit.com">
-    <meta name="twitter:description" content="DMARCbis has been approved by the IESG and is in the RFC Editor Queue for publication as a Proposed Standard in 2026. Learn what's changing in domain discovery, subdomain protection, and tag updates.">
+    <meta property="og:type" content="website" />
+    <meta property="og:site_name" content="dns-audit.com" />
+    <meta property="og:url" content="https://dns-audit.com/dmarcbis" />
+    <meta property="og:title" content="DMARCbis Explained | dns-audit.com" />
+    <meta property="og:description" content="DMARCbis (draft-ietf-dmarc-dmarcbis) is the IESG-approved successor to DMARC RFC 7489. Learn about the DNS tree walk, new tags (np, psd, t), deprecated tags, and how to prepare." />
+    <meta property="og:image" content="https://dns-audit.com/static/og-image.png" />
+    <meta name="twitter:card" content="summary_large_image" />
+    <meta name="twitter:image" content="https://dns-audit.com/static/og-image.png" />
+    <meta name="twitter:title" content="DMARCbis Explained | dns-audit.com" />
+    <meta name="twitter:description" content="DMARCbis (draft-ietf-dmarc-dmarcbis) is the IESG-approved successor to DMARC RFC 7489. Learn about the DNS tree walk, new tags (np, psd, t), deprecated tags, and how to prepare." />
     <link rel="canonical" href="https://dns-audit.com/dmarcbis">
     <link rel="icon" type="image/svg+xml" href="/static/favicon.svg">
     <link rel="preconnect" href="https://fonts.googleapis.com">
@@ -25,9 +26,13 @@
     <script type="application/ld+json">
     {
         "@context": "https://schema.org",
-        "@type": "Article",
+        "@type": "TechArticle",
         "headline": "DMARCbis Explained: What's Changing in Email Authentication",
-        "description": "DMARCbis is an upcoming revision to DMARC that refines domain discovery, adds subdomain protections, and updates tag handling.",
+        "description": "DMARCbis replaces RFC 7489 with stricter parsing, new subdomain protections, and a DNS-native discovery mechanism.",
+        "datePublished": "2025-06-01",
+        "dateModified": "2026-03-22",
+        "proficiencyLevel": "Intermediate",
+        "dependencies": "Basic understanding of DMARC, SPF, and DKIM",
         "author": {
             "@type": "Person",
             "name": "Neil Anuskiewicz",
@@ -38,7 +43,67 @@
             "name": "dns-audit.com",
             "url": "https://dns-audit.com"
         },
-        "mainEntityOfPage": "https://dns-audit.com/dmarcbis"
+        "mainEntityOfPage": "https://dns-audit.com/dmarcbis",
+        "speakable": {
+            "@type": "SpeakableSpecification",
+            "cssSelector": ["h1", ".faq-answer", ".key-takeaways"]
+        }
+    }
+    </script>
+    <script type="application/ld+json">
+    {
+        "@context": "https://schema.org",
+        "@type": "FAQPage",
+        "mainEntity": [
+            {
+                "@type": "Question",
+                "name": "What is DMARCbis?",
+                "acceptedAnswer": {
+                    "@type": "Answer",
+                    "text": "DMARCbis is the IESG-approved revision of DMARC that upgrades RFC 7489 from Informational to Standards Track status. It replaces Public Suffix List dependency with DNS-based tree walk discovery, adds new tags (np, psd, t), and deprecates unreliable tags (pct, rf, ri)."
+                }
+            },
+            {
+                "@type": "Question",
+                "name": "What is the DNS tree walk in DMARCbis?",
+                "acceptedAnswer": {
+                    "@type": "Answer",
+                    "text": "The DNS tree walk is DMARCbis's method for discovering DMARC policy by querying DNS from the specific subdomain upward through the hierarchy. For example, for mail.sales.eu.example.com, it queries _dmarc.mail.sales.eu.example.com, then _dmarc.sales.eu.example.com, then _dmarc.eu.example.com, then _dmarc.example.com, stopping when a record is found or after a maximum of 9 queries."
+                }
+            },
+            {
+                "@type": "Question",
+                "name": "What tags does DMARCbis deprecate?",
+                "acceptedAnswer": {
+                    "@type": "Answer",
+                    "text": "DMARCbis deprecates three tags: pct (percentage sampling, replaced by the binary t= flag), rf (report format, only afrf was ever implemented), and ri (report interval, receivers rarely respected custom intervals)."
+                }
+            },
+            {
+                "@type": "Question",
+                "name": "What new tags does DMARCbis introduce?",
+                "acceptedAnswer": {
+                    "@type": "Answer",
+                    "text": "DMARCbis introduces three new tags: np= (policy for non-existent subdomains, with values none/quarantine/reject), psd= (declares whether a domain is a public suffix with values y/n/u), and t= (binary test mode flag replacing the unreliable pct= tag)."
+                }
+            },
+            {
+                "@type": "Question",
+                "name": "Do I need to update my DMARC record for DMARCbis?",
+                "acceptedAnswer": {
+                    "@type": "Answer",
+                    "text": "No immediate action is required. Existing DMARC records (v=DMARC1) continue to work without modification. To prepare, remove deprecated tags (pct, rf, ri), consider adding np=reject if enforcing p=reject, add psd=n to declare non-public-suffix status, and verify rua/ruf URIs include the mailto: prefix."
+                }
+            },
+            {
+                "@type": "Question",
+                "name": "When will DMARCbis be published?",
+                "acceptedAnswer": {
+                    "@type": "Answer",
+                    "text": "DMARCbis (draft-ietf-dmarc-dmarcbis, version 41) was approved by the IESG and is in the RFC Editor Queue as of 2025. It is expected to be published as a Proposed Standard RFC in 2026."
+                }
+            }
+        ]
     }
     </script>
 </head>
@@ -450,7 +515,7 @@
             </div>
 
             <!-- Section 6: What This Means for Your Domain -->
-            <div class="dbis-section" id="what-this-means">
+            <div class="dbis-section key-takeaways" id="what-this-means">
                 <h2>What This Means for Your Domain</h2>
                 <p>The changes in DMARCbis are backward-compatible. Your existing DMARC record with <code>v=DMARC1</code> will continue to work. But there are things worth reviewing, and what matters depends on your specific configuration.</p>
                 <p>The simplest approach: run an audit on your domain. The results include a DMARCbis readiness assessment that checks your record against the updated specification and flags exactly what applies to you.</p>
@@ -464,6 +529,7 @@
                     <li>Confirm that all <code>rua=</code> and <code>ruf=</code> URIs include the <code>mailto:</code> prefix — bare email addresses are no longer accepted</li>
                 </ul>
                 <p>A word of caution on <code>np=</code>: this tag applies to all non-existent subdomains. If you use services that send email from dynamically created subdomains, or if marketing teams spin up campaign-specific subdomains without creating DNS records first, an <code>np=reject</code> policy will cause that mail to fail DMARC. Audit your sending infrastructure before adding this tag.</p>
+                <p><a href="/">Test your domain's current DMARC configuration</a> to see where you stand, or review the <a href="/methodology">scoring methodology</a> for details on how each protocol is evaluated.</p>
                 <p>An example of a DMARCbis-compliant record:</p>
                 <p><code>v=DMARC1; p=reject; sp=reject; np=reject; psd=n; fo=1; rua=mailto:dmarc@yourdomain.com</code></p>
             </div>

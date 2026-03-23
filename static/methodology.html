@@ -7,6 +7,17 @@
     <title>Methodology | dns-audit.com</title>
     <meta name="description"
         content="How dns-audit.com works: DNS query methodology, security checks, scoring model, standards references, and limitations.">
+    <meta property="og:type" content="website" />
+    <meta property="og:site_name" content="dns-audit.com" />
+    <meta property="og:url" content="https://dns-audit.com/methodology" />
+    <meta property="og:title" content="Methodology | dns-audit.com" />
+    <meta property="og:description" content="How dns-audit.com works: DNS query methodology, security checks, scoring model, standards references, and limitations." />
+    <meta property="og:image" content="https://dns-audit.com/static/og-image.png" />
+    <meta name="twitter:card" content="summary_large_image" />
+    <meta name="twitter:title" content="Methodology | dns-audit.com" />
+    <meta name="twitter:description" content="How dns-audit.com works: DNS query methodology, security checks, scoring model, standards references, and limitations." />
+    <meta name="twitter:image" content="https://dns-audit.com/static/og-image.png" />
+    <link rel="canonical" href="https://dns-audit.com/methodology" />
     <link rel="icon" type="image/svg+xml" href="/static/favicon.svg">
     <link rel="stylesheet" href="/static/style.css?v=dark5">
 </head>
@@ -335,6 +346,7 @@
                 DMARC pct values are scored on a sliding scale: 100% receives full credit (5 pts),
                 75%+ receives 4, 50%+ receives 3, 25%+ receives 2, and values above 0 receive 1.
                 A pct of 0 (enforcement disabled) receives no credit.
+                Note that <a href="/dmarcbis">DMARCbis deprecates the pct tag</a> in favor of a binary test mode flag.
             </p>
 
             <h3>Grade Thresholds</h3>
