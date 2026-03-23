@@ -83,7 +83,7 @@
             <!-- Section 1: What is DMARCbis? -->
             <div class="dbis-section" id="what-is-dmarcbis">
                 <h2>What is DMARCbis?</h2>
-                <p>DMARCbis is the IETF's update to the DMARC email authentication standard. It is currently progressing through the IETF standardization process as a Standards Track specification, upgrading from the original RFC 7489 which was published in 2015 as an Informational RFC. That status change matters: it signals that DMARC is moving from an experimental protocol to a formal standard with stronger expectations for vendor compliance.</p>
+                <p>DMARCbis is the IETF's update to the DMARC email authentication standard. It is currently progressing through the IETF standardization process as a Standards Track specification. When published, DMARCbis will obsolete RFC 7489 (published in 2015 as an Informational RFC), replacing it as the authoritative DMARC specification. That status change matters: it signals that DMARC is moving from an experimental protocol to a formal standard with stronger expectations for vendor compliance.</p>
                 <p>The name stands for "DMARC bis" (Latin for "twice" or "again"). It is the second iteration of the specification, and it also obsoletes RFC 9091, which defined Public Suffix Domain DMARC policies.</p>
                 <p>RFC 9091 (published in 2021) was an experimental standard that defined how public suffix domains could publish DMARC policies. DMARCbis incorporates RFC 9091's goals through the <code>psd=</code> tag while providing a more robust mechanism via the DNS tree walk. With DMARCbis, RFC 9091 is no longer needed and is formally obsoleted.</p>
                 <p>DMARCbis refines and clarifies existing DMARC behavior rather than replacing it wholesale. It uses the same record format (<code>v=DMARC1</code>), the same authentication model (SPF + DKIM + alignment), and existing DMARC records continue to work without modification. The most significant refinement is in how organizational domains are discovered — moving from the Public Suffix List to a DNS-based tree walk method.</p>
@@ -262,6 +262,11 @@
                         </tbody>
                     </table>
                 </div>
+
+                <h3>External Report Authorization</h3>
+                <p>If your <code>rua=</code> or <code>ruf=</code> tag points to a domain you do not own (for example, a third-party reporting service), the destination domain must publish an authorization record. For a DMARC record on <code>example.com</code> with <code>rua=mailto:dmarc@thirdparty.com</code>, the authorization record would be:</p>
+                <p><code>example.com._report._dmarc.thirdparty.com  IN TXT "v=DMARC1"</code></p>
+                <p>This authorizes <code>thirdparty.com</code> to receive reports on behalf of <code>example.com</code>. Without this record, receivers will not send reports to the external destination. This is a common deployment stumble.</p>
             </div>
 
             <!-- Section: Tag Changes in DMARCbis -->
@@ -464,6 +469,7 @@
                 <h2>Further Reading</h2>
                 <ul class="dbis-links">
                     <li><a href="https://datatracker.ietf.org/doc/draft-ietf-dmarc-dmarcbis/" target="_blank" rel="noopener">IETF DMARCbis Draft (datatracker.ietf.org)</a></li>
+                    <li><a href="https://datatracker.ietf.org/doc/draft-ietf-dmarc-dmarcbis/41/" target="_blank" rel="noopener">DMARCbis draft-41 (IESG-approved version)</a></li>
                     <li><a href="https://dmarc.org/2025/12/summary-of-changes-in-dmarcbis/" target="_blank" rel="noopener">Summary of Changes in DMARCbis (dmarc.org)</a></li>
                     <li><a href="https://dmarcian.com/dmarcbis/" target="_blank" rel="noopener">dmarcian's DMARCbis Overview</a></li>
                     <li><a href="/methodology">dns-audit.com Methodology</a></li>
