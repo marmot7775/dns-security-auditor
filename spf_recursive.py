@@ -18,7 +18,45 @@ Usage:
 import dns.resolver
 import dns.exception
 import re
-from typing import Any, Dict, List, Optional, Set
+from typing import Any, Dict, List, Optional, Set, Tuple
+
+
+def repair_spf_missing_spaces(record: str) -> Tuple[str, bool]:
+    """Detect and fix missing spaces between SPF mechanisms.
+
+    Some domains (e.g. GitHub) store each SPF mechanism as a separate
+    TXT string without embedded boundary spaces.  After RFC-correct
+    concatenation (no separator), mechanisms are jammed together like
+    ``v=spf1ip4:1.2.3.0/22include:example.com~all``.
+
+    This function inserts spaces before known mechanism/modifier
+    prefixes when they appear immediately after other text, then
+    returns (repaired_record, was_malformed).
+
+    It intentionally does NOT touch arbitrary tokens like bare ``a``,
+    ``mx``, or ``ptr`` because those are too short and would cause
+    false splits inside domain names.
+    """
+    # Longer prefixes first to avoid partial matches.
+    SPLIT_BEFORE = [
+        r'redirect=',
+        r'include:',
+        r'exists:',
+        r'ip4:',
+        r'ip6:',
+        r'exp=',
+        # Qualified all (e.g. ~all, -all, ?all, +all) jammed onto prior text
+        r'[~?+\-]all(?=\s|$)',
+    ]
+
+    pattern = r'(?<=\S)(' + '|'.join(SPLIT_BEFORE) + ')'
+    repaired = re.sub(pattern, r' \1', record, flags=re.IGNORECASE)
+
+    # Handle v=spf1 not followed by a space (e.g. "v=spf1ip4:...")
+    repaired = re.sub(r'(v=spf1)(?=\S)', r'\1 ', repaired, flags=re.IGNORECASE)
+
+    is_malformed = repaired != record
+    return repaired, is_malformed
 
 
 def _get_resolver(timeout: float = 5.0):
@@ -34,9 +72,10 @@ def _get_spf_record(domain: str) -> Optional[str]:
         resolver = _get_resolver()
         answers = resolver.resolve(domain, "TXT")
         for rdata in answers:
-            txt = b" ".join(rdata.strings).decode("utf-8", errors="replace")
+            txt = b"".join(rdata.strings).decode("utf-8", errors="replace")
             if txt.strip().lower().startswith("v=spf1"):
-                return txt.strip()
+                repaired, _ = repair_spf_missing_spaces(txt.strip())
+                return repaired
     except Exception:
         pass
     return None

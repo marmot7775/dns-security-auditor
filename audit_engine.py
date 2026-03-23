@@ -73,7 +73,7 @@ def _is_private_ip(ip_str: str) -> bool:
 
 from checks_extra import check_mta_sts, check_tls_rpt, check_bimi
 from mx_check import check_mx
-from spf_recursive import count_spf_lookups
+from spf_recursive import count_spf_lookups, repair_spf_missing_spaces
 from advanced_fingerprinting import AdvancedVendorFingerprinter
 from security_scoring import EmailSecurityScorer
 from dkim_formatter import analyze_dkim_key_strength
@@ -203,15 +203,12 @@ def _get_dnssec_resolver(timeout: float = 8.0):
 def _lookup_txt(name: str) -> List[str]:
     """Look up TXT records, correctly concatenating multi-string records.
 
-    DNS TXT records can contain multiple strings within a single rdata
-    (each up to 255 bytes).  Some domains (e.g. GitHub) store each SPF
-    mechanism as a separate string WITHOUT embedded boundary spaces.
-    Concatenating with no separator jams mechanisms together, breaking
-    downstream parsing.
-
-    We join with a single space, which is safe for every record type
-    this function serves (SPF, DMARC, MTA-STS, BIMI, TLS-RPT).  DKIM
-    lookups use their own resolver path and are not affected.
+    Per RFC 7208 Section 3.3, multi-string TXT records MUST be
+    concatenated with no separator (raw byte join).  This preserves
+    values that span string boundaries (e.g. a 255-byte split landing
+    mid-IP-address).  SPF-specific code downstream uses
+    repair_spf_missing_spaces() to handle domains (like GitHub) that
+    store each mechanism as a separate string without embedded spaces.
     """
     try:
         resolver = _get_resolver()
@@ -221,9 +218,8 @@ def _lookup_txt(name: str) -> List[str]:
             parts = []
             for s in rdata.strings:
                 parts.append(s.decode("utf-8") if isinstance(s, bytes) else str(s))
-            # Join with a space so multi-string records like GitHub's SPF
-            # (22 separate mechanism strings) are parsed correctly.
-            txt = " ".join(parts)
+            # Concatenate WITHOUT spaces -- RFC-correct for all record types.
+            txt = "".join(parts)
             # Some resolvers escape semicolons in TXT records (\;).
             # Normalize so downstream parsers split correctly.
             txt = txt.replace("\\;", ";")
@@ -1792,9 +1788,21 @@ def _raw_check_spf(domain: str) -> Dict[str, Any]:
         )
         return result
 
-    record = spf_records[0]
+    raw_record = spf_records[0]
+    record, spf_was_malformed = repair_spf_missing_spaces(raw_record)
     result["record"] = record
     result["ttl"] = _lookup_ttl(domain, "TXT")
+
+    if spf_was_malformed:
+        _add_syntax(
+            "SPF record has syntax errors: mechanisms are not space-delimited",
+            "The SPF record has mechanisms jammed together without spaces, "
+            "likely caused by multi-string TXT record configuration in DNS. "
+            "While the tool extracted the mechanisms, this violates RFC 7208 "
+            "and can cause unpredictable SPF evaluation at some receivers.",
+            "Ensure each mechanism in the SPF record is separated by a space. "
+            "Check your DNS provider's TXT record configuration for improper string splitting.",
+        )
 
     # ── Step 3: Parse mechanisms and run syntax checks ──────────
     parts = record.split()
@@ -3436,7 +3444,7 @@ def _probe_subdomain(subdomain: str) -> Dict[str, Any]:
     try:
         txt_ans = resolver.resolve(subdomain, "TXT")
         for rdata in txt_ans:
-            txt = b" ".join(rdata.strings).decode("utf-8", errors="replace")
+            txt = b"".join(rdata.strings).decode("utf-8", errors="replace")
             if txt.lower().startswith("v=spf1"):
                 result["has_spf"] = True
                 result["spf_record"] = txt
@@ -3450,7 +3458,7 @@ def _probe_subdomain(subdomain: str) -> Dict[str, Any]:
     try:
         txt_ans = resolver.resolve(dmarc_name, "TXT")
         for rdata in txt_ans:
-            txt = b" ".join(rdata.strings).decode("utf-8", errors="replace")
+            txt = b"".join(rdata.strings).decode("utf-8", errors="replace")
             if txt.lower().startswith("v=dmarc1"):
                 result["has_dmarc"] = True
                 result["dmarc_record"] = txt

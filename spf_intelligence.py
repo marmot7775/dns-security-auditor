@@ -238,9 +238,10 @@ def smart_dkim_check(domain: str, spf_record: Optional[str] = None, max_selector
         try:
             answers = dns.resolver.resolve(domain, 'TXT')
             for rdata in answers:
-                txt = b" ".join(rdata.strings).decode("utf-8", errors="replace")
+                txt = b"".join(rdata.strings).decode("utf-8", errors="replace")
                 if txt.startswith('v=spf1'):
-                    spf_record = txt
+                    from spf_recursive import repair_spf_missing_spaces
+                    spf_record, _ = repair_spf_missing_spaces(txt)
                     break
         except (dns.resolver.NXDOMAIN, dns.resolver.NoAnswer, dns.resolver.NoNameservers, dns.exception.DNSException):
             spf_record = None
