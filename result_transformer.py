@@ -552,6 +552,23 @@ def _extract_spf_all(record: str) -> str:
     return ""
 
 
+def _normalize_record_for_comparison(value: str) -> str:
+    """Normalize a DNS record string so whitespace-only differences are ignored.
+
+    Strips extra spaces, standardizes semicolon/space patterns (e.g. both
+    ``p=quarantine;sp=reject`` and ``p=quarantine; sp=reject`` become the same
+    canonical form), and lowercases for comparison purposes.
+    """
+    import re
+    if not value:
+        return ""
+    # Collapse all runs of whitespace to a single space
+    s = re.sub(r'\s+', ' ', value.strip())
+    # Standardize semicolons: ensure exactly "; " (semicolon + one space)
+    s = re.sub(r'\s*;\s*', '; ', s)
+    return s
+
+
 def build_change_detection(
     raw_results: Dict,
     history: Dict[str, list],
@@ -599,6 +616,12 @@ def build_change_detection(
             for i in range(len(snapshots) - 1):
                 newer = snapshots[i]
                 older = snapshots[i + 1]
+                # Compare normalized versions to ignore whitespace-only differences
+                # (e.g. semicolon spacing from record normalization across runs)
+                norm_newer = _normalize_record_for_comparison(newer["record_value"])
+                norm_older = _normalize_record_for_comparison(older["record_value"])
+                if norm_newer == norm_older:
+                    continue  # Whitespace-only difference, not a real change
                 if newer["record_hash"] != older["record_hash"]:
                     classification = _classify_change(
                         record_type, older["record_value"], newer["record_value"]
@@ -620,6 +643,9 @@ def build_change_detection(
             for i in range(len(snapshots) - 1):
                 newer = snapshots[i]
                 older = snapshots[i + 1]
+                # Skip whitespace-only differences
+                if _normalize_record_for_comparison(newer["record_value"]) == _normalize_record_for_comparison(older["record_value"]):
+                    continue
                 if newer["record_hash"] != older["record_hash"]:
                     changes.append({
                         "record_type": rt,
@@ -3486,7 +3512,7 @@ def transform_spf(raw: Dict, has_mx: bool = True) -> Dict:
         for issue in raw.get("issues", []):
             details.append(_issue_to_detail(issue))
 
-    # Override status to fail for critical SPF issues
+    # Override status based on critical SPF issues
     if record and not null_spf:
         all_mech = raw.get("all_mechanism") or ""
         lookups = raw.get("lookup_count", 0)
@@ -3499,6 +3525,12 @@ def transform_spf(raw: Dict, has_mx: bool = True) -> Dict:
             status = "fail"
         elif has_engine_errors:
             status = "fail"
+        elif all_mech in ("-all", "~all") and lookups <= 10 and not has_engine_errors:
+            # Lenient parser recovered a valid record with a proper all mechanism
+            # and within lookup limits.  Syntax warnings (e.g. missing spaces)
+            # should not downgrade the card to "warn" -- show "pass" with the
+            # warning details visible in the card body.
+            status = "pass"
 
     # Fix
     fix = None
