@@ -3236,22 +3236,29 @@ details.st-node>summary:hover {
         gap: 0.75rem;
     }
 
+    .input-unified .input-wrapper,
     .input-wrapper {
         max-width: 100% !important;
         width: 100% !important;
+        box-sizing: border-box;
     }
 
+    .input-unified .domain-input,
     .domain-input {
         width: 100% !important;
         min-width: 0;
+        flex: 1 1 0%;
         -webkit-appearance: none;
         -moz-appearance: none;
         appearance: none;
         border-radius: 8px;
     }
 
-    .audit-btn {
-        width: 100%;
+    .audit-btn,
+    .input-unified .audit-btn {
+        flex-shrink: 0;
+        min-width: 80px;
+        max-width: 120px;
         justify-content: center;
         min-height: 48px;
     }
