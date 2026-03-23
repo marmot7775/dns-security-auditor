@@ -526,12 +526,18 @@ async def audit_stream(
         if cancel_event.is_set():
             raise InterruptedError("Audit cancelled: client disconnected")
         progress_pct = int((completed / total) * 100) if total else 0
-        progress_q.put({
+        msg = {
             "step": step_name,
             "progress": progress_pct,
             "total_checks": total,
             "completed": completed,
-        })
+        }
+        # DKIM sub-progress: step_name like "DKIM:5" means 5 selectors found
+        if ":" in str(step_name) and step_name.startswith("DKIM:"):
+            count = step_name.split(":", 1)[1]
+            msg["step"] = "DKIM"
+            msg["detail"] = f"{count} found so far"
+        progress_q.put(msg)
 
     def _run_audit():
         global _active_audits

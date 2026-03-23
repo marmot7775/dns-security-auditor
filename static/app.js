@@ -274,7 +274,7 @@ async function runAudit(domain) {
                 }
 
                 // Progress update
-                updateLoadingProgress(msg.step, msg.progress);
+                updateLoadingProgress(msg.step, msg.progress, msg.detail);
             }
         }
 
@@ -362,14 +362,16 @@ function showLoading() {
     window.scrollTo({ top: 0, behavior: 'smooth' });
 }
 
-function updateLoadingProgress(step, progressPct) {
+function updateLoadingProgress(step, progressPct, detail) {
     const bar = document.getElementById('loading-bar');
     const status = document.getElementById('loading-status');
     const pct = Math.min(progressPct, 97);
     if (bar) bar.style.width = pct + '%';
     const track = bar?.closest('.loading-bar-track');
     if (track) track.setAttribute('aria-valuenow', Math.round(pct));
-    if (status) status.textContent = STEP_MESSAGES[step] || `Checking ${step}...`;
+    let text = STEP_MESSAGES[step] || `Checking ${step}...`;
+    if (detail) text += ` (${detail})`;
+    if (status) status.textContent = text;
     const topBar = document.querySelector('.top-progress-bar');
     if (topBar) topBar.style.width = pct + '%';
 }
