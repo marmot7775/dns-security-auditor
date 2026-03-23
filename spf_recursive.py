@@ -18,7 +18,46 @@ Usage:
 import dns.resolver
 import dns.exception
 import re
-from typing import Any, Dict, List, Optional, Set
+from typing import Any, Dict, List, Optional, Set, Tuple
+
+
+def repair_missing_spaces(record: str) -> Tuple[str, bool]:
+    """Detect and fix missing spaces between SPF mechanisms.
+
+    Multi-string TXT records (each up to 255 bytes) are concatenated without
+    spaces per RFC 7208 Section 3.3. If the strings happen to break mid-mechanism,
+    the result is well-formed. But some DNS configurations produce records where
+    mechanism boundaries land exactly at string boundaries, jamming mechanisms
+    together (e.g. ``ip4:1.2.3.0/24include:_spf.google.com``).
+
+    This function inserts spaces before known mechanism/modifier prefixes
+    when they are preceded by non-whitespace, and returns a flag indicating
+    whether the record was malformed.
+
+    Returns:
+        (repaired_record, is_malformed)
+    """
+    # Insert space before well-known mechanism prefixes jammed against prior text.
+    # Order: longer prefixes first to avoid partial matches.
+    SPLIT_BEFORE = [
+        r'redirect=',
+        r'include:',
+        r'exists:',
+        r'ip4:',
+        r'ip6:',
+        r'exp=',
+        # Qualified all (e.g. ~all, -all, ?all, +all) jammed onto prior token
+        r'[~?+\-]all(?=\s|$)',
+    ]
+
+    pattern = r'(?<=\S)(' + '|'.join(SPLIT_BEFORE) + ')'
+    repaired = re.sub(pattern, r' \1', record, flags=re.IGNORECASE)
+
+    # Handle v=spf1 not followed by a space (e.g. "v=spf1ip4:...")
+    repaired = re.sub(r'(v=spf1)(?=\S)', r'\1 ', repaired, flags=re.IGNORECASE)
+
+    is_malformed = repaired != record
+    return repaired, is_malformed
 
 
 def _get_resolver(timeout: float = 5.0):
@@ -49,7 +88,8 @@ LOOKUP_MECHANISMS = {"include", "a", "mx", "ptr", "exists", "redirect"}
 def _parse_spf_mechanisms(spf_record: str) -> List[Dict[str, str]]:
     """Parse an SPF record into its mechanisms with types and values."""
     mechanisms = []
-    parts = spf_record.split()
+    repaired, _ = repair_missing_spaces(spf_record)
+    parts = repaired.split()
 
     for part in parts:
         if part.lower().startswith("v=spf1"):
