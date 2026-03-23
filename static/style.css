@@ -1354,6 +1354,10 @@ h3.result-title,
     transform: rotate(180deg);
 }
 
+.result-card.expanded {
+    box-shadow: var(--shadow-md);
+}
+
 .result-body {
     display: grid;
     grid-template-rows: 0fr;
@@ -1394,6 +1398,7 @@ h3.result-title,
     position: relative;
     color: var(--text-primary);
     overflow-x: auto;
+    border-left: 3px solid var(--primary-border);
 }
 
 /* Record syntax highlighting */
@@ -1486,6 +1491,10 @@ h3.result-title,
     font-family: var(--font-body);
     font-size: var(--font-sm);
     font-weight: 600;
+}
+
+.error-retry:hover {
+    background: var(--primary-hover);
 }
 
 /* ==========================================================================
@@ -3251,6 +3260,10 @@ details.st-node>summary:hover {
 
     .summary-card {
         padding: 1rem 1.1rem;
+    }
+
+    .summary-card:first-child {
+        grid-column: 1 / -1;
     }
 
     .domain-banner {
@@ -5097,6 +5110,16 @@ main .meth-page {
 .es-action:hover {
     background: var(--primary-subtle, rgba(96, 165, 250, 0.1));
     border-color: var(--primary-light, #60a5fa);
+}
+
+.share-btn:active,
+.scope-btn:active,
+.toggle-all-btn:active,
+.copy-btn:active,
+.copy-all-btn:active,
+.details-toggle:active,
+.es-action:active {
+    transform: scale(0.97);
 }
 
 @media (max-width: 600px) {
