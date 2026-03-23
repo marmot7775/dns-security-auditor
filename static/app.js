@@ -830,8 +830,8 @@ function createResultCard(check, index) {
 
     const tooltipText = PROTOCOL_TOOLTIPS[check.name] || '';
     const titleHtml = tooltipText
-        ? `<div class="result-title"><span class="protocol-name-tip" tabindex="0">${escapeHtml(check.name)}<span class="protocol-tooltip">${escapeHtml(tooltipText)}</span></span></div>`
-        : `<div class="result-title">${escapeHtml(check.name)}</div>`;
+        ? `<h3 class="result-title"><span class="protocol-name-tip" tabindex="0">${escapeHtml(check.name)}<span class="protocol-tooltip">${escapeHtml(tooltipText)}</span></span></h3>`
+        : `<h3 class="result-title">${escapeHtml(check.name)}</h3>`;
 
     const bodyId = `body-${(check.name || '').toLowerCase().replace(/[^a-z0-9]/g, '-')}`;
     card.innerHTML = `
@@ -2955,15 +2955,22 @@ function renderTreeNode(node, totalLookups, isRoot) {
 
 document.getElementById('export-btn').addEventListener('click', () => {
     if (!lastAuditData) return;
-    const blob = new Blob([JSON.stringify(lastAuditData, null, 2)], { type: 'application/json' });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = `dns-audit-${lastAuditData.domain || 'report'}.json`;
-    document.body.appendChild(a);
-    a.click();
-    document.body.removeChild(a);
-    URL.revokeObjectURL(url);
+    const exportBtn = document.getElementById('export-btn');
+    exportBtn.classList.add('btn-busy');
+    exportBtn.disabled = true;
+    try {
+        const blob = new Blob([JSON.stringify(lastAuditData, null, 2)], { type: 'application/json' });
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = `dns-audit-${lastAuditData.domain || 'report'}.json`;
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+        URL.revokeObjectURL(url);
+    } finally {
+        setTimeout(() => { exportBtn.classList.remove('btn-busy'); exportBtn.disabled = false; }, 600);
+    }
 });
 
 // ============================================================
@@ -2972,11 +2979,15 @@ document.getElementById('export-btn').addEventListener('click', () => {
 
 document.getElementById('pdf-btn').addEventListener('click', () => {
     if (!lastAuditData || !lastAuditData.domain) return;
+    const pdfBtn = document.getElementById('pdf-btn');
+    pdfBtn.classList.add('btn-busy');
+    pdfBtn.disabled = true;
     const domain = encodeURIComponent(lastAuditData.domain);
     const scope = currentScope || 'complete';
     const selectorVal = document.getElementById('selector-input')?.value?.trim() || '';
     const selectorParam = selectorVal ? `&selector=${encodeURIComponent(selectorVal)}` : '';
     window.open(`/api/audit/${domain}/pdf?scope=${scope}${selectorParam}`, '_blank');
+    setTimeout(() => { pdfBtn.classList.remove('btn-busy'); pdfBtn.disabled = false; }, 2000);
 });
 
 // ============================================================
