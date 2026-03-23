@@ -3186,12 +3186,11 @@ details.st-node>summary:hover {
     }
 
     .site-nav {
+        gap: 0.1rem;
         overflow-x: auto;
         -webkit-overflow-scrolling: touch;
         scrollbar-width: none;
         flex-wrap: nowrap;
-        gap: 0.25rem;
-        padding-bottom: 2px;
     }
 
     .site-nav::-webkit-scrollbar {
