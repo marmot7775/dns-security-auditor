@@ -21,7 +21,7 @@
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
-    <link rel="stylesheet" href="/static/style.css?v=ds10">
+    <link rel="stylesheet" href="/static/style.css?v=ds11">
     <script type="application/ld+json">
     {
         "@context": "https://schema.org",
@@ -335,6 +335,7 @@
                             <tr><th>DMARCbis Term</th><th>Replaces / Clarifies</th><th>Meaning</th></tr>
                         </thead>
                         <tbody>
+                            <tr><td>Organizational Domain</td><td>Organizational domain (unchanged term, new discovery method)</td><td>The term remains, but DMARCbis changes how it is discovered: a DNS tree walk replaces the Public Suffix List lookup, making domain boundary detection self-contained within DNS</td></tr>
                             <tr><td>Report Consumer</td><td>Report receiver</td><td>The entity that processes DMARC aggregate or failure reports</td></tr>
                             <tr><td>Monitoring Mode</td><td>p=none</td><td>Policy is set to <code>none</code> — receivers observe and report, but do not alter mail handling</td></tr>
                             <tr><td>Enforcement</td><td>p=quarantine or p=reject</td><td>Policy instructs receivers to quarantine or reject messages that fail DMARC evaluation</td></tr>
@@ -496,7 +497,7 @@
             <!-- Section: Do You Need to Change Anything? -->
             <div class="dbis-section" id="do-you-need-to-change">
                 <h2>Do You Need to Change Anything?</h2>
-                <p>Existing DMARC records (v=DMARC1) continue to work without modification. No immediate action is required.</p>
+                <p>Existing DMARC records (v=DMARC1) continue to work without modification. No immediate action is required. Publication as an RFC is expected in 2026. Organizations should begin reviewing their DMARC configurations for DMARCbis compatibility now, as the transition period will begin once the RFC is published.</p>
                 <p>To prepare for DMARCbis:</p>
                 <ul>
                     <li>Ensure your root domain has a DMARC record</li>
