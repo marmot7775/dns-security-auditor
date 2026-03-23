@@ -4,25 +4,6 @@
    ========================================================================== */
 
 /* -- Self-hosted fonts -- */
-/* DM Sans: italic 400 */
-@font-face {
-    font-family: 'DM Sans';
-    font-style: italic;
-    font-weight: 400;
-    font-display: swap;
-    src: url('/static/fonts/dm-sans-italic-400-latin-ext.woff2') format('woff2');
-    unicode-range: U+0100-02BA, U+02BD-02C5, U+02C7-02CC, U+02CE-02D7, U+02DD-02FF, U+0304, U+0308, U+0329, U+1D00-1DBF, U+1E00-1E9F, U+1EF2-1EFF, U+2020, U+20A0-20AB, U+20AD-20C0, U+2113, U+2C60-2C7F, U+A720-A7FF;
-}
-
-@font-face {
-    font-family: 'DM Sans';
-    font-style: italic;
-    font-weight: 400;
-    font-display: swap;
-    src: url('/static/fonts/dm-sans-italic-400-latin.woff2') format('woff2');
-    unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD;
-}
-
 /* DM Sans: normal 400 */
 @font-face {
     font-family: 'DM Sans';
@@ -1764,7 +1745,6 @@ h3.result-title,
 .tw-animated.tree-walk-simple .tw-simple-policy { animation-delay: 0.22s; }
 .tw-animated.tree-walk-simple .tw-footnote { animation-delay: 0.36s; }
 
-
 .tw-content {
     flex: 1;
     min-width: 0;
@@ -2118,7 +2098,6 @@ h3.result-title,
     animation-delay: 0.02s;
 }
 
-
 @media (max-width: 640px) {
     .spf-execution { padding: 1.1rem 1rem; }
     .se-mechanism { font-size: 0.72rem; }
@@ -2126,7 +2105,6 @@ h3.result-title,
     .se-depth-2 { padding-left: 1.5rem; }
     .se-depth-3 { padding-left: 2.25rem; }
 }
-
 
 /* ==========================================================================
    DMARC EVALUATION SUMMARY
@@ -2246,13 +2224,11 @@ h3.result-title,
     animation-delay: 0.02s;
 }
 
-
 @media (max-width: 640px) {
     .dmarc-eval { padding: 1.1rem 1rem; }
     .de-row { flex-wrap: wrap; gap: 0.35rem; }
     .de-disposition { margin-left: 0; width: 100%; }
 }
-
 
 /* ==========================================================================
    DMARC REPORT DELIVERY CHAIN
@@ -2360,14 +2336,12 @@ h3.result-title,
     animation-delay: 0.02s;
 }
 
-
 @media (max-width: 640px) {
     .report-chain { padding: 1.1rem 1rem; }
     .rc-dest { gap: 0.35rem; }
     .rc-address { font-size: 0.72rem; max-width: 200px; }
     .rc-auth { margin-left: 0; width: 100%; }
 }
-
 
 /* ==========================================================================
    SPF INCLUDE TREE
@@ -2574,14 +2548,12 @@ details.st-node>summary:hover {
     animation-delay: 0.2s;
 }
 
-
 @media (max-width: 640px) {
     .spf-tree { padding: 1.1rem 1rem; }
     .st-children { padding-left: 0.75rem; }
     .st-record { margin-left: 0.75rem; font-size: 0.65rem; }
     .st-ips { padding-left: 0.75rem; }
 }
-
 
 /* Explanation text */
 .explanation {
@@ -2995,7 +2967,6 @@ details.st-node>summary:hover {
     color: var(--text-secondary);
     line-height: 1.5;
 }
-
 
 .footer-right {
     display: flex;
@@ -4308,7 +4279,6 @@ body {
 
 /* Print stylesheet */
 @media print {
-
     .site-header,
     .audit-input-section,
     .loading-section,
@@ -7746,10 +7716,8 @@ main .meth-page {
     .dk-tag {
         background: #f1f5f9;
     }
-}
 
-/* Light mode overrides for auxiliary components */
-@media (prefers-color-scheme: light) {
+    /* Auxiliary components */
     .domain-inline-error {
         color: #dc2626;
     }
