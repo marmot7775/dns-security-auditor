@@ -4,18 +4,18 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>DMARCbis Explained | dns-audit.com</title>
-    <meta name="description" content="DMARCbis replaces RFC 7489 with stricter parsing, new subdomain protections, and DNS-based domain discovery. What changed and what it means for your domain.">
+    <meta name="description" content="DMARCbis is an upcoming revision to DMARC progressing through the IETF standardization process. Learn what's changing in domain discovery, subdomain protection, and tag updates.">
     <meta name="keywords" content="DMARCbis, DMARC, email authentication, RFC 7489, DNS tree walk, np tag, psd tag, email security standard">
     <meta name="author" content="Neil Anuskiewicz">
     <meta property="og:title" content="DMARCbis Explained | dns-audit.com">
-    <meta property="og:description" content="DMARCbis replaces RFC 7489 with stricter parsing, new subdomain protections, and DNS-based domain discovery. What changed and what it means for your domain.">
+    <meta property="og:description" content="DMARCbis is an upcoming revision to DMARC progressing through the IETF standardization process. Learn what's changing in domain discovery, subdomain protection, and tag updates.">
     <meta property="og:type" content="article">
     <meta property="og:url" content="https://dns-audit.com/dmarcbis">
     <meta property="og:image" content="https://dns-audit.com/static/og-image.png">
     <meta name="twitter:card" content="summary_large_image">
     <meta name="twitter:image" content="https://dns-audit.com/static/og-image.png">
     <meta name="twitter:title" content="DMARCbis Explained | dns-audit.com">
-    <meta name="twitter:description" content="DMARCbis replaces RFC 7489 with stricter parsing, new subdomain protections, and DNS-based domain discovery. What changed and what it means for your domain.">
+    <meta name="twitter:description" content="DMARCbis is an upcoming revision to DMARC progressing through the IETF standardization process. Learn what's changing in domain discovery, subdomain protection, and tag updates.">
     <link rel="canonical" href="https://dns-audit.com/dmarcbis">
     <link rel="icon" type="image/svg+xml" href="/static/favicon.svg">
     <link rel="preconnect" href="https://fonts.googleapis.com">
@@ -27,7 +27,7 @@
         "@context": "https://schema.org",
         "@type": "Article",
         "headline": "DMARCbis Explained: What's Changing in Email Authentication",
-        "description": "DMARCbis replaces RFC 7489 with stricter parsing, new subdomain protections, and a DNS-native discovery mechanism.",
+        "description": "DMARCbis is an upcoming revision to DMARC that refines domain discovery, adds subdomain protections, and updates tag handling.",
         "author": {
             "@type": "Person",
             "name": "Neil Anuskiewicz",
@@ -65,16 +65,36 @@
             <!-- Hero -->
             <div class="dbis-hero">
                 <h1><span>DMARCbis:</span> The Next DMARC Standard</h1>
-                <p class="dbis-hero-sub">DMARCbis replaces RFC 7489 with stricter parsing, new subdomain protections, and DNS-based domain discovery. Here is what changed and what it means for your domain.</p>
+                <p class="dbis-hero-sub">DMARCbis is an upcoming revision to DMARC currently progressing through the IETF standardization process. It is not yet universally adopted, but reflects the future direction of DMARC implementations.</p>
+            </div>
+
+            <!-- Section: Why DMARCbis Matters -->
+            <div class="dbis-section" id="why-dmarcbis-matters">
+                <h2>Why DMARCbis Matters</h2>
+                <ul>
+                    <li>Removes reliance on the Public Suffix List, an external dependency with inconsistent updates</li>
+                    <li>Makes policy discovery more predictable through DNS-native lookups</li>
+                    <li>Better handling of deep subdomain hierarchies</li>
+                    <li>Introduces new tags (np=, psd=, t=) for finer-grained control</li>
+                    <li>Deprecates unreliable tags (pct, rf, ri)</li>
+                </ul>
             </div>
 
             <!-- Section 1: What is DMARCbis? -->
             <div class="dbis-section" id="what-is-dmarcbis">
                 <h2>What is DMARCbis?</h2>
-                <p>DMARCbis is the IETF's update to the DMARC email authentication standard. It replaces the original RFC 7489, published in 2015 as an Informational RFC, with a Standards Track specification. That status change matters: it signals that DMARC is no longer an experimental protocol but a formal standard with stronger expectations for vendor compliance.</p>
-                <p>The name stands for "DMARC bis" (Latin for "twice" or "again"). It is the second iteration of the specification, and it also obsoletes RFC 9091, which defined Public Suffix Domain DMARC policies. RFC 9091 (published in 2021) was an experimental standard that defined how public suffix domains could publish DMARC policies. DMARCbis incorporates RFC 9091's goals through the <code>psd=</code> tag while providing a more robust mechanism via the DNS tree walk. With DMARCbis, RFC 9091 is no longer needed and is formally obsoleted.</p>
-                <p>The update addresses problems that surfaced over a decade of real-world DMARC deployment. Receivers parsed records inconsistently. The percentage-based rollout tag was unreliable. Non-existent subdomains had no dedicated protection. And organizational domain boundaries depended entirely on the Public Suffix List, a manually-maintained external file that different receivers updated on different schedules.</p>
-                <p>DMARCbis maintains backward compatibility. It still uses <code>v=DMARC1</code> as the version tag, and existing DMARC records continue to work. But records that relied on lenient parsing or deprecated features will need attention as receivers adopt the stricter rules.</p>
+                <p>DMARCbis is the IETF's update to the DMARC email authentication standard. It is currently progressing through the IETF standardization process as a Standards Track specification, upgrading from the original RFC 7489 which was published in 2015 as an Informational RFC. That status change matters: it signals that DMARC is moving from an experimental protocol to a formal standard with stronger expectations for vendor compliance.</p>
+                <p>The name stands for "DMARC bis" (Latin for "twice" or "again"). It is the second iteration of the specification, and it also obsoletes RFC 9091, which defined Public Suffix Domain DMARC policies.</p>
+                <p>RFC 9091 (published in 2021) was an experimental standard that defined how public suffix domains could publish DMARC policies. DMARCbis incorporates RFC 9091's goals through the <code>psd=</code> tag while providing a more robust mechanism via the DNS tree walk. With DMARCbis, RFC 9091 is no longer needed and is formally obsoleted.</p>
+                <p>DMARCbis refines and clarifies existing DMARC behavior rather than replacing it wholesale. It uses the same record format (<code>v=DMARC1</code>), the same authentication model (SPF + DKIM + alignment), and existing DMARC records continue to work without modification. The most significant refinement is in how organizational domains are discovered — moving from the Public Suffix List to a DNS-based tree walk method.</p>
+                <p>The update addresses problems that surfaced over a decade of real-world DMARC deployment:</p>
+                <ul>
+                    <li>Receivers parsed records inconsistently</li>
+                    <li>The percentage-based rollout tag was unreliable</li>
+                    <li>Non-existent subdomains had no dedicated protection</li>
+                    <li>Organizational domain boundaries depended entirely on the Public Suffix List, a manually-maintained external file that different receivers updated on different schedules</li>
+                </ul>
+                <p>Records that relied on lenient parsing or deprecated features will need attention as receivers adopt the stricter rules.</p>
             </div>
 
             <!-- Section: Why DMARCbis? -->
@@ -84,16 +104,76 @@
 
                 <p><strong>Subdomain spoofing had no answer.</strong> RFC 7489 let you set a policy for your domain and a subdomain policy with <code>sp=</code>. But attackers learned to spoof from subdomains that do not exist in DNS, like <code>secure-login.yourbank.com</code>. There was no tag to address this. DMARCbis adds <code>np=</code> to let domain owners set a policy specifically for non-existent subdomains.</p>
 
-                <p><strong>The Public Suffix List was a single point of fragility.</strong> DMARC needed to know where one organization's domain ends and the public suffix begins. It relied on the PSL, a community-maintained text file hosted on GitHub. Different receivers updated their copy on different schedules. A new TLD could go weeks without being recognized. DMARCbis replaces this with the DNS Tree Walk, where receivers walk up the DNS hierarchy and domain owners declare their own boundaries with the <code>psd=</code> tag. The answer lives in DNS, not in a file someone has to remember to update.</p>
+                <p><strong>The Public Suffix List was a single point of fragility.</strong> DMARC needed to know where one organization's domain ends and the public suffix begins. It relied on the PSL, a community-maintained text file hosted on GitHub. Different receivers updated their copy on different schedules. A new TLD could go weeks without being recognized.</p>
+                <p>DMARCbis removes reliance on the Public Suffix List for organizational domain discovery, replacing it with a DNS-based tree walk method that is more predictable and self-contained. Receivers walk up the DNS hierarchy and domain owners declare their own boundaries with the <code>psd=</code> tag. The answer lives in DNS, not in a file someone has to remember to update.</p>
 
-                <p><strong>Percentage rollout was unreliable.</strong> The <code>pct=</code> tag was meant to let domain owners gradually enforce their policy on a percentage of failing mail. In practice, receivers implemented it inconsistently. Some honored it exactly, some rounded, some ignored it entirely. A domain owner setting <code>pct=50</code> had no reliable way to predict what would happen. DMARCbis replaces this with <code>t=y</code>, a simple binary: you are either testing or you are enforcing. No ambiguity.</p>
+                <p><strong>Percentage rollout was unreliable.</strong> The <code>pct=</code> tag was meant to let domain owners gradually enforce their policy on a percentage of failing mail. In practice, receivers implemented it inconsistently:</p>
+                <ul>
+                    <li>Some honored it exactly</li>
+                    <li>Some rounded</li>
+                    <li>Some ignored it entirely</li>
+                </ul>
+                <p>A domain owner setting <code>pct=50</code> had no reliable way to predict what would happen. DMARCbis replaces this with <code>t=y</code>, a simple binary: you are either testing or you are enforcing. No ambiguity.</p>
 
                 <p><strong>Parsing rules were too loose.</strong> RFC 7489 was lenient about record syntax. Some receivers accepted malformed records that others rejected, which meant the same DMARC record could produce different results depending on who was reading it. DMARCbis tightens parsing so that a valid record is valid everywhere and a broken record fails everywhere.</p>
 
                 <p><strong>The standard needed real authority.</strong> As an Informational RFC, DMARC was technically a suggestion. Vendors could implement it however they saw fit, and they did. Promoting DMARC to Standards Track gives the specification formal weight and sets clearer expectations for how receivers should behave.</p>
             </div>
 
-            <!-- Section 2: What Changed -->
+            <!-- Section: DMARC vs DMARCbis -->
+            <div class="dbis-section" id="dmarc-vs-dmarcbis">
+                <h2>DMARC vs DMARCbis</h2>
+                <div class="dbis-table-wrap">
+                    <table class="dbis-table">
+                        <thead>
+                            <tr>
+                                <th>Feature</th>
+                                <th>DMARC (RFC 7489)</th>
+                                <th>DMARCbis</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            <tr>
+                                <td>Domain discovery</td>
+                                <td>Public Suffix List</td>
+                                <td>DNS Tree Walk</td>
+                            </tr>
+                            <tr>
+                                <td>External dependency</td>
+                                <td>PSL (maintained by volunteers)</td>
+                                <td>DNS only</td>
+                            </tr>
+                            <tr>
+                                <td>Deep subdomain handling</td>
+                                <td>Limited</td>
+                                <td>Walk up to 8 labels</td>
+                            </tr>
+                            <tr>
+                                <td>Policy testing</td>
+                                <td>pct= (unreliable)</td>
+                                <td>t= (binary, predictable)</td>
+                            </tr>
+                            <tr>
+                                <td>Non-existent subdomain policy</td>
+                                <td>Not available</td>
+                                <td>np= tag</td>
+                            </tr>
+                            <tr>
+                                <td>Record format</td>
+                                <td>v=DMARC1</td>
+                                <td>v=DMARC1 (unchanged)</td>
+                            </tr>
+                            <tr>
+                                <td>Authentication model</td>
+                                <td>SPF + DKIM + alignment</td>
+                                <td>SPF + DKIM + alignment (unchanged)</td>
+                            </tr>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+
+            <!-- Section 2: What Changed (detailed) -->
             <div class="dbis-section" id="whats-new">
                 <h2>What Changed</h2>
                 <div class="dbis-table-wrap">
@@ -159,7 +239,7 @@
                                 <td>External Reporting</td>
                                 <td>Advisory</td>
                                 <td>Stricter validation</td>
-                                <td>Under RFC 7489, cross-domain reporting authorization (where rua= or ruf= points to a different domain) was advisory and inconsistently enforced. DMARCbis makes verification mandatory: the receiving domain must publish an explicit authorization record at <code>&lt;selector&gt;._report._dmarc.&lt;destination-domain&gt;</code> for the report destination to be accepted. Reports sent to unauthorized domains are silently dropped</td>
+                                <td>Cross-domain reporting authorization is now mandatory. The receiving domain must publish an explicit authorization record at <code>&lt;selector&gt;._report._dmarc.&lt;destination-domain&gt;</code>. Reports sent to unauthorized domains are silently dropped.</td>
                             </tr>
                             <tr>
                                 <td>Spec Structure</td>
@@ -177,8 +257,28 @@
                                 <td>SPF Evaluation</td>
                                 <td>MAIL FROM + HELO</td>
                                 <td>MAIL FROM only</td>
-                                <td>Under RFC 7489, SPF could be checked against both the MAIL FROM identity and the HELO identity. DMARCbis restricts SPF alignment to MAIL FROM only, eliminating ambiguity. If your SPF deployment relies on HELO identity matching (uncommon but possible with null reverse-path senders), verify your configuration still achieves DMARC alignment under the updated rules</td>
+                                <td>DMARCbis restricts SPF alignment to MAIL FROM only, eliminating ambiguity. If your SPF deployment relies on HELO identity matching (uncommon but possible with null reverse-path senders), verify your configuration still achieves DMARC alignment under the updated rules.</td>
                             </tr>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+
+            <!-- Section: Tag Changes in DMARCbis -->
+            <div class="dbis-section" id="tag-changes">
+                <h2>Tag Changes in DMARCbis</h2>
+                <div class="dbis-table-wrap">
+                    <table class="dbis-table">
+                        <thead>
+                            <tr><th>Tag</th><th>Status</th><th>Notes</th></tr>
+                        </thead>
+                        <tbody>
+                            <tr><td>pct</td><td>Deprecated</td><td>Replaced by t= tag for binary testing mode</td></tr>
+                            <tr><td>rf</td><td>Deprecated</td><td>Failure report format, rarely implemented</td></tr>
+                            <tr><td>ri</td><td>Deprecated</td><td>Reporting interval, now simplified</td></tr>
+                            <tr><td>np</td><td>New</td><td>Policy for non-existent subdomains</td></tr>
+                            <tr><td>psd</td><td>New</td><td>Public suffix domain declaration, replaces PSL reliance</td></tr>
+                            <tr><td>t</td><td>New</td><td>Binary testing flag (t=y or t=n), replaces pct</td></tr>
                         </tbody>
                     </table>
                 </div>
@@ -194,7 +294,13 @@
                         <span class="dbis-tag-badge">NEW in DMARCbis</span>
                     </div>
                     <p><strong>Non-Existent Subdomain Policy.</strong> This tag controls what happens when someone sends email from a subdomain that does not exist in DNS, like <code>secure-login.yourdomain.com</code> or <code>invoice.yourdomain.com</code>. Attackers prefer non-existent subdomains because they look legitimate and most organizations do not realize they need protection for domains that are not real.</p>
-                    <p>Values: <code>none</code>, <code>quarantine</code>, <code>reject</code>. Policy for non-existent subdomains follows a defined fallback chain: <code>np=</code> (if present) takes precedence. If <code>np=</code> is absent, <code>sp=</code> applies. If <code>sp=</code> is also absent, <code>p=</code> is used. This hierarchy allows administrators to set a strict reject policy for non-existent subdomains (via <code>np=reject</code>) while maintaining a more permissive policy for legitimate subdomains (via <code>sp=none</code> or <code>sp=quarantine</code>).</p>
+                    <p>Values: <code>none</code>, <code>quarantine</code>, <code>reject</code>. Policy for non-existent subdomains follows a defined fallback chain:</p>
+                    <ul>
+                        <li><code>np=</code> (if present) takes precedence</li>
+                        <li>If <code>np=</code> is absent, <code>sp=</code> applies</li>
+                        <li>If <code>sp=</code> is also absent, <code>p=</code> is used</li>
+                    </ul>
+                    <p>This hierarchy allows administrators to set a strict reject policy for non-existent subdomains (via <code>np=reject</code>) while maintaining a more permissive policy for legitimate subdomains (via <code>sp=none</code> or <code>sp=quarantine</code>).</p>
                     <p>Before adding <code>np=reject</code>, review whether any third-party services send mail from dynamically generated subdomains on your behalf. An <code>np=reject</code> policy applies to all non-existent subdomains without exception.</p>
                 </div>
 
@@ -204,7 +310,13 @@
                         <span class="dbis-tag-badge">NEW in DMARCbis</span>
                     </div>
                     <p><strong>Public Suffix Domain indicator.</strong> Declares whether a domain is a Public Suffix Domain (like <code>.com</code>, <code>.co.uk</code>, or <code>.gov.au</code>) so the DNS tree walk knows where to stop.</p>
-                    <p>Three values: <code>psd=y</code> means the domain is a PSD and subdomains should be treated as separate organizational domains. <code>psd=n</code> means the domain is not a PSD and is the organizational domain for itself and its subdomains (the walk stops here). <code>psd=u</code> (the default when the tag is absent) means the domain has not declared whether it is a public suffix. The tree walk continues upward to find a domain that explicitly declares <code>psd=y</code> (this is a public suffix) or <code>psd=n</code> (this is not a public suffix, stop here). If neither is found within up to 8 tree walk queries plus the initial Author Domain lookup (9 DNS queries maximum), DMARC does not apply.</p>
+                    <p>Three values:</p>
+                    <ul>
+                        <li><code>psd=y</code> means the domain is a PSD and subdomains should be treated as separate organizational domains</li>
+                        <li><code>psd=n</code> means the domain is not a PSD and is the organizational domain for itself and its subdomains (the walk stops here)</li>
+                        <li><code>psd=u</code> (the default when the tag is absent) means the domain has not declared whether it is a public suffix</li>
+                    </ul>
+                    <p>When <code>psd=u</code> is in effect, the tree walk continues upward to find a domain that explicitly declares <code>psd=y</code> or <code>psd=n</code>. If neither is found within up to 8 tree walk queries plus the initial Author Domain lookup (9 DNS queries maximum), DMARC does not apply.</p>
                     <p>Most domains should use <code>psd=n</code>. Only operators of actual public suffixes (registries, ccTLDs) should use <code>psd=y</code>. If you are unsure, <code>psd=n</code> is almost certainly correct for your domain.</p>
                 </div>
 
@@ -273,6 +385,30 @@
                     </div>
                 </div>
 
+                <h3>Concrete Example: mail.sales.eu.example.com</h3>
+                <div class="dbis-walk-steps">
+                    <div class="dbis-walk-step">
+                        <code>_dmarc.mail.sales.eu.example.com</code>
+                        <span class="dbis-walk-label">No record</span>
+                    </div>
+                    <div class="dbis-walk-step">
+                        <code>_dmarc.sales.eu.example.com</code>
+                        <span class="dbis-walk-label">No record</span>
+                    </div>
+                    <div class="dbis-walk-step">
+                        <code>_dmarc.eu.example.com</code>
+                        <span class="dbis-walk-label">No record</span>
+                    </div>
+                    <div class="dbis-walk-step found">
+                        <code>_dmarc.example.com</code>
+                        <span class="dbis-walk-label">Policy found here</span>
+                    </div>
+                </div>
+                <p>The lookup moves up the DNS hierarchy one label at a time until a DMARC record is found or the query limit (8 tree walk queries) is reached.</p>
+
+                <h3>Organizational Domain</h3>
+                <p>The organizational domain is the base domain where DMARC policy ultimately applies if no subdomain-specific policy exists. It defines both alignment boundaries and the fallback policy location. Under DMARCbis, this is discovered via the DNS tree walk rather than the Public Suffix List.</p>
+
                 <p>The first record found becomes the effective policy. The walk stops when it hits a domain with <code>psd=y</code> or <code>psd=n</code>, or after up to 8 tree walk queries plus the initial Author Domain lookup (9 DNS queries maximum), a safety limit to prevent abuse from deeply nested domain names.</p>
                 <p>If no DMARC record is found after up to 8 tree walk queries (plus the initial Author Domain lookup), or if the walk reaches the DNS root without encountering a record with <code>psd=y</code> or <code>psd=n</code>, DMARC evaluation concludes that no policy applies. The domain is treated as having no DMARC record, and receivers apply their default handling.</p>
                 <p>This matters because a DMARC record published at an intermediate level, like <code>_dmarc.marketing.example.com</code>, is discovered by DMARCbis but invisible to RFC 7489. During the transition period where some receivers use the old algorithm and some use the new one, the same domain can have different effective policies depending on which standard the receiver implements.</p>
@@ -285,10 +421,42 @@
                 <p>The simplest approach: run an audit on your domain. The results include a DMARCbis readiness assessment that checks your record against the updated specification and flags exactly what applies to you.</p>
 
                 <h3>The short version</h3>
-                <p>For most domains, the key changes are: remove <code>pct=</code>, <code>rf=</code>, and <code>ri=</code> if present, since these tags are deprecated and will be ignored. Add <code>np=reject</code> if you already enforce <code>p=reject</code> and want to close the non-existent subdomain loophole. Add <code>psd=n</code> to declare that your domain is not a public suffix. And confirm that all <code>rua=</code> and <code>ruf=</code> URIs include the <code>mailto:</code> prefix, since bare email addresses are no longer accepted.</p>
+                <p>For most domains, the key changes are:</p>
+                <ul>
+                    <li>Remove <code>pct=</code>, <code>rf=</code>, and <code>ri=</code> if present — these tags are deprecated and will be ignored</li>
+                    <li>Add <code>np=reject</code> if you already enforce <code>p=reject</code> and want to close the non-existent subdomain loophole</li>
+                    <li>Add <code>psd=n</code> to declare that your domain is not a public suffix</li>
+                    <li>Confirm that all <code>rua=</code> and <code>ruf=</code> URIs include the <code>mailto:</code> prefix — bare email addresses are no longer accepted</li>
+                </ul>
                 <p>A word of caution on <code>np=</code>: this tag applies to all non-existent subdomains. If you use services that send email from dynamically created subdomains, or if marketing teams spin up campaign-specific subdomains without creating DNS records first, an <code>np=reject</code> policy will cause that mail to fail DMARC. Audit your sending infrastructure before adding this tag.</p>
                 <p>An example of a DMARCbis-compliant record:</p>
                 <p><code>v=DMARC1; p=reject; sp=reject; np=reject; psd=n; fo=1; rua=mailto:dmarc@yourdomain.com</code></p>
+            </div>
+
+            <!-- Section: Do You Need to Change Anything? -->
+            <div class="dbis-section" id="do-you-need-to-change">
+                <h2>Do You Need to Change Anything?</h2>
+                <p>Existing DMARC records (v=DMARC1) continue to work without modification. No immediate action is required.</p>
+                <p>To prepare for DMARCbis:</p>
+                <ul>
+                    <li>Ensure your root domain has a DMARC record</li>
+                    <li>Verify subdomain policies are intentional (not relying on PSL edge cases)</li>
+                    <li>Consider adding np= to protect non-existent subdomains</li>
+                    <li>Consider declaring psd=n explicitly if you are not a public suffix</li>
+                    <li>Use dns-audit.com to check your DMARCbis readiness score</li>
+                </ul>
+            </div>
+
+            <!-- Section: Key Takeaways -->
+            <div class="dbis-section" id="key-takeaways">
+                <h2>Key Takeaways</h2>
+                <ul>
+                    <li>DMARCbis does not change SPF or DKIM validation</li>
+                    <li>It improves how receivers discover and apply DMARC policies</li>
+                    <li>It removes the dependency on the Public Suffix List</li>
+                    <li>Existing records continue to work — no breaking changes</li>
+                    <li>Early preparation (np=, psd=, removing deprecated tags) positions you ahead of adoption</li>
+                </ul>
             </div>
 
             <!-- Section 7: Further Reading -->
