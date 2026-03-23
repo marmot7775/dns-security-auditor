@@ -116,7 +116,9 @@ document.addEventListener('DOMContentLoaded', () => {
             domainInput.value = normalized;
             runAudit(normalized);
         }
-    } else if (!domain) {
+    } else {
+        // Clear any browser-restored value when there's no ?d= param
+        domainInput.value = '';
         // Ensure focus after all DOM mutations complete
         requestAnimationFrame(() => domainInput.focus());
     }
