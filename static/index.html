@@ -4,7 +4,7 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>DNS Security Auditor | dns-audit.com</title>
-    <meta name="description" content="Free DNS and email security auditing. Check your domain's DMARC, SPF, DKIM, MTA-STS, TLS-RPT, BIMI, DNSSEC, CAA, and more. Get a security grade and detailed findings.">
+    <meta name="description" content="Free DNS security audit tool. Scan any domain for DMARC, SPF, DKIM, MTA-STS, DNSSEC, DANE, CAA, TLS-RPT, and BIMI. Get a security score, letter grade, and PDF report.">
     <meta name="keywords" content="DNS audit, DMARC check, SPF validator, DKIM checker, email security, MTA-STS, BIMI, DNSSEC, domain security">
     <meta name="author" content="Neil Anuskiewicz">
     <meta property="og:type" content="website" />
@@ -22,7 +22,7 @@
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
-    <link rel="stylesheet" href="/static/style.css?v=ds9">
+    <link rel="stylesheet" href="/static/style.css?v=ds10">
     <script type="application/ld+json">
     {
         "@context": "https://schema.org",
@@ -64,6 +64,30 @@
                     "@type": "Answer",
                     "text": "dns-audit.com evaluates nine email security and DNS protocols: DMARC (domain policy), SPF (sender authorization), DKIM (message signing), MTA-STS (transport encryption), TLS-RPT (TLS failure reporting), DANE (certificate pinning via DNSSEC), DNSSEC (DNS integrity), CAA (certificate authority restrictions), and BIMI (brand indicators)."
                 }
+            }
+        ]
+    }
+    </script>
+    <script type="application/ld+json">
+    {
+        "@context": "https://schema.org",
+        "@type": "DefinedTermSet",
+        "name": "Email Security Protocols",
+        "hasDefinedTerm": [
+            {
+                "@type": "DefinedTerm",
+                "name": "DMARC",
+                "description": "Domain-based Message Authentication, Reporting, and Conformance. A DNS-based email authentication policy protocol defined in RFC 7489."
+            },
+            {
+                "@type": "DefinedTerm",
+                "name": "SPF",
+                "description": "Sender Policy Framework. A DNS record that specifies which mail servers are authorized to send email for a domain, defined in RFC 7208."
+            },
+            {
+                "@type": "DefinedTerm",
+                "name": "DKIM",
+                "description": "DomainKeys Identified Mail. A cryptographic email signing standard that allows receivers to verify message integrity, defined in RFC 6376."
             }
         ]
     }
