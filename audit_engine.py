@@ -1794,8 +1794,12 @@ def _raw_check_spf(domain: str) -> Dict[str, Any]:
     result["ttl"] = _lookup_ttl(domain, "TXT")
 
     if spf_was_malformed:
-        _add_syntax(
-            "SPF record has syntax errors: mechanisms are not space-delimited",
+        # Lenient parser recovered the mechanisms, so this is a warning, not a
+        # fatal error.  Reserve "error" severity for cases where SPF genuinely
+        # cannot be evaluated (no record, >10 lookups, multiple records, etc.).
+        _add_issue(
+            "warning",
+            "SPF record has syntax issues: mechanisms are not space-delimited",
             "The SPF record has mechanisms jammed together without spaces, "
             "likely caused by multi-string TXT record configuration in DNS. "
             "While the tool extracted the mechanisms, this violates RFC 7208 "
@@ -1950,7 +1954,8 @@ def _raw_check_spf(domain: str) -> Dict[str, Any]:
                     f"Unknown mechanism: '{mech_name}'",
                     f"'{mech_name}' is not a recognized SPF mechanism. "
                     "This may be a typo (e.g., 'inclde' instead of 'include').",
-                    f"Valid mechanisms: {', '.join(sorted(KNOWN_MECHANISMS))}.",
+                    f"Remove or correct '{mech_name}' in your SPF record. "
+                    f"Check for typos against the SPF specification (RFC 7208).",
                 )
 
         else:
@@ -1981,7 +1986,8 @@ def _raw_check_spf(domain: str) -> Dict[str, Any]:
                 _add_syntax(
                     f"Unknown mechanism: '{raw}'",
                     f"'{raw}' is not a recognized SPF mechanism or modifier.",
-                    f"Valid mechanisms: {', '.join(sorted(KNOWN_MECHANISMS))}.",
+                    f"Remove or correct '{raw}' in your SPF record. "
+                    f"Check for typos against the SPF specification (RFC 7208).",
                 )
 
     # ── Step 4: Cross-mechanism checks ──────────────────────────

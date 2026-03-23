@@ -220,12 +220,15 @@ def build_dmarc_evaluation(raw_dmarc: Dict, raw_spf: Dict,
 
     # --- SPF result ---
     spf_record = raw_spf.get("record") if raw_spf else None
-    spf_status = raw_spf.get("status", "error") if raw_spf else "error"
     spf_lookup_count = raw_spf.get("lookup_count", 0) if raw_spf else 0
 
     if not spf_record:
         spf_result = "none"
-    elif spf_status == "error" or spf_lookup_count > 10:
+    elif spf_lookup_count > 10:
+        # Only treat as permerror when lookups genuinely exceed the RFC 7208
+        # limit.  Syntax warnings (e.g. malformed but recovered records) should
+        # NOT produce a permerror here -- the lenient parser result is the
+        # single source of truth for the entire UI.
         spf_result = "permerror"
     else:
         spf_result = "configured"
