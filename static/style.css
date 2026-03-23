@@ -326,7 +326,7 @@ main {
     border-radius: 7px;
     overflow: hidden;
     flex-shrink: 0;
-    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.4);
+    box-shadow: var(--shadow-md);
     line-height: 1;
     border: 1px solid var(--border);
 }
@@ -379,7 +379,7 @@ main {
 
 .logo-text {
     font-weight: 700;
-    font-size: 1.15rem;
+    font-size: var(--font-lg);
     letter-spacing: -0.01em;
 }
 
@@ -394,7 +394,7 @@ main {
 }
 
 .site-tagline {
-    font-size: 0.82rem;
+    font-size: var(--font-sm);
     font-weight: 500;
     color: var(--text-tertiary);
     letter-spacing: 0.01em;
@@ -408,7 +408,7 @@ main {
 }
 
 .nav-link {
-    font-size: 0.78rem;
+    font-size: var(--font-sm);
     font-weight: 500;
     color: var(--text-muted);
     text-decoration: none;
@@ -438,7 +438,7 @@ main {
 }
 
 .header-link {
-    font-size: 0.82rem;
+    font-size: var(--font-sm);
     font-weight: 600;
     color: var(--primary-light);
     text-decoration: none;
@@ -456,6 +456,7 @@ main {
    AUDIT INPUT
    ========================================================================== */
 .audit-input-section {
+    position: relative;
     padding-top: var(--space-2xl);
     padding-bottom: var(--space-lg);
     transition: padding 0.3s ease;
@@ -503,10 +504,6 @@ main {
     opacity: 0.6;
 }
 
-.audit-input-section {
-    position: relative;
-}
-
 .audit-title {
     font-size: 1.87rem;
     font-weight: 700;
@@ -517,7 +514,7 @@ main {
 }
 
 .audit-subtitle {
-    font-size: 1rem;
+    font-size: var(--font-md);
     font-weight: 500;
     color: var(--text-secondary);
     margin-bottom: 0.65rem;
@@ -525,7 +522,7 @@ main {
 }
 
 .audit-trust {
-    font-size: 0.8rem;
+    font-size: var(--font-sm);
     color: var(--text-tertiary);
     margin-bottom: var(--space-lg);
     line-height: 1.5;
@@ -594,7 +591,7 @@ main {
 }
 
 .selector-toggle {
-    font-size: 0.78rem;
+    font-size: var(--font-sm);
     color: var(--text-tertiary);
     text-decoration: none;
     cursor: pointer;
@@ -620,7 +617,7 @@ main {
 
 .selector-input {
     max-width: 280px;
-    font-size: 0.9rem;
+    font-size: var(--font-base);
     padding-left: 0.85rem;
 }
 
@@ -765,7 +762,7 @@ main {
 }
 
 .loading-status {
-    font-size: 0.85rem;
+    font-size: var(--font-sm);
     color: var(--text-secondary);
     letter-spacing: 0.005em;
 }
@@ -822,14 +819,14 @@ main {
 }
 
 .domain-name {
-    font-size: 1.3rem;
+    font-size: var(--font-xl);
     font-weight: 700;
     letter-spacing: -0.02em;
     color: var(--text-primary);
 }
 
 .audit-timestamp {
-    font-size: 0.78rem;
+    font-size: var(--font-sm);
     color: var(--text-tertiary);
     margin-top: 0.2rem;
     letter-spacing: 0.005em;
@@ -849,7 +846,7 @@ main {
     border: 1px solid var(--border);
     border-radius: var(--radius);
     font-family: var(--font-body);
-    font-size: 0.78rem;
+    font-size: var(--font-sm);
     font-weight: 500;
     color: var(--text-secondary);
     cursor: pointer;
@@ -942,7 +939,7 @@ main {
     border: none;
     border-radius: calc(var(--radius) - 2px);
     font-family: var(--font-body);
-    font-size: 0.82rem;
+    font-size: var(--font-sm);
     font-weight: 500;
     color: var(--text-primary);
     cursor: pointer;
@@ -1020,7 +1017,7 @@ main {
 }
 
 .summary-label {
-    font-size: 0.7rem;
+    font-size: var(--font-xs);
     font-weight: 600;
     letter-spacing: 0.1em;
     text-transform: uppercase;
@@ -1041,7 +1038,7 @@ main {
 }
 
 .score-subtext {
-    font-size: 0.82rem;
+    font-size: var(--font-sm);
     color: var(--text-secondary);
     font-weight: 500;
     margin-top: 0.15rem;
@@ -1075,7 +1072,7 @@ main {
     align-items: center;
     gap: 0.5rem;
     font-weight: 600;
-    font-size: 0.9rem;
+    font-size: var(--font-base);
     color: var(--fail);
     margin-bottom: 0.85rem;
 }
@@ -1090,7 +1087,7 @@ main {
     display: flex;
     align-items: flex-start;
     gap: 0.65rem;
-    font-size: 0.88rem;
+    font-size: var(--font-sm);
     color: var(--text-primary);
     line-height: 1.55;
 }
@@ -1105,7 +1102,7 @@ main {
     display: flex;
     align-items: center;
     justify-content: center;
-    font-size: 0.7rem;
+    font-size: var(--font-xs);
     font-weight: 700;
     margin-top: 2px;
 }
@@ -1132,7 +1129,7 @@ main {
     border: 1px solid var(--border);
     border-radius: var(--radius);
     font-family: var(--font-body);
-    font-size: 0.72rem;
+    font-size: var(--font-xs);
     font-weight: 500;
     color: var(--text-secondary);
     cursor: pointer;
@@ -1147,7 +1144,7 @@ main {
 
 /* Results list */
 .results-label {
-    font-size: 0.7rem;
+    font-size: var(--font-xs);
     font-weight: 600;
     letter-spacing: 0.1em;
     text-transform: uppercase;
@@ -1291,7 +1288,7 @@ main {
 h3.result-title,
 .result-title {
     font-weight: 600;
-    font-size: 1rem;
+    font-size: var(--font-md);
     color: var(--text-primary);
     margin: 0;
 }
@@ -1336,7 +1333,7 @@ h3.result-title,
 .result-verdict {
     flex: 1;
     text-align: right;
-    font-size: 0.82rem;
+    font-size: var(--font-sm);
     color: var(--text-tertiary);
     white-space: nowrap;
     overflow: hidden;
@@ -1346,7 +1343,7 @@ h3.result-title,
 /* Chevron */
 .result-chevron {
     color: var(--text-tertiary);
-    font-size: 0.7rem;
+    font-size: var(--font-xs);
     transition: transform var(--duration-slow) var(--ease-out);
     flex-shrink: 0;
     margin-left: 0.25rem;
@@ -1441,7 +1438,7 @@ h3.result-title,
     padding: 0.4rem 0.7rem;
     min-height: 32px;
     font-family: var(--font-body);
-    font-size: 0.7rem;
+    font-size: var(--font-xs);
     font-weight: 500;
     color: #a0a8b8;
     cursor: pointer;
@@ -1475,7 +1472,7 @@ h3.result-title,
 
 .error-message {
     color: var(--text-secondary);
-    font-size: 0.88rem;
+    font-size: var(--font-sm);
 }
 
 .error-retry {
@@ -1487,7 +1484,7 @@ h3.result-title,
     border-radius: var(--radius);
     cursor: pointer;
     font-family: var(--font-body);
-    font-size: 0.85rem;
+    font-size: var(--font-sm);
     font-weight: 600;
 }
 
@@ -1511,7 +1508,7 @@ h3.result-title,
 }
 
 .tree-walk-header {
-    font-size: 0.7rem;
+    font-size: var(--font-xs);
     font-weight: 700;
     letter-spacing: 0.08em;
     text-transform: uppercase;
@@ -1519,7 +1516,7 @@ h3.result-title,
 }
 
 .tw-spec-badge {
-    font-size: 0.6rem;
+    font-size: var(--font-xs);
     font-weight: 600;
     letter-spacing: 0.04em;
     color: var(--dmarcbis);
@@ -1540,7 +1537,7 @@ h3.result-title,
 
 /* Intro / educational text */
 .tw-intro {
-    font-size: 0.82rem;
+    font-size: var(--font-sm);
     color: var(--text-secondary);
     line-height: 1.65;
     margin-bottom: 1rem;
@@ -1566,14 +1563,14 @@ h3.result-title,
     display: flex;
     align-items: flex-start;
     gap: 0.5rem;
-    font-size: 0.88rem;
+    font-size: var(--font-sm);
     color: var(--text-secondary);
     line-height: 1.6;
 }
 
 .tw-simple-check {
     color: var(--pass);
-    font-size: 1rem;
+    font-size: var(--font-md);
     font-weight: 700;
     flex-shrink: 0;
     line-height: 1.6;
@@ -1587,7 +1584,7 @@ h3.result-title,
 .tw-simple-policy {
     margin-top: 0.65rem;
     padding-left: 1.5rem;
-    font-size: 0.82rem;
+    font-size: var(--font-sm);
     color: var(--text-secondary);
 }
 
@@ -1595,7 +1592,7 @@ h3.result-title,
     margin-top: 0.85rem;
     padding-top: 0.75rem;
     border-top: 1px solid var(--border);
-    font-size: 0.72rem;
+    font-size: var(--font-xs);
     color: var(--text-tertiary);
     line-height: 1.65;
 }
@@ -1758,25 +1755,6 @@ h3.result-title,
 .tw-animated.tree-walk-simple .tw-simple-policy { animation-delay: 0.22s; }
 .tw-animated.tree-walk-simple .tw-footnote { animation-delay: 0.36s; }
 
-/* Respect reduced motion */
-@media (prefers-reduced-motion: reduce) {
-    .tw-animated .tw-step,
-    .tw-animated .tw-policy-source .tw-dot,
-    .tw-animated .tw-meta,
-    .tw-animated .tw-summary,
-    .tw-animated .tw-intro,
-    .tw-animated.tree-walk-simple .tw-simple-body,
-    .tw-animated.tree-walk-simple .tw-simple-policy,
-    .tw-animated.tree-walk-simple .tw-footnote {
-        animation: none;
-        opacity: 1;
-        transform: none;
-    }
-
-    .tw-animated .tw-step:not(.tw-last)::before {
-        animation: none;
-    }
-}
 
 .tw-content {
     flex: 1;
@@ -1785,20 +1763,20 @@ h3.result-title,
 
 .tw-domain {
     font-family: var(--font-mono);
-    font-size: 0.82rem;
+    font-size: var(--font-sm);
     font-weight: 600;
     color: var(--text-primary);
 }
 
 .tw-label {
-    font-size: 0.72rem;
+    font-size: var(--font-xs);
     color: var(--text-tertiary);
     margin-top: 0.1rem;
 }
 
 .tw-source-badge {
     display: inline-block;
-    font-size: 0.6rem;
+    font-size: var(--font-xs);
     font-weight: 600;
     color: var(--pass);
     background: var(--pass-bg);
@@ -1813,7 +1791,7 @@ h3.result-title,
 
 .tw-record {
     font-family: var(--font-mono);
-    font-size: 0.72rem;
+    font-size: var(--font-xs);
     color: var(--pass);
     margin-top: 0.3rem;
     word-break: break-all;
@@ -1821,7 +1799,7 @@ h3.result-title,
 }
 
 .tw-norecord {
-    font-size: 0.72rem;
+    font-size: var(--font-xs);
     color: var(--text-tertiary);
     font-style: italic;
     margin-top: 0.2rem;
@@ -1830,7 +1808,7 @@ h3.result-title,
 /* -- Policy pill badges -- */
 .tw-pill {
     display: inline-block;
-    font-size: 0.72rem;
+    font-size: var(--font-xs);
     font-weight: 600;
     padding: 0.1rem 0.45rem;
     border-radius: 4px;
@@ -1870,14 +1848,14 @@ h3.result-title,
     display: flex;
     align-items: baseline;
     gap: 0.75rem;
-    font-size: 0.8rem;
+    font-size: var(--font-sm);
     line-height: 1.55;
 }
 
 .tw-meta-label {
     flex-shrink: 0;
     width: 140px;
-    font-size: 0.72rem;
+    font-size: var(--font-xs);
     font-weight: 600;
     color: var(--text-tertiary);
     text-transform: uppercase;
@@ -1897,7 +1875,7 @@ h3.result-title,
 
 .tw-meta-value code {
     font-family: var(--font-mono);
-    font-size: 0.76rem;
+    font-size: var(--font-xs);
     background: rgba(255, 255, 255, 0.05);
     padding: 0.1rem 0.35rem;
     border-radius: 3px;
@@ -1908,7 +1886,7 @@ h3.result-title,
     margin-top: 0.85rem;
     padding-top: 0.75rem;
     border-top: 1px solid var(--border);
-    font-size: 0.82rem;
+    font-size: var(--font-sm);
     color: var(--text-secondary);
     line-height: 1.55;
 }
@@ -1952,7 +1930,7 @@ h3.result-title,
 }
 
 .se-header {
-    font-size: 0.7rem;
+    font-size: var(--font-xs);
     font-weight: 700;
     letter-spacing: 0.08em;
     text-transform: uppercase;
@@ -1960,7 +1938,7 @@ h3.result-title,
 }
 
 .se-intro {
-    font-size: 0.82rem;
+    font-size: var(--font-sm);
     color: var(--text-secondary);
     line-height: 1.65;
     margin-bottom: 1rem;
@@ -2043,14 +2021,14 @@ h3.result-title,
 
 .se-mechanism {
     font-family: var(--font-mono);
-    font-size: 0.78rem;
+    font-size: var(--font-sm);
     font-weight: 600;
     color: var(--text-primary);
 }
 
 .se-vendor-badge {
     display: inline-block;
-    font-size: 0.6rem;
+    font-size: var(--font-xs);
     font-weight: 600;
     padding: 0.1rem 0.4rem;
     border-radius: 4px;
@@ -2085,7 +2063,7 @@ h3.result-title,
 
 .se-counter {
     display: inline-block;
-    font-size: 0.6rem;
+    font-size: var(--font-xs);
     font-weight: 600;
     padding: 0.1rem 0.4rem;
     border-radius: 4px;
@@ -2106,7 +2084,7 @@ h3.result-title,
     margin-top: 0.85rem;
     padding-top: 0.75rem;
     border-top: 1px solid var(--border);
-    font-size: 0.78rem;
+    font-size: var(--font-sm);
     color: var(--text-secondary);
 }
 
@@ -2131,19 +2109,6 @@ h3.result-title,
     animation-delay: 0.02s;
 }
 
-@media (prefers-reduced-motion: reduce) {
-    .se-animated .se-step,
-    .se-animated .se-footer,
-    .se-animated .se-intro {
-        animation: none;
-        opacity: 1;
-        transform: none;
-    }
-
-    .se-animated .se-step:not(.se-last)::before {
-        animation: none;
-    }
-}
 
 @media (max-width: 640px) {
     .spf-execution { padding: 1.1rem 1rem; }
@@ -2166,7 +2131,7 @@ h3.result-title,
 }
 
 .de-intro {
-    font-size: 0.82rem;
+    font-size: var(--font-sm);
     color: var(--text-secondary);
     line-height: 1.65;
     margin-bottom: 1rem;
@@ -2186,7 +2151,7 @@ h3.result-title,
     background: var(--surface);
     border: 1px solid var(--border);
     border-radius: 6px;
-    font-size: 0.82rem;
+    font-size: var(--font-sm);
 }
 
 .de-row.de-final {
@@ -2196,7 +2161,7 @@ h3.result-title,
 
 .de-protocol {
     font-family: var(--font-mono);
-    font-size: 0.72rem;
+    font-size: var(--font-xs);
     font-weight: 700;
     color: var(--text-primary);
     min-width: 3.2rem;
@@ -2204,7 +2169,7 @@ h3.result-title,
 
 .de-pill {
     display: inline-block;
-    font-size: 0.6rem;
+    font-size: var(--font-xs);
     font-weight: 600;
     padding: 0.1rem 0.45rem;
     border-radius: 4px;
@@ -2222,11 +2187,11 @@ h3.result-title,
     border: 1px solid var(--border);
 }
 
-.de-align-mode { font-size: 0.72rem; color: var(--text-tertiary); }
-.de-align-result { font-size: 0.72rem; font-weight: 600; }
+.de-align-mode { font-size: var(--font-xs); color: var(--text-tertiary); }
+.de-align-result { font-size: var(--font-xs); font-weight: 600; }
 
 .de-note {
-    font-size: 0.68rem;
+    font-size: var(--font-xs);
     color: var(--text-muted);
     font-style: italic;
     width: 100%;
@@ -2234,7 +2199,7 @@ h3.result-title,
 }
 
 .de-mailing-list-note {
-    font-size: 0.72rem;
+    font-size: var(--font-xs);
     color: var(--text-muted);
     font-style: italic;
     margin-top: 0.6rem;
@@ -2246,13 +2211,13 @@ h3.result-title,
 .de-not-aligned { color: var(--fail); }
 
 .de-policy-group {
-    font-size: 0.72rem;
+    font-size: var(--font-xs);
     color: var(--text-secondary);
     font-weight: 400;
 }
 
 .de-disposition {
-    font-size: 0.72rem;
+    font-size: var(--font-xs);
     color: var(--text-secondary);
     margin-left: auto;
     font-style: italic;
@@ -2272,14 +2237,6 @@ h3.result-title,
     animation-delay: 0.02s;
 }
 
-@media (prefers-reduced-motion: reduce) {
-    .de-animated .de-row,
-    .de-animated .de-intro {
-        animation: none;
-        opacity: 1;
-        transform: none;
-    }
-}
 
 @media (max-width: 640px) {
     .dmarc-eval { padding: 1.1rem 1rem; }
@@ -2300,7 +2257,7 @@ h3.result-title,
 }
 
 .rc-intro {
-    font-size: 0.82rem;
+    font-size: var(--font-sm);
     color: var(--text-secondary);
     line-height: 1.65;
     margin-bottom: 1rem;
@@ -2325,13 +2282,13 @@ h3.result-title,
     background: var(--surface);
     border: 1px solid var(--border);
     border-radius: 6px;
-    font-size: 0.82rem;
+    font-size: var(--font-sm);
     flex-wrap: wrap;
 }
 
 .rc-type {
     display: inline-block;
-    font-size: 0.6rem;
+    font-size: var(--font-xs);
     font-weight: 700;
     padding: 0.1rem 0.4rem;
     border-radius: 4px;
@@ -2354,7 +2311,7 @@ h3.result-title,
 
 .rc-address {
     font-family: var(--font-mono);
-    font-size: 0.78rem;
+    font-size: var(--font-sm);
     color: var(--text-primary);
     min-width: 0;
     overflow: hidden;
@@ -2363,7 +2320,7 @@ h3.result-title,
 }
 
 .rc-auth {
-    font-size: 0.72rem;
+    font-size: var(--font-xs);
     font-weight: 600;
     flex-shrink: 0;
     margin-left: auto;
@@ -2372,14 +2329,14 @@ h3.result-title,
 .rc-authorized { color: var(--pass); }
 .rc-unauthorized { color: var(--fail); }
 .rc-same-domain { color: var(--text-tertiary); }
-.rc-mx-ok { font-size: 0.6rem; color: var(--pass); flex-shrink: 0; }
-.rc-mx-fail { font-size: 0.6rem; color: var(--fail); flex-shrink: 0; }
+.rc-mx-ok { font-size: var(--font-xs); color: var(--pass); flex-shrink: 0; }
+.rc-mx-fail { font-size: var(--font-xs); color: var(--fail); flex-shrink: 0; }
 
 .rc-footnote {
     margin-top: 0.85rem;
     padding-top: 0.75rem;
     border-top: 1px solid var(--border);
-    font-size: 0.72rem;
+    font-size: var(--font-xs);
     color: var(--text-tertiary);
     line-height: 1.65;
 }
@@ -2394,14 +2351,6 @@ h3.result-title,
     animation-delay: 0.02s;
 }
 
-@media (prefers-reduced-motion: reduce) {
-    .rc-animated .rc-dest,
-    .rc-animated .rc-intro {
-        animation: none;
-        opacity: 1;
-        transform: none;
-    }
-}
 
 @media (max-width: 640px) {
     .report-chain { padding: 1.1rem 1rem; }
@@ -2431,13 +2380,13 @@ h3.result-title,
     display: flex;
     justify-content: space-between;
     align-items: center;
-    font-size: 0.82rem;
+    font-size: var(--font-sm);
     color: var(--text-primary);
     margin-bottom: 0.35rem;
 }
 
 .st-budget-status {
-    font-size: 0.68rem;
+    font-size: var(--font-xs);
     font-weight: 700;
     text-transform: uppercase;
     letter-spacing: 0.04em;
@@ -2474,14 +2423,14 @@ h3.result-title,
 .st-budget-fill.st-bar-over { background: var(--fail); }
 
 .st-budget-note {
-    font-size: 0.72rem;
+    font-size: var(--font-xs);
     color: var(--text-tertiary);
     margin-top: 0.35rem;
     line-height: 1.5;
 }
 
 .st-tree-label {
-    font-size: 0.72rem;
+    font-size: var(--font-xs);
     color: var(--text-tertiary);
     margin-bottom: 0.5rem;
     font-style: italic;
@@ -2511,7 +2460,7 @@ details.st-node>summary {
     cursor: pointer;
     border-radius: 6px;
     min-height: 44px;
-    font-size: 0.82rem;
+    font-size: var(--font-sm);
     list-style: none;
 }
 
@@ -2538,14 +2487,14 @@ details.st-node>summary:hover {
 
 .st-domain {
     font-family: var(--font-mono);
-    font-size: 0.82rem;
+    font-size: var(--font-sm);
     font-weight: 600;
     color: var(--text-primary);
 }
 
 .st-cost {
     display: inline-block;
-    font-size: 0.6rem;
+    font-size: var(--font-xs);
     font-weight: 600;
     padding: 0.1rem 0.4rem;
     border-radius: 4px;
@@ -2565,7 +2514,7 @@ details.st-node>summary:hover {
 
 .st-record {
     font-family: var(--font-mono);
-    font-size: 0.7rem;
+    font-size: var(--font-xs);
     color: var(--text-secondary);
     padding: 0.35rem 0.65rem;
     margin: 0.25rem 0 0.25rem 1.5rem;
@@ -2587,7 +2536,7 @@ details.st-node>summary:hover {
 .st-ip {
     display: inline-block;
     font-family: var(--font-mono);
-    font-size: 0.65rem;
+    font-size: var(--font-xs);
     padding: 0.1rem 0.35rem;
     background: var(--surface);
     border: 1px solid var(--border);
@@ -2597,7 +2546,7 @@ details.st-node>summary:hover {
 
 .st-terminal {
     font-family: var(--font-mono);
-    font-size: 0.78rem;
+    font-size: var(--font-sm);
     font-weight: 700;
     color: var(--text-primary);
     padding: 0.35rem 0.65rem;
@@ -2616,14 +2565,6 @@ details.st-node>summary:hover {
     animation-delay: 0.2s;
 }
 
-@media (prefers-reduced-motion: reduce) {
-    .st-animated>details.st-node,
-    .st-animated .st-children>details.st-node {
-        animation: none;
-        opacity: 1;
-        transform: none;
-    }
-}
 
 @media (max-width: 640px) {
     .spf-tree { padding: 1.1rem 1rem; }
@@ -2635,7 +2576,7 @@ details.st-node>summary:hover {
 
 /* Explanation text */
 .explanation {
-    font-size: 0.9rem;
+    font-size: var(--font-base);
     color: var(--text-secondary);
     line-height: 1.75;
     margin: 0.6rem 0;
@@ -2656,7 +2597,7 @@ details.st-node>summary:hover {
 }
 
 .fix-label {
-    font-size: 0.68rem;
+    font-size: var(--font-xs);
     font-weight: 700;
     letter-spacing: 0.1em;
     text-transform: uppercase;
@@ -2665,7 +2606,7 @@ details.st-node>summary:hover {
 }
 
 .fix-text {
-    font-size: 0.86rem;
+    font-size: var(--font-sm);
     color: var(--text-primary);
     line-height: 1.65;
 }
@@ -2686,7 +2627,7 @@ details.st-node>summary:hover {
 }
 
 .fix-records-label {
-    font-size: 0.68rem;
+    font-size: var(--font-xs);
     font-weight: 700;
     letter-spacing: 0.1em;
     text-transform: uppercase;
@@ -2699,7 +2640,7 @@ details.st-node>summary:hover {
     display: flex;
     align-items: flex-start;
     gap: 0.55rem;
-    font-size: 0.86rem;
+    font-size: var(--font-sm);
     line-height: 1.6;
     margin: 0.4rem 0;
 }
@@ -2707,7 +2648,7 @@ details.st-node>summary:hover {
 .detail-icon {
     flex-shrink: 0;
     margin-top: 0.18rem;
-    font-size: 0.85rem;
+    font-size: var(--font-sm);
 }
 
 .detail-item.pass-item { color: var(--pass); }
@@ -2725,7 +2666,7 @@ details.st-node>summary:hover {
     border-radius: 5px;
     padding: 0.3rem 0.65rem;
     font-family: var(--font-body);
-    font-size: 0.72rem;
+    font-size: var(--font-xs);
     font-weight: 500;
     color: var(--text-tertiary);
     cursor: pointer;
@@ -2787,7 +2728,7 @@ details.st-node>summary:hover {
 
 .vendor-name {
     font-weight: 600;
-    font-size: 0.88rem;
+    font-size: var(--font-sm);
     color: var(--text-primary);
 }
 
@@ -2817,7 +2758,7 @@ details.st-node>summary:hover {
     border-radius: var(--radius);
     padding: 0.85rem 1rem;
     margin-bottom: 1rem;
-    font-size: 0.85rem;
+    font-size: var(--font-sm);
     color: var(--text-secondary);
     line-height: 1.5;
 }
@@ -2866,13 +2807,13 @@ details.st-node>summary:hover {
 
 .pi-provider-name {
     font-weight: 700;
-    font-size: 1rem;
+    font-size: var(--font-md);
     color: var(--text-primary);
 }
 
 .pi-category-badge {
     display: inline-block;
-    font-size: 0.65rem;
+    font-size: var(--font-xs);
     font-weight: 600;
     text-transform: uppercase;
     letter-spacing: 0.04em;
@@ -2913,7 +2854,7 @@ details.st-node>summary:hover {
     border: none;
     border-top: 1px solid var(--border);
     color: var(--text-secondary);
-    font-size: 0.82rem;
+    font-size: var(--font-sm);
     font-weight: 600;
     cursor: pointer;
     text-align: left;
@@ -2926,7 +2867,7 @@ details.st-node>summary:hover {
 }
 
 .pi-chevron {
-    font-size: 0.6rem;
+    font-size: var(--font-xs);
     flex-shrink: 0;
 }
 
@@ -2937,7 +2878,7 @@ details.st-node>summary:hover {
 
 .pi-guidance-item {
     padding: 0.5rem 0;
-    font-size: 0.82rem;
+    font-size: var(--font-sm);
     line-height: 1.55;
     color: var(--text-secondary);
 }
@@ -2966,7 +2907,7 @@ details.st-node>summary:hover {
 .pi-scorecard-table {
     width: 100%;
     border-collapse: collapse;
-    font-size: 0.8rem;
+    font-size: var(--font-sm);
 }
 
 .pi-scorecard-table th {
@@ -2974,7 +2915,7 @@ details.st-node>summary:hover {
     font-weight: 600;
     color: var(--text-tertiary);
     text-transform: uppercase;
-    font-size: 0.68rem;
+    font-size: var(--font-xs);
     letter-spacing: 0.04em;
     padding: 0.4rem 0.5rem;
     border-bottom: 1px solid var(--border);
@@ -2995,7 +2936,7 @@ details.st-node>summary:hover {
 }
 
 .pi-sending-header {
-    font-size: 0.8rem;
+    font-size: var(--font-sm);
     font-weight: 600;
     color: var(--text-tertiary);
     text-transform: uppercase;
@@ -3034,14 +2975,14 @@ details.st-node>summary:hover {
 }
 
 .footer-brand-name {
-    font-size: 1.07rem;
+    font-size: var(--font-md);
     font-weight: 600;
     color: var(--text-primary);
     letter-spacing: -0.01em;
 }
 
 .footer-brand-desc {
-    font-size: 0.87rem;
+    font-size: var(--font-sm);
     color: var(--text-secondary);
     line-height: 1.5;
 }
@@ -3080,13 +3021,13 @@ details.st-node>summary:hover {
 
 .footer-dot {
     color: var(--text-muted);
-    font-size: 0.9rem;
+    font-size: var(--font-base);
 }
 
 .footer-link {
     color: var(--primary-light);
     text-decoration: none;
-    font-size: 0.93rem;
+    font-size: var(--font-base);
     font-weight: 500;
     transition: color var(--duration) var(--ease);
 }
@@ -3097,7 +3038,7 @@ details.st-node>summary:hover {
 }
 
 .footer-attribution {
-    font-size: 0.87rem;
+    font-size: var(--font-sm);
     color: var(--text-muted);
     display: flex;
     align-items: center;
@@ -3123,7 +3064,7 @@ details.st-node>summary:hover {
 }
 
 .scope-label {
-    font-size: 0.7rem;
+    font-size: var(--font-xs);
     font-weight: 600;
     letter-spacing: 0.1em;
     text-transform: uppercase;
@@ -3146,7 +3087,7 @@ details.st-node>summary:hover {
     border: 1.5px solid var(--border);
     border-radius: 100px;
     font-family: var(--font-body);
-    font-size: 0.78rem;
+    font-size: var(--font-sm);
     font-weight: 500;
     color: var(--text-secondary);
     cursor: pointer;
@@ -3530,14 +3471,14 @@ details.st-node>summary:hover {
 }
 
 .defensive-header {
-    font-size: 0.88rem;
+    font-size: var(--font-sm);
     font-weight: 700;
     color: var(--pass);
     margin-bottom: 0.4rem;
 }
 
 .defensive-body {
-    font-size: 0.84rem;
+    font-size: var(--font-sm);
     color: var(--text-secondary);
     line-height: 1.6;
     margin-bottom: 0.65rem;
@@ -3550,7 +3491,7 @@ details.st-node>summary:hover {
 }
 
 .defensive-signal {
-    font-size: 0.72rem;
+    font-size: var(--font-xs);
     font-weight: 600;
     color: var(--pass);
     background: rgba(16, 185, 129, 0.08);
@@ -3571,7 +3512,7 @@ details.st-node>summary:hover {
 }
 
 .resilience-header {
-    font-size: 0.88rem;
+    font-size: var(--font-sm);
     font-weight: 700;
     color: var(--primary-light);
     margin-bottom: 0.65rem;
@@ -3585,7 +3526,7 @@ details.st-node>summary:hover {
 }
 
 .resilience-level {
-    font-size: 0.68rem;
+    font-size: var(--font-xs);
     font-weight: 700;
     text-transform: uppercase;
     letter-spacing: 0.05em;
@@ -3600,7 +3541,7 @@ details.st-node>summary:hover {
 .resilience-fail { background: var(--fail); }
 
 .resilience-text {
-    font-size: 0.82rem;
+    font-size: var(--font-sm);
     color: var(--text-primary);
     line-height: 1.5;
 }
@@ -3616,7 +3557,7 @@ details.st-node>summary:hover {
     display: flex;
     align-items: center;
     gap: 0.35rem;
-    font-size: 0.76rem;
+    font-size: var(--font-xs);
     padding: 0.3rem 0.6rem;
     background: var(--bg-raised);
     border-radius: 5px;
@@ -3626,12 +3567,12 @@ details.st-node>summary:hover {
 .resilience-mech-name {
     font-weight: 700;
     font-family: var(--font-mono);
-    font-size: 0.72rem;
+    font-size: var(--font-xs);
     color: var(--text-primary);
 }
 
 .resilience-mech-status {
-    font-size: 0.68rem;
+    font-size: var(--font-xs);
     font-weight: 600;
     padding: 0.1rem 0.35rem;
     border-radius: 3px;
@@ -3642,12 +3583,12 @@ details.st-node>summary:hover {
 .resilience-mech-status.resilience-fail { background: var(--fail-bg); color: var(--fail); }
 
 .resilience-mech-note {
-    font-size: 0.72rem;
+    font-size: var(--font-xs);
     color: var(--text-tertiary);
 }
 
 .resilience-risk-text {
-    font-size: 0.78rem;
+    font-size: var(--font-sm);
     color: var(--text-secondary);
     line-height: 1.6;
     padding: 0.5rem 0.75rem;
@@ -3667,7 +3608,7 @@ details.st-node>summary:hover {
 }
 
 .fix-preview-label {
-    font-size: 0.78rem;
+    font-size: var(--font-sm);
     font-weight: 700;
     color: var(--pass);
     text-transform: uppercase;
@@ -3680,7 +3621,7 @@ details.st-node>summary:hover {
 }
 
 .fix-preview-host {
-    font-size: 0.78rem;
+    font-size: var(--font-sm);
     color: var(--text-secondary);
     margin-bottom: 0.45rem;
 }
@@ -3688,12 +3629,12 @@ details.st-node>summary:hover {
 .fix-preview-host strong {
     color: var(--text-primary);
     font-family: var(--font-mono);
-    font-size: 0.76rem;
+    font-size: var(--font-xs);
 }
 
 .fix-record-block {
     font-family: var(--font-mono);
-    font-size: 0.78rem;
+    font-size: var(--font-sm);
     line-height: 1.75;
     background: var(--fix-bg);
     border: 1px solid var(--pass-border);
@@ -3712,7 +3653,7 @@ details.st-node>summary:hover {
 }
 
 .fix-comment {
-    font-size: 0.74rem;
+    font-size: var(--font-xs);
     color: var(--text-tertiary);
     margin-top: 0.3rem;
     line-height: 1.5;
@@ -3730,7 +3671,7 @@ details.st-node>summary:hover {
     display: flex;
     align-items: center;
     gap: 0.5rem;
-    font-size: 0.88rem;
+    font-size: var(--font-sm);
     font-weight: 700;
     color: var(--primary-light);
     margin-bottom: 0.65rem;
@@ -3772,7 +3713,7 @@ details.st-node>summary:hover {
 }
 
 .anomaly-severity {
-    font-size: 0.62rem;
+    font-size: var(--font-xs);
     font-weight: 700;
     text-transform: uppercase;
     letter-spacing: 0.05em;
@@ -3786,19 +3727,19 @@ details.st-node>summary:hover {
 .anomaly-severity.info { background: var(--primary); }
 
 .anomaly-title {
-    font-size: 0.82rem;
+    font-size: var(--font-sm);
     font-weight: 600;
     color: var(--text-primary);
 }
 
 .anomaly-desc {
-    font-size: 0.78rem;
+    font-size: var(--font-sm);
     color: var(--text-secondary);
     line-height: 1.55;
 }
 
 .anomaly-rec {
-    font-size: 0.76rem;
+    font-size: var(--font-xs);
     color: var(--pass);
     margin-top: 0.3rem;
     line-height: 1.5;
@@ -3818,7 +3759,7 @@ details.st-node>summary:hover {
 }
 
 .edu-teaser {
-    font-size: 0.88rem;
+    font-size: var(--font-sm);
     color: var(--text-secondary);
     text-align: center;
     padding: 1rem 0;
@@ -3845,7 +3786,7 @@ details.st-node>summary:hover {
     border-radius: var(--radius);
     padding: 0.85rem 1.15rem;
     font-family: var(--font-body);
-    font-size: 0.88rem;
+    font-size: var(--font-sm);
     font-weight: 600;
     color: var(--primary-light);
     cursor: pointer;
@@ -3859,7 +3800,7 @@ details.st-node>summary:hover {
 
 .edu-chevron {
     transition: transform 0.2s var(--ease);
-    font-size: 0.8rem;
+    font-size: var(--font-sm);
 }
 
 .edu-toggle.open .edu-chevron {
@@ -3880,7 +3821,7 @@ details.st-node>summary:hover {
 }
 
 .edu-intro {
-    font-size: 0.84rem;
+    font-size: var(--font-sm);
     color: var(--text-secondary);
     line-height: 1.7;
     margin-bottom: 1.25rem;
@@ -3893,7 +3834,7 @@ details.st-node>summary:hover {
 }
 
 .edu-heading {
-    font-size: 0.85rem;
+    font-size: var(--font-sm);
     font-weight: 700;
     color: var(--text-primary);
     margin: 1.15rem 0 0.4rem;
@@ -3904,7 +3845,7 @@ details.st-node>summary:hover {
 }
 
 .edu-text {
-    font-size: 0.8rem;
+    font-size: var(--font-sm);
     color: var(--text-secondary);
     line-height: 1.7;
     margin: 0 0 0.75rem;
@@ -3930,14 +3871,14 @@ details.st-node>summary:hover {
 }
 
 .edu-change-title {
-    font-size: 0.78rem;
+    font-size: var(--font-sm);
     font-weight: 700;
     color: var(--text-primary);
     margin-bottom: 0.25rem;
 }
 
 .edu-change-desc {
-    font-size: 0.76rem;
+    font-size: var(--font-xs);
     color: var(--text-secondary);
     line-height: 1.65;
 }
@@ -3945,7 +3886,7 @@ details.st-node>summary:hover {
 .edu-table {
     width: 100%;
     border-collapse: collapse;
-    font-size: 0.76rem;
+    font-size: var(--font-xs);
     margin: 0.5rem 0 1rem;
 }
 
@@ -3956,7 +3897,7 @@ details.st-node>summary:hover {
     text-align: left;
     padding: 0.5rem 0.65rem;
     border: 1px solid var(--border);
-    font-size: 0.72rem;
+    font-size: var(--font-xs);
 }
 
 .edu-table td {
@@ -3969,7 +3910,7 @@ details.st-node>summary:hover {
 
 .edu-table code {
     font-family: var(--font-mono);
-    font-size: 0.7rem;
+    font-size: var(--font-xs);
     background: rgba(255, 255, 255, 0.05);
     padding: 0.05rem 0.25rem;
     border-radius: 3px;
@@ -3977,7 +3918,7 @@ details.st-node>summary:hover {
 
 .edu-change-desc code {
     font-family: var(--font-mono);
-    font-size: 0.72rem;
+    font-size: var(--font-xs);
     background: rgba(255, 255, 255, 0.05);
     padding: 0.1rem 0.3rem;
     border-radius: 3px;
@@ -4257,7 +4198,7 @@ body {
     transform: translateX(-50%);
     background: var(--surface-hover);
     color: var(--text-primary);
-    font-size: 0.87rem;
+    font-size: var(--font-sm);
     font-weight: 400;
     max-width: 280px;
     width: max-content;
@@ -4334,7 +4275,7 @@ body {
     border: 1px solid var(--border);
     border-radius: var(--radius);
     font-family: var(--font-body);
-    font-size: 0.78rem;
+    font-size: var(--font-sm);
     font-weight: 500;
     color: var(--text-secondary);
     cursor: pointer;
@@ -4423,7 +4364,7 @@ main .meth-page {
 }
 
 .meth-page h1 {
-    font-size: 1.65rem;
+    font-size: var(--font-2xl);
     font-weight: 700;
     letter-spacing: -0.03em;
     color: var(--text-primary);
@@ -4431,14 +4372,14 @@ main .meth-page {
 }
 
 .meth-intro {
-    font-size: 0.92rem;
+    font-size: var(--font-base);
     color: var(--text-secondary);
     line-height: 1.7;
     margin-bottom: 2rem;
 }
 
 .meth-page h2 {
-    font-size: 1.15rem;
+    font-size: var(--font-lg);
     font-weight: 700;
     color: var(--text-primary);
     margin-top: 2.25rem;
@@ -4448,7 +4389,7 @@ main .meth-page {
 }
 
 .meth-page h3 {
-    font-size: 0.95rem;
+    font-size: var(--font-base);
     font-weight: 700;
     color: var(--primary-light);
     margin-top: 1.5rem;
@@ -4456,7 +4397,7 @@ main .meth-page {
 }
 
 .meth-page p {
-    font-size: 0.9rem;
+    font-size: var(--font-base);
     color: var(--text-secondary);
     line-height: 1.75;
     margin-bottom: 0.85rem;
@@ -4464,7 +4405,7 @@ main .meth-page {
 
 .meth-page code {
     font-family: var(--font-mono);
-    font-size: 0.82rem;
+    font-size: var(--font-sm);
     background: rgba(255, 255, 255, 0.05);
     padding: 0.1rem 0.35rem;
     border-radius: 3px;
@@ -4474,7 +4415,7 @@ main .meth-page {
 .meth-page ul,
 .meth-page ol {
     margin: 0.5rem 0 1rem 1.25rem;
-    font-size: 0.9rem;
+    font-size: var(--font-base);
     color: var(--text-secondary);
     line-height: 1.75;
 }
@@ -4496,7 +4437,7 @@ main .meth-page {
 .check-table {
     width: 100%;
     border-collapse: collapse;
-    font-size: 0.82rem;
+    font-size: var(--font-sm);
     min-width: 540px;
 }
 
@@ -4507,7 +4448,7 @@ main .meth-page {
     text-align: left;
     padding: 0.55rem 0.75rem;
     border: 1px solid var(--border);
-    font-size: 0.76rem;
+    font-size: var(--font-xs);
     letter-spacing: 0.02em;
 }
 
@@ -4541,7 +4482,7 @@ main .meth-page {
     margin-top: 0.35rem;
     font-style: italic;
     color: var(--text-tertiary);
-    font-size: 0.78rem;
+    font-size: var(--font-sm);
     line-height: 1.5;
 }
 
@@ -4554,7 +4495,7 @@ main .meth-page {
 .score-table {
     width: 100%;
     border-collapse: collapse;
-    font-size: 0.82rem;
+    font-size: var(--font-sm);
     min-width: 400px;
 }
 
@@ -4565,7 +4506,7 @@ main .meth-page {
     text-align: left;
     padding: 0.55rem 0.75rem;
     border: 1px solid var(--border);
-    font-size: 0.76rem;
+    font-size: var(--font-xs);
 }
 
 .score-table td {
@@ -4594,13 +4535,13 @@ main .meth-page {
 .limit-item strong {
     color: var(--text-primary);
     display: block;
-    font-size: 0.85rem;
+    font-size: var(--font-sm);
     margin-bottom: 0.2rem;
 }
 
 .limit-item p {
     margin: 0;
-    font-size: 0.84rem;
+    font-size: var(--font-sm);
 }
 
 .std-list {
@@ -4614,7 +4555,7 @@ main .meth-page {
     display: flex;
     gap: 0.75rem;
     align-items: baseline;
-    font-size: 0.84rem;
+    font-size: var(--font-sm);
     line-height: 1.55;
 }
 
@@ -4623,7 +4564,7 @@ main .meth-page {
     text-decoration: none;
     font-weight: 600;
     font-family: var(--font-mono);
-    font-size: 0.78rem;
+    font-size: var(--font-sm);
     white-space: nowrap;
     border-bottom: 1px solid var(--primary-border);
 }
@@ -4640,7 +4581,7 @@ main .meth-page {
     margin-top: 1.25rem;
     padding-top: 0.75rem;
     border-top: 1px solid var(--border);
-    font-size: 0.82rem;
+    font-size: var(--font-sm);
     color: var(--text-tertiary);
     line-height: 1.65;
 }
@@ -4665,7 +4606,7 @@ main .meth-page {
     color: var(--text-inverse);
     border-radius: var(--radius);
     font-family: var(--font-body);
-    font-size: 0.88rem;
+    font-size: var(--font-sm);
     font-weight: 600;
     text-decoration: none;
     transition: background var(--duration) var(--ease);
@@ -4751,7 +4692,7 @@ main .meth-page {
     color: var(--dmarcbis);
 }
 .dbis-hero-sub {
-    font-size: 1rem;
+    font-size: var(--font-md);
     color: var(--text-secondary);
     line-height: 1.65;
     max-width: 620px;
@@ -4764,7 +4705,7 @@ main .meth-page {
     padding: 0.6rem 1.25rem;
     background: var(--dmarcbis);
     color: #111;
-    font-size: 0.88rem;
+    font-size: var(--font-sm);
     font-weight: 600;
     border-radius: 8px;
     text-decoration: none;
@@ -4777,14 +4718,14 @@ main .meth-page {
     margin-top: 2.5rem;
 }
 .dbis-section h2 {
-    font-size: 1.35rem;
+    font-size: var(--font-xl);
     font-weight: 700;
     color: var(--text-primary);
     letter-spacing: -0.02em;
     margin-bottom: 0.75rem;
 }
 .dbis-section p {
-    font-size: 0.92rem;
+    font-size: var(--font-base);
     color: var(--text-secondary);
     line-height: 1.7;
     margin-bottom: 0.85rem;
@@ -4819,7 +4760,7 @@ main .meth-page {
 .dbis-table {
     width: 100%;
     border-collapse: collapse;
-    font-size: 0.82rem;
+    font-size: var(--font-sm);
 }
 .dbis-table th {
     text-align: left;
@@ -4863,12 +4804,12 @@ main .meth-page {
 }
 .dbis-tag-name {
     font-family: var(--font-mono);
-    font-size: 0.95rem;
+    font-size: var(--font-base);
     font-weight: 600;
     color: var(--text-primary);
 }
 .dbis-tag-badge {
-    font-size: 0.6rem;
+    font-size: var(--font-xs);
     font-weight: 700;
     padding: 0.1rem 0.4rem;
     border-radius: 4px;
@@ -4881,7 +4822,7 @@ main .meth-page {
     color: var(--fail);
 }
 .dbis-tag-card p {
-    font-size: 0.85rem;
+    font-size: var(--font-sm);
     color: var(--text-secondary);
     line-height: 1.6;
     margin-bottom: 0.4rem;
@@ -4901,7 +4842,7 @@ main .meth-page {
     gap: 0.6rem;
     padding: 0.45rem 0.75rem;
     font-family: var(--font-mono);
-    font-size: 0.8rem;
+    font-size: var(--font-sm);
     color: var(--text-secondary);
     position: relative;
 }
@@ -4937,7 +4878,7 @@ main .meth-page {
 }
 .dbis-walk-label {
     font-family: var(--font-body);
-    font-size: 0.72rem;
+    font-size: var(--font-xs);
     color: var(--text-muted);
     margin-left: auto;
     flex-shrink: 0;
@@ -4956,7 +4897,7 @@ main .meth-page {
     align-items: flex-start;
     gap: 0.75rem;
     padding: 0.5rem 0;
-    font-size: 0.88rem;
+    font-size: var(--font-sm);
     color: var(--text-secondary);
     line-height: 1.6;
 }
@@ -4970,7 +4911,7 @@ main .meth-page {
     border-radius: 50%;
     background: var(--dmarcbis-bg);
     color: var(--dmarcbis);
-    font-size: 0.72rem;
+    font-size: var(--font-xs);
     font-weight: 700;
     flex-shrink: 0;
     margin-top: 0.1rem;
@@ -4984,7 +4925,7 @@ main .meth-page {
     padding: 0.65rem 0.85rem;
     margin: 1rem 0;
     font-family: var(--font-mono);
-    font-size: 0.8rem;
+    font-size: var(--font-sm);
     color: var(--text-primary);
     line-height: 1.6;
     word-break: break-all;
@@ -5000,7 +4941,7 @@ main .meth-page {
     padding: 0.35rem 0;
 }
 .dbis-links a {
-    font-size: 0.88rem;
+    font-size: var(--font-sm);
 }
 
 /* Footer CTA */
@@ -5011,7 +4952,7 @@ main .meth-page {
     border-top: 1px solid var(--border);
 }
 .dbis-footer-cta p {
-    font-size: 0.92rem;
+    font-size: var(--font-base);
     color: var(--text-secondary);
     margin-bottom: 1rem;
 }
@@ -5034,7 +4975,7 @@ main .meth-page {
 }
 
 .es-verdict {
-    font-size: 1.15rem;
+    font-size: var(--font-lg);
     font-weight: 700;
     line-height: 1.45;
     color: var(--text-primary);
@@ -5057,14 +4998,14 @@ main .meth-page {
 }
 
 .es-metric-value {
-    font-size: 1.35rem;
+    font-size: var(--font-xl);
     font-weight: 800;
     letter-spacing: -0.01em;
     margin-bottom: 0.25rem;
 }
 
 .es-metric-label {
-    font-size: 0.72rem;
+    font-size: var(--font-xs);
     font-weight: 600;
     color: var(--text-muted);
     text-transform: uppercase;
@@ -5073,7 +5014,7 @@ main .meth-page {
 }
 
 .es-metric-detail {
-    font-size: 0.68rem;
+    font-size: var(--font-xs);
     color: var(--text-muted);
 }
 
@@ -5096,7 +5037,7 @@ main .meth-page {
 
 .es-ring-text {
     position: absolute;
-    font-size: 0.72rem;
+    font-size: var(--font-xs);
     font-weight: 700;
     color: var(--text-primary);
 }
@@ -5118,7 +5059,7 @@ main .meth-page {
 }
 
 .es-risk-label {
-    font-size: 0.68rem;
+    font-size: var(--font-xs);
     font-weight: 700;
     text-transform: uppercase;
     letter-spacing: 0.04em;
@@ -5127,7 +5068,7 @@ main .meth-page {
 }
 
 .es-risk-text {
-    font-size: 0.82rem;
+    font-size: var(--font-sm);
     color: var(--text-primary);
     line-height: 1.45;
 }
@@ -5139,7 +5080,7 @@ main .meth-page {
 }
 
 .es-action {
-    font-size: 0.74rem;
+    font-size: var(--font-xs);
     font-weight: 600;
     padding: 0.4rem 0.85rem;
     border-radius: 6px;
@@ -5223,13 +5164,13 @@ main .meth-page {
 }
 
 .sr-title {
-    font-size: 0.9rem;
+    font-size: var(--font-base);
     font-weight: 700;
     color: var(--text-primary);
 }
 
 .sr-summary {
-    font-size: 0.72rem;
+    font-size: var(--font-xs);
     color: var(--text-muted);
 }
 
@@ -5238,7 +5179,7 @@ main .meth-page {
 }
 
 .sr-tier-label {
-    font-size: 0.68rem;
+    font-size: var(--font-xs);
     font-weight: 700;
     text-transform: uppercase;
     letter-spacing: 0.04em;
@@ -5273,7 +5214,7 @@ main .meth-page {
 .sr-item-pass { border-left: 3px solid var(--pass); }
 
 .sr-protocol {
-    font-size: 0.65rem;
+    font-size: var(--font-xs);
     font-weight: 700;
     background: #0d1117;
     color: #79c0ff;
@@ -5289,13 +5230,13 @@ main .meth-page {
 }
 
 .sr-action {
-    font-size: 0.78rem;
+    font-size: var(--font-sm);
     font-weight: 600;
     color: var(--text-primary);
 }
 
 .sr-impact {
-    font-size: 0.72rem;
+    font-size: var(--font-xs);
     color: var(--text-muted);
     line-height: 1.4;
 }
@@ -5330,18 +5271,18 @@ main .meth-page {
 
 .dk-selector {
     font-family: var(--font-mono);
-    font-size: 0.78rem;
+    font-size: var(--font-sm);
     font-weight: 700;
     color: var(--text-primary);
 }
 
 .dk-key-info {
-    font-size: 0.72rem;
+    font-size: var(--font-xs);
     color: var(--text-muted);
 }
 
 .dk-key-detail {
-    font-size: 0.74rem;
+    font-size: var(--font-xs);
     color: var(--text-primary);
     margin-top: 0.2rem;
     line-height: 1.4;
@@ -5355,7 +5296,7 @@ main .meth-page {
 }
 
 .dk-tag {
-    font-size: 0.68rem;
+    font-size: var(--font-xs);
     padding: 0.1rem 0.35rem;
     background: rgba(255, 255, 255, 0.05);
     border-radius: 3px;
@@ -5373,7 +5314,7 @@ main .meth-page {
 }
 
 .dk-rotation {
-    font-size: 0.76rem;
+    font-size: var(--font-xs);
     color: var(--text-primary);
     padding: 0.4rem 0.65rem;
     background: var(--primary-subtle);
@@ -5403,13 +5344,13 @@ main .meth-page {
 }
 
 .spfd-title {
-    font-size: 0.85rem;
+    font-size: var(--font-sm);
     font-weight: 600;
     color: var(--text-primary);
 }
 
 .spfd-lookup-badge {
-    font-size: 0.7rem;
+    font-size: var(--font-xs);
     font-weight: 600;
     padding: 0.15rem 0.5rem;
     border-radius: 100px;
@@ -5426,7 +5367,7 @@ main .meth-page {
     grid-template-columns: 1fr auto auto;
     gap: 0.5rem;
     padding: 0.2rem 0.4rem;
-    font-size: 0.68rem;
+    font-size: var(--font-xs);
     color: var(--text-muted);
     font-weight: 600;
     text-transform: uppercase;
@@ -5440,7 +5381,7 @@ main .meth-page {
     align-items: center;
     padding: 0.3rem 0.4rem;
     border-radius: 4px;
-    font-size: 0.78rem;
+    font-size: var(--font-sm);
 }
 
 .spfd-mech-row:hover {
@@ -5449,14 +5390,14 @@ main .meth-page {
 
 .spfd-mech-raw {
     font-family: var(--font-mono);
-    font-size: 0.74rem;
+    font-size: var(--font-xs);
     color: var(--text-primary);
     word-break: break-all;
 }
 
 .spfd-cost {
     font-family: var(--font-mono);
-    font-size: 0.68rem;
+    font-size: var(--font-xs);
     font-weight: 700;
     width: 1.4rem;
     height: 1.4rem;
@@ -5474,7 +5415,7 @@ main .meth-page {
 }
 
 .spfd-provider {
-    font-size: 0.66rem;
+    font-size: var(--font-xs);
     font-weight: 600;
     padding: 0.1rem 0.4rem;
     border-radius: 3px;
@@ -5498,13 +5439,13 @@ main .meth-page {
 
 .spfd-all-mech {
     font-family: var(--font-mono);
-    font-size: 0.76rem;
+    font-size: var(--font-xs);
     font-weight: 700;
     flex-shrink: 0;
 }
 
 .spfd-all-text {
-    font-size: 0.76rem;
+    font-size: var(--font-xs);
     color: var(--text-primary);
     line-height: 1.4;
 }
@@ -5514,7 +5455,7 @@ main .meth-page {
 }
 
 .spfd-opt {
-    font-size: 0.76rem;
+    font-size: var(--font-xs);
     color: var(--text-primary);
     padding: 0.35rem 0.6rem;
     background: var(--primary-subtle);
@@ -5549,13 +5490,13 @@ main .meth-page {
 }
 
 .as-title {
-    font-size: 0.85rem;
+    font-size: var(--font-sm);
     font-weight: 600;
     color: var(--text-primary);
 }
 
 .as-overall {
-    font-size: 0.72rem;
+    font-size: var(--font-xs);
     font-weight: 700;
     padding: 0.2rem 0.6rem;
     border-radius: 100px;
@@ -5566,13 +5507,13 @@ main .meth-page {
 .as-overall-red { background: var(--fail-bg); color: var(--fail); }
 
 .as-overall-summary {
-    font-size: 0.78rem;
+    font-size: var(--font-sm);
     color: var(--text-muted);
     margin-bottom: 0.5rem;
 }
 
 .as-attacker {
-    font-size: 0.76rem;
+    font-size: var(--font-xs);
     color: var(--text-primary);
     background: var(--fail-bg);
     border-left: 3px solid var(--fail);
@@ -5611,13 +5552,13 @@ main .meth-page {
 }
 
 .as-vector-name {
-    font-size: 0.76rem;
+    font-size: var(--font-xs);
     font-weight: 600;
     color: var(--text-primary);
 }
 
 .as-vector-badge {
-    font-size: 0.62rem;
+    font-size: var(--font-xs);
     font-weight: 700;
     padding: 0.1rem 0.4rem;
     border-radius: 100px;
@@ -5630,14 +5571,14 @@ main .meth-page {
 .as-badge-red { background: var(--fail-bg); color: var(--fail); }
 
 .as-vector-summary {
-    font-size: 0.74rem;
+    font-size: var(--font-xs);
     color: var(--text-primary);
     margin-bottom: 0.2rem;
     line-height: 1.4;
 }
 
 .as-vector-detail {
-    font-size: 0.7rem;
+    font-size: var(--font-xs);
     color: var(--text-muted);
     line-height: 1.4;
 }
@@ -5667,12 +5608,12 @@ main .meth-page {
 
 .sua-title {
     font-weight: 700;
-    font-size: 0.85rem;
+    font-size: var(--font-sm);
     color: var(--text-primary);
 }
 
 .sua-badge {
-    font-size: 0.68rem;
+    font-size: var(--font-xs);
     font-weight: 600;
     padding: 0.15rem 0.5rem;
     border-radius: 99px;
@@ -5681,13 +5622,13 @@ main .meth-page {
 }
 
 .sua-summary-line {
-    font-size: 0.78rem;
+    font-size: var(--font-sm);
     color: var(--text-secondary);
     line-height: 1.5;
 }
 
 .sua-callout {
-    font-size: 0.78rem;
+    font-size: var(--font-sm);
     color: var(--text-primary);
     background: var(--fail-bg);
     border-left: 3px solid var(--fail);
@@ -5702,7 +5643,7 @@ main .meth-page {
 }
 
 .sua-toggle {
-    font-size: 0.76rem;
+    font-size: var(--font-xs);
     font-weight: 600;
     color: var(--primary);
     cursor: pointer;
@@ -5719,7 +5660,7 @@ main .meth-page {
     display: inline-block;
     transition: transform 0.2s ease;
     margin-right: 0.3rem;
-    font-size: 0.65rem;
+    font-size: var(--font-xs);
 }
 
 .sua-details[open] .sua-toggle-icon {
@@ -5735,7 +5676,7 @@ main .meth-page {
 .sua-table {
     width: 100%;
     border-collapse: collapse;
-    font-size: 0.72rem;
+    font-size: var(--font-xs);
 }
 
 .sua-table th {
@@ -5745,7 +5686,7 @@ main .meth-page {
     padding: 0.4rem 0.5rem;
     border-bottom: 1px solid var(--border);
     white-space: nowrap;
-    font-size: 0.68rem;
+    font-size: var(--font-xs);
     text-transform: uppercase;
     letter-spacing: 0.03em;
 }
@@ -5775,12 +5716,12 @@ main .meth-page {
 
 .sua-sub-name {
     font-family: var(--font-mono, 'JetBrains Mono', monospace);
-    font-size: 0.72rem;
+    font-size: var(--font-xs);
 }
 
 .sua-cell-policy {
     font-family: var(--font-mono, 'JetBrains Mono', monospace);
-    font-size: 0.68rem;
+    font-size: var(--font-xs);
 }
 
 .sua-cell-status {
@@ -5797,7 +5738,7 @@ main .meth-page {
     background: transparent;
     border: 1px solid var(--primary);
     color: var(--primary);
-    font-size: 0.68rem;
+    font-size: var(--font-xs);
     font-weight: 600;
     padding: 0.2rem 0.5rem;
     border-radius: 4px;
@@ -5847,7 +5788,7 @@ main .meth-page {
 }
 
 .st-toggle-label {
-    font-size: 0.78rem;
+    font-size: var(--font-sm);
     font-weight: 600;
     color: var(--text-muted);
 }
@@ -5861,7 +5802,7 @@ main .meth-page {
 }
 
 .st-pill {
-    font-size: 0.72rem;
+    font-size: var(--font-xs);
     font-weight: 600;
     padding: 0.3rem 0.75rem;
     border: none;
@@ -5920,7 +5861,7 @@ main .meth-page {
 }
 
 .st-future-title {
-    font-size: 0.82rem;
+    font-size: var(--font-sm);
     font-weight: 700;
     color: var(--warn);
     margin-bottom: 0.3rem;
@@ -5943,7 +5884,7 @@ main .meth-page {
 
 .st-future-code {
     font-family: var(--font-mono);
-    font-size: 0.65rem;
+    font-size: var(--font-xs);
     background: rgba(255, 255, 255, 0.06);
     padding: 0.05rem 0.35rem;
     border-radius: 3px;
@@ -5992,7 +5933,7 @@ main .meth-page {
 .sv-badge {
     background: var(--dmarcbis);
     color: #0a2d28;
-    font-size: 0.62rem;
+    font-size: var(--font-xs);
     font-weight: 700;
     padding: 0.15rem 0.5rem;
     border-radius: 4px;
@@ -6000,7 +5941,7 @@ main .meth-page {
 }
 
 .sv-title {
-    font-size: 0.85rem;
+    font-size: var(--font-sm);
     font-weight: 600;
     color: var(--text-primary);
 }
@@ -6012,7 +5953,7 @@ main .meth-page {
 }
 
 .sv-summary {
-    font-size: 0.72rem;
+    font-size: var(--font-xs);
     font-weight: 600;
     padding: 0.2rem 0.6rem;
     border-radius: 100px;
@@ -6034,12 +5975,12 @@ main .meth-page {
 }
 
 .sv-cat-label {
-    font-size: 0.78rem;
+    font-size: var(--font-sm);
     font-weight: 600;
     color: var(--text-primary);
 }
 
-.sv-cat-score { font-size: 0.7rem; color: var(--text-muted); }
+.sv-cat-score { font-size: var(--font-xs); color: var(--text-muted); }
 
 .sv-checks { padding-left: 0.2rem; }
 
@@ -6048,13 +5989,13 @@ main .meth-page {
     align-items: flex-start;
     gap: 0.4rem;
     padding: 0.2rem 0;
-    font-size: 0.78rem;
+    font-size: var(--font-sm);
     line-height: 1.4;
 }
 
 .sv-icon {
     flex-shrink: 0;
-    font-size: 0.72rem;
+    font-size: var(--font-xs);
     width: 1rem;
     text-align: center;
 }
@@ -6070,7 +6011,7 @@ main .meth-page {
 
 .sv-check-code {
     font-family: var(--font-mono);
-    font-size: 0.62rem;
+    font-size: var(--font-xs);
     color: var(--text-muted);
     background: rgba(255, 255, 255, 0.05);
     padding: 0.05rem 0.3rem;
@@ -6085,7 +6026,7 @@ main .meth-page {
     border-radius: 6px;
     padding: 0.5rem 0.85rem;
     margin: 0.5rem 0;
-    font-size: 0.78rem;
+    font-size: var(--font-sm);
     color: var(--fail);
     font-weight: 600;
 }
@@ -6113,7 +6054,7 @@ main .meth-page {
 }
 
 .rb-title {
-    font-size: 0.85rem;
+    font-size: var(--font-sm);
     font-weight: 600;
     color: var(--text-primary);
 }
@@ -6134,13 +6075,13 @@ main .meth-page {
 
 .rb-verdict-label {
     font-weight: 700;
-    font-size: 0.8rem;
+    font-size: var(--font-sm);
     padding: 0.15rem 0.55rem;
     border-radius: 100px;
 }
 
 .rb-verdict-summary {
-    font-size: 0.78rem;
+    font-size: var(--font-sm);
     color: var(--text-primary);
 }
 
@@ -6152,7 +6093,7 @@ main .meth-page {
 }
 
 .rb-verdict-reason {
-    font-size: 0.7rem;
+    font-size: var(--font-xs);
     background: rgba(255, 255, 255, 0.06);
     padding: 0.1rem 0.45rem;
     border-radius: 3px;
@@ -6201,14 +6142,14 @@ main .meth-page {
 .rb-tag-name {
     font-family: var(--font-mono);
     font-weight: 700;
-    font-size: 0.78rem;
+    font-size: var(--font-sm);
     color: var(--text-primary);
     flex-shrink: 0;
 }
 
 .rb-value {
     font-family: var(--font-mono);
-    font-size: 0.76rem;
+    font-size: var(--font-xs);
     background: #0d1117;
     color: #e6edf3;
     padding: 0.1rem 0.4rem;
@@ -6217,30 +6158,30 @@ main .meth-page {
 
 .rb-default {
     font-family: var(--font-mono);
-    font-size: 0.76rem;
+    font-size: var(--font-xs);
     color: var(--text-muted);
 }
 
 .rb-default-label {
-    font-size: 0.68rem;
+    font-size: var(--font-xs);
     font-style: italic;
     opacity: 0.7;
 }
 
 .rb-absent {
-    font-size: 0.74rem;
+    font-size: var(--font-xs);
     font-style: italic;
     color: var(--text-muted);
 }
 
 .rb-tag-label {
-    font-size: 0.72rem;
+    font-size: var(--font-xs);
     color: var(--text-muted);
     margin-top: 0.15rem;
 }
 
 .rb-tag-explain {
-    font-size: 0.78rem;
+    font-size: var(--font-sm);
     color: var(--text-primary);
     margin-top: 0.25rem;
     line-height: 1.45;
@@ -6292,7 +6233,7 @@ main .meth-page {
 
 .rb-chain-link {
     font-family: var(--font-mono);
-    font-size: 0.72rem;
+    font-size: var(--font-xs);
     padding: 0.12rem 0.4rem;
     border-radius: 3px;
 }
@@ -6311,7 +6252,7 @@ main .meth-page {
 
 .rb-chain-arrow {
     color: var(--text-muted);
-    font-size: 0.7rem;
+    font-size: var(--font-xs);
 }
 
 /* Configuration Warnings */
@@ -6322,7 +6263,7 @@ main .meth-page {
 }
 
 .rb-cw-label {
-    font-size: 0.78rem;
+    font-size: var(--font-sm);
     font-weight: 600;
     color: var(--text-primary);
     margin-bottom: 0.5rem;
@@ -6347,17 +6288,17 @@ main .meth-page {
     flex-wrap: wrap;
 }
 
-.rb-cw-icon { font-size: 0.8rem; flex-shrink: 0; }
+.rb-cw-icon { font-size: var(--font-sm); flex-shrink: 0; }
 .rb-cw-critical .rb-cw-icon { color: var(--fail); }
 .rb-cw-advisory .rb-cw-icon { color: var(--warn); }
 
-.rb-cw-title { font-size: 0.78rem; font-weight: 600; }
+.rb-cw-title { font-size: var(--font-sm); font-weight: 600; }
 .rb-cw-critical .rb-cw-title { color: var(--fail); }
 .rb-cw-advisory .rb-cw-title { color: var(--warn); }
 
 .rb-cw-tag {
     font-family: var(--font-mono);
-    font-size: 0.65rem;
+    font-size: var(--font-xs);
     background: rgba(255, 255, 255, 0.08);
     padding: 0.05rem 0.35rem;
     border-radius: 3px;
@@ -6365,7 +6306,7 @@ main .meth-page {
 }
 
 .rb-cw-text {
-    font-size: 0.76rem;
+    font-size: var(--font-xs);
     color: var(--text-primary);
     margin-top: 0.2rem;
     line-height: 1.4;
@@ -6373,7 +6314,7 @@ main .meth-page {
 
 /* DMARCbis note callout */
 .rb-bis-note {
-    font-size: 0.74rem;
+    font-size: var(--font-xs);
     color: var(--text-secondary);
     margin-top: 0.3rem;
     padding: 0.35rem 0.55rem;
@@ -6385,7 +6326,7 @@ main .meth-page {
 
 .rb-bis-note-label {
     font-weight: 700;
-    font-size: 0.62rem;
+    font-size: var(--font-xs);
     color: var(--text-inverse);
     background: var(--dmarcbis);
     padding: 0.05rem 0.35rem;
@@ -6415,7 +6356,7 @@ main .meth-page {
     border: 1px solid var(--border);
     border-radius: 8px;
     cursor: pointer;
-    font-size: 0.82rem;
+    font-size: var(--font-sm);
     font-weight: 600;
     color: var(--text-primary);
     list-style: none;
@@ -6424,7 +6365,7 @@ main .meth-page {
 
 .wd-summary::-webkit-details-marker { display: none; }
 
-.wd-summary-icon { font-size: 1rem; }
+.wd-summary-icon { font-size: var(--font-md); }
 
 .wd-body {
     background: var(--bg-raised);
@@ -6438,21 +6379,21 @@ main .meth-page {
 .wd-section:last-child { margin-bottom: 0; }
 
 .wd-section-title {
-    font-size: 0.82rem;
+    font-size: var(--font-sm);
     font-weight: 700;
     color: var(--text-primary);
     margin-bottom: 0.4rem;
 }
 
 .wd-content {
-    font-size: 0.78rem;
+    font-size: var(--font-sm);
     color: var(--text-primary);
     line-height: 1.55;
     margin: 0 0 0.3rem 0;
 }
 
 .wd-item {
-    font-size: 0.78rem;
+    font-size: var(--font-sm);
     color: var(--text-primary);
     line-height: 1.5;
     padding: 0.35rem 0.6rem;
@@ -6470,7 +6411,7 @@ main .meth-page {
 }
 
 .wd-scale-item {
-    font-size: 0.68rem;
+    font-size: var(--font-xs);
     font-weight: 600;
     padding: 0.2rem 0.5rem;
     border-radius: 100px;
@@ -6502,7 +6443,7 @@ main .meth-page {
 }
 
 .ci-statement {
-    font-size: 0.88rem;
+    font-size: var(--font-sm);
     line-height: 1.45;
     color: var(--text);
     margin-bottom: 0.6rem;
@@ -6533,7 +6474,7 @@ main .meth-page {
 .ci-bar-labels {
     display: flex;
     justify-content: space-between;
-    font-size: 0.72rem;
+    font-size: var(--font-xs);
     color: var(--text-muted);
 }
 
@@ -6547,7 +6488,7 @@ main .meth-page {
 }
 
 .ci-adoption-summary {
-    font-size: 0.78rem;
+    font-size: var(--font-sm);
     font-weight: 600;
     color: var(--text-secondary);
     cursor: pointer;
@@ -6559,7 +6500,7 @@ main .meth-page {
 }
 
 .ci-adoption-title {
-    font-size: 0.78rem;
+    font-size: var(--font-sm);
     font-weight: 600;
     color: var(--text-secondary);
     margin-bottom: 0.4rem;
@@ -6570,7 +6511,7 @@ main .meth-page {
     align-items: center;
     gap: 0.5rem;
     margin-bottom: 0.3rem;
-    font-size: 0.78rem;
+    font-size: var(--font-sm);
 }
 
 .ci-adoption-label {
@@ -6601,7 +6542,7 @@ main .meth-page {
 }
 
 .ci-adoption-tagline {
-    font-size: 0.78rem;
+    font-size: var(--font-sm);
     font-style: italic;
     color: var(--text-muted);
     margin-top: 0.5rem;
@@ -6634,13 +6575,13 @@ main .meth-page {
 }
 
 .mw-title {
-    font-size: 0.85rem;
+    font-size: var(--font-sm);
     font-weight: 600;
     color: var(--text-primary);
 }
 
 .mw-progress {
-    font-size: 0.72rem;
+    font-size: var(--font-xs);
     color: var(--text-muted);
 }
 
@@ -6665,7 +6606,7 @@ main .meth-page {
     display: flex;
     align-items: center;
     justify-content: center;
-    font-size: 0.7rem;
+    font-size: var(--font-xs);
     font-weight: 700;
     flex-shrink: 0;
     margin-top: 0.1rem;
@@ -6677,13 +6618,13 @@ main .meth-page {
 }
 
 .mw-step-action {
-    font-size: 0.8rem;
+    font-size: var(--font-sm);
     font-weight: 600;
     color: var(--text-primary);
 }
 
 .mw-step-why {
-    font-size: 0.74rem;
+    font-size: var(--font-xs);
     color: var(--text-muted);
     margin-top: 0.15rem;
     line-height: 1.4;
@@ -6699,14 +6640,14 @@ main .meth-page {
 
 .mw-record-text {
     font-family: var(--font-mono);
-    font-size: 0.72rem;
+    font-size: var(--font-xs);
     color: #e6edf3;
     white-space: nowrap;
 }
 
 .mw-tag-badge {
     font-family: var(--font-mono);
-    font-size: 0.6rem;
+    font-size: var(--font-xs);
     background: rgba(255, 255, 255, 0.06);
     padding: 0.05rem 0.3rem;
     border-radius: 3px;
@@ -6721,7 +6662,7 @@ main .meth-page {
 }
 
 .mw-target-label {
-    font-size: 0.78rem;
+    font-size: var(--font-sm);
     font-weight: 600;
     color: var(--text-primary);
     margin-bottom: 0.3rem;
@@ -6741,7 +6682,7 @@ main .meth-page {
 }
 
 .mw-ready-text {
-    font-size: 0.82rem;
+    font-size: var(--font-sm);
     font-weight: 600;
     color: var(--pass);
 }
@@ -6778,7 +6719,7 @@ main .meth-page {
 .dbis-badge {
     background: var(--dmarcbis);
     color: #0a2d28;
-    font-size: 0.62rem;
+    font-size: var(--font-xs);
     font-weight: 700;
     padding: 0.15rem 0.5rem;
     border-radius: 4px;
@@ -6786,7 +6727,7 @@ main .meth-page {
 }
 
 .dbis-title {
-    font-size: 0.85rem;
+    font-size: var(--font-sm);
     font-weight: 600;
     color: var(--text-primary);
 }
@@ -6815,7 +6756,7 @@ main .meth-page {
     align-items: center;
     gap: 0.5rem;
     padding: 0.35rem 0;
-    font-size: 0.82rem;
+    font-size: var(--font-sm);
 }
 
 .dbis-check-label {
@@ -6829,7 +6770,7 @@ main .meth-page {
     background: #0d1117;
     color: #f85149;
     font-family: var(--font-mono);
-    font-size: 0.7rem;
+    font-size: var(--font-xs);
     padding: 0.1rem 0.4rem;
     border-radius: 3px;
     flex-shrink: 0;
@@ -6872,14 +6813,14 @@ main .meth-page {
 
 .dbis-chain-link {
     font-family: var(--font-mono);
-    font-size: 0.72rem;
+    font-size: var(--font-xs);
     padding: 0.1rem 0.4rem;
     border-radius: 3px;
 }
 
 .dbis-chain-active { background: var(--pass-bg); color: var(--pass); font-weight: 600; }
 .dbis-chain-inactive { background: var(--surface); color: var(--text-muted); border: 1px solid var(--border); text-decoration: line-through; }
-.dbis-chain-arrow { color: var(--text-muted); font-size: 0.68rem; }
+.dbis-chain-arrow { color: var(--text-muted); font-size: var(--font-xs); }
 .dbis-chain-note { color: var(--text-muted); margin-top: 0.2rem; font-style: italic; }
 
 .dbis-suggested {
@@ -6889,7 +6830,7 @@ main .meth-page {
 }
 
 .dbis-suggested-label {
-    font-size: 0.78rem;
+    font-size: var(--font-sm);
     font-weight: 600;
     color: var(--text-secondary);
     margin-bottom: 0.4rem;
@@ -6908,7 +6849,7 @@ main .meth-page {
 .dbis-removed {
     background: var(--fail-bg);
     color: var(--fail);
-    font-size: 0.62rem;
+    font-size: var(--font-xs);
     font-weight: 700;
     padding: 0.1rem 0.4rem;
     border-radius: 3px;
@@ -6919,7 +6860,7 @@ main .meth-page {
 .dbis-added {
     background: var(--pass-bg);
     color: var(--pass);
-    font-size: 0.62rem;
+    font-size: var(--font-xs);
     font-weight: 700;
     padding: 0.1rem 0.4rem;
     border-radius: 3px;
@@ -6972,13 +6913,13 @@ main .meth-page {
 }
 
 .rcb-title {
-    font-size: 0.85rem;
+    font-size: var(--font-sm);
     font-weight: 600;
     color: var(--text-primary);
 }
 
 .rcb-badge {
-    font-size: 0.62rem;
+    font-size: var(--font-xs);
     font-weight: 700;
     padding: 0.15rem 0.5rem;
     border-radius: 4px;
@@ -6990,13 +6931,13 @@ main .meth-page {
 }
 
 .rcb-ready-msg {
-    font-size: 0.82rem;
+    font-size: var(--font-sm);
     color: var(--pass);
     line-height: 1.5;
 }
 
 .rcb-first-note {
-    font-size: 0.82rem;
+    font-size: var(--font-sm);
     color: var(--text-secondary);
     line-height: 1.55;
     padding: 0.6rem 0.75rem;
@@ -7030,7 +6971,7 @@ main .meth-page {
 }
 
 .rcb-diff-label {
-    font-size: 0.68rem;
+    font-size: var(--font-xs);
     font-weight: 600;
     letter-spacing: 0.04em;
     color: var(--text-muted);
@@ -7081,7 +7022,7 @@ main .meth-page {
 }
 
 .rcb-changes-label {
-    font-size: 0.7rem;
+    font-size: var(--font-xs);
     font-weight: 600;
     letter-spacing: 0.04em;
     color: var(--text-muted);
@@ -7140,7 +7081,7 @@ main .meth-page {
 }
 
 .rcb-change-reason {
-    font-size: 0.78rem;
+    font-size: var(--font-sm);
     color: var(--text-muted);
     line-height: 1.45;
 }
@@ -7152,7 +7093,7 @@ main .meth-page {
 }
 
 .rcb-result-label {
-    font-size: 0.72rem;
+    font-size: var(--font-xs);
     font-weight: 600;
     color: var(--dmarcbis);
     letter-spacing: 0.03em;
@@ -7192,7 +7133,7 @@ main .meth-page {
 }
 
 .rcb-deploy-label {
-    font-size: 0.68rem;
+    font-size: var(--font-xs);
     font-weight: 600;
     letter-spacing: 0.04em;
     color: var(--text-muted);
@@ -7200,7 +7141,7 @@ main .meth-page {
 }
 
 .rcb-deploy-item {
-    font-size: 0.78rem;
+    font-size: var(--font-sm);
     color: var(--text-secondary);
     line-height: 1.5;
     padding: 0.15rem 0;
@@ -7213,7 +7154,7 @@ main .meth-page {
 
 .rcb-deploy-item code {
     font-family: var(--font-mono);
-    font-size: 0.78rem;
+    font-size: var(--font-sm);
     background: var(--surface);
     border: 1px solid var(--border);
     padding: 0.05rem 0.3rem;
@@ -7228,7 +7169,7 @@ main .meth-page {
 }
 
 .rcb-suggestions-label {
-    font-size: 0.68rem;
+    font-size: var(--font-xs);
     font-weight: 600;
     letter-spacing: 0.04em;
     color: var(--text-muted);
@@ -7239,7 +7180,7 @@ main .meth-page {
     display: flex;
     align-items: flex-start;
     gap: 0.5rem;
-    font-size: 0.78rem;
+    font-size: var(--font-sm);
     color: var(--text-secondary);
     padding: 0.3rem 0;
     line-height: 1.45;
@@ -7247,7 +7188,7 @@ main .meth-page {
 
 .rcb-suggestion-tag {
     font-family: var(--font-mono);
-    font-size: 0.72rem;
+    font-size: var(--font-xs);
     font-weight: 600;
     color: var(--primary-light);
     background: var(--primary-subtle);
@@ -7278,7 +7219,7 @@ main .meth-page {
    ========================================================================== */
 .domain-inline-error {
     color: #ef4444;
-    font-size: 0.85rem;
+    font-size: var(--font-sm);
     margin-top: 0.4rem;
     display: none;
 }
@@ -7297,7 +7238,7 @@ main .meth-page {
     padding: 0.65rem 1rem;
     border-radius: 8px;
     margin-bottom: 0.5rem;
-    font-size: 0.88rem;
+    font-size: var(--font-sm);
     line-height: 1.5;
     display: flex;
     gap: 0.5rem;
@@ -7348,14 +7289,14 @@ main .meth-page {
     color: #60a5fa;
 }
 .deliv-label {
-    font-size: 0.72rem;
+    font-size: var(--font-xs);
     font-weight: 700;
     text-transform: uppercase;
     letter-spacing: 0.04em;
     color: #60a5fa;
 }
 .deliv-text {
-    font-size: 0.82rem;
+    font-size: var(--font-sm);
     color: var(--text-secondary);
     line-height: 1.55;
 }
@@ -7370,7 +7311,7 @@ main .meth-page {
     border-radius: 7px;
     border: 1px solid #3b82f622;
     background: #3b82f608;
-    font-size: 0.84rem;
+    font-size: var(--font-sm);
     color: var(--text-secondary);
     line-height: 1.5;
 }
@@ -7387,7 +7328,7 @@ main .meth-page {
     display: inline-flex;
     align-items: baseline;
     gap: 0.5em;
-    font-size: 0.78rem;
+    font-size: var(--font-sm);
     padding: 0.35em 0.7em;
     border-radius: 6px;
     margin: 0.5em 0;
@@ -7434,7 +7375,7 @@ main .meth-page {
     background: var(--surface);
     cursor: pointer;
     user-select: none;
-    font-size: 0.85rem;
+    font-size: var(--font-sm);
 }
 .cd-header:hover {
     background: var(--surface-hover, rgba(255,255,255,0.04));
@@ -7476,16 +7417,16 @@ main .meth-page {
 }
 .cd-change-label {
     font-weight: 600;
-    font-size: 0.84rem;
+    font-size: var(--font-sm);
     color: var(--text-primary);
 }
 .cd-change-date {
-    font-size: 0.78rem;
+    font-size: var(--font-sm);
     color: var(--text-tertiary);
 }
 .cd-diff {
     font-family: var(--mono);
-    font-size: 0.78rem;
+    font-size: var(--font-sm);
     line-height: 1.6;
     margin: 0.3em 0;
     padding: 0.5em 0.7em;
@@ -7506,7 +7447,7 @@ main .meth-page {
     color: #22c55e;
 }
 .cd-change-desc {
-    font-size: 0.8rem;
+    font-size: var(--font-sm);
     margin-top: 0.3em;
     display: flex;
     align-items: center;
@@ -7528,7 +7469,7 @@ main .meth-page {
     display: flex;
     align-items: center;
     gap: 0.5em;
-    font-size: 0.82rem;
+    font-size: var(--font-sm);
     color: var(--text-secondary);
     padding: 0.6em 0;
     margin-top: 0.5em;
@@ -7552,7 +7493,7 @@ main .meth-page {
     margin-bottom: 0.3em;
 }
 .cf-badge {
-    font-size: 0.68rem;
+    font-size: var(--font-xs);
     font-weight: 700;
     text-transform: uppercase;
     letter-spacing: 0.04em;
@@ -7572,11 +7513,11 @@ main .meth-page {
 }
 .cf-finding-title {
     font-weight: 600;
-    font-size: 0.84rem;
+    font-size: var(--font-sm);
     color: var(--text-primary);
 }
 .cf-finding-detail {
-    font-size: 0.8rem;
+    font-size: var(--font-sm);
     color: var(--text-secondary);
     line-height: 1.5;
 }
@@ -7590,7 +7531,7 @@ main .meth-page {
     border-radius: 7px;
     border: 1px solid #3b82f633;
     background: #3b82f60a;
-    font-size: 0.8rem;
+    font-size: var(--font-sm);
     color: var(--text-secondary);
     line-height: 1.5;
 }
