@@ -781,6 +781,10 @@ if STATIC_DIR.exists():
     async def methodology():
         return FileResponse(str(STATIC_DIR / "methodology.html"))
 
+    @app.get("/about", tags=["Pages"])
+    async def about():
+        return FileResponse(str(STATIC_DIR / "about.html"))
+
 else:
     @app.get("/")
     async def index():
