@@ -3,19 +3,19 @@
     <url>
         <loc>https://dns-audit.com/</loc>
         <lastmod>2026-03-23</lastmod>
-        <changefreq>monthly</changefreq>
+        <changefreq>weekly</changefreq>
         <priority>1.0</priority>
     </url>
     <url>
         <loc>https://dns-audit.com/dmarcbis</loc>
         <lastmod>2026-03-23</lastmod>
-        <changefreq>weekly</changefreq>
+        <changefreq>monthly</changefreq>
         <priority>0.8</priority>
     </url>
     <url>
         <loc>https://dns-audit.com/methodology</loc>
         <lastmod>2026-03-23</lastmod>
-        <changefreq>weekly</changefreq>
+        <changefreq>monthly</changefreq>
         <priority>0.6</priority>
     </url>
     <url>
@@ -27,7 +27,7 @@
     <url>
         <loc>https://dns-audit.com/privacy</loc>
         <lastmod>2026-03-23</lastmod>
-        <changefreq>monthly</changefreq>
+        <changefreq>yearly</changefreq>
         <priority>0.3</priority>
     </url>
 </urlset>
