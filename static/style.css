@@ -187,6 +187,13 @@
     /* Typography */
     --font-body: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', system-ui, sans-serif;
     --font-mono: 'JetBrains Mono', 'SF Mono', 'Fira Code', 'Consolas', monospace;
+    --font-xs: 0.75rem;
+    --font-sm: 0.8125rem;
+    --font-base: 0.9375rem;
+    --font-md: 1rem;
+    --font-lg: 1.125rem;
+    --font-xl: 1.25rem;
+    --font-2xl: 1.5rem;
 
     /* Layout */
     --max-width: 880px;
@@ -418,6 +425,8 @@ main {
 .nav-link-active {
     color: var(--text-primary);
     font-weight: 600;
+    border-bottom: 2px solid var(--primary);
+    padding-bottom: 2px;
 }
 
 .header-nav {
@@ -677,6 +686,7 @@ main {
 
 .audit-btn:hover {
     background: var(--primary-hover);
+    box-shadow: 0 4px 12px rgba(59, 130, 246, 0.4);
 }
 
 .audit-btn:active {
@@ -840,6 +850,31 @@ main {
     transition: border-color var(--duration) var(--ease), color var(--duration) var(--ease), box-shadow var(--duration) var(--ease), background var(--duration) var(--ease);
 }
 
+.share-btn.btn-busy {
+    opacity: 0.6;
+    pointer-events: none;
+    position: relative;
+}
+
+.share-btn.btn-busy span {
+    visibility: hidden;
+}
+
+.share-btn.btn-busy::after {
+    content: '';
+    position: absolute;
+    width: 14px;
+    height: 14px;
+    border: 2px solid var(--text-secondary);
+    border-top-color: transparent;
+    border-radius: 50%;
+    animation: btn-spin 0.6s linear infinite;
+}
+
+@keyframes btn-spin {
+    to { transform: rotate(360deg); }
+}
+
 .share-btn:hover {
     border-color: var(--primary-border);
     color: var(--text-primary);
@@ -925,7 +960,7 @@ main {
 /* Summary grid */
 .summary-grid {
     display: grid;
-    grid-template-columns: repeat(4, 1fr);
+    grid-template-columns: 1.4fr 1fr 1fr 1fr;
     gap: 0.75rem;
     margin-bottom: var(--space-lg);
 }
@@ -1237,10 +1272,12 @@ main {
 }
 
 /* Check name */
+h3.result-title,
 .result-title {
     font-weight: 600;
     font-size: 1rem;
     color: var(--text-primary);
+    margin: 0;
 }
 
 /* Status pill -- text on tinted bg, pill-shaped */
@@ -3005,6 +3042,20 @@ details.st-node>summary:hover {
     display: flex;
     align-items: center;
     gap: 0.4rem;
+}
+
+.footer-trust {
+    display: flex;
+    align-items: center;
+    gap: 0.4rem;
+    margin-top: 0.35rem;
+    font-size: var(--font-xs, 0.75rem);
+    color: var(--text-muted);
+}
+
+.footer-version {
+    color: var(--text-muted);
+    font-family: var(--font-mono);
 }
 
 .footer-dot {
