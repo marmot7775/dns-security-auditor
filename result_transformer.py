@@ -3975,6 +3975,9 @@ def transform_dkim(raw: Dict, domain: str, has_mx: bool = True) -> Dict:
 
     details.append({"type": "info", "text": f"Tested {tested} selectors"})
 
+    if raw.get("timeout_note"):
+        details.append({"type": "warning", "text": raw["timeout_note"]})
+
     # ARC informational note (RFC 8617)
     details.append({"type": "info", "text": "ARC (RFC 8617) extends the DKIM signing mechanism to preserve authentication across mail forwarding"})
 

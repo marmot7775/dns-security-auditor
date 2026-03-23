@@ -7,10 +7,15 @@ Based on real-world consulting experience with 100+ enterprise deployments.
 """
 
 import re
+import time
 import dns.resolver
 import dns.exception
 from concurrent.futures import ThreadPoolExecutor, as_completed
-from typing import List, Dict, Set, Optional
+from typing import List, Dict, Set, Optional, Callable
+
+# Hard limits for DKIM selector discovery
+DKIM_DISCOVERY_TIMEOUT = 30   # seconds for entire discovery
+DKIM_MAX_FOUND = 15           # stop after finding this many selectors
 
 # Map SPF includes to vendors and their DKIM selectors
 SPF_VENDOR_MAP = {
@@ -204,7 +209,8 @@ def generate_vendor_intelligence_report(spf_record: str) -> str:
     
     return report
 
-def smart_dkim_check(domain: str, spf_record: Optional[str] = None, max_selectors: int = 200) -> Dict:
+def smart_dkim_check(domain: str, spf_record: Optional[str] = None, max_selectors: int = 200,
+                     progress_callback: Optional[Callable[[int], None]] = None) -> Dict:
     """
     INTELLIGENT DKIM checking using SPF-based vendor detection.
 
@@ -330,6 +336,9 @@ def smart_dkim_check(domain: str, spf_record: Optional[str] = None, max_selector
             return None
 
     found = []
+    timed_out = False
+    deadline = time.monotonic() + DKIM_DISCOVERY_TIMEOUT
+
     with ThreadPoolExecutor(max_workers=15) as executor:
         futures = {
             executor.submit(_test_selector, sel): sel
@@ -339,9 +348,15 @@ def smart_dkim_check(domain: str, spf_record: Optional[str] = None, max_selector
             r = future.result()
             if r:
                 found.append(r)
-                if len(found) >= 10:
+                if progress_callback:
+                    progress_callback(len(found))
+                if len(found) >= DKIM_MAX_FOUND:
                     executor.shutdown(wait=False, cancel_futures=True)
                     break
+            if time.monotonic() >= deadline:
+                timed_out = True
+                executor.shutdown(wait=False, cancel_futures=True)
+                break
 
     # Preserve priority order from SPF-based ranking
     selector_order = {sel: i for i, sel in enumerate(selectors_to_test)}
@@ -349,6 +364,10 @@ def smart_dkim_check(domain: str, spf_record: Optional[str] = None, max_selector
 
     result['found_selectors'] = found
     result['tested_count'] = len(selectors_to_test)
+
+    if timed_out:
+        result['timed_out'] = True
+        result['timeout_note'] = 'DKIM selector discovery timed out, results may be incomplete.'
 
     return result
 

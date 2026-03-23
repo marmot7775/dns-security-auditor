@@ -3769,8 +3769,11 @@ def run_full_audit(domain: str, dkim_selector: Optional[str] = None,
                 lambda raw: transform_dkim(raw, domain, has_mx=has_mx), "DKIM"))
         else:
             _spf_rec = spf_record  # capture
+            def _dkim_progress(found_count):
+                if progress_callback:
+                    progress_callback(f"DKIM:{found_count}", completed, total_checks)
             _parallel_checks.append(("dkim",
-                lambda: smart_dkim_check(domain, _spf_rec),
+                lambda: smart_dkim_check(domain, _spf_rec, progress_callback=_dkim_progress),
                 lambda raw: transform_dkim(raw, domain, has_mx=has_mx), "DKIM"))
 
     if _should_include("ct", scope_set):
