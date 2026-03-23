@@ -3186,12 +3186,26 @@ details.st-node>summary:hover {
     }
 
     .site-nav {
-        gap: 0.1rem;
+        overflow-x: auto;
+        -webkit-overflow-scrolling: touch;
+        scrollbar-width: none;
+        flex-wrap: nowrap;
+        gap: 0.25rem;
+        padding-bottom: 2px;
+    }
+
+    .site-nav::-webkit-scrollbar {
+        display: none;
     }
 
     .nav-link {
+        white-space: nowrap;
+        flex-shrink: 0;
         font-size: 0.68rem;
         padding: 0.25rem 0.4rem;
+        min-height: 44px;
+        display: flex;
+        align-items: center;
     }
 
     .header-nav {
@@ -3215,13 +3229,32 @@ details.st-node>summary:hover {
         font-size: 0.85rem;
     }
 
-    .input-row {
+    .input-row,
+    .input-row.input-unified {
         flex-direction: column;
+        width: 100%;
+        max-width: 100%;
+        gap: 0.75rem;
+    }
+
+    .input-wrapper {
+        max-width: 100%;
+        width: 100%;
+    }
+
+    .domain-input {
+        width: 100%;
+        min-width: 0;
+        -webkit-appearance: none;
+        -moz-appearance: none;
+        appearance: none;
+        border-radius: 8px;
     }
 
     .audit-btn {
         width: 100%;
         justify-content: center;
+        min-height: 48px;
     }
 
     .summary-grid {
@@ -3314,14 +3347,20 @@ details.st-node>summary:hover {
         padding: 1.1rem 1.25rem;
     }
 
-    .scope-options {
-        gap: 0.35rem;
+    .scope-options,
+    .scope-selector {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 0.4rem;
     }
 
     .scope-btn {
-        font-size: 0.76rem;
-        padding: 0.5rem 0.7rem;
+        font-size: 0.7rem;
+        padding: 0.35rem 0.6rem;
+        flex: 0 0 auto;
         min-height: 44px;
+        display: flex;
+        align-items: center;
     }
 
     .scope-btn svg {
@@ -3906,6 +3945,26 @@ details.st-node>summary:hover {
     background: rgba(255, 255, 255, 0.05);
     padding: 0.1rem 0.3rem;
     border-radius: 3px;
+}
+
+/* ==========================================================================
+   iOS INPUT STYLING RESET (global, not inside media query)
+   ========================================================================== */
+input[type="text"],
+input[type="search"],
+.domain-input {
+    -webkit-appearance: none;
+    -moz-appearance: none;
+    appearance: none;
+    border-radius: 8px;
+}
+
+/* ==========================================================================
+   SAFE AREA INSETS (notched iPhones)
+   ========================================================================== */
+body {
+    padding-left: env(safe-area-inset-left);
+    padding-right: env(safe-area-inset-right);
 }
 
 /* ==========================================================================
