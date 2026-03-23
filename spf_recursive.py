@@ -34,7 +34,7 @@ def _get_spf_record(domain: str) -> Optional[str]:
         resolver = _get_resolver()
         answers = resolver.resolve(domain, "TXT")
         for rdata in answers:
-            txt = b"".join(rdata.strings).decode("utf-8", errors="replace")
+            txt = b" ".join(rdata.strings).decode("utf-8", errors="replace")
             if txt.strip().lower().startswith("v=spf1"):
                 return txt.strip()
     except Exception:

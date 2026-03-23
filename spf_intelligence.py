@@ -238,7 +238,7 @@ def smart_dkim_check(domain: str, spf_record: Optional[str] = None, max_selector
         try:
             answers = dns.resolver.resolve(domain, 'TXT')
             for rdata in answers:
-                txt = str(rdata).strip('"')
+                txt = b" ".join(rdata.strings).decode("utf-8", errors="replace")
                 if txt.startswith('v=spf1'):
                     spf_record = txt
                     break

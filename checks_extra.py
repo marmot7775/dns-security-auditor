@@ -114,7 +114,7 @@ def _lookup_txt(name: str) -> List[str]:
             parts = []
             for s in rdata.strings:
                 parts.append(s.decode("utf-8") if isinstance(s, bytes) else str(s))
-            records.append("".join(parts))
+            records.append(" ".join(parts))
         return records
     except (dns.resolver.NXDOMAIN, dns.resolver.NoAnswer, dns.resolver.NoNameservers, dns.exception.DNSException):
         return []

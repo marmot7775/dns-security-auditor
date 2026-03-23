@@ -203,8 +203,15 @@ def _get_dnssec_resolver(timeout: float = 8.0):
 def _lookup_txt(name: str) -> List[str]:
     """Look up TXT records, correctly concatenating multi-string records.
 
-    Multi-string TXT records (split across 255-byte chunks) are joined
-    WITHOUT adding spaces, per RFC 7489 Section 6.1.
+    DNS TXT records can contain multiple strings within a single rdata
+    (each up to 255 bytes).  Some domains (e.g. GitHub) store each SPF
+    mechanism as a separate string WITHOUT embedded boundary spaces.
+    Concatenating with no separator jams mechanisms together, breaking
+    downstream parsing.
+
+    We join with a single space, which is safe for every record type
+    this function serves (SPF, DMARC, MTA-STS, BIMI, TLS-RPT).  DKIM
+    lookups use their own resolver path and are not affected.
     """
     try:
         resolver = _get_resolver()
@@ -214,8 +221,9 @@ def _lookup_txt(name: str) -> List[str]:
             parts = []
             for s in rdata.strings:
                 parts.append(s.decode("utf-8") if isinstance(s, bytes) else str(s))
-            # Concatenate WITHOUT spaces -- critical for split DMARC records
-            txt = "".join(parts)
+            # Join with a space so multi-string records like GitHub's SPF
+            # (22 separate mechanism strings) are parsed correctly.
+            txt = " ".join(parts)
             # Some resolvers escape semicolons in TXT records (\;).
             # Normalize so downstream parsers split correctly.
             txt = txt.replace("\\;", ";")
@@ -2038,7 +2046,8 @@ def _raw_check_spf(domain: str) -> Dict[str, Any]:
             "SPF records should end with an 'all' mechanism to define what happens "
             "to mail from servers not listed in the record. Without it, the default "
             "is neutral (?all), which provides no protection.",
-            "Add -all to the end of the SPF record.",
+            "Add ~all (softfail) to the end of the SPF record as a safe starting point. "
+            "Once you are confident all legitimate senders are listed, tighten to -all (hardfail).",
         )
 
     # ── Step 8: Merge syntax errors into issues and set final status ──
@@ -3427,7 +3436,7 @@ def _probe_subdomain(subdomain: str) -> Dict[str, Any]:
     try:
         txt_ans = resolver.resolve(subdomain, "TXT")
         for rdata in txt_ans:
-            txt = b"".join(rdata.strings).decode("utf-8", errors="replace")
+            txt = b" ".join(rdata.strings).decode("utf-8", errors="replace")
             if txt.lower().startswith("v=spf1"):
                 result["has_spf"] = True
                 result["spf_record"] = txt
@@ -3441,7 +3450,7 @@ def _probe_subdomain(subdomain: str) -> Dict[str, Any]:
     try:
         txt_ans = resolver.resolve(dmarc_name, "TXT")
         for rdata in txt_ans:
-            txt = b"".join(rdata.strings).decode("utf-8", errors="replace")
+            txt = b" ".join(rdata.strings).decode("utf-8", errors="replace")
             if txt.lower().startswith("v=dmarc1"):
                 result["has_dmarc"] = True
                 result["dmarc_record"] = txt
