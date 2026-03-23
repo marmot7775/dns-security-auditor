@@ -21,7 +21,7 @@
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
-    <link rel="stylesheet" href="/static/style.css?v=ds13">
+    <link rel="stylesheet" href="/static/style.css?v=ds14">
     <script type="application/ld+json">
     {
         "@context": "https://schema.org",
@@ -90,6 +90,24 @@
             <div class="dbis-hero">
                 <h1><span>DMARCbis:</span> The Next DMARC Standard</h1>
                 <p class="dbis-hero-sub">DMARCbis (draft-ietf-dmarc-dmarcbis, version 41) has been approved by the IESG and is currently in the RFC Editor Queue. It is expected to be published as a Proposed Standard in 2026.</p>
+            </div>
+
+            <!-- Section: What Our DMARCbis Assessment Checks -->
+            <div class="dbis-section" id="dmarcbis-assessment">
+                <h2>What Our DMARCbis Assessment Checks</h2>
+                <ul>
+                    <li>Per-tag analysis showing Current, Deprecated, or New in DMARCbis status for every DMARC record tag</li>
+                    <li>Detection of deprecated tags (pct, rf, ri) with specific migration guidance</li>
+                    <li>Assessment of new DMARCbis tags (np=, psd=, t=) with top-1000 adoption benchmarks</li>
+                    <li>A step-by-step migration path from your current record to a DMARCbis-ready record</li>
+                    <li>Auto-generated target DMARCbis-ready record you can copy and deploy</li>
+                    <li>Comparison of your enforcement strength against the top 1000 domains</li>
+                    <li>SPF alignment evaluation under DMARCbis rules (MAIL FROM only, not HELO)</li>
+                    <li>Awareness of the reporting restructure (aggregate and failure reporting are now separate RFCs)</li>
+                </ul>
+                <div style="text-align: center; margin-top: 1.5rem;">
+                    <a href="/" class="audit-cta">Test Your Domain</a>
+                </div>
             </div>
 
             <!-- Section: Why DMARCbis Matters -->

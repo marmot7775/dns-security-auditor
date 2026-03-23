@@ -4251,7 +4251,8 @@ body {
     border-bottom: 1px dotted var(--text-tertiary);
 }
 
-.protocol-tooltip {
+.protocol-name-tip[data-tooltip]::before {
+    content: attr(data-tooltip);
     position: absolute;
     bottom: calc(100% + 8px);
     left: 50%;
@@ -4274,18 +4275,23 @@ body {
     letter-spacing: 0;
 }
 
-.protocol-tooltip::after {
+.protocol-name-tip[data-tooltip]::after {
     content: '';
     position: absolute;
-    top: 100%;
+    bottom: calc(100% - 2px);
     left: 50%;
     transform: translateX(-50%);
     border: 5px solid transparent;
     border-top-color: var(--surface-hover);
+    pointer-events: none;
+    opacity: 0;
+    transition: opacity 150ms ease;
 }
 
-.protocol-name-tip:hover .protocol-tooltip,
-.protocol-name-tip:focus .protocol-tooltip {
+.protocol-name-tip[data-tooltip]:hover::before,
+.protocol-name-tip[data-tooltip]:focus::before,
+.protocol-name-tip[data-tooltip]:hover::after,
+.protocol-name-tip[data-tooltip]:focus::after {
     opacity: 1;
 }
 
