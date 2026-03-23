@@ -20,6 +20,38 @@ log = logging.getLogger(__name__)
 # Per-check timeout in seconds (prevents hung DNS queries from blocking the audit)
 CHECK_TIMEOUT = 15
 
+import time
+import threading as _ct_threading
+
+# CT (crt.sh) result cache -- 24-hour TTL because CT data rarely changes
+# and crt.sh is frequently slow or unavailable.
+_ct_cache = {}
+_ct_cache_lock = _ct_threading.Lock()
+CT_CACHE_TTL = 86400  # 24 hours
+
+
+def _get_cached_ct(domain):
+    with _ct_cache_lock:
+        entry = _ct_cache.get(domain)
+        if entry and (time.time() - entry['timestamp']) < CT_CACHE_TTL:
+            return entry['data']
+    return None
+
+
+def _get_stale_ct(domain):
+    """Return stale cache entry if available (for fallback on timeout)."""
+    with _ct_cache_lock:
+        entry = _ct_cache.get(domain)
+        if entry:
+            return entry['data']
+    return None
+
+
+def _set_cached_ct(domain, data):
+    with _ct_cache_lock:
+        _ct_cache[domain] = {'data': data, 'timestamp': time.time()}
+
+
 import ipaddress
 import dns.resolver
 import dns.flags
@@ -2926,6 +2958,25 @@ def _raw_check_dane(domain: str, raw_results: Dict[str, Any]) -> Dict[str, Any]:
 # ============================================================
 
 def _raw_check_ct(domain: str, raw_results: Dict[str, Any]) -> Dict[str, Any]:
+    """CT check with 24-hour caching and stale-cache fallback on timeout."""
+    cached = _get_cached_ct(domain)
+    if cached is not None:
+        return cached
+
+    result = _raw_check_ct_uncached(domain, raw_results)
+
+    # On failure, try returning stale cache
+    if result.get("unavailable_reason") in ("timeout", "request_error"):
+        stale = _get_stale_ct(domain)
+        if stale is not None:
+            return stale
+        return result
+
+    _set_cached_ct(domain, result)
+    return result
+
+
+def _raw_check_ct_uncached(domain: str, raw_results: Dict[str, Any]) -> Dict[str, Any]:
     """Query crt.sh for Certificate Transparency logs and analyze findings.
 
     Surfaces:
