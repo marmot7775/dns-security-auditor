@@ -529,10 +529,13 @@ function renderResults(data) {
     document.getElementById('summary-fail').textContent = failCount;
 
     // Tab title with issue summary
-    const issues = failCount + warnCount;
-    document.title = issues > 0
-        ? `(${issues} issue${issues > 1 ? 's' : ''}) ${data.domain} | DNS Audit`
-        : `All clear: ${data.domain} | DNS Audit`;
+    if (failCount > 0) {
+        document.title = `(${failCount} issue${failCount > 1 ? 's' : ''}) ${data.domain} | DNS Audit`;
+    } else if (warnCount > 0) {
+        document.title = `(${warnCount} warning${warnCount > 1 ? 's' : ''}) ${data.domain} | DNS Audit`;
+    } else {
+        document.title = `${data.domain} | DNS Audit`;
+    }
 
     // Grade color-coding
     const gradeCard = document.querySelector('.grade-card');
@@ -845,7 +848,7 @@ function createResultCard(check, index) {
 
     const tooltipText = PROTOCOL_TOOLTIPS[check.name] || '';
     const titleHtml = tooltipText
-        ? `<h3 class="result-title"><span class="protocol-name-tip" tabindex="0">${escapeHtml(check.name)}<span class="protocol-tooltip">${escapeHtml(tooltipText)}</span></span></h3>`
+        ? `<h3 class="result-title protocol-name-tip" tabindex="0" data-tooltip="${escapeHtml(tooltipText)}">${escapeHtml(check.name)}</h3>`
         : `<h3 class="result-title">${escapeHtml(check.name)}</h3>`;
 
     const bodyId = `body-${(check.name || '').toLowerCase().replace(/[^a-z0-9]/g, '-')}`;
