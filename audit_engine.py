@@ -73,7 +73,7 @@ def _is_private_ip(ip_str: str) -> bool:
 
 from checks_extra import check_mta_sts, check_tls_rpt, check_bimi
 from mx_check import check_mx
-from spf_recursive import count_spf_lookups, repair_missing_spaces
+from spf_recursive import count_spf_lookups
 from advanced_fingerprinting import AdvancedVendorFingerprinter
 from security_scoring import EmailSecurityScorer
 from dkim_formatter import analyze_dkim_key_strength
@@ -1788,24 +1788,8 @@ def _raw_check_spf(domain: str) -> Dict[str, Any]:
     result["record"] = record
     result["ttl"] = _lookup_ttl(domain, "TXT")
 
-    # ── Step 2b: Detect and repair missing spaces between mechanisms ──
-    # Multi-string TXT records can produce jammed-together mechanisms
-    # (e.g. "ip4:1.2.3.0/24include:_spf.google.com~all") when strings are
-    # concatenated without spaces per RFC 7208 Section 3.3.
-    repaired_record, is_malformed = repair_missing_spaces(record)
-    if is_malformed:
-        _add_syntax(
-            "SPF record has syntax errors: mechanisms are not space-delimited",
-            "The SPF record has mechanisms jammed together without spaces. "
-            "This is likely caused by incorrect multi-string TXT record configuration "
-            "in DNS. While some receivers may still parse it, this violates RFC 7208 "
-            "and can cause unpredictable SPF evaluation.",
-            "Ensure each mechanism in the SPF record is separated by a space. "
-            "Check your DNS provider's TXT record configuration for improper string splitting.",
-        )
-
     # ── Step 3: Parse mechanisms and run syntax checks ──────────
-    parts = repaired_record.split()
+    parts = record.split()
     all_mech = None
     include_count = 0
     ip4_count = 0
@@ -2054,8 +2038,7 @@ def _raw_check_spf(domain: str) -> Dict[str, Any]:
             "SPF records should end with an 'all' mechanism to define what happens "
             "to mail from servers not listed in the record. Without it, the default "
             "is neutral (?all), which provides no protection.",
-            "Add ~all (softfail) to the end of the SPF record as a safe starting point. "
-            "Once you are confident all legitimate senders are listed, tighten to -all (hardfail).",
+            "Add -all to the end of the SPF record.",
         )
 
     # ── Step 8: Merge syntax errors into issues and set final status ──
