@@ -873,6 +873,76 @@ def check_bimi(domain: str, dmarc_enforcing_override: bool = None) -> Dict[str, 
                                         "Add a viewBox attribute to the root <svg> element.",
                                     ))
 
+                                # Gmail/Google Workspace compatibility: fixed pixel dimensions
+                                raw_w = root.get("width")
+                                raw_h = root.get("height")
+                                relative_units = ("%", "em", "rem", "vw", "vh")
+
+                                def _is_relative(val):
+                                    if not val:
+                                        return True
+                                    v = val.strip().lower()
+                                    return any(u in v for u in relative_units)
+
+                                if _is_relative(raw_w) or _is_relative(raw_h):
+                                    result["issues"].append(_make_issue(
+                                        "warning",
+                                        "SVG uses relative or missing dimensions (Gmail compatibility)",
+                                        f"SVG has width='{raw_w or 'missing'}' height='{raw_h or 'missing'}'. "
+                                        "Google and Gmail require fixed pixel values (e.g., width='96' height='96'). "
+                                        "Logo may not display even though the SVG is technically valid.",
+                                        "Logo may silently fail to display in Gmail.",
+                                        "Set fixed pixel dimensions on the root <svg> element, e.g., width=\"96\" height=\"96\".",
+                                    ))
+
+                                # Gmail/Google Workspace compatibility: minimum 96x96 pixels
+                                def _parse_px(val):
+                                    if not val:
+                                        return None
+                                    v = val.strip().lower().replace("px", "")
+                                    if any(u in v for u in relative_units):
+                                        return None
+                                    try:
+                                        return float(v)
+                                    except ValueError:
+                                        return None
+
+                                explicit_w = _parse_px(raw_w)
+                                explicit_h = _parse_px(raw_h)
+
+                                viewbox_w = None
+                                viewbox_h = None
+                                vb = root.get("viewBox")
+                                if vb:
+                                    try:
+                                        parts = vb.replace(",", " ").split()
+                                        if len(parts) == 4:
+                                            viewbox_w = float(parts[2])
+                                            viewbox_h = float(parts[3])
+                                    except ValueError:
+                                        pass
+
+                                check_w = explicit_w if explicit_w is not None else viewbox_w
+                                check_h = explicit_h if explicit_h is not None else viewbox_h
+                                from_viewbox_only = (
+                                    explicit_w is None and explicit_h is None
+                                    and viewbox_w is not None and viewbox_h is not None
+                                )
+
+                                if check_w is not None and check_h is not None:
+                                    if check_w < 96 or check_h < 96:
+                                        size_desc = f"{check_w:g}x{check_h:g}"
+                                        source_note = " (from viewBox)" if from_viewbox_only else ""
+                                        result["issues"].append(_make_issue(
+                                            "warning",
+                                            "SVG dimensions below Google's 96x96 minimum (Gmail compatibility)",
+                                            f"SVG dimensions {size_desc}{source_note} are below Google's minimum "
+                                            "96x96 pixel requirement. Logo may not display in Gmail even though "
+                                            "the SVG is technically valid.",
+                                            "Logo may silently fail to display in Gmail.",
+                                            "Resize the SVG so both width and height are at least 96 pixels.",
+                                        ))
+
                                 # Check for <script> elements (security risk)
                                 script_tags = root.iter(f"{{{svg_ns}}}script")
                                 script_tags_no_ns = root.iter("script")
