@@ -5594,16 +5594,22 @@ def transform_blacklist(raw: Dict, domain: str) -> Dict:
     # Determine status from domain-based results only
     listed = False
     listed_names = []
+    has_errors = False
 
     for dr in domain_results:
         if dr.get("listed"):
             listed = True
             list_name = dr["list"]
             listed_names.append(list_name)
+        if dr.get("error"):
+            has_errors = True
 
     if listed:
         status = "fail"
         pill_label = "Listed"
+    elif has_errors:
+        status = "warn"
+        pill_label = "Unavailable"
     else:
         status = "pass"
         pill_label = "Clean"
@@ -5614,6 +5620,8 @@ def transform_blacklist(raw: Dict, domain: str) -> Dict:
     # Verdict
     if total_listings > 0:
         verdict = f"Listed on {total_listings} domain blocklist{'s' if total_listings != 1 else ''}"
+    elif has_errors:
+        verdict = "Blocklist check could not be completed"
     else:
         verdict = f"Clean on {total_lists} domain blocklist{'s' if total_lists != 1 else ''}"
 
@@ -5625,6 +5633,12 @@ def transform_blacklist(raw: Dict, domain: str) -> Dict:
             "Domain blocklists (like Spamhaus DBL) list domains directly associated with spam, "
             "phishing, or malware. A listing can affect deliverability. "
             "Investigate the cause before requesting removal."
+        )
+    elif has_errors:
+        explanation = (
+            "One or more blocklist queries were blocked, likely due to rate limiting "
+            "on the public Spamhaus DNS mirror. This does not mean the domain is listed "
+            "or clean. You can verify manually at https://check.spamhaus.org/."
         )
     else:
         explanation = (
@@ -5639,6 +5653,8 @@ def transform_blacklist(raw: Dict, domain: str) -> Dict:
         if dr.get("listed"):
             meaning = dr.get("meaning", "Listed")
             details.append({"type": "error", "text": f"{domain}: {dr['list']}: {meaning}"})
+        elif dr.get("error"):
+            details.append({"type": "warning", "text": f"{domain}: {dr['list']}: {dr['error']}"})
         else:
             details.append({"type": "good", "text": f"{domain}: clean on {dr['list']}"})
 
@@ -5674,6 +5690,12 @@ def transform_blacklist(raw: Dict, domain: str) -> Dict:
             "failures right now. Emails may be bouncing or going directly to spam at major providers. "
             "This often happens when a compromised account or aggressive outreach triggers spam reports. "
             "Investigate the root cause before requesting delisting."
+        )
+    elif has_errors:
+        _deliverability = (
+            "The blocklist check was inconclusive due to query restrictions. "
+            "This does not indicate a problem with your domain. "
+            "Check manually at https://check.spamhaus.org/ for a definitive answer."
         )
     else:
         _deliverability = (
