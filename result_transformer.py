@@ -5193,29 +5193,38 @@ def _build_dane_deep(tlsa_records: List[Dict], dnssec_ok: bool) -> Optional[Dict
         if not r.get("found") or not r.get("records"):
             continue
         for rec in r.get("records", []):
-            parts = rec.strip().split()
-            if len(parts) >= 4:
-                try:
+            try:
+                # Records are dicts with usage/selector/matching_type keys
+                if isinstance(rec, dict):
+                    usage = int(rec.get("usage", -1))
+                    selector = int(rec.get("selector", -1))
+                    matching = int(rec.get("matching_type", -1))
+                else:
+                    # Legacy fallback: raw string "usage selector matching data"
+                    parts = rec.strip().split()
+                    if len(parts) < 4:
+                        continue
                     usage = int(parts[0])
                     selector = int(parts[1])
                     matching = int(parts[2])
-                    usage_info = _TLSA_USAGE.get(usage, ("Unknown", f"Usage {usage}"))
-                    sel_info = _TLSA_SELECTOR.get(selector, ("Unknown", f"Selector {selector}"))
-                    match_info = _TLSA_MATCHING.get(matching, ("Unknown", f"Matching {matching}"))
 
-                    is_best = usage == 3 and selector == 1 and matching == 1
-                    rotation_safe = selector == 1
+                usage_info = _TLSA_USAGE.get(usage, ("Unknown", f"Usage {usage}"))
+                sel_info = _TLSA_SELECTOR.get(selector, ("Unknown", f"Selector {selector}"))
+                match_info = _TLSA_MATCHING.get(matching, ("Unknown", f"Matching {matching}"))
 
-                    parsed_tlsa.append({
-                        "mx_host": r["mx_host"],
-                        "usage": usage, "usage_label": usage_info[0], "usage_desc": usage_info[1],
-                        "selector": selector, "selector_label": sel_info[0], "selector_desc": sel_info[1],
-                        "matching": matching, "matching_label": match_info[0], "matching_desc": match_info[1],
-                        "is_best_practice": is_best,
-                        "rotation_safe": rotation_safe,
-                    })
-                except (ValueError, IndexError):
-                    pass
+                is_best = usage == 3 and selector == 1 and matching == 1
+                rotation_safe = selector == 1
+
+                parsed_tlsa.append({
+                    "mx_host": r["mx_host"],
+                    "usage": usage, "usage_label": usage_info[0], "usage_desc": usage_info[1],
+                    "selector": selector, "selector_label": sel_info[0], "selector_desc": sel_info[1],
+                    "matching": matching, "matching_label": match_info[0], "matching_desc": match_info[1],
+                    "is_best_practice": is_best,
+                    "rotation_safe": rotation_safe,
+                })
+            except (ValueError, IndexError, TypeError):
+                pass
 
     return {
         "dnssec_status": dnssec_status,
