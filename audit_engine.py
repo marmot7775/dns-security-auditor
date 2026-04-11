@@ -2173,15 +2173,57 @@ def _raw_check_dnssec(domain: str) -> Dict[str, Any]:
             "Verify the domain name is correct and DNS is properly configured.",
         )
     except dns.resolver.LifetimeTimeout:
-        # Timeout is NOT evidence of no DNSSEC — could be large DNSKEY response
-        result["has_dnssec"] = False
-        _add_issue(
-            "warning",
-            "DNSSEC check timed out",
-            "The DNSKEY query timed out. This does not necessarily mean DNSSEC is "
-            "unconfigured. Large DNSKEY responses can exceed typical timeouts.",
-            "Try checking with 'delv' or 'dig +dnssec' for a definitive answer.",
-        )
+        # Timeout is NOT evidence of no DNSSEC — large DNSKEY RRsets or
+        # slow authoritative servers can exceed the default timeout.
+        # Retry once with a generous 30s timeout before giving up.
+        retry_resolver = _get_dnssec_resolver(timeout=30.0)
+        try:
+            dnskey_answers = retry_resolver.resolve(domain, "DNSKEY")
+            result["has_dnssec"] = True
+            result["key_count"] = len(dnskey_answers)
+
+            ad_flag = bool(dnskey_answers.response.flags & dns.flags.AD)
+            result["validated"] = ad_flag
+
+            seen_algos = set()
+            for rdata in dnskey_answers:
+                seen_algos.add(rdata.algorithm)
+
+            for algo in sorted(seen_algos):
+                algo_name = DNSSEC_ALGORITHMS.get(algo, f"Unknown ({algo})")
+                result["algorithms"].append({
+                    "number": algo,
+                    "name": algo_name,
+                    "deprecated": algo in DEPRECATED_ALGORITHMS,
+                    "legacy": algo in LEGACY_ALGORITHMS,
+                })
+
+                if algo in DEPRECATED_ALGORITHMS:
+                    _add_issue(
+                        "error",
+                        f"Deprecated DNSSEC algorithm: {algo_name}",
+                        f"Algorithm {algo} ({algo_name}) is deprecated and considered insecure. "
+                        "Attackers may be able to forge DNSSEC signatures using this algorithm.",
+                        "Migrate to algorithm 13 (ECDSA P-256) or 8 (RSA/SHA-256).",
+                    )
+                elif algo in LEGACY_ALGORITHMS:
+                    _add_issue(
+                        "warning",
+                        f"Legacy DNSSEC algorithm: {algo_name}",
+                        f"Algorithm {algo} is functional but not recommended for new deployments. "
+                        "Modern algorithms offer better security and smaller signatures.",
+                        "Consider migrating to algorithm 13 (ECDSA P-256) for better performance and security.",
+                    )
+        except dns.exception.DNSException:
+            result["has_dnssec"] = False
+            _add_issue(
+                "warning",
+                "DNSSEC check timed out",
+                "The DNSKEY query timed out on two attempts (including a 30s retry). "
+                "This does not necessarily mean DNSSEC is unconfigured. Large DNSKEY "
+                "responses or slow authoritative servers can cause timeouts.",
+                "Verify manually with 'delv' or 'dig +dnssec DNSKEY " + domain + "'.",
+            )
     except dns.exception.DNSException as e:
         result["has_dnssec"] = False
         _add_issue(
