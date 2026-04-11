@@ -2868,8 +2868,12 @@ def _raw_check_dane(domain: str, raw_results: Dict[str, Any]) -> Dict[str, Any]:
         result["status"] = "ok"
         return result
 
-    # DNSSEC status from earlier check
-    raw_dnssec = raw_results.get("dnssec", {})
+    # DNSSEC status: query directly rather than relying on raw_results,
+    # because DNSSEC and DANE run as parallel Phase 2 checks so the
+    # DNSSEC result may not be available in the raw_results snapshot.
+    raw_dnssec = raw_results.get("dnssec")
+    if raw_dnssec is None:
+        raw_dnssec = _raw_check_dnssec(domain)
     dnssec_ok = (
         raw_dnssec.get("has_dnssec", False)
         and raw_dnssec.get("has_ds", False)
