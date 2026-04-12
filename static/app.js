@@ -24,6 +24,7 @@ let lastAuditData = null;
 let auditStartTime = 0;
 let auditController = null;
 let auditReader = null;
+let sessionAuditCount = 0;
 
 // -- DOM References --
 const auditForm = document.getElementById('audit-form');
@@ -164,15 +165,34 @@ auditForm.addEventListener('submit', (e) => {
         _showInlineError('Please enter a domain name.');
         return;
     }
+
+    // Prompt 10: Detect common input mistakes
+    const IP_RE = /^\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}$/;
+    if (IP_RE.test(raw)) {
+        _showInlineError('This looks like an IP address. DNS audit checks domain names, not IPs.');
+        return;
+    }
+
     const domain = normalizeDomain(raw);
     if (!domain) {
         _showInlineError('Please enter a valid domain name.');
         return;
     }
+
+    // Suggest fix if user pasted a URL
+    if (/^https?:\/\//i.test(raw) && domain) {
+        domainInput.value = domain;
+    }
+
     // Basic format validation before sending to the server
     const DOMAIN_RE = /^(?!-)[A-Za-z0-9-]{1,63}(?<!-)(\.(?!-)[A-Za-z0-9-]{1,63}(?<!-))*\.[A-Za-z]{2,}$/;
     if (!DOMAIN_RE.test(domain)) {
-        _showInlineError(`"${domain}" does not look like a valid domain name.`);
+        // Provide helpful suggestion
+        if (raw.includes('/')) {
+            _showInlineError(`Did you mean "${domain}"? Please enter just the domain name.`);
+        } else {
+            _showInlineError(`"${domain}" does not look like a valid domain name.`);
+        }
         return;
     }
     _clearInlineError();
@@ -199,8 +219,11 @@ function _clearInlineError() {
     domainInput.classList.remove('input-error');
 }
 
-// Clear inline error when user starts typing
-domainInput.addEventListener('input', _clearInlineError);
+// Clear inline error and run real-time validation as user types (Prompt 10)
+domainInput.addEventListener('input', () => {
+    _clearInlineError();
+    _realtimeValidate();
+});
 
 function normalizeDomain(input) {
     if (!input) return '';
@@ -269,6 +292,7 @@ async function runAudit(domain) {
 
                 if (msg.done) {
                     auditReader = null;
+                    if (msg.cached) msg.result._cached = true;
                     renderResults(msg.result);
                     return;
                 }
@@ -443,6 +467,9 @@ function renderResults(data) {
         window.history.replaceState({}, '', url);
     }, 300);
 
+    // Track session audit count
+    sessionAuditCount++;
+
     // Domain banner
     document.getElementById('result-domain').textContent = data.domain;
 
@@ -452,6 +479,15 @@ function renderResults(data) {
     const tsText = now.toLocaleDateString('en-US', { year: 'numeric', month: 'short', day: 'numeric' })
         + ' ' + now.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit', timeZoneName: 'short' });
     document.getElementById('result-timestamp').textContent = `${tsText}  \u00b7  ${auditDuration}s`;
+
+    // Prompt 12: Cache status badge
+    _renderCacheBadge(data);
+
+    // Prompt 14: Request ID display
+    _renderRequestId(data.request_id);
+
+    // Prompt 2: Record to recent audits in localStorage
+    _recordRecentAudit(data.domain, data.score?.grade || '?');
 
     // -- Executive Summary (Prompt 16) -- render at the very top --
     const esSlot = document.getElementById('executive-summary-slot');
@@ -725,6 +761,9 @@ function renderResults(data) {
         });
     }
 
+    // Prompt 3: Lazy load -- render first 4 cards immediately, rest via IntersectionObserver
+    const EAGER_COUNT = 4;
+
     checks.forEach((check, i) => {
         // Attach tree walk + DMARC eval + subdomain audit data to the DMARC check
         if ((check.name || '').toUpperCase().includes('DMARC') && data.tree_walk) {
@@ -770,9 +809,53 @@ function renderResults(data) {
                 check._consistency_findings = relevant;
             }
         }
-        const card = createResultCard(check, i);
-        resultsList.appendChild(card);
+
+        if (i < EAGER_COUNT) {
+            const card = createResultCard(check, i);
+            resultsList.appendChild(card);
+        } else {
+            // Create a skeleton placeholder
+            const placeholder = document.createElement('div');
+            placeholder.className = 'result-card-skeleton';
+            placeholder.dataset.checkIndex = i;
+            placeholder.innerHTML = `
+                <div class="skeleton-bar skeleton-title"></div>
+                <div class="skeleton-bar skeleton-body"></div>
+                <div class="skeleton-bar skeleton-body short"></div>
+            `;
+            placeholder._checkData = check;
+            placeholder._checkIndex = i;
+            resultsList.appendChild(placeholder);
+        }
     });
+
+    // IntersectionObserver for lazy-loaded cards
+    if ('IntersectionObserver' in window) {
+        const lazyObserver = new IntersectionObserver((entries) => {
+            entries.forEach(entry => {
+                if (entry.isIntersecting) {
+                    const placeholder = entry.target;
+                    const check = placeholder._checkData;
+                    const idx = placeholder._checkIndex;
+                    if (check) {
+                        const card = createResultCard(check, idx);
+                        placeholder.parentNode.replaceChild(card, placeholder);
+                    }
+                    lazyObserver.unobserve(placeholder);
+                }
+            });
+        }, { rootMargin: '200px' });
+
+        resultsList.querySelectorAll('.result-card-skeleton').forEach(el => {
+            lazyObserver.observe(el);
+        });
+    } else {
+        // Fallback: render all immediately
+        resultsList.querySelectorAll('.result-card-skeleton').forEach(el => {
+            const card = createResultCard(el._checkData, el._checkIndex);
+            el.parentNode.replaceChild(card, el);
+        });
+    }
 
     // Vendors
     const vendorsSection = document.getElementById('vendors-section');
@@ -800,30 +883,47 @@ function renderResults(data) {
     // Share button with dropdown
     _initShareDropdown();
 
-    // "Run another audit" button at bottom of results
+    // Prompt 11: Comparison mode button
+    _initComparisonMode();
+
+    // "Run another audit" + CSV export buttons at bottom of results (Prompts 9, 15)
     let runAnother = document.getElementById('run-another-btn');
     if (!runAnother) {
         runAnother = document.createElement('div');
         runAnother.id = 'run-another-btn';
         runAnother.className = 'run-another';
         runAnother.innerHTML = `
-            <button class="audit-btn run-another-btn" type="button">
-                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
-                     stroke-linecap="round" stroke-linejoin="round" width="16" height="16">
-                    <polyline points="23 4 23 10 17 10"/>
-                    <path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"/>
-                </svg>
-                <span>Run Another Audit</span>
-            </button>
+            <div class="run-another-inner">
+                <button class="audit-btn run-another-btn" type="button" title="Press R to reset and start a new audit">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+                         stroke-linecap="round" stroke-linejoin="round" width="16" height="16">
+                        <polyline points="23 4 23 10 17 10"/>
+                        <path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"/>
+                    </svg>
+                    <span>Run Another Audit</span>
+                </button>
+                <button class="audit-btn export-csv-btn" type="button" title="Export audit results as CSV">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+                         stroke-linecap="round" stroke-linejoin="round" width="16" height="16">
+                        <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
+                        <polyline points="7 10 12 15 17 10"/>
+                        <line x1="12" y1="15" x2="12" y2="3"/>
+                    </svg>
+                    <span>Export CSV</span>
+                </button>
+            </div>
+            <div class="session-audit-count">Audits this session: ${sessionAuditCount}</div>
         `;
         resultsSection.appendChild(runAnother);
-        runAnother.querySelector('button').addEventListener('click', () => {
-            window.scrollTo({ top: 0, behavior: 'smooth' });
-            setTimeout(() => {
-                domainInput.value = '';
-                domainInput.focus();
-            }, 400);
-        });
+        runAnother.querySelector('.run-another-btn').addEventListener('click', _resetAndFocusInput);
+        runAnother.querySelector('.export-csv-btn').addEventListener('click', () => _exportToCSV(data));
+    } else {
+        runAnother.querySelector('.session-audit-count').textContent = `Audits this session: ${sessionAuditCount}`;
+        // Re-bind CSV export to latest data
+        const csvBtn = runAnother.querySelector('.export-csv-btn');
+        const newCsvBtn = csvBtn.cloneNode(true);
+        csvBtn.parentNode.replaceChild(newCsvBtn, csvBtn);
+        newCsvBtn.addEventListener('click', () => _exportToCSV(data));
     }
 }
 
@@ -3225,19 +3325,19 @@ function _buildShareDropdownItems() {
 function _copyToClipboard(text, feedbackEl, origLabel) {
     if (navigator.clipboard) {
         navigator.clipboard.writeText(text).then(() => {
+            showToast('Copied to clipboard');
             if (feedbackEl) {
-                feedbackEl.textContent = 'Copied!';
                 const btnEl = feedbackEl.closest('.copy-btn') || feedbackEl;
                 btnEl.classList.add('copied');
-                setTimeout(() => { feedbackEl.textContent = origLabel; btnEl.classList.remove('copied'); }, 2000);
+                setTimeout(() => btnEl.classList.remove('copied'), 2000);
             }
-        }).catch(() => _copyFallback(text, feedbackEl, origLabel));
+        }).catch(() => _copyFallback(text));
     } else {
-        _copyFallback(text, feedbackEl, origLabel);
+        _copyFallback(text);
     }
 }
 
-function _copyFallback(text, feedbackEl, origLabel) {
+function _copyFallback(text) {
     const ta = document.createElement('textarea');
     ta.value = text;
     ta.style.position = 'fixed';
@@ -3246,14 +3346,9 @@ function _copyFallback(text, feedbackEl, origLabel) {
     ta.select();
     try {
         document.execCommand('copy');
-        if (feedbackEl) {
-            feedbackEl.textContent = 'Copied!';
-            const btnEl = feedbackEl.closest('.copy-btn') || feedbackEl;
-            btnEl.classList.add('copied');
-            setTimeout(() => { feedbackEl.textContent = origLabel; btnEl.classList.remove('copied'); }, 2000);
-        }
+        showToast('Copied to clipboard');
     } catch {
-        if (feedbackEl) { feedbackEl.textContent = 'Failed'; setTimeout(() => feedbackEl.textContent = origLabel, 2000); }
+        showToast('Copy failed');
     }
     document.body.removeChild(ta);
 }
@@ -3440,4 +3535,426 @@ function _renderProviderCard(provider, showScorecard) {
     html += `</div>`;
     return html;
 }
+
+// ============================================================
+// Toast notification system (Prompt 4)
+// ============================================================
+
+const _toastQueue = [];
+const MAX_TOASTS = 3;
+
+function showToast(message) {
+    let container = document.querySelector('.toast-container');
+    if (!container) {
+        container = document.createElement('div');
+        container.className = 'toast-container';
+        document.body.appendChild(container);
+    }
+
+    // Cap visible toasts
+    while (container.children.length >= MAX_TOASTS) {
+        container.removeChild(container.firstChild);
+    }
+
+    const toast = document.createElement('div');
+    toast.className = 'toast';
+    toast.textContent = message;
+    container.appendChild(toast);
+
+    // Trigger reflow for animation
+    toast.offsetHeight;
+    toast.classList.add('visible');
+
+    setTimeout(() => {
+        toast.classList.remove('visible');
+        toast.addEventListener('transitionend', () => toast.remove(), { once: true });
+        // Fallback removal
+        setTimeout(() => { if (toast.parentNode) toast.remove(); }, 400);
+    }, 2000);
+}
+
+// ============================================================
+// Recent Audits (Prompt 2)
+// ============================================================
+
+function _recordRecentAudit(domain, grade) {
+    try {
+        let recent = JSON.parse(localStorage.getItem('recentAudits') || '[]');
+        // Remove duplicate
+        recent = recent.filter(r => r.domain !== domain);
+        recent.unshift({ domain, grade, timestamp: Date.now() });
+        // Keep only 10
+        if (recent.length > 10) recent = recent.slice(0, 10);
+        localStorage.setItem('recentAudits', JSON.stringify(recent));
+        _renderRecentAudits();
+    } catch { /* localStorage unavailable */ }
+}
+
+function _renderRecentAudits() {
+    let container = document.getElementById('recent-audits');
+    if (!container) {
+        container = document.createElement('div');
+        container.id = 'recent-audits';
+        container.className = 'recent-audits';
+        // Insert after the domain input form
+        const formEl = document.getElementById('audit-form');
+        if (formEl && formEl.parentNode) {
+            formEl.parentNode.insertBefore(container, formEl.nextSibling);
+        } else {
+            return;
+        }
+    }
+
+    try {
+        const recent = JSON.parse(localStorage.getItem('recentAudits') || '[]');
+        if (recent.length === 0) {
+            container.style.display = 'none';
+            return;
+        }
+
+        container.style.display = 'block';
+        container.innerHTML = `
+            <div class="recent-audits-header">
+                <span class="recent-audits-label">Recent</span>
+                <button class="recent-audits-clear" type="button">Clear</button>
+            </div>
+            <div class="recent-audits-chips"></div>
+        `;
+
+        const chips = container.querySelector('.recent-audits-chips');
+        recent.forEach(r => {
+            const chip = document.createElement('button');
+            chip.type = 'button';
+            chip.className = 'recent-audit-chip';
+            chip.textContent = `${r.domain} (${r.grade})`;
+            chip.addEventListener('click', () => {
+                domainInput.value = r.domain;
+                runAudit(r.domain);
+            });
+            chips.appendChild(chip);
+        });
+
+        container.querySelector('.recent-audits-clear').addEventListener('click', () => {
+            localStorage.removeItem('recentAudits');
+            container.style.display = 'none';
+        });
+    } catch {
+        container.style.display = 'none';
+    }
+}
+
+// Render recent audits on page load
+document.addEventListener('DOMContentLoaded', _renderRecentAudits);
+
+// ============================================================
+// Real-time input validation (Prompt 10)
+// ============================================================
+
+function _realtimeValidate() {
+    const raw = domainInput.value.trim();
+    let indicator = document.getElementById('domain-valid-indicator');
+    if (!indicator) {
+        indicator = document.createElement('span');
+        indicator.id = 'domain-valid-indicator';
+        indicator.className = 'domain-valid-indicator';
+        domainInput.parentNode.style.position = 'relative';
+        domainInput.parentNode.appendChild(indicator);
+    }
+
+    if (!raw) {
+        indicator.className = 'domain-valid-indicator';
+        indicator.textContent = '';
+        return;
+    }
+
+    const domain = normalizeDomain(raw);
+    const DOMAIN_RE = /^(?!-)[A-Za-z0-9-]{1,63}(?<!-)(\.(?!-)[A-Za-z0-9-]{1,63}(?<!-))*\.[A-Za-z]{2,}$/;
+
+    if (domain && DOMAIN_RE.test(domain)) {
+        indicator.className = 'domain-valid-indicator valid';
+        indicator.innerHTML = '&#10003;';
+    } else if (raw.length > 2) {
+        indicator.className = 'domain-valid-indicator invalid';
+        indicator.innerHTML = '&#10005;';
+    } else {
+        indicator.className = 'domain-valid-indicator';
+        indicator.textContent = '';
+    }
+}
+
+// ============================================================
+// Cache status badge (Prompt 12)
+// ============================================================
+
+function _renderCacheBadge(data) {
+    let badge = document.getElementById('cache-status-badge');
+    if (!badge) {
+        badge = document.createElement('div');
+        badge.id = 'cache-status-badge';
+        badge.className = 'cache-status-badge';
+        const ts = document.getElementById('result-timestamp');
+        if (ts && ts.parentNode) {
+            ts.parentNode.insertBefore(badge, ts.nextSibling);
+        }
+    }
+
+    if (data._cached || data.cached) {
+        badge.className = 'cache-status-badge cached';
+        badge.innerHTML = `
+            <span>Cached result</span>
+            <button class="cache-rerun-btn" type="button" title="Force a fresh audit">Re-run</button>
+        `;
+        badge.style.display = 'inline-flex';
+        badge.querySelector('.cache-rerun-btn').addEventListener('click', () => {
+            // Force fresh audit by running again (server will return fresh if cache expires)
+            runAudit(data.domain);
+        });
+    } else {
+        badge.className = 'cache-status-badge fresh';
+        badge.innerHTML = '<span>Fresh result</span>';
+        badge.style.display = 'inline-flex';
+    }
+}
+
+// ============================================================
+// Request ID display (Prompt 14)
+// ============================================================
+
+function _renderRequestId(requestId) {
+    if (!requestId) return;
+    let el = document.getElementById('request-id-display');
+    if (!el) {
+        el = document.createElement('div');
+        el.id = 'request-id-display';
+        el.className = 'request-id-display';
+        const ts = document.getElementById('result-timestamp');
+        if (ts && ts.parentNode) {
+            ts.parentNode.appendChild(el);
+        }
+    }
+    el.innerHTML = `<span class="request-id-label">Request ID:</span> <code class="request-id-value">${escapeHtml(requestId)}</code>`;
+    el.style.cursor = 'pointer';
+    el.title = 'Click to copy';
+    el.onclick = () => _copyToClipboard(requestId, null, '');
+}
+
+// ============================================================
+// CSV Export (Prompt 15)
+// ============================================================
+
+function _exportToCSV(data) {
+    if (!data) return;
+    const rows = [['Domain', 'Grade', 'Score', 'Check', 'Status', 'Verdict', 'Priority Fixes', 'Timestamp']];
+    const ts = new Date().toISOString();
+    const grade = data.score?.grade || '?';
+    const score = Math.round(data.score?.total || 0);
+    const fixes = (data.priority_fixes || []).map(f => f.title || f).join('; ');
+
+    if (data.checks && data.checks.length > 0) {
+        data.checks.forEach(check => {
+            rows.push([
+                data.domain,
+                grade,
+                score,
+                check.name || '',
+                check.status || '',
+                (check.verdict || '').replace(/,/g, ';'),
+                fixes,
+                ts,
+            ]);
+        });
+    } else {
+        rows.push([data.domain, grade, score, '', '', '', fixes, ts]);
+    }
+
+    const csvContent = rows.map(r => r.map(cell => `"${String(cell).replace(/"/g, '""')}"`).join(',')).join('\n');
+    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    const safeDomain = data.domain.replace(/[^a-zA-Z0-9.-]/g, '');
+    const dateStr = new Date().toISOString().slice(0, 10);
+    a.href = url;
+    a.download = `dns-audit-${safeDomain}-${dateStr}.csv`;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+    showToast('CSV downloaded');
+}
+
+// ============================================================
+// Run Another Audit helpers (Prompt 9)
+// ============================================================
+
+function _resetAndFocusInput() {
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+    setTimeout(() => {
+        domainInput.value = '';
+        domainInput.focus();
+    }, 400);
+}
+
+// Keyboard shortcut: press 'R' to reset (Prompt 9)
+document.addEventListener('keydown', (e) => {
+    // Don't trigger when typing in inputs
+    if (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA' || e.target.isContentEditable) return;
+    if (e.key === 'r' || e.key === 'R') {
+        if (resultsSection.style.display !== 'none') {
+            e.preventDefault();
+            _resetAndFocusInput();
+        }
+    }
+});
+
+// Sticky run-another on scroll (Prompt 9)
+window.addEventListener('scroll', () => {
+    const runAnother = document.getElementById('run-another-btn');
+    if (!runAnother) return;
+    const rect = runAnother.getBoundingClientRect();
+    runAnother.classList.toggle('sticky', rect.bottom > window.innerHeight);
+}, { passive: true });
+
+// ============================================================
+// Comparison Mode (Prompt 11)
+// ============================================================
+
+function _initComparisonMode() {
+    const resultsBanner = document.getElementById('results-banner');
+    if (!resultsBanner) return;
+
+    let compareBtn = document.getElementById('compare-btn');
+    if (compareBtn) return; // Already initialized
+
+    compareBtn = document.createElement('button');
+    compareBtn.id = 'compare-btn';
+    compareBtn.type = 'button';
+    compareBtn.className = 'audit-btn compare-btn';
+    compareBtn.innerHTML = `
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+             stroke-linecap="round" stroke-linejoin="round" width="14" height="14">
+            <line x1="18" y1="20" x2="18" y2="10"/><line x1="12" y1="20" x2="12" y2="4"/>
+            <line x1="6" y1="20" x2="6" y2="14"/>
+        </svg>
+        <span>Compare</span>
+    `;
+
+    const bannerActions = resultsBanner.querySelector('.banner-actions');
+    if (bannerActions) {
+        bannerActions.appendChild(compareBtn);
+    }
+
+    compareBtn.addEventListener('click', () => {
+        let panel = document.getElementById('comparison-panel');
+        if (panel) {
+            panel.style.display = panel.style.display === 'none' ? 'block' : 'none';
+            return;
+        }
+
+        panel = document.createElement('div');
+        panel.id = 'comparison-panel';
+        panel.className = 'comparison-panel';
+        panel.innerHTML = `
+            <div class="comparison-header">Compare with another domain</div>
+            <form class="comparison-form" id="comparison-form">
+                <input type="text" class="domain-input comparison-input" id="compare-domain-input"
+                       placeholder="Enter second domain..." autocomplete="off" spellcheck="false" />
+                <button type="submit" class="audit-btn">Compare</button>
+            </form>
+            <div id="comparison-results" class="comparison-results" style="display:none"></div>
+        `;
+        resultsBanner.parentNode.insertBefore(panel, resultsBanner.nextSibling);
+
+        document.getElementById('comparison-form').addEventListener('submit', async (e) => {
+            e.preventDefault();
+            const raw = document.getElementById('compare-domain-input').value.trim();
+            if (!raw) return;
+            const domain2 = normalizeDomain(raw);
+            if (!domain2) return;
+
+            const resultsDiv = document.getElementById('comparison-results');
+            resultsDiv.style.display = 'block';
+            resultsDiv.innerHTML = '<div class="comparison-loading">Running comparison audit...</div>';
+
+            try {
+                const selectorVal = document.getElementById('selector-input')?.value?.trim() || '';
+                let url = `${API_BASE}/audit?domain=${encodeURIComponent(domain2)}`;
+                if (selectorVal) url += `&selector=${encodeURIComponent(selectorVal)}`;
+                if (currentScope && currentScope !== 'complete') url += `&scope=${encodeURIComponent(currentScope)}`;
+                const resp = await fetch(url);
+                const data2 = await resp.json();
+
+                if (data2.error) {
+                    resultsDiv.innerHTML = `<div class="comparison-error">${escapeHtml(data2.error_message || data2.error)}</div>`;
+                    return;
+                }
+
+                _renderComparison(lastAuditData, data2, resultsDiv);
+            } catch (err) {
+                resultsDiv.innerHTML = `<div class="comparison-error">Comparison failed: ${escapeHtml(err.message)}</div>`;
+            }
+        });
+    });
+}
+
+function _renderComparison(data1, data2, container) {
+    const grade1 = data1.score?.grade || '?';
+    const grade2 = data2.score?.grade || '?';
+    const score1 = Math.round(data1.score?.total || 0);
+    const score2 = Math.round(data2.score?.total || 0);
+
+    let html = `
+        <div class="comparison-table-wrap">
+            <table class="comparison-table">
+                <thead>
+                    <tr>
+                        <th>Check</th>
+                        <th>${escapeHtml(data1.domain)}</th>
+                        <th>${escapeHtml(data2.domain)}</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    <tr class="comparison-grade-row">
+                        <td><strong>Overall Grade</strong></td>
+                        <td><span class="comparison-grade">${escapeHtml(grade1)} (${score1}/100)</span></td>
+                        <td><span class="comparison-grade">${escapeHtml(grade2)} (${score2}/100)</span></td>
+                    </tr>
+    `;
+
+    // Build a map of checks for data2
+    const checks2Map = {};
+    (data2.checks || []).forEach(c => { checks2Map[c.name] = c; });
+
+    (data1.checks || []).forEach(check => {
+        const check2 = checks2Map[check.name] || {};
+        const s1 = check.status || 'N/A';
+        const s2 = check2.status || 'N/A';
+        const winner = (s1 === 'pass' && s2 !== 'pass') ? 'left' :
+                       (s2 === 'pass' && s1 !== 'pass') ? 'right' : '';
+        html += `
+            <tr>
+                <td>${escapeHtml(check.name)}</td>
+                <td class="${winner === 'left' ? 'comparison-winner' : ''}">
+                    <span class="status-pill ${s1}">${s1}</span>
+                </td>
+                <td class="${winner === 'right' ? 'comparison-winner' : ''}">
+                    <span class="status-pill ${s2}">${s2}</span>
+                </td>
+            </tr>
+        `;
+    });
+
+    html += `</tbody></table></div>`;
+
+    // Summary: which domain is stronger
+    const stronger = score1 > score2 ? data1.domain : score2 > score1 ? data2.domain : null;
+    if (stronger) {
+        html += `<div class="comparison-summary">${escapeHtml(stronger)} has a stronger security posture</div>`;
+    } else {
+        html += `<div class="comparison-summary">Both domains have equivalent security scores</div>`;
+    }
+
+    container.innerHTML = html;
+}
+
+
 

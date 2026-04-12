@@ -20,6 +20,7 @@ import queue
 import re
 import threading
 import time
+import uuid
 from collections import defaultdict
 from datetime import datetime, timezone
 from pathlib import Path
@@ -35,6 +36,12 @@ import dns.resolver
 import dns.exception
 
 from audit_engine import run_full_audit
+from config import (
+    LOG_DIR, LOG_LEVEL, CACHE_TTL, CACHE_MAX_SIZE,
+    RATE_LIMIT_MAX, RATE_LIMIT_WINDOW, RATE_LIMIT_MAX_IPS,
+    MAX_CONCURRENT_AUDITS, CORS_ORIGINS,
+    DOMAIN_PATTERN, SELECTOR_PATTERN,
+)
 try:
     from pdf_report import generate_pdf
 except ImportError:
@@ -46,22 +53,28 @@ except ImportError:
 # ============================================================
 
 logging.basicConfig(
-    level=logging.INFO,
+    level=getattr(logging, LOG_LEVEL, logging.INFO),
     format="%(asctime)s  %(levelname)-8s  %(message)s",
     datefmt="%Y-%m-%d %H:%M:%S",
 )
 log = logging.getLogger("dns-auditor")
 
-error_file_handler = logging.handlers.RotatingFileHandler(
-    '/var/log/dns-auditor/errors.log',
-    maxBytes=10_000_000,  # 10MB
-    backupCount=5,
-)
-error_file_handler.setLevel(logging.ERROR)
-error_file_handler.setFormatter(logging.Formatter(
-    '%(asctime)s %(levelname)s %(message)s'
-))
-log.addHandler(error_file_handler)
+# Rotating error log -- directory is configurable via LOG_DIR env var
+_log_dir = Path(LOG_DIR)
+try:
+    _log_dir.mkdir(parents=True, exist_ok=True)
+    error_file_handler = logging.handlers.RotatingFileHandler(
+        str(_log_dir / "errors.log"),
+        maxBytes=10_000_000,  # 10MB
+        backupCount=5,
+    )
+    error_file_handler.setLevel(logging.ERROR)
+    error_file_handler.setFormatter(logging.Formatter(
+        '%(asctime)s %(levelname)s %(message)s'
+    ))
+    log.addHandler(error_file_handler)
+except PermissionError:
+    log.warning("Cannot create log directory %s -- file logging disabled", _log_dir)
 
 
 # ============================================================
@@ -116,10 +129,7 @@ app = FastAPI(
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=[
-        "https://dns-audit.com",
-        "https://www.dns-audit.com",
-    ],
+    allow_origins=CORS_ORIGINS,
     allow_methods=["GET", "POST"],
     allow_headers=["Content-Type", "Accept"],
 )
@@ -148,6 +158,8 @@ class SecurityHeadersMiddleware(BaseHTTPMiddleware):
         response.headers["Referrer-Policy"] = "strict-origin-when-cross-origin"
         response.headers["Permissions-Policy"] = "camera=(), microphone=(), geolocation=()"
         response.headers["Content-Security-Policy"] = self.CSP
+        if request.url.scheme == "https":
+            response.headers["Strict-Transport-Security"] = "max-age=31536000; includeSubDomains; preload"
         path = request.url.path
         if path.startswith("/api/"):
             response.headers["Cache-Control"] = "no-store"
@@ -166,17 +178,11 @@ app.add_middleware(SecurityHeadersMiddleware)
 
 _rate_limits: dict = defaultdict(list)
 _rate_lock = threading.Lock()
-RATE_LIMIT_MAX = 10       # max requests
-RATE_LIMIT_WINDOW = 60    # per 60 seconds
-_RATE_LIMIT_MAX_IPS = 10000  # cap dict size to prevent memory exhaustion
+_RATE_LIMIT_MAX_IPS = RATE_LIMIT_MAX_IPS
 
-# DKIM selector validation (DNS label characters only)
-SELECTOR_PATTERN = re.compile(r'^[A-Za-z0-9._-]{1,63}$')
-
-# Cap concurrent audit threads to prevent DoS via SSE connection flooding
 _active_audits = 0
 _active_audits_lock = threading.Lock()
-_MAX_CONCURRENT_AUDITS = 8
+_MAX_CONCURRENT_AUDITS = MAX_CONCURRENT_AUDITS
 
 
 def _get_client_ip(request: Request) -> str:
@@ -239,8 +245,6 @@ def _check_rate_limit(client_ip: str) -> bool:
 
 _cache: dict = {}
 _cache_lock = threading.Lock()
-CACHE_TTL = 300  # 5 minutes
-CACHE_MAX_SIZE = 500
 
 
 def _get_cached(cache_key: str) -> Optional[dict]:
@@ -268,9 +272,8 @@ def _set_cached(cache_key: str, data: dict):
 # Domain validation
 # ============================================================
 
-DOMAIN_PATTERN = re.compile(
-    r"^(?!-)[A-Za-z0-9-]{1,63}(?<!-)(\.(?!-)[A-Za-z0-9-]{1,63}(?<!-))*\.[A-Za-z]{2,}$"
-)
+
+
 
 
 def _validate_domain(domain: str) -> str:
@@ -418,16 +421,18 @@ async def audit_domain(
     domain = _validate_domain(domain)
     scope = _validate_scope(scope)
     if selector and not SELECTOR_PATTERN.match(selector.strip()):
-        raise HTTPException(status_code=400, detail="Invalid DKIM selector")
-    log.info("Audit requested: %s (scope=%s, ip=%s)", domain, scope or "complete", client_ip)
+        raise HTTPException(status_code=400, detail="Invalid DKIM selector (RFC 6376: alphanumeric and hyphens only)")
+    request_id = str(uuid.uuid4())
+    log.info("Audit requested: %s (scope=%s, ip=%s, rid=%s)", domain, scope or "complete", client_ip, request_id)
 
     cache_key = f"{domain}:{selector or ''}:{scope or 'complete'}"
 
     # Check cache (always; nocache removed from public API to prevent abuse)
     cached = _get_cached(cache_key)
     if cached:
-        log.info("Cache hit: %s", domain)
-        return JSONResponse(content=cached)
+        log.info("Cache hit: %s (rid=%s)", domain, request_id)
+        cached_with_rid = {**cached, "request_id": request_id, "cached": True}
+        return JSONResponse(content=cached_with_rid)
 
     # Pre-flight DNS check
     preflight_err = _preflight_dns_check(domain)
@@ -453,7 +458,7 @@ async def audit_domain(
         }
 
     elapsed = round(time.time() - start, 2)
-    log.info("Audit complete: %s -- %.2fs, grade=%s", domain, elapsed, result.get("score", {}).get("grade", "?"))
+    log.info("Audit complete: %s -- %.2fs, grade=%s (rid=%s)", domain, elapsed, result.get("score", {}).get("grade", "?"), request_id)
 
     # Audit log (GDPR-safe)
     _log_audit(request, domain, scope,
@@ -464,6 +469,7 @@ async def audit_domain(
     if "error" not in result:
         _set_cached(cache_key, result)
 
+    result["request_id"] = request_id
     return JSONResponse(content=result)
 
 
@@ -489,8 +495,9 @@ async def audit_stream(
     domain = _validate_domain(domain)
     scope = _validate_scope(scope)
     if selector and not SELECTOR_PATTERN.match(selector.strip()):
-        raise HTTPException(status_code=400, detail="Invalid DKIM selector")
-    log.info("SSE audit requested: %s (scope=%s, ip=%s)", domain, scope or "complete", client_ip)
+        raise HTTPException(status_code=400, detail="Invalid DKIM selector (RFC 6376: alphanumeric and hyphens only)")
+    request_id = str(uuid.uuid4())
+    log.info("SSE audit requested: %s (scope=%s, ip=%s, rid=%s)", domain, scope or "complete", client_ip, request_id)
 
     # Reject if too many concurrent audits (DoS protection)
     global _active_audits
@@ -505,9 +512,10 @@ async def audit_stream(
     # Check cache -- if cached, send result immediately
     cached = _get_cached(cache_key)
     if cached:
-        log.info("SSE cache hit: %s", domain)
+        log.info("SSE cache hit: %s (rid=%s)", domain, request_id)
         async def _cached_stream():
-            yield f"data: {json.dumps({'done': True, 'result': cached, 'cached': True})}\n\n"
+            cached_result = {**cached, "request_id": request_id}
+            yield f"data: {json.dumps({'done': True, 'result': cached_result, 'cached': True, 'request_id': request_id})}\n\n"
         return StreamingResponse(_cached_stream(), media_type="text/event-stream")
 
     # Pre-flight DNS check
@@ -597,7 +605,8 @@ async def audit_stream(
                     _log_audit(request, domain, scope,
                                result.get("score", {}).get("grade", "?"),
                                elapsed, len(result.get("checks", [])), source="sse")
-                    yield f"data: {json.dumps({'done': True, 'result': result})}\n\n"
+                    result["request_id"] = request_id
+                    yield f"data: {json.dumps({'done': True, 'result': result, 'request_id': request_id})}\n\n"
                     return
                 else:
                     yield f"data: {json.dumps(msg)}\n\n"
@@ -645,7 +654,7 @@ async def audit_pdf(
     domain = _validate_domain(domain)
     scope = _validate_scope(scope)
     if selector and not SELECTOR_PATTERN.match(selector.strip()):
-        raise HTTPException(status_code=400, detail="Invalid DKIM selector")
+        raise HTTPException(status_code=400, detail="Invalid DKIM selector (RFC 6376: alphanumeric and hyphens only)")
     log.info("PDF requested: %s (scope=%s, ip=%s)", domain, scope or "complete", client_ip)
 
     cache_key = f"{domain}:{selector or ''}:{scope or 'complete'}"
