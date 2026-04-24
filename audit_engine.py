@@ -7,21 +7,20 @@ Assembles results for the security scorer and transforms everything
 into the frontend's expected format.
 """
 
+import ipaddress
 import logging
 import re
-import traceback
-from html import escape as _e
+import threading as _ct_threading
+import time
 from concurrent.futures import ThreadPoolExecutor, TimeoutError as FuturesTimeoutError, as_completed
 from datetime import datetime, timezone
+from html import escape as _e
 from typing import Any, Dict, List, Optional
 
 log = logging.getLogger(__name__)
 
 # Per-check timeout in seconds (prevents hung DNS queries from blocking the audit)
 CHECK_TIMEOUT = 15
-
-import time
-import threading as _ct_threading
 
 # CT (crt.sh) result cache -- 24-hour TTL because CT data rarely changes
 # and crt.sh is frequently slow or unavailable.
@@ -52,7 +51,6 @@ def _set_cached_ct(domain, data):
         _ct_cache[domain] = {'data': data, 'timestamp': time.time()}
 
 
-import ipaddress
 import dns.resolver
 import dns.flags
 import dns.exception
@@ -1718,7 +1716,6 @@ def _raw_check_spf(domain: str) -> Dict[str, Any]:
       - openspf.org common errors
       - dmarc.org / dmarcian deployment guidance
     """
-    import re
     import ipaddress
 
     # Known mechanisms that consume a DNS lookup (RFC 7208 §4.6.4)
@@ -3317,9 +3314,6 @@ def _raw_check_blacklist(domain: str, raw_results: Dict[str, Any]) -> Dict[str, 
 
     Checks both IP-based lists (against MX IPs) and domain-based lists.
     """
-    import ipaddress
-    import socket
-
     # Domain-based blocklists only. IP-based checks were removed because
     # MX host IPs are shared infrastructure (e.g. Microsoft 365, Google)
     # that the audited domain does not control. A listing on a shared IP

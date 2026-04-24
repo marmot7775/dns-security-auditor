@@ -42,6 +42,7 @@ from config import (
     MAX_CONCURRENT_AUDITS, CORS_ORIGINS,
     DOMAIN_PATTERN, SELECTOR_PATTERN,
 )
+from dns_tools import normalize_domain
 try:
     from pdf_report import generate_pdf
 except ImportError:
@@ -284,32 +285,10 @@ def _validate_domain(domain: str) -> str:
     if not domain:
         raise HTTPException(status_code=400, detail="Domain parameter is required")
 
-    # Normalize
-    d = domain.strip().lower()
-    if "@" in d:
-        d = d.split("@")[-1]
-    d = d.removeprefix("http://").removeprefix("https://")
-    d = d.split("/")[0].split("?")[0].split("#")[0]
-    # Strip port (e.g. example.com:443)
-    if ":" in d:
-        d = d.rsplit(":", 1)[0]
-    d = d.rstrip(".")
+    d = normalize_domain(domain)
 
     if not d:
         raise HTTPException(status_code=400, detail="Invalid domain")
-
-    # Handle internationalized domain names (IDN) -- convert to punycode
-    try:
-        d = d.encode("idna").decode("ascii")
-    except (UnicodeError, UnicodeDecodeError):
-        # If IDNA encoding fails, try encoding each label individually
-        try:
-            labels = d.split(".")
-            d = ".".join(
-                label.encode("idna").decode("ascii") for label in labels
-            )
-        except (UnicodeError, UnicodeDecodeError):
-            pass  # Fall through to regex validation below
 
     if not DOMAIN_PATTERN.match(d):
         raise HTTPException(
@@ -791,6 +770,10 @@ if STATIC_DIR.exists():
     @app.get("/dmarcbis", tags=["Pages"])
     async def dmarcbis():
         return FileResponse(str(STATIC_DIR / "dmarcbis.html"))
+
+    @app.get("/dkim2", tags=["Pages"])
+    async def dkim2():
+        return FileResponse(str(STATIC_DIR / "dkim2.html"))
 
     @app.get("/methodology", tags=["Pages"])
     async def methodology():
