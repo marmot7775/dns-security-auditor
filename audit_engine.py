@@ -12,7 +12,6 @@ import logging
 import re
 import threading as _ct_threading
 import time
-import traceback
 from concurrent.futures import ThreadPoolExecutor, TimeoutError as FuturesTimeoutError, as_completed
 from datetime import datetime, timezone
 from html import escape as _e
@@ -1717,7 +1716,6 @@ def _raw_check_spf(domain: str) -> Dict[str, Any]:
       - openspf.org common errors
       - dmarc.org / dmarcian deployment guidance
     """
-    import re
     import ipaddress
 
     # Known mechanisms that consume a DNS lookup (RFC 7208 §4.6.4)
@@ -3316,9 +3314,6 @@ def _raw_check_blacklist(domain: str, raw_results: Dict[str, Any]) -> Dict[str, 
 
     Checks both IP-based lists (against MX IPs) and domain-based lists.
     """
-    import ipaddress
-    import socket
-
     # Domain-based blocklists only. IP-based checks were removed because
     # MX host IPs are shared infrastructure (e.g. Microsoft 365, Google)
     # that the audited domain does not control. A listing on a shared IP
