@@ -22,6 +22,7 @@
 - All touch targets must be 44px minimum on mobile
 - Text contrast must pass WCAG AA (4.5:1 ratio)
 - No personal data in logs (GDPR-safe)
+- When editing static/privacy.html body content, update the "Last updated" date in the same commit.
 
 ## Architecture
 - API: /api/audit (JSON), /api/audit/stream (SSE), /api/audit/pdf
