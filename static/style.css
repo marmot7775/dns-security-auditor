@@ -7846,6 +7846,456 @@ main .meth-page {
     }
 }
 
+/* ==========================================================================
+   Toast Notifications (Prompt 4)
+   ========================================================================== */
+
+.toast-container {
+    position: fixed;
+    bottom: 1.5rem;
+    right: 1.5rem;
+    z-index: 10000;
+    display: flex;
+    flex-direction: column-reverse;
+    gap: 0.5rem;
+    pointer-events: none;
+}
+
+.toast {
+    background: var(--surface);
+    color: var(--text-primary);
+    border: 1px solid var(--border);
+    border-left: 3px solid var(--pass);
+    padding: 0.75rem 1.25rem;
+    border-radius: var(--radius);
+    font-size: var(--font-sm);
+    font-weight: 500;
+    box-shadow: var(--shadow-md);
+    opacity: 0;
+    transform: translateX(100%);
+    transition: opacity 0.25s var(--ease), transform 0.25s var(--ease);
+    pointer-events: auto;
+}
+
+.toast.visible {
+    opacity: 1;
+    transform: translateX(0);
+}
+
+/* ==========================================================================
+   Recent Audits (Prompt 2)
+   ========================================================================== */
+
+.recent-audits {
+    margin-top: 0.75rem;
+}
+
+.recent-audits-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-bottom: 0.4rem;
+}
+
+.recent-audits-label {
+    font-size: var(--font-xs);
+    font-weight: 600;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: var(--text-tertiary);
+}
+
+.recent-audits-clear {
+    background: none;
+    border: none;
+    color: var(--text-tertiary);
+    font-size: var(--font-xs);
+    cursor: pointer;
+    padding: 0.15rem 0.35rem;
+    border-radius: var(--radius-sm);
+    transition: color var(--duration) var(--ease), background var(--duration) var(--ease);
+}
+
+.recent-audits-clear:hover {
+    color: var(--fail);
+    background: rgba(239, 68, 68, 0.1);
+}
+
+.recent-audits-chips {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.35rem;
+}
+
+.recent-audit-chip {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 2rem;
+    padding: 0.3rem 0.75rem;
+    font-size: var(--font-xs);
+    font-family: var(--font-body);
+    color: var(--text-secondary);
+    cursor: pointer;
+    transition: background var(--duration) var(--ease), border-color var(--duration) var(--ease), color var(--duration) var(--ease);
+    min-height: 44px;
+    display: inline-flex;
+    align-items: center;
+}
+
+.recent-audit-chip:hover {
+    background: var(--surface-hover);
+    border-color: var(--primary);
+    color: var(--text-primary);
+}
+
+/* ==========================================================================
+   Real-time Input Validation Indicator (Prompt 10)
+   ========================================================================== */
+
+.domain-valid-indicator {
+    position: absolute;
+    right: 5.5rem;
+    top: 50%;
+    transform: translateY(-50%);
+    font-size: 1.1rem;
+    line-height: 1;
+    opacity: 0;
+    transition: opacity 0.2s var(--ease);
+    pointer-events: none;
+}
+
+.domain-valid-indicator.valid {
+    color: var(--pass);
+    opacity: 1;
+}
+
+.domain-valid-indicator.invalid {
+    color: var(--fail);
+    opacity: 0.6;
+}
+
+/* ==========================================================================
+   Cache Status Badge (Prompt 12)
+   ========================================================================== */
+
+.cache-status-badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.5rem;
+    font-size: var(--font-xs);
+    padding: 0.2rem 0.6rem;
+    border-radius: 2rem;
+    margin-left: 0.5rem;
+}
+
+.cache-status-badge.cached {
+    background: rgba(234, 179, 8, 0.12);
+    color: var(--warn);
+    border: 1px solid rgba(234, 179, 8, 0.25);
+}
+
+.cache-status-badge.fresh {
+    background: rgba(34, 197, 94, 0.1);
+    color: var(--pass);
+    border: 1px solid rgba(34, 197, 94, 0.2);
+}
+
+.cache-rerun-btn {
+    background: none;
+    border: 1px solid currentColor;
+    border-radius: var(--radius-sm);
+    color: inherit;
+    font-size: 0.65rem;
+    padding: 0.1rem 0.4rem;
+    cursor: pointer;
+    font-family: var(--font-body);
+    transition: background var(--duration) var(--ease);
+}
+
+.cache-rerun-btn:hover {
+    background: rgba(255, 255, 255, 0.1);
+}
+
+/* ==========================================================================
+   Request ID Display (Prompt 14)
+   ========================================================================== */
+
+.request-id-display {
+    font-size: 0.65rem;
+    color: var(--text-tertiary);
+    margin-top: 0.25rem;
+    cursor: pointer;
+    opacity: 0.6;
+    transition: opacity var(--duration) var(--ease);
+}
+
+.request-id-display:hover {
+    opacity: 1;
+}
+
+.request-id-label {
+    font-weight: 500;
+}
+
+.request-id-value {
+    font-family: var(--font-mono);
+    font-size: 0.6rem;
+    background: var(--surface);
+    padding: 0.1rem 0.3rem;
+    border-radius: var(--radius-sm);
+    border: 1px solid var(--border);
+}
+
+/* ==========================================================================
+   Lazy Load Skeleton (Prompt 3)
+   ========================================================================== */
+
+.result-card-skeleton {
+    background: var(--surface);
+    border-radius: var(--radius-lg);
+    padding: var(--space-lg);
+    border: 1px solid var(--border);
+    margin-bottom: var(--space-md);
+    min-height: 80px;
+}
+
+.skeleton-bar {
+    background: linear-gradient(90deg, var(--border) 25%, var(--surface-hover) 50%, var(--border) 75%);
+    background-size: 200% 100%;
+    animation: shimmer 1.5s infinite;
+    border-radius: var(--radius-sm);
+    height: 0.75rem;
+    margin-bottom: 0.5rem;
+}
+
+.skeleton-title {
+    width: 35%;
+    height: 1rem;
+}
+
+.skeleton-body {
+    width: 80%;
+}
+
+.skeleton-body.short {
+    width: 55%;
+}
+
+@keyframes shimmer {
+    0% { background-position: -200% 0; }
+    100% { background-position: 200% 0; }
+}
+
+/* ==========================================================================
+   Run Another / CSV Export / Session Count (Prompts 9, 15)
+   ========================================================================== */
+
+.run-another-inner {
+    display: flex;
+    gap: 0.75rem;
+    align-items: center;
+    justify-content: center;
+    flex-wrap: wrap;
+}
+
+.export-csv-btn {
+    background: var(--surface) !important;
+    border: 1px solid var(--border) !important;
+    color: var(--text-secondary) !important;
+}
+
+.export-csv-btn:hover {
+    background: var(--surface-hover) !important;
+    color: var(--text-primary) !important;
+}
+
+.session-audit-count {
+    text-align: center;
+    font-size: var(--font-xs);
+    color: var(--text-tertiary);
+    margin-top: 0.5rem;
+}
+
+/* Sticky run-another when scrolled past (Prompt 9) */
+#run-another-btn.sticky {
+    position: fixed;
+    bottom: 0;
+    left: 0;
+    right: 0;
+    background: var(--bg-raised);
+    border-top: 1px solid var(--border);
+    padding: 0.75rem 1rem;
+    z-index: 100;
+    box-shadow: 0 -4px 12px rgba(0, 0, 0, 0.15);
+}
+
+#run-another-btn.sticky .session-audit-count {
+    display: none;
+}
+
+/* ==========================================================================
+   Comparison Mode (Prompt 11)
+   ========================================================================== */
+
+.compare-btn {
+    font-size: var(--font-xs) !important;
+    padding: 0.35rem 0.75rem !important;
+    background: var(--surface) !important;
+    border: 1px solid var(--border) !important;
+    color: var(--text-secondary) !important;
+}
+
+.compare-btn:hover {
+    background: var(--surface-hover) !important;
+    color: var(--text-primary) !important;
+}
+
+.comparison-panel {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-lg);
+    padding: var(--space-lg);
+    margin-bottom: var(--space-lg);
+}
+
+.comparison-header {
+    font-weight: 600;
+    font-size: var(--font-base);
+    margin-bottom: var(--space-md);
+    color: var(--text-primary);
+}
+
+.comparison-form {
+    display: flex;
+    gap: 0.5rem;
+    margin-bottom: var(--space-md);
+}
+
+.comparison-input {
+    flex: 1;
+    min-width: 0;
+}
+
+.comparison-loading {
+    text-align: center;
+    color: var(--text-secondary);
+    padding: var(--space-lg);
+    font-size: var(--font-sm);
+}
+
+.comparison-error {
+    color: var(--fail);
+    padding: var(--space-md);
+    font-size: var(--font-sm);
+}
+
+.comparison-table-wrap {
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+}
+
+.comparison-table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: var(--font-sm);
+}
+
+.comparison-table th,
+.comparison-table td {
+    padding: 0.5rem 0.75rem;
+    border-bottom: 1px solid var(--border);
+    text-align: left;
+}
+
+.comparison-table th {
+    font-weight: 600;
+    color: var(--text-secondary);
+    font-size: var(--font-xs);
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+}
+
+.comparison-grade-row td {
+    font-weight: 600;
+}
+
+.comparison-grade {
+    font-size: var(--font-base);
+}
+
+.comparison-winner {
+    background: rgba(34, 197, 94, 0.08);
+}
+
+.comparison-summary {
+    text-align: center;
+    font-weight: 500;
+    font-size: var(--font-sm);
+    color: var(--text-secondary);
+    margin-top: var(--space-md);
+    padding: var(--space-sm);
+    border-radius: var(--radius);
+    background: var(--bg-raised);
+}
+
+/* ==========================================================================
+   Additional Responsive (Prompt 7)
+   ========================================================================== */
+
+@media (min-width: 769px) and (max-width: 1024px) {
+    .summary-grid {
+        grid-template-columns: 1fr 1fr 1fr;
+    }
+    .summary-card:first-child {
+        grid-column: 1 / -1;
+    }
+}
+
+@media (max-width: 768px) {
+    .summary-grid {
+        grid-template-columns: 1fr 1fr;
+    }
+    .summary-card:first-child {
+        grid-column: 1 / -1;
+    }
+
+    .comparison-form {
+        flex-direction: column;
+    }
+
+    .run-another-inner {
+        flex-direction: column;
+        gap: 0.5rem;
+    }
+}
+
+@media (max-width: 640px) {
+    .toast-container {
+        bottom: 1rem;
+        right: 1rem;
+        left: 1rem;
+    }
+
+    .toast {
+        font-size: 0.75rem;
+    }
+
+    .recent-audit-chip {
+        font-size: 0.7rem;
+        padding: 0.25rem 0.6rem;
+    }
+
+    .domain-valid-indicator {
+        right: 4.5rem;
+    }
+
+    .cache-status-badge {
+        margin-left: 0;
+        margin-top: 0.35rem;
+        display: flex;
+    }
+}
+
 /* Skip to content (accessibility) */
 .skip-to-content {
     position: absolute;
