@@ -21,7 +21,7 @@
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
-    <link rel="stylesheet" href="/static/style.css?v=81944b6">
+    <link rel="stylesheet" href="/static/style.css?v=88c3d46">
     <script type="application/ld+json">
     {
         "@context": "https://schema.org",
@@ -222,7 +222,7 @@
                 <ul>
                     <li><strong>Do nothing deployment-wise for DKIM2.</strong> Publishing a DKIM2 DNS record today would serve no purpose and could be misinterpreted by tooling that encounters an unknown record format.</li>
                     <li><strong>Track the IETF DKIM working group</strong> at <a href="https://datatracker.ietf.org/wg/dkim/" target="_blank" rel="noopener noreferrer">datatracker.ietf.org/wg/dkim/</a>. Working group adoption of the core spec will be the first concrete signal that vendor implementation work is approaching.</li>
-                    <li><strong>Keep DKIM1 healthy.</strong> Audit every selector you publish. Keys should be 2048-bit RSA at minimum. 1024-bit keys are considered compromised and should be rotated out.</li>
+                    <li><strong>Keep DKIM1 healthy.</strong> Audit every selector you publish. Keys should be 2048-bit RSA at minimum. 1024-bit keys fall below the NIST SP 800-131A minimum key strength in effect since 2014 and should be rotated to 2048-bit.</li>
                     <li><strong>Rotate DKIM1 keys on a documented schedule.</strong> Quarterly rotation is a reasonable default. Automated rotation with overlap windows avoids selector churn that breaks in-flight mail.</li>
                     <li><strong>Maintain strong DMARC and SPF alignment today.</strong> DKIM2 does not replace DMARC or SPF. The authentication stack you build now will carry forward into any DKIM2 transition.</li>
                 </ul>
