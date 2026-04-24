@@ -21,7 +21,7 @@
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
-    <link rel="stylesheet" href="/static/style.css?v=8d08bb3">
+    <link rel="stylesheet" href="/static/style.css?v=81944b6">
     <script type="application/ld+json">
     {
         "@context": "https://schema.org",
@@ -129,7 +129,7 @@
                 <p>DMARCbis is the IETF's update to the DMARC email authentication standard. The draft (version 41) was approved by the IESG in 2025 and is now in the RFC Editor Queue, with publication as a Proposed Standard expected in 2026. When published, DMARCbis will obsolete RFC 7489 (published in 2015 as an Informational RFC), replacing it as the authoritative DMARC specification. That status change matters: it signals that DMARC is moving from an experimental protocol to a formal standard with stronger expectations for vendor compliance.</p>
                 <p>The name stands for "DMARC bis" (Latin for "twice" or "again"). It is the second iteration of the specification, and it also obsoletes RFC 9091, which defined Public Suffix Domain DMARC policies.</p>
                 <p>RFC 9091 (published in 2021) was an experimental standard that defined how public suffix domains could publish DMARC policies. DMARCbis incorporates RFC 9091's goals through the <code>psd=</code> tag while providing a more robust mechanism via the DNS tree walk. With DMARCbis, RFC 9091 is no longer needed and is formally obsoleted.</p>
-                <p>DMARCbis refines and clarifies existing DMARC behavior rather than replacing it wholesale. It uses the same record format (<code>v=DMARC1</code>), the same authentication model (SPF + DKIM + alignment), and existing DMARC records continue to work without modification. The most significant refinement is in how organizational domains are discovered — moving from the Public Suffix List to a DNS-based tree walk method.</p>
+                <p>DMARCbis refines and clarifies existing DMARC behavior rather than replacing it wholesale. It uses the same record format (<code>v=DMARC1</code>), the same authentication model (SPF + DKIM + alignment), and existing DMARC records continue to work without modification. The most significant refinement is in how organizational domains are discovered. DMARCbis moves from the Public Suffix List to a DNS-based tree walk method.</p>
                 <p>The update addresses problems that surfaced over a decade of real-world DMARC deployment:</p>
                 <ul>
                     <li>Receivers parsed records inconsistently</li>
@@ -145,9 +145,9 @@
                 <h2>Three-Document Split</h2>
                 <p>RFC 7489 defined DMARC as a single document covering the core protocol, aggregate reporting, and failure reporting. DMARCbis splits the specification into three separate RFCs:</p>
                 <ul>
-                    <li><strong>Core specification</strong> (draft-ietf-dmarc-dmarcbis) — protocol mechanics, policy discovery, and identifier alignment</li>
-                    <li><strong>Aggregate reporting</strong> (draft-ietf-dmarc-aggregate-reporting) — <code>rua=</code> report format and delivery</li>
-                    <li><strong>Failure reporting</strong> (draft-ietf-dmarc-failure-reporting) — <code>ruf=</code> forensic report format and delivery</li>
+                    <li><strong>Core specification</strong> (draft-ietf-dmarc-dmarcbis), covering protocol mechanics, policy discovery, and identifier alignment</li>
+                    <li><strong>Aggregate reporting</strong> (draft-ietf-dmarc-aggregate-reporting), covering the <code>rua=</code> report format and delivery</li>
+                    <li><strong>Failure reporting</strong> (draft-ietf-dmarc-failure-reporting), covering the <code>ruf=</code> forensic report format and delivery</li>
                 </ul>
                 <p>Separating concerns allows each specification to be updated independently. It also makes implementation clearer for different audiences: domain owners primarily need the core spec, while report processors can focus on the reporting documents without tracking unrelated protocol changes.</p>
             </div>
@@ -356,7 +356,7 @@
                         <tbody>
                             <tr><td>Organizational Domain</td><td>Organizational domain (unchanged term, new discovery method)</td><td>The term remains, but DMARCbis changes how it is discovered: a DNS tree walk replaces the Public Suffix List lookup, making domain boundary detection self-contained within DNS</td></tr>
                             <tr><td>Report Consumer</td><td>Report receiver</td><td>The entity that processes DMARC aggregate or failure reports</td></tr>
-                            <tr><td>Monitoring Mode</td><td>p=none</td><td>Policy is set to <code>none</code> — receivers observe and report, but do not alter mail handling</td></tr>
+                            <tr><td>Monitoring Mode</td><td>p=none</td><td>Policy is set to <code>none</code>. Receivers observe and report, but do not alter mail handling.</td></tr>
                             <tr><td>Enforcement</td><td>p=quarantine or p=reject</td><td>Policy instructs receivers to quarantine or reject messages that fail DMARC evaluation</td></tr>
                         </tbody>
                     </table>
@@ -502,10 +502,10 @@
                 <h3>The short version</h3>
                 <p>For most domains, the key changes are:</p>
                 <ul>
-                    <li>Remove <code>pct=</code>, <code>rf=</code>, and <code>ri=</code> if present — these tags are deprecated and will be ignored</li>
+                    <li>Remove <code>pct=</code>, <code>rf=</code>, and <code>ri=</code> if present. These tags are deprecated and will be ignored.</li>
                     <li>Add <code>np=reject</code> if you already enforce <code>p=reject</code> and want to close the non-existent subdomain loophole</li>
                     <li>Add <code>psd=n</code> to declare that your domain is not a public suffix</li>
-                    <li>Confirm that all <code>rua=</code> and <code>ruf=</code> URIs include the <code>mailto:</code> prefix — bare email addresses are no longer accepted</li>
+                    <li>Confirm that all <code>rua=</code> and <code>ruf=</code> URIs include the <code>mailto:</code> prefix. Bare email addresses are no longer accepted.</li>
                 </ul>
                 <p>A word of caution on <code>np=</code>: this tag applies to all non-existent subdomains. If you use services that send email from dynamically created subdomains, or if marketing teams spin up campaign-specific subdomains without creating DNS records first, an <code>np=reject</code> policy will cause that mail to fail DMARC. Audit your sending infrastructure before adding this tag.</p>
                 <p><a href="/">Test your domain's current DMARC configuration</a> to see where you stand, or review the <a href="/methodology">scoring methodology</a> for details on how each protocol is evaluated.</p>
@@ -534,7 +534,7 @@
                     <li>DMARCbis does not change SPF or DKIM validation</li>
                     <li>It improves how receivers discover and apply DMARC policies</li>
                     <li>It removes the dependency on the Public Suffix List</li>
-                    <li>Existing records continue to work — no breaking changes</li>
+                    <li>Existing records continue to work, with no breaking changes</li>
                     <li>Early preparation (np=, psd=, removing deprecated tags) positions you ahead of adoption</li>
                 </ul>
             </div>
