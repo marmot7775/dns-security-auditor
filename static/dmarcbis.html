@@ -321,7 +321,7 @@
                 <h3>External Report Authorization</h3>
                 <p>If your <code>rua=</code> or <code>ruf=</code> tag points to a domain you do not own (for example, a third-party reporting service), the destination domain must publish an authorization record. For a DMARC record on <code>example.com</code> with <code>rua=mailto:dmarc@thirdparty.com</code>, the authorization record would be:</p>
                 <p><code>example.com._report._dmarc.thirdparty.com  IN TXT "v=DMARC1"</code></p>
-                <p>This authorizes <code>thirdparty.com</code> to receive reports on behalf of <code>example.com</code>. Without this record, receivers will not send reports to the external destination. This is a common deployment stumble.</p>
+                <p>This authorizes <code>thirdparty.com</code> to receive reports on behalf of <code>example.com</code>. Without this record, receivers will not send reports to the external destination. Missing authorization records are one of the most common causes of silently failing DMARC report delivery.</p>
             </div>
 
             <!-- Section: Tag Changes in DMARCbis -->
