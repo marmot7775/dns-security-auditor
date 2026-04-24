@@ -762,6 +762,10 @@ if STATIC_DIR.exists():
     async def dmarcbis():
         return FileResponse(str(STATIC_DIR / "dmarcbis.html"))
 
+    @app.get("/dkim2", tags=["Pages"])
+    async def dkim2():
+        return FileResponse(str(STATIC_DIR / "dkim2.html"))
+
     @app.get("/methodology", tags=["Pages"])
     async def methodology():
         return FileResponse(str(STATIC_DIR / "methodology.html"))
