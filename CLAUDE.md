@@ -33,6 +33,17 @@
 ## Deploy
 git push && ssh marmot7@159.223.201.90 "cd dns-security-auditor && git pull && sudo systemctl restart dns-auditor"
 
+## Cache-busting
+After any change to `static/style.css` or `static/app.js`, run this command before committing, OR include it as the final step of your commit. It handles any alphanumeric version string and rewrites both CSS and JS references across every static HTML page:
+
+```bash
+NEW=$(git rev-parse --short HEAD) && for f in static/*.html; do
+  sed -i -E "s|(style\.css\|app\.js)\?v=[a-zA-Z0-9]+|\1?v=$NEW|g" "$f"
+done
+```
+
+The older pattern `grep -oP 'v=\K[a-f0-9]+'` is broken: it only matches hex characters, so version strings containing non-hex letters (e.g. `ds17`, `sec9`) produce a partial or empty match and sed silently no-ops. Do not use the old pattern.
+
 ## Testing
 python3 -m pytest tests/ -v
 python3 -c "import ast; ast.parse(open('server.py').read()); print('OK')"
