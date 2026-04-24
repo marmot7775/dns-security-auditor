@@ -32,3 +32,8 @@ def test_normalize_domain_edge_cases():
     assert normalize_domain("user@gmail.com") == "gmail.com"
     assert normalize_domain("example.com.") == "example.com"
     assert normalize_domain("example.com:443") == "example.com"
+
+
+def test_normalize_domain_idn():
+    # Internationalized domain name converts to punycode
+    assert normalize_domain("münchen.de") == "xn--mnchen-3ya.de"
