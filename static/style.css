@@ -167,7 +167,7 @@
     --dmarcbis-border: rgba(45, 212, 191, 0.25);
 
     /* Typography */
-    --font-body: 'Inter', 'DM Sans', -apple-system, BlinkMacSystemFont, 'Segoe UI', system-ui, sans-serif;
+    --font-body: 'DM Sans', -apple-system, BlinkMacSystemFont, 'Segoe UI', system-ui, sans-serif;
     --font-mono: 'JetBrains Mono', 'SF Mono', 'Fira Code', 'Consolas', monospace;
     --font-xs: 0.75rem;
     --font-sm: 0.8125rem;
