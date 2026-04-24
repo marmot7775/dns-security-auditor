@@ -761,14 +761,19 @@ async def sitemap_xml():
 
 @app.exception_handler(404)
 async def not_found(request: Request, exc):
-    """Redirect unknown non-API routes to homepage."""
+    """Serve a proper 404 page for non-API routes; JSON for API routes."""
     if request.url.path.startswith("/api/"):
         return JSONResponse(
             status_code=404,
             content={"detail": "Endpoint not found"},
         )
-    from starlette.responses import RedirectResponse
-    return RedirectResponse(url="/")
+    not_found_path = STATIC_DIR / "404.html"
+    if not_found_path.exists():
+        return FileResponse(str(not_found_path), status_code=404)
+    return PlainTextResponse(
+        "Page not found. Return to https://dns-audit.com/",
+        status_code=404,
+    )
 
 
 # ============================================================
@@ -803,6 +808,13 @@ if STATIC_DIR.exists():
     @app.get("/about", tags=["Pages"])
     async def about():
         return FileResponse(str(STATIC_DIR / "about.html"))
+
+    @app.get("/security", response_class=PlainTextResponse, tags=["Pages"])
+    async def security_policy():
+        security_path = Path(__file__).parent / "SECURITY.md"
+        if security_path.exists():
+            return security_path.read_text(encoding="utf-8")
+        return "Security policy not available."
 
 else:
     @app.get("/")
