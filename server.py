@@ -166,7 +166,7 @@ class SecurityHeadersMiddleware(BaseHTTPMiddleware):
             response.headers["Cache-Control"] = "no-store"
         elif any(path.endswith(ext) for ext in ('.css', '.js', '.png', '.jpg', '.svg', '.woff2', '.woff', '.ico')):
             response.headers["Cache-Control"] = "public, max-age=14400"  # 4 hours
-        elif path in ('/', '/dmarcbis', '/methodology', '/privacy'):
+        elif path in ('/', '/dmarcbis', '/dkim2', '/methodology', '/privacy', '/about'):
             response.headers["Cache-Control"] = "public, max-age=300"  # 5 minutes for HTML
         return response
 
@@ -716,17 +716,38 @@ async def sitemap_xml():
         '<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">\n'
         "  <url>\n"
         "    <loc>https://dns-audit.com/</loc>\n"
+        "    <lastmod>2026-04-24</lastmod>\n"
         "    <changefreq>weekly</changefreq>\n"
         "    <priority>1.0</priority>\n"
         "  </url>\n"
         "  <url>\n"
         "    <loc>https://dns-audit.com/dmarcbis</loc>\n"
+        "    <lastmod>2026-04-24</lastmod>\n"
         "    <changefreq>monthly</changefreq>\n"
         "    <priority>0.8</priority>\n"
         "  </url>\n"
         "  <url>\n"
-        "    <loc>https://dns-audit.com/privacy</loc>\n"
+        "    <loc>https://dns-audit.com/dkim2</loc>\n"
+        "    <lastmod>2026-04-24</lastmod>\n"
         "    <changefreq>monthly</changefreq>\n"
+        "    <priority>0.7</priority>\n"
+        "  </url>\n"
+        "  <url>\n"
+        "    <loc>https://dns-audit.com/methodology</loc>\n"
+        "    <lastmod>2026-04-24</lastmod>\n"
+        "    <changefreq>monthly</changefreq>\n"
+        "    <priority>0.6</priority>\n"
+        "  </url>\n"
+        "  <url>\n"
+        "    <loc>https://dns-audit.com/about</loc>\n"
+        "    <lastmod>2026-04-24</lastmod>\n"
+        "    <changefreq>monthly</changefreq>\n"
+        "    <priority>0.5</priority>\n"
+        "  </url>\n"
+        "  <url>\n"
+        "    <loc>https://dns-audit.com/privacy</loc>\n"
+        "    <lastmod>2026-04-24</lastmod>\n"
+        "    <changefreq>yearly</changefreq>\n"
         "    <priority>0.3</priority>\n"
         "  </url>\n"
         "</urlset>\n"
