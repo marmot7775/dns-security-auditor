@@ -504,6 +504,15 @@ main {
     line-height: 1.55;
 }
 
+.audit-subtitle-link {
+    color: var(--primary-light);
+    font-weight: 500;
+}
+
+.audit-subtitle-link:hover {
+    text-decoration: underline;
+}
+
 .audit-trust {
     font-size: var(--font-sm);
     color: var(--text-tertiary);
