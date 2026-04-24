@@ -560,6 +560,22 @@ async def audit_stream(
         loop = asyncio.get_running_loop()
         try:
             while True:
+                if time.time() - sse_start_time > 120:
+                    log.warning("SSE stream exceeded 120s limit: %s", domain)
+                    cancel_event.set()
+                    timeout_result = {
+                        "domain": domain,
+                        "timestamp": datetime.now(timezone.utc).isoformat(),
+                        "score": {"total": 0, "grade": "?"},
+                        "checks": [],
+                        "priority_fixes": [],
+                        "vendors": [],
+                        "error": "timeout",
+                        "error_message": "Audit exceeded the 120 second time limit. Please try again.",
+                    }
+                    _log_audit(request, domain, scope, "?", 120.0, 0, source="sse")
+                    yield f"data: {json.dumps({'done': True, 'result': timeout_result})}\n\n"
+                    return
                 try:
                     msg = await loop.run_in_executor(None, lambda: progress_q.get(timeout=0.2))
                 except queue.Empty:
