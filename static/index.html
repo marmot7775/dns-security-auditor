@@ -145,27 +145,27 @@
                 <div class="scope-selector" id="scope-selector" role="radiogroup" aria-label="Audit scope selection">
                     <div class="scope-label">Audit Scope</div>
                     <div class="scope-options">
-                        <button class="scope-btn active" data-scope="complete" role="radio" aria-checked="true" tabindex="0" title="All checks: DMARC, SPF, DKIM, MX, MTA-STS, TLS-RPT, BIMI, DNSSEC, CAA, DANE, Nameservers, Certificate Transparency, Blocklist">
+                        <button type="button" class="scope-btn active" data-scope="complete" role="radio" aria-checked="true" tabindex="0" title="All checks: DMARC, SPF, DKIM, MX, MTA-STS, TLS-RPT, BIMI, DNSSEC, CAA, DANE, Nameservers, Certificate Transparency, Blocklist">
                             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" width="15" height="15"><circle cx="12" cy="12" r="10"/><path d="m9 12 2 2 4-4"/></svg>
                             <span>Complete Audit</span>
                         </button>
-                        <button class="scope-btn" data-scope="email_full" role="radio" aria-checked="false" tabindex="-1" title="DMARC, SPF, DKIM, MX, MTA-STS, TLS-RPT, BIMI">
+                        <button type="button" class="scope-btn" data-scope="email_full" role="radio" aria-checked="false" tabindex="-1" title="DMARC, SPF, DKIM, MX, MTA-STS, TLS-RPT, BIMI">
                             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" width="15" height="15"><rect width="20" height="16" x="2" y="4" rx="2"/><path d="m22 7-8.97 5.7a1.94 1.94 0 0 1-2.06 0L2 7"/></svg>
                             <span>Email Security</span>
                         </button>
-                        <button class="scope-btn" data-scope="dmarc" role="radio" aria-checked="false" tabindex="-1" title="DMARC + SPF + DKIM (authentication triad)">
+                        <button type="button" class="scope-btn" data-scope="dmarc" role="radio" aria-checked="false" tabindex="-1" title="DMARC + SPF + DKIM (authentication triad)">
                             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" width="15" height="15"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>
                             <span>DMARC Check</span>
                         </button>
-                        <button class="scope-btn" data-scope="transport" role="radio" aria-checked="false" tabindex="-1" title="MTA-STS, TLS-RPT, MX transport security">
+                        <button type="button" class="scope-btn" data-scope="transport" role="radio" aria-checked="false" tabindex="-1" title="MTA-STS, TLS-RPT, MX transport security">
                             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" width="15" height="15"><rect width="18" height="11" x="3" y="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>
                             <span>Transport Security</span>
                         </button>
-                        <button class="scope-btn" data-scope="dns_infra" role="radio" aria-checked="false" tabindex="-1" title="DNSSEC, CAA, Nameservers">
+                        <button type="button" class="scope-btn" data-scope="dns_infra" role="radio" aria-checked="false" tabindex="-1" title="DNSSEC, CAA, Nameservers">
                             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" width="15" height="15"><rect width="18" height="18" x="3" y="3" rx="2" ry="2"/><path d="M3 9h18"/><path d="M3 15h18"/><path d="M9 3v18"/></svg>
                             <span>DNS Infrastructure</span>
                         </button>
-                        <button class="scope-btn" data-scope="security_scan" role="radio" aria-checked="false" tabindex="-1" title="DMARC, SPF, DKIM, DNSSEC - quick security posture">
+                        <button type="button" class="scope-btn" data-scope="security_scan" role="radio" aria-checked="false" tabindex="-1" title="DMARC, SPF, DKIM, DNSSEC - quick security posture">
                             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" width="15" height="15"><path d="M2 12s3-7 10-7 10 7 10 7-3 7-10 7-10-7-10-7Z"/><circle cx="12" cy="12" r="3"/></svg>
                             <span>Security Scan</span>
                         </button>
@@ -216,19 +216,19 @@
                     <div class="audit-timestamp" id="result-timestamp"></div>
                 </div>
                 <div class="banner-actions">
-                    <button class="share-btn pdf-btn" id="pdf-btn" title="Download professional PDF report" aria-label="Download PDF report">
+                    <button type="button" class="share-btn pdf-btn" id="pdf-btn" title="Download professional PDF report" aria-label="Download PDF report">
                         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" width="16" height="16">
                             <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/><polyline points="10 9 9 9 8 9"/>
                         </svg>
                         <span>PDF Report</span>
                     </button>
-                    <button class="share-btn" id="export-btn" title="Download audit as JSON" aria-label="Export results as JSON">
+                    <button type="button" class="share-btn" id="export-btn" title="Download audit as JSON" aria-label="Export results as JSON">
                         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" width="16" height="16">
                             <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/>
                         </svg>
                         <span>Export</span>
                     </button>
-                    <button class="share-btn" id="share-btn" title="Copy shareable link" aria-label="Share audit results">
+                    <button type="button" class="share-btn" id="share-btn" title="Copy shareable link" aria-label="Share audit results">
                         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" width="16" height="16">
                             <path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/>
                             <path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/>
@@ -284,13 +284,13 @@
             <div class="results-toolbar">
                 <h2 class="results-label">Findings</h2>
                 <div style="display:flex;gap:0.5rem;align-items:center">
-                    <button class="copy-all-btn" id="copy-all-btn" title="Copy all DNS records to clipboard" aria-label="Copy all DNS records to clipboard">
+                    <button type="button" class="copy-all-btn" id="copy-all-btn" title="Copy all DNS records to clipboard" aria-label="Copy all DNS records to clipboard">
                         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" width="14" height="14">
                             <rect width="14" height="14" x="8" y="8" rx="2" ry="2"/><path d="M4 16c-1.1 0-2-.9-2-2V4c0-1.1.9-2 2-2h10c1.1 0 2 .9 2 2"/>
                         </svg>
                         <span>Copy All Records</span>
                     </button>
-                    <button class="toggle-all-btn" id="toggle-all-btn" title="Expand or collapse all results">
+                    <button type="button" class="toggle-all-btn" id="toggle-all-btn" title="Expand or collapse all results">
                         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" width="14" height="14">
                             <polyline points="15 3 21 3 21 9"/><polyline points="9 21 3 21 3 15"/><line x1="21" y1="3" x2="14" y2="10"/><line x1="3" y1="21" x2="10" y2="14"/>
                         </svg>
