@@ -4667,8 +4667,8 @@ main .meth-page {
     gap: 0.5rem;
     margin-top: 0.75rem;
     padding: 0.65rem 1.25rem;
-    background: var(--primary);
-    color: var(--text-inverse);
+    background: #1d4ed8;
+    color: #ffffff;
     border-radius: var(--radius);
     font-family: var(--font-body);
     font-size: var(--font-sm);
@@ -4678,7 +4678,7 @@ main .meth-page {
 }
 
 .audit-cta:hover {
-    background: var(--primary-hover);
+    background: #1e40af;
 }
 
 @media (max-width: 768px) {
