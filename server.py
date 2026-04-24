@@ -478,14 +478,6 @@ async def audit_stream(
     request_id = str(uuid.uuid4())
     log.info("SSE audit requested: %s (scope=%s, ip=%s, rid=%s)", domain, scope or "complete", client_ip, request_id)
 
-    # Reject if too many concurrent audits (DoS protection)
-    global _active_audits
-    with _active_audits_lock:
-        if _active_audits >= _MAX_CONCURRENT_AUDITS:
-            async def _busy_error():
-                yield f"data: {json.dumps({'error': 'Server is busy. Please try again in a moment.'})}\n\n"
-            return StreamingResponse(_busy_error(), media_type="text/event-stream")
-
     cache_key = f"{domain}:{selector or ''}:{scope or 'complete'}"
 
     # Check cache -- if cached, send result immediately
@@ -504,6 +496,15 @@ async def audit_stream(
         async def _preflight_error():
             yield f"data: {json.dumps({'done': True, 'result': preflight_err})}\n\n"
         return StreamingResponse(_preflight_error(), media_type="text/event-stream")
+
+    # Reserve a concurrent-audit slot atomically (DoS protection)
+    global _active_audits
+    with _active_audits_lock:
+        if _active_audits >= _MAX_CONCURRENT_AUDITS:
+            async def _busy_error():
+                yield f"data: {json.dumps({'error': 'Server is busy. Please try again in a moment.'})}\n\n"
+            return StreamingResponse(_busy_error(), media_type="text/event-stream")
+        _active_audits += 1
 
     # Run audit in a background thread, streaming progress via a queue
     progress_q: queue.Queue = queue.Queue()
@@ -528,8 +529,6 @@ async def audit_stream(
 
     def _run_audit():
         global _active_audits
-        with _active_audits_lock:
-            _active_audits += 1
         try:
             result = run_full_audit(domain, dkim_selector=selector, scope=scope,
                                     progress_callback=_progress_callback)
