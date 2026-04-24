@@ -128,6 +128,7 @@
 
     /* Borders */
     --border: #334155;
+    --border-strong: #475569;
     --border-light: #1e293b;
     --border-focus: #3b82f6;
 
@@ -825,7 +826,7 @@ main {
     gap: 0.4rem;
     padding: 0.5rem 0.9rem;
     background: var(--surface);
-    border: 1px solid var(--border);
+    border: 1px solid var(--border-strong);
     border-radius: var(--radius);
     font-family: var(--font-body);
     font-size: var(--font-sm);
@@ -1108,7 +1109,7 @@ main {
     gap: 0.35rem;
     padding: 0.4rem 0.75rem;
     background: var(--surface);
-    border: 1px solid var(--border);
+    border: 1px solid var(--border-strong);
     border-radius: var(--radius);
     font-family: var(--font-body);
     font-size: var(--font-xs);
@@ -4338,7 +4339,7 @@ body {
     gap: 0.4rem;
     padding: 0.45rem 0.85rem;
     background: transparent;
-    border: 1px solid var(--border);
+    border: 1px solid var(--border-strong);
     border-radius: var(--radius);
     font-family: var(--font-body);
     font-size: var(--font-sm);
@@ -7643,6 +7644,7 @@ main .meth-page {
 
         /* Borders */
         --border: #e2e8f0;
+        --border-strong: #94a3b8;
         --border-light: #f1f5f9;
         --border-focus: #3b82f6;
 
