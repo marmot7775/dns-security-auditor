@@ -69,8 +69,7 @@ document.getElementById('scope-selector').addEventListener('keydown', (e) => {
 });
 
 // -- DKIM selector toggle --
-document.getElementById('selector-toggle').addEventListener('click', (e) => {
-    e.preventDefault();
+document.getElementById('selector-toggle').addEventListener('click', () => {
     const field = document.getElementById('selector-field');
     const toggle = document.getElementById('selector-toggle');
     field.classList.toggle('visible');
