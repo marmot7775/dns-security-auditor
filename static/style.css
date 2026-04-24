@@ -4661,7 +4661,7 @@ main .meth-page {
     text-decoration: underline;
 }
 
-.audit-cta {
+.dbis-section a.audit-cta {
     display: inline-flex;
     align-items: center;
     gap: 0.5rem;
@@ -4677,7 +4677,7 @@ main .meth-page {
     transition: background var(--duration) var(--ease);
 }
 
-.audit-cta:hover {
+.dbis-section a.audit-cta:hover {
     background: #1e40af;
 }
 
