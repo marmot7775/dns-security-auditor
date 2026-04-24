@@ -7,21 +7,21 @@ Assembles results for the security scorer and transforms everything
 into the frontend's expected format.
 """
 
+import ipaddress
 import logging
 import re
+import threading as _ct_threading
+import time
 import traceback
-from html import escape as _e
 from concurrent.futures import ThreadPoolExecutor, TimeoutError as FuturesTimeoutError, as_completed
 from datetime import datetime, timezone
+from html import escape as _e
 from typing import Any, Dict, List, Optional
 
 log = logging.getLogger(__name__)
 
 # Per-check timeout in seconds (prevents hung DNS queries from blocking the audit)
 CHECK_TIMEOUT = 15
-
-import time
-import threading as _ct_threading
 
 # CT (crt.sh) result cache -- 24-hour TTL because CT data rarely changes
 # and crt.sh is frequently slow or unavailable.
@@ -52,7 +52,6 @@ def _set_cached_ct(domain, data):
         _ct_cache[domain] = {'data': data, 'timestamp': time.time()}
 
 
-import ipaddress
 import dns.resolver
 import dns.flags
 import dns.exception
