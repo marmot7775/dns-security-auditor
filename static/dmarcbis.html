@@ -43,7 +43,7 @@
                 "name": "When will DMARCbis be published?",
                 "acceptedAnswer": {
                     "@type": "Answer",
-                    "text": "DMARCbis (draft-ietf-dmarc-dmarcbis) has been approved by the IESG and is in the RFC Editor Queue. Publication as an RFC is expected in 2026."
+                    "text": "DMARCbis (draft-ietf-dmarc-dmarcbis) was approved by the IESG in 2025. Final RFC publication is pending resolution of the related failure-reporting draft and is expected in 2026."
                 }
             },
             {
@@ -90,7 +90,7 @@
             <!-- Hero -->
             <div class="dbis-hero">
                 <h1><span>DMARCbis:</span> The Next DMARC Standard</h1>
-                <p class="dbis-hero-sub">DMARCbis (draft-ietf-dmarc-dmarcbis, version 41) has been approved by the IESG and is currently in the RFC Editor Queue. It is expected to be published as a Proposed Standard in 2026.</p>
+                <p class="dbis-hero-sub">DMARCbis (draft-ietf-dmarc-dmarcbis, version 41) was approved by the IESG in 2025. Final RFC publication is pending resolution of the related failure-reporting draft and is expected in 2026.</p>
             </div>
 
             <!-- Section: What Our DMARCbis Assessment Checks -->
@@ -126,7 +126,7 @@
             <!-- Section 1: What is DMARCbis? -->
             <div class="dbis-section" id="what-is-dmarcbis">
                 <h2>What is DMARCbis?</h2>
-                <p>DMARCbis is the IETF's update to the DMARC email authentication standard. The draft (version 41) was approved by the IESG in 2025 and is now in the RFC Editor Queue, with publication as a Proposed Standard expected in 2026. When published, DMARCbis will obsolete RFC 7489 (published in 2015 as an Informational RFC), replacing it as the authoritative DMARC specification. That status change matters: it signals that DMARC is moving from an experimental protocol to a formal standard with stronger expectations for vendor compliance.</p>
+                <p>DMARCbis is the IETF's update to the DMARC email authentication standard. The draft (version 41) was approved by the IESG in 2025, with final RFC publication as a Proposed Standard expected in 2026 once the related failure-reporting draft completes. When published, DMARCbis will obsolete RFC 7489 (published in 2015 as an Informational RFC), replacing it as the authoritative DMARC specification. That status change matters: it signals that DMARC is moving from an experimental protocol to a formal standard with stronger expectations for vendor compliance.</p>
                 <p>The name stands for "DMARC bis" (Latin for "twice" or "again"). It is the second iteration of the specification, and it also obsoletes RFC 9091, which defined Public Suffix Domain DMARC policies.</p>
                 <p>RFC 9091 (published in 2021) was an experimental standard that defined how public suffix domains could publish DMARC policies. DMARCbis incorporates RFC 9091's goals through the <code>psd=</code> tag while providing a more robust mechanism via the DNS tree walk. With DMARCbis, RFC 9091 is no longer needed and is formally obsoleted.</p>
                 <p>DMARCbis refines and clarifies existing DMARC behavior rather than replacing it wholesale. It uses the same record format (<code>v=DMARC1</code>), the same authentication model (SPF + DKIM + alignment), and existing DMARC records continue to work without modification. The most significant refinement is in how organizational domains are discovered. DMARCbis moves from the Public Suffix List to a DNS-based tree walk method.</p>
