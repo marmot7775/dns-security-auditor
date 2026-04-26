@@ -18,20 +18,20 @@ except ImportError:
     REQUESTS_AVAILABLE = False
 
 
-_BLOCKED_NETWORKS = [
-    ipaddress.ip_network('0.0.0.0/8'),
-    ipaddress.ip_network('127.0.0.0/8'),
-    ipaddress.ip_network('10.0.0.0/8'),
-    ipaddress.ip_network('172.16.0.0/12'),
-    ipaddress.ip_network('192.168.0.0/16'),
-    ipaddress.ip_network('169.254.0.0/16'),
-    ipaddress.ip_network('100.64.0.0/10'),     # Carrier-Grade NAT
-    ipaddress.ip_network('198.18.0.0/15'),      # Benchmark testing
-    ipaddress.ip_network('::1/128'),
-    ipaddress.ip_network('fc00::/7'),
-    ipaddress.ip_network('fe80::/10'),
-    ipaddress.ip_network('::ffff:0:0/96'),      # IPv4-mapped IPv6
-]
+# Carrier-Grade NAT (RFC 6598). Not classified by ipaddress.is_private
+# in Python 3.12, so check it explicitly. Drop once is_private covers it
+# (Python 3.13+ via is_global, but we target 3.9+).
+_CGNAT = ipaddress.ip_network('100.64.0.0/10')
+
+
+def _is_blocked_ip(ip: ipaddress._BaseAddress) -> bool:
+    """Reject anything that isn't a routable, non-special public address."""
+    if (ip.is_private or ip.is_loopback or ip.is_link_local
+            or ip.is_multicast or ip.is_reserved or ip.is_unspecified):
+        return True
+    if isinstance(ip, ipaddress.IPv4Address) and ip in _CGNAT:
+        return True
+    return False
 
 
 def _resolve_and_validate(hostname: str) -> str:
@@ -44,9 +44,8 @@ def _resolve_and_validate(hostname: str) -> str:
             raise ValueError(f"DNS resolution failed for {hostname}")
         ip_str = results[0][4][0]
         ip = ipaddress.ip_address(ip_str)
-        for network in _BLOCKED_NETWORKS:
-            if ip in network:
-                raise ValueError(f"Resolved IP {ip_str} is in blocked range {network}")
+        if _is_blocked_ip(ip):
+            raise ValueError(f"Resolved IP {ip_str} is not a public address")
         return ip_str
     except socket.gaierror as e:
         raise ValueError(f"DNS resolution failed for {hostname}: {e}")
