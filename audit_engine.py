@@ -568,6 +568,37 @@ def _is_rua_syntactically_valid(rua_value: str) -> bool:
     return False
 
 
+def _emit_size_modifier_info(result: Dict[str, Any], tag_name: str, addr: str) -> None:
+    """Append a spec-required info issue for a rua/ruf URI carrying an
+    obsolete !size modifier (dmarcbis-41 §C.4 / §4.8).
+
+    Caller has already verified addr starts with 'mailto:' and contains
+    '!' in the payload after 'mailto:'. Modifier is everything after the
+    first '!' in the payload; format isn't validated (it's obsolete —
+    deeper validation is wasted work).
+    """
+    modifier = addr[7:].split("!", 1)[1]
+    result["issues"].append({
+        "severity": "info",
+        "issue": "rua/ruf size modifier (!N) is obsolete in dmarcbis",
+        "plain_english": (
+            f"Your DMARC record uses the legacy size modifier "
+            f"(e.g., {addr} has !{modifier}). dmarcbis-41 §C.4 removed "
+            "this syntax. Receivers implementing dmarcbis will ignore "
+            "the size limit; receivers following RFC 7489 still honor it. "
+            "Remove the modifier to be forward-compatible."
+        ),
+        "fix": (
+            f"Edit the {tag_name}= URI to remove the !N suffix "
+            "(everything after the @domain.tld!). Example: change "
+            f"{tag_name}=mailto:reports@example.com!10m to "
+            f"{tag_name}=mailto:reports@example.com."
+        ),
+        "source": "spec_required",
+        "spec_reference": "dmarcbis-41 §C.4 / §4.8",
+    })
+
+
 def _raw_check_dmarc(domain: str) -> Dict[str, Any]:
     """Check DMARC record with comprehensive syntax validation.
 
@@ -1133,6 +1164,8 @@ def _raw_check_dmarc(domain: str) -> Dict[str, Any]:
                     "reports to this address, so you lose visibility.",
                     f"Change to: rua=mailto:{addr}",
                 )
+            elif addr and "!" in addr[7:]:
+                _emit_size_modifier_info(result, "rua", addr)
 
     # 6d. ruf (forensic reports)
     raw_ruf = tags.get("ruf", "")
@@ -1149,6 +1182,8 @@ def _raw_check_dmarc(domain: str) -> Dict[str, Any]:
                     "failure reports because of PII concerns, so this is low priority.",
                     f"Change to: ruf=mailto:{addr}",
                 )
+            elif addr and "!" in addr[7:]:
+                _emit_size_modifier_info(result, "ruf", addr)
 
     # 6e. adkim (DKIM alignment)
     raw_adkim = tags.get("adkim", "")
@@ -1510,12 +1545,27 @@ def _validate_dmarc_strict(record: str, dmarc_records_count: int = 1) -> Dict:
                      "and older tools silently accept it. DMARCbis requires valid URI format.")
                 all_valid = False
             else:
-                # Validate email format within mailto:
-                email_part = uri_stripped[7:].split("!")[0]  # strip size modifier
+                # Split mailto:<addr>!<size>. The email part is validated even
+                # when a size modifier is present; the modifier is reported as
+                # a separate, non-fatal warn (it's obsolete, not forbidden —
+                # dmarcbis-41 §4.8 keeps obs-dmarc-uri in the ABNF for parsing
+                # legacy records).
+                payload_parts = uri_stripped[7:].split("!", 1)
+                email_part = payload_parts[0]
+                size_modifier = payload_parts[1] if len(payload_parts) == 2 else ""
+
                 if not re.match(r'^[^@\s]+@[^@\s]+\.[^@\s]+$', email_part):
                     _add("uri_validation", "URI_BAD_EMAIL", "fail",
                          f"{tag_name} contains invalid email address in URI: {uri_stripped}")
                     all_valid = False
+
+                if size_modifier:
+                    _add("uri_validation", "URI_SIZE_MODIFIER_OBSOLETE", "warn",
+                         f"{tag_name}={uri_stripped} contains a size modifier (!{size_modifier}). "
+                         "dmarcbis-41 §C.4 removes the ability to specify a maximum report size; "
+                         "§4.8 marks the syntax as obsolete. Reporters following dmarcbis will "
+                         "ignore the size suffix. RFC 7489 receivers may still honor it. "
+                         "Remove the modifier.")
 
         if all_valid:
             uri_count = len(uris)
