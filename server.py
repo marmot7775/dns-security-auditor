@@ -307,14 +307,15 @@ def _validate_domain(domain: str) -> str:
     if not d:
         raise HTTPException(status_code=400, detail="Invalid domain")
 
+    # Length check before regex: caps regex CPU on pathological-length input.
+    if len(d) > 253:
+        raise HTTPException(status_code=400, detail="Domain name too long")
+
     if not DOMAIN_PATTERN.match(d):
         raise HTTPException(
             status_code=400,
             detail=f"'{d}' does not look like a valid domain name",
         )
-
-    if len(d) > 253:
-        raise HTTPException(status_code=400, detail="Domain name too long")
 
     return d
 
