@@ -538,6 +538,30 @@ def _enrich_dmarc_inheritance(
 # Individual Raw Checks (DMARC and SPF written fresh here)
 # ============================================================
 
+_RUA_EMAIL_RE = re.compile(r'^[^@\s]+@[^@\s]+\.[^@\s]+$')
+
+
+def _is_rua_syntactically_valid(rua_value: str) -> bool:
+    """Return True if rua_value contains at least one syntactically
+    valid reporting URI, per dmarcbis-41 §4.10.1.
+
+    A URI counts as syntactically valid if it starts with mailto:
+    (case-insensitive) and the email part matches local@domain.tld.
+    Per RFC 6068, an optional !size modifier after the email address
+    is stripped before validation.
+    """
+    if not rua_value:
+        return False
+    for raw in rua_value.split(","):
+        candidate = raw.strip()
+        if len(candidate) < 7 or not candidate[:7].lower() == "mailto:":
+            continue
+        email_part = candidate[7:].split("!", 1)[0]
+        if _RUA_EMAIL_RE.match(email_part):
+            return True
+    return False
+
+
 def _raw_check_dmarc(domain: str) -> Dict[str, Any]:
     """Check DMARC record with comprehensive syntax validation.
 
@@ -578,6 +602,7 @@ def _raw_check_dmarc(domain: str) -> Dict[str, Any]:
         "issues": [],
         "syntax_errors": [],
         "recommendations": [],
+        "policy_recovery_applied": False,
     }
 
     def _add_issue(severity, issue, plain_english, fix):
@@ -903,38 +928,17 @@ def _raw_check_dmarc(domain: str) -> Dict[str, Any]:
 
     # ── Step 6: Extract and validate individual tag values ──────
 
-    # 6a. Policy (p=) — required tag
+    # 6a. Policy (p=) — required tag. Syntax errors are emitted here;
+    #     receiver-side recovery (dmarcbis §4.10.1) is decided after
+    #     sp= and np= have also been validated.
     raw_policy = tags.get("p", "")
     policy = raw_policy.lower()
     result["policy"] = policy
 
-    if not raw_policy:
-        # dmarcbis §4.10.1 MUSTs that receivers act as if p=none when rua= is present.
-        # RFC 7489 has no such fallback and ignores the record. Interop hazard.
-        if tags.get("rua"):
-            _add_issue(
-                "warning",
-                "Missing p= tag. Interop hazard: RFC 7489 receivers ignore, dmarcbis receivers treat as p=none.",
-                "This record has no explicit policy tag. dmarcbis S4.10.1 specifies that receivers "
-                "MUST treat the record as p=none when rua= is present, but RFC 7489 receivers will "
-                "ignore the record entirely. The same record will produce different behavior depending "
-                "on which spec the receiver implements. Older receivers (still common) give you no "
-                "protection; newer ones treat as monitoring-only.",
-                "Add an explicit p=none (or p=quarantine / p=reject) to the record. Explicit policy "
-                "works under both specs and removes the ambiguity.",
-            )
-            policy = "none"
-            result["policy"] = policy
-        else:
-            _add_syntax(
-                "Missing required policy tag (p=) and no rua= tag",
-                "Every DMARC record must include a policy tag. Without p= or rua=, "
-                "receivers will ignore this record entirely. "
-                "This is the same as having no DMARC record at all.",
-                "Add a policy tag. Start with p=none for monitoring, and add "
-                "rua=mailto:dmarc-reports@yourdomain.com to receive aggregate reports.",
-            )
-    elif policy not in VALID_POLICIES:
+    p_missing = not raw_policy
+    p_invalid_value = bool(raw_policy) and policy not in VALID_POLICIES
+
+    if p_invalid_value:
         # Check for common misspellings (dmarc.org dataset)
         suggestions = {
             "monitor": "p=monitor was used in early DMARC drafts but was replaced by p=none before publication.",
@@ -961,7 +965,8 @@ def _raw_check_dmarc(domain: str) -> Dict[str, Any]:
     raw_sp = tags.get("sp", "")
     sp = raw_sp.lower() if raw_sp else None
     result["sp"] = sp
-    if raw_sp and sp not in VALID_POLICIES:
+    sp_invalid_value = bool(raw_sp) and sp not in VALID_POLICIES
+    if sp_invalid_value:
         _add_syntax(
             f"Invalid subdomain policy: sp={raw_sp}",
             f"'{raw_sp}' is not a valid subdomain policy. Same rules as p= apply.",
@@ -972,13 +977,117 @@ def _raw_check_dmarc(domain: str) -> Dict[str, Any]:
     raw_np = tags.get("np", "")
     np_val = raw_np.lower() if raw_np else None
     result["np"] = np_val
-    if raw_np and np_val not in VALID_POLICIES:
+    np_invalid_value = bool(raw_np) and np_val not in VALID_POLICIES
+    if np_invalid_value:
         _add_syntax(
             f"Invalid non-existent subdomain policy: np={raw_np}",
             f"'{raw_np}' is not a valid np policy. Same rules as p= apply. "
             "The np tag controls policy for subdomains that don't exist in DNS.",
             "Change to np=none, np=quarantine, or np=reject.",
         )
+
+    # 6b-recovery. dmarcbis-41 §4.10.1 receiver behavior.
+    #
+    # Verbatim from §4.10.1:
+    #   "If a retrieved DMARC Policy Record does not contain a valid 'p'
+    #    tag, or contains an 'sp' or 'np' tag that is not valid, then:
+    #    *  If a 'rua' tag is present and contains at least one
+    #       syntactically valid reporting URI, the Mail Receiver MUST
+    #       act as if a record containing 'p=none' was retrieved and
+    #       continue processing;
+    #    *  Otherwise, the Mail Receiver applies no DMARC processing to
+    #       this message."
+    #
+    # The trigger covers all four cases: missing p, invalid p, invalid
+    # sp, invalid np. Recovery is dmarcbis-only; RFC 7489 has no such
+    # fallback. We surface the interop split so users don't assume the
+    # broken record is universally honored. Per-tag _add_syntax above
+    # is preserved — recovery is a separate, receiver-side concern.
+    recovery_trigger = None
+    if p_missing:
+        recovery_trigger = ("p", None, "missing")
+    elif p_invalid_value:
+        recovery_trigger = ("p", raw_policy, "invalid")
+    elif sp_invalid_value:
+        recovery_trigger = ("sp", raw_sp, "invalid")
+    elif np_invalid_value:
+        recovery_trigger = ("np", raw_np, "invalid")
+
+    if recovery_trigger:
+        rua_for_recovery = tags.get("rua", "")
+        rua_valid_for_recovery = _is_rua_syntactically_valid(rua_for_recovery)
+        rec_tag_name, rec_tag_value, rec_kind = recovery_trigger
+        if rua_valid_for_recovery:
+            policy = "none"
+            result["policy"] = policy
+            result["policy_recovery_applied"] = True
+            if rec_kind == "missing":
+                _add_issue(
+                    "warning",
+                    "Missing p= tag. Spec recovery: dmarcbis treats "
+                    "record as p=none, RFC 7489 receivers ignore.",
+                    "This record has no explicit policy tag. Per "
+                    "dmarcbis-41 §4.10.1, because rua= contains at "
+                    "least one syntactically valid reporting URI, "
+                    "dmarcbis-compliant receivers MUST act as if a "
+                    "record containing p=none was retrieved and "
+                    "continue processing. RFC 7489 has no such "
+                    "fallback; older receivers (still common) will "
+                    "ignore the record entirely. Same record, two "
+                    "different behaviors.",
+                    "Add an explicit p=none (or p=quarantine / "
+                    "p=reject). Explicit policy works under both "
+                    "specs and removes the ambiguity.",
+                )
+            else:
+                _add_issue(
+                    "warning",
+                    f"Invalid {rec_tag_name}= value: {rec_tag_name}="
+                    f"{rec_tag_value}. Spec recovery: dmarcbis treats "
+                    f"record as p=none, RFC 7489 receivers may ignore.",
+                    f"Per dmarcbis-41 §4.10.1, because rua= contains "
+                    f"at least one syntactically valid reporting URI, "
+                    f"dmarcbis-compliant receivers MUST act as if a "
+                    f"record containing p=none was retrieved and "
+                    f"continue processing. RFC 7489 has no such "
+                    f"recovery rule; older receivers may instead "
+                    f"ignore the record entirely. Interop hazard — "
+                    f"fix the value rather than relying on this "
+                    f"fallback.",
+                    f"Set {rec_tag_name}= to one of: none, quarantine, "
+                    f"reject. Do not rely on the dmarcbis recovery "
+                    f"fallback to mask the invalid value.",
+                )
+        else:
+            if rec_kind == "missing":
+                _add_syntax(
+                    "Missing required policy tag (p=) and no valid rua= URI",
+                    "Per dmarcbis-41 §4.10.1, a record without a valid "
+                    "p= tag is recoverable only when rua= contains at "
+                    "least one syntactically valid mailto: URI. This "
+                    "record has neither, so receivers apply no DMARC "
+                    "processing to messages — equivalent to having no "
+                    "DMARC record at all.",
+                    "Add a policy tag. Start with p=none for "
+                    "monitoring, and add rua=mailto:dmarc-reports@"
+                    "yourdomain.com to receive aggregate reports.",
+                )
+            else:
+                _add_issue(
+                    "error",
+                    f"Invalid {rec_tag_name}= value AND no valid rua= URI. "
+                    f"Per dmarcbis-41 §4.10.1, this record yields no "
+                    f"DMARC processing.",
+                    f"dmarcbis-41 §4.10.1 specifies that receivers "
+                    f"apply no DMARC processing when an invalid "
+                    f"{rec_tag_name}= is published without a "
+                    f"syntactically valid rua= URI. Effectively, this "
+                    f"record produces the same outcome as having no "
+                    f"DMARC record at all.",
+                    f"Set {rec_tag_name}= to a valid value (none, "
+                    f"quarantine, or reject) AND add a valid rua= URI "
+                    f"such as rua=mailto:reports@yourdomain.com.",
+                )
 
     # 6b3. Test mode (t=) — DMARCbis §4.5
     raw_t = tags.get("t", "")

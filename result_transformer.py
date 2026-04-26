@@ -1255,6 +1255,19 @@ def transform_dmarc(raw: Dict, tree_walk: Optional[Dict] = None) -> Dict:
         if has_syntax_errors or has_engine_errors:
             status = "fail"
 
+    # dmarcbis-41 §4.10.1 policy recovery: invalid p/sp/np with valid
+    # rua= is treated as p=none by dmarcbis receivers but may be
+    # ignored by RFC 7489 receivers. Surface this distinctly so the
+    # user sees it as a spec-recovery state, not as a clean p=none.
+    if record and not inherited and raw.get("policy_recovery_applied"):
+        pill_label = "Recovery"
+        verdict = (
+            "Spec recovery applied (dmarcbis-41 §4.10.1): invalid value "
+            "masked by rua fallback, treated as p=none."
+        )
+        if status != "fail":
+            status = "warn"
+
     # Build explanation
     if inherited:
         applied_tag = raw.get("applied_tag", "p")
@@ -1380,7 +1393,16 @@ def transform_dmarc(raw: Dict, tree_walk: Optional[Dict] = None) -> Dict:
             details.append({"type": "info", "text": f"Organizational domain: {tree_walk['org_domain']}"})
 
     elif record:
-        if policy == "reject":
+        if raw.get("policy_recovery_applied"):
+            details.append({
+                "type": "warning",
+                "text": (
+                    "Spec recovery applied: invalid value masked by rua fallback. "
+                    "dmarcbis-41 §4.10.1 receivers will treat as p=none; older "
+                    "RFC 7489 receivers may ignore the record. Fix the offending tag."
+                ),
+            })
+        elif policy == "reject":
             details.append({"type": "good", "text": "Policy p=reject: authentication failures are rejected"})
         elif policy == "quarantine":
             details.append({"type": "good", "text": "Policy p=quarantine: authentication failures are sent to spam"})
