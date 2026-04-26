@@ -36,17 +36,21 @@ def _is_blocked_ip(ip: ipaddress._BaseAddress) -> bool:
 
 def _resolve_and_validate(hostname: str) -> str:
     """Resolve hostname to IP, reject private/internal addresses.
-    Returns the validated IP string.
-    Raises ValueError if the IP is blocked or resolution fails."""
+    Returns the first resolved IP (the one _safe_fetch will pin to).
+    Raises ValueError if ANY resolved IP is blocked or resolution fails.
+
+    Checking every result (not just results[0]) prevents DNS rebinding /
+    multi-record SSRF: if a hostname resolves to both public and private
+    addresses, the connection is refused outright."""
     try:
         results = socket.getaddrinfo(hostname, 443, socket.AF_UNSPEC, socket.SOCK_STREAM)
         if not results:
             raise ValueError(f"DNS resolution failed for {hostname}")
-        ip_str = results[0][4][0]
-        ip = ipaddress.ip_address(ip_str)
-        if _is_blocked_ip(ip):
-            raise ValueError(f"Resolved IP {ip_str} is not a public address")
-        return ip_str
+        for res in results:
+            ip_str = res[4][0]
+            if _is_blocked_ip(ipaddress.ip_address(ip_str)):
+                raise ValueError(f"Resolved IP {ip_str} is not a public address")
+        return results[0][4][0]
     except socket.gaierror as e:
         raise ValueError(f"DNS resolution failed for {hostname}: {e}")
 
