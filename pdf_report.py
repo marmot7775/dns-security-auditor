@@ -25,6 +25,7 @@ Wire into server.py:
 
 import io
 import re
+import tempfile
 from datetime import datetime, timezone
 from typing import Dict, List, Optional, Any
 
@@ -1876,6 +1877,9 @@ if __name__ == "__main__":
         ],
     }
     pdf = generate_pdf(sample)
-    with open("/tmp/dns-audit-sample.pdf", "wb") as f:
+    out_path = tempfile.NamedTemporaryFile(
+        suffix=".pdf", prefix="dns-audit-sample-", delete=False
+    ).name
+    with open(out_path, "wb") as f:
         f.write(pdf)
-    print(f"Written /tmp/dns-audit-sample.pdf ({len(pdf):,} bytes)")
+    print(f"Sample PDF written to {out_path} ({len(pdf):,} bytes)")
