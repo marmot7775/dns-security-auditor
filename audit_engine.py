@@ -896,15 +896,19 @@ def _raw_check_dmarc(domain: str) -> Dict[str, Any]:
     result["policy"] = policy
 
     if not raw_policy:
-        # DMARCbis §4.10.1: If p= missing but rua= present, treat as p=none
+        # dmarcbis §4.10.1 MUSTs that receivers act as if p=none when rua= is present.
+        # RFC 7489 has no such fallback and ignores the record. Interop hazard.
         if tags.get("rua"):
             _add_issue(
                 "warning",
-                "Missing policy tag (p=). Treated as p=none per DMARCbis",
-                "This record has no explicit policy tag. Because a rua= tag is present, "
-                "DMARCbis-compliant receivers will treat this as p=none (monitoring only). "
-                "However, some older receivers following RFC 7489 may ignore the record entirely.",
-                "Add an explicit p=none (or p=quarantine / p=reject) to the record.",
+                "Missing p= tag. Interop hazard: RFC 7489 receivers ignore, dmarcbis receivers treat as p=none.",
+                "This record has no explicit policy tag. dmarcbis S4.10.1 specifies that receivers "
+                "MUST treat the record as p=none when rua= is present, but RFC 7489 receivers will "
+                "ignore the record entirely. The same record will produce different behavior depending "
+                "on which spec the receiver implements. Older receivers (still common) give you no "
+                "protection; newer ones treat as monitoring-only.",
+                "Add an explicit p=none (or p=quarantine / p=reject) to the record. Explicit policy "
+                "works under both specs and removes the ambiguity.",
             )
             policy = "none"
             result["policy"] = policy

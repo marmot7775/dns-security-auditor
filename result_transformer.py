@@ -317,6 +317,15 @@ def build_security_roadmap(checks: List[Dict]) -> Dict:
                 break
 
     # ── High ────────────────────────────────────────────────
+    # Missing p= with rua: interop hazard between RFC 7489 and dmarcbis
+    if tb:
+        for w in cw:
+            if w.get("title") == "Missing p= tag (interop hazard)":
+                items.append({"priority": "high", "protocol": "DMARC",
+                              "action": "Add explicit p= tag to the DMARC record",
+                              "impact": "RFC 7489 receivers ignore this record entirely; dmarcbis receivers treat as p=none. Receiver behavior is split."})
+                break
+
     # p=none with rua (monitoring)
     health = tb.get("health", {}) if tb else {}
     if health.get("status") == "monitoring":
@@ -2342,6 +2351,20 @@ def _detect_dangerous_combinations(tags: Dict[str, str], policy: str) -> List[Di
     np_resolved_via = "np" if np_present else ("sp" if sp else "p")
 
     # ── RED: Critical ───────────────────────────────────────
+
+    # 0. Missing p= but rua= present. dmarcbis S4.10.1 MUSTs treat-as-p=none;
+    # RFC 7489 ignores the record. Same record, two behaviors.
+    if not tags.get("p") and rua:
+        warnings.append({
+            "level": "critical",
+            "title": "Missing p= tag (interop hazard)",
+            "text": (
+                "No explicit p= tag. dmarcbis-compliant receivers treat this as p=none; RFC 7489 "
+                "receivers ignore the record entirely. Behavior depends on which spec the receiver "
+                "implements. Add an explicit p=none, p=quarantine, or p=reject."
+            ),
+            "tags": ["p"],
+        })
 
     # 1. Any policy + no rua
     if not rua:
