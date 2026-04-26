@@ -4784,6 +4784,7 @@ def transform_dnssec(raw: Dict) -> Dict:
     algorithms = raw.get("algorithms", [])
     key_count = raw.get("key_count", 0)
     has_ds = raw.get("has_ds", False)
+    validated_by_resolver = raw.get("validated_by_resolver", False)
     issues = raw.get("issues", [])
     status = _map_status(raw.get("status", "ok"))
 
@@ -4832,7 +4833,10 @@ def transform_dnssec(raw: Dict) -> Dict:
             details.append({"type": "good", "text": "DS digest matches DNSKEY (chain of trust verified)"})
         elif chain_valid is False:
             details.append({"type": "error", "text": "DS digest does NOT match any DNSKEY (chain of trust not valid; validating resolvers will return SERVFAIL)"})
-    else:
+    elif not validated_by_resolver:
+        # No direct DS evidence and no AD-bit corroboration: real warning.
+        # When AD is set the audit engine emits an info-level annotation
+        # which is rendered below by the issues loop.
         details.append({"type": "warning", "text": "No DS record at parent zone (chain may not validate)"})
 
     # Show algorithms
@@ -4857,16 +4861,17 @@ def transform_dnssec(raw: Dict) -> Dict:
     else:
         verdict = "DNS records cryptographically signed"
 
-    # Downgrade status if issues exist
+    # Downgrade status if issues exist. AD-bit corroboration keeps the
+    # DNSSEC card at "pass" even when DS isn't directly observable.
     if any(a.get("deprecated") for a in algorithms):
         status = "fail"
     elif chain_valid is False:
         status = "fail"
-    elif not has_ds:
+    elif not has_ds and not validated_by_resolver:
         status = "warn"
 
     fix = _first_fix(issues)
-    if not fix and not has_ds:
+    if not fix and not has_ds and not validated_by_resolver:
         fix = "Add a DS record at your domain registrar to complete the DNSSEC chain of trust."
 
     return {

@@ -191,8 +191,11 @@ def _get_dnssec_resolver(timeout: float = 8.0):
     resolver = dns.resolver.Resolver()
     resolver.timeout = timeout
     resolver.lifetime = timeout * 2
-    # Use DNSSEC-validating public resolvers
-    resolver.nameservers = ["1.1.1.1", "1.0.0.1", "8.8.8.8", "9.9.9.9"]
+    # Use DNSSEC-validating public resolvers. Quad9 first because its
+    # AD-bit signal is the strictest (drops bogus answers rather than
+    # returning AD=0), so when we fall back to AD-only annotation the
+    # signal is most trustworthy.
+    resolver.nameservers = ["9.9.9.9", "1.1.1.1", "1.0.0.1", "8.8.8.8"]
     # Set DO flag — without this, resolvers may not return DNSKEY/RRSIG
     resolver.use_edns(0, dns.flags.DO, 4096)
     return resolver
@@ -2122,6 +2125,7 @@ def _raw_check_dnssec(domain: str) -> Dict[str, Any]:
         "key_count": 0,
         "has_ds": False,
         "ds_algorithms": [],
+        "validated_by_resolver": False,
         "issues": [],
         "status": "ok",
     }
@@ -2142,9 +2146,12 @@ def _raw_check_dnssec(domain: str) -> Dict[str, Any]:
         result["has_dnssec"] = True
         result["key_count"] = len(dnskey_answers)
 
-        # Check if the recursive resolver validated the chain (AD flag)
+        # Record whether the recursive resolver validated the chain (AD
+        # flag). This is a corroborating signal only: an on-path attacker
+        # can clear AD, and AD=0 does not prove DS is absent. Treat it
+        # as soft evidence, never as the sole basis for has_ds.
         ad_flag = bool(dnskey_answers.response.flags & dns.flags.AD)
-        result["validated"] = ad_flag
+        result["validated_by_resolver"] = ad_flag
 
         seen_algos = set()
         for rdata in dnskey_answers:
@@ -2197,7 +2204,7 @@ def _raw_check_dnssec(domain: str) -> Dict[str, Any]:
             result["key_count"] = len(dnskey_answers)
 
             ad_flag = bool(dnskey_answers.response.flags & dns.flags.AD)
-            result["validated"] = ad_flag
+            result["validated_by_resolver"] = ad_flag
 
             seen_algos = set()
             for rdata in dnskey_answers:
@@ -2249,11 +2256,12 @@ def _raw_check_dnssec(domain: str) -> Dict[str, Any]:
         )
 
     # Check DS records at the parent (proves the chain is anchored)
-    # DS records ONLY exist at the parent zone — child nameservers never serve them.
+    # DS records ONLY exist at the parent zone. Child nameservers never serve them.
     # Strategy:
     #   Method 1: Direct DS query via recursive resolver (works when resolver is smart)
     #   Method 2: Query parent NS directly via dns.query.udp (no delegation following)
-    #   Method 3: AD flag on DNSKEY response = chain already validated by resolver
+    # The AD bit on the earlier DNSKEY response is consulted later as a
+    # corroborating signal only (annotation, never as proof of has_ds).
     ds_found = False
     ds_algos = set()
 
@@ -2338,16 +2346,30 @@ def _raw_check_dnssec(domain: str) -> Dict[str, Any]:
         except (dns.exception.DNSException, OSError):
             pass
 
-    # Method 3: If DNSKEY query had AD flag set, the chain is validated
-    # (meaning DS must exist even if we couldn't fetch it directly)
-    if not ds_found and result.get("validated"):
-        ds_found = True  # AD flag proves the chain is complete
-
+    # Methods 1 and 2 are the only direct evidence that a DS record
+    # exists at the parent. The AD bit on the DNSKEY response is a
+    # corroborating signal (RFC 4035 §5, RFC 6840 §5.7-5.9): a
+    # validating resolver setting AD=1 implies the chain validated, but
+    # an on-path attacker can clear AD and AD=0 does not prove DS is
+    # absent. So we never let AD alone set has_ds — we only annotate.
     if ds_found:
         result["has_ds"] = True
         result["ds_algorithms"] = sorted(ds_algos)
-    else:
-        if result["has_dnssec"]:
+    elif result["has_dnssec"]:
+        if result.get("validated_by_resolver"):
+            _add_issue(
+                "info",
+                "DS not directly observable; resolver AD bit is set",
+                "We could not fetch the DS record at the parent zone via direct "
+                "query or parent-NS query, but a validating resolver reports the "
+                "chain is intact (AD bit set). This is consistent with a working "
+                "DNSSEC deployment but is not cryptographic proof. Verify with: "
+                "dig +dnssec DS " + domain + " @1.1.1.1",
+                "No action needed if the AD bit is set by a validating resolver "
+                "you trust. If you want certainty, query the parent zone's "
+                "authoritative nameservers directly.",
+            )
+        else:
             _add_issue(
                 "warning",
                 "DNSKEY exists but no DS record found at parent",
