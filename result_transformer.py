@@ -4109,7 +4109,7 @@ def transform_dkim(raw: Dict, domain: str, has_mx: bool = True) -> Dict:
         "Receiving servers retrieve this key to verify the DKIM signature on incoming messages "
         "(<a href=\"https://datatracker.ietf.org/doc/html/rfc6376\" target=\"_blank\" rel=\"noopener\">RFC 6376</a>). Note: this audit confirms the public key exists in DNS; "
         "it does not test live message signatures."
-    ).format(domain=domain)
+    ).format(domain=_e(domain))
     if raw.get("discovery_method") == "spf_intelligent":
         explanation += " Selectors were targeted using SPF-based sender discovery."
 
@@ -4873,9 +4873,9 @@ def transform_dnssec(raw: Dict, domain: str = "") -> Dict:
         for issue in issues:
             details.append(_issue_to_detail(issue))
         bogus_fix = (
-            f"Run 'delv {domain}' locally for a chain analysis, or open "
-            f"<a href=\"https://dnsviz.net/d/{domain}/dnssec/\" target=\"_blank\" rel=\"noopener\">"
-            f"https://dnsviz.net/d/{domain}/dnssec/</a> in a browser. "
+            f"Run 'delv {_e(domain)}' locally for a chain analysis, or open "
+            f"<a href=\"https://dnsviz.net/d/{_e(domain)}/dnssec/\" target=\"_blank\" rel=\"noopener\">"
+            f"https://dnsviz.net/d/{_e(domain)}/dnssec/</a> in a browser. "
             f"If a key rollover is in progress, coordinate with your registrar "
             f"to update the DS record at the parent zone."
         )
