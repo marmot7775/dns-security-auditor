@@ -334,7 +334,7 @@ def _check_report_authorization(domain: str, raw_dmarc: Dict, tree_walk_result: 
                 try:
                     txt_records = _lookup_txt(auth_fqdn)
                     authorized = any(
-                        r.strip().lower().startswith("v=dmarc")
+                        r.strip().startswith("v=DMARC1")
                         for r in txt_records
                     )
                     dest_info["authorized"] = authorized
@@ -503,7 +503,7 @@ def _enrich_dmarc_inheritance(
         return  # Already the org domain, no inheritance possible
 
     org_recs = _lookup_txt(f"_dmarc.{org_domain}")
-    org_dmarc = [r for r in org_recs if r.strip().lower().startswith("v=dmarc")]
+    org_dmarc = [r for r in org_recs if r.strip().startswith("v=DMARC1")]
     if len(org_dmarc) != 1:
         return  # No valid record (zero or multiple)
 
@@ -614,10 +614,30 @@ def _raw_check_dmarc(domain: str) -> Dict[str, Any]:
 
     # ── Step 1: Lookup ──────────────────────────────────────────
     dmarc_recs = _lookup_txt(dmarc_fqdn)
-    dmarc_records = [r for r in dmarc_recs if r.strip().lower().startswith("v=dmarc")]
 
-    # Note any non-DMARC TXT records at the _dmarc subdomain
-    non_dmarc_txt = [r for r in dmarc_recs if not r.strip().lower().startswith("v=dmarc")]
+    # Pre-check: lowercase v=dmarc1 is invalid per RFC 7489 S6.3 (case-sensitive).
+    # Detect BEFORE the strict v=DMARC1 filter so the syntax error is captured
+    # even though the record is excluded from the count.
+    for _r in dmarc_recs:
+        _stripped = _r.strip()
+        if _stripped.lower().startswith("v=dmarc1") and not _stripped.startswith("v=DMARC1"):
+            _add_syntax(
+                "Lowercase v=dmarc1 detected",
+                "Lowercase v=dmarc1 detected. RFC 7489 requires uppercase. "
+                "This record is invalid and will not be honored.",
+                "Change to v=DMARC1 (uppercase).",
+            )
+
+    dmarc_records = [r for r in dmarc_recs if r.strip().startswith("v=DMARC1")]
+
+    # Note any non-DMARC TXT records at the _dmarc subdomain.
+    # Lowercase v=dmarc1 records are excluded here because the pre-check above
+    # already reports them via a dedicated syntax error.
+    non_dmarc_txt = [
+        r for r in dmarc_recs
+        if not r.strip().startswith("v=DMARC1")
+        and not r.strip().lower().startswith("v=dmarc1")
+    ]
     if non_dmarc_txt:
         result["non_dmarc_txt_count"] = len(non_dmarc_txt)
         _add_issue(
@@ -700,16 +720,9 @@ def _raw_check_dmarc(domain: str) -> Dict[str, Any]:
     # ── Step 3: Structural / formatting syntax checks ───────────
     # These run BEFORE tag parsing because they can make parsing unreliable.
 
-    # 3a. "DMARC" must be uppercase (dmarc.org: non-negotiable)
-    # The version tag value is case-sensitive per RFC 7489 §6.3
+    # 3a. Lowercase v=dmarc1 is handled by the pre-check above Step 1.
+    # Records reaching here have already passed the strict v=DMARC1 filter.
     stripped = record.strip()
-    if stripped.startswith("v=dmarc1") and not stripped.startswith("v=DMARC1"):
-        _add_syntax(
-            "Version tag 'DMARC' is not uppercase",
-            "The DMARC specification requires 'DMARC1' in uppercase. "
-            "Lowercase 'dmarc1' may be ignored by some receivers.",
-            "Change to v=DMARC1 (uppercase).",
-        )
 
     # 3b. Missing version number: v=DMARC instead of v=DMARC1
     if re.match(r"v=DMARC\s*[;]", stripped, re.IGNORECASE) or \
