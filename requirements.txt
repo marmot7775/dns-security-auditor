@@ -11,6 +11,7 @@ python-dateutil==2.9.0.post0
 requests>=2.33.0
 fpdf2==2.8.7
 defusedxml==0.7.1
+idna>=3.4
 
 # Optional: DNSSEC RRSIG signature verification
 # cryptography>=42.0.0

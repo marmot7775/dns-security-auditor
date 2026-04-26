@@ -6,6 +6,8 @@ Domain normalization and audit entry point.
 
 from typing import Any, Dict, Optional
 
+import idna
+
 from audit_engine import run_full_audit
 
 
@@ -28,17 +30,11 @@ def normalize_domain(value: str) -> str:
     if ":" in domain:
         domain = domain.rsplit(":", 1)[0]
     domain = domain.rstrip(".")
-    # Handle internationalized domain names (IDN)
+    # IDNA2008 (multi-label aware). Leave invalid input for downstream rejection.
     try:
-        domain = domain.encode("idna").decode("ascii")
-    except (UnicodeError, UnicodeDecodeError):
-        try:
-            labels = domain.split(".")
-            domain = ".".join(
-                label.encode("idna").decode("ascii") for label in labels
-            )
-        except (UnicodeError, UnicodeDecodeError):
-            pass
+        domain = idna.encode(domain).decode("ascii")
+    except idna.IDNAError:
+        pass
     return domain
 
 
