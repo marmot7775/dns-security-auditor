@@ -3620,7 +3620,8 @@ def _raw_check_ct_uncached(domain: str, raw_results: Dict[str, Any]) -> Dict[str
     # Query crt.sh
     try:
         resp = requests.get(
-            f"https://crt.sh/?q=%.{domain}&output=json",
+            "https://crt.sh/",
+            params={"q": f"%.{domain}", "output": "json"},
             timeout=10,
             headers={"User-Agent": "dns-audit.com/1.0"},
         )
