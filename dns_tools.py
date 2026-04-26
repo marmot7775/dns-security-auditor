@@ -62,7 +62,6 @@ def audit_dns_security(
             "error": "Empty domain after normalization",
             "checks": [],
             "priority_fixes": [],
-            "score": {"total": 0, "grade": "?"},
         }
 
     return run_full_audit(domain, dkim_selector=dkim_selector, scope=scope)

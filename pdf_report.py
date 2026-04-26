@@ -38,7 +38,6 @@ from reportlab.platypus import (
     SimpleDocTemplate, Paragraph, Spacer, Table, TableStyle,
     KeepTogether, HRFlowable, PageBreak, CondPageBreak,
 )
-from reportlab.graphics.shapes import Drawing, Wedge, Circle, String, Group
 from reportlab.graphics import renderPDF
 
 # ================================================================
@@ -67,12 +66,6 @@ TEAL_ACCENT = colors.HexColor("#2dd4bf")
 SURFACE_BG  = colors.HexColor("#f8fafc")
 LIGHT_BLUE_BG = colors.HexColor("#eff6ff")
 
-GRADE_COLORS = {
-    "A+": colors.HexColor("#10b981"), "A": colors.HexColor("#10b981"),
-    "B": colors.HexColor("#3b82f6"),
-    "C": colors.HexColor("#f59e0b"), "D": colors.HexColor("#f97316"),
-    "F": colors.HexColor("#ef4444"),
-}
 STATUS_CLR = {"pass": PASS_CLR, "warn": WARN_CLR, "fail": FAIL_CLR}
 STATUS_BG  = {"pass": PASS_BG,  "warn": WARN_BG,  "fail": FAIL_BG}
 STATUS_LBL = {"pass": "PASS",   "warn": "WARNING", "fail": "FAIL"}
@@ -137,51 +130,23 @@ def _alt_rows(cmds, row_count):
     return cmds
 
 
-def _score_gauge(score, grade, grade_color):
-    """Build a circular donut gauge showing score/grade.
+def _findings_summary(passes, warns, fails):
+    """Return a stacked tally of pass/warn/fail counts as a list of Paragraphs.
 
-    Returns a Drawing flowable: filled arc for the score percentage,
-    light gray track for the remainder, grade letter centered inside.
+    Drops into a Table cell in place of the old donut gauge. Each line is a
+    colored count with a short label (issues / warnings / passing).
     """
-    size = 120
-    cx, cy = size / 2, size / 2
-    outer_r = 52
-    inner_r = 36
-    track_clr = colors.HexColor("#e2e8f0")
-
-    pct = max(0, min(score, 100)) / 100.0
-    score_angle = pct * 360
-
-    d = Drawing(size, size)
-
-    # Background track (full circle)
-    d.add(Wedge(cx, cy, outer_r, 0, 360, radius1=inner_r,
-                fillColor=track_clr, strokeColor=None, strokeWidth=0))
-
-    # Score arc (counter-clockwise from 12 o'clock = 90 degrees)
-    if score_angle > 0:
-        start = 90
-        end = 90 - score_angle
-        if end < -270:
-            end = -270
-        d.add(Wedge(cx, cy, outer_r, end, start, radius1=inner_r,
-                     fillColor=grade_color, strokeColor=None, strokeWidth=0))
-
-    # Inner white circle for clean donut hole
-    d.add(Circle(cx, cy, inner_r - 0.5,
-                 fillColor=SURFACE_BG, strokeColor=None, strokeWidth=0))
-
-    # Grade letter centered
-    d.add(String(cx, cy - 10, grade,
-                 fontSize=26, fontName="Helvetica-Bold",
-                 fillColor=grade_color, textAnchor="middle"))
-
-    # Score underneath
-    d.add(String(cx, cy - 24, f"{score}/100",
-                 fontSize=9, fontName="Helvetica",
-                 fillColor=TEXT_TER, textAnchor="middle"))
-
-    return d
+    total = passes + warns + fails
+    line = ParagraphStyle("FS", fontName="Helvetica-Bold", fontSize=11, leading=16)
+    label = ParagraphStyle("FSL", fontName="Helvetica", fontSize=9, textColor=TEXT_TER, leading=12)
+    return [
+        Paragraph(f'<font color="{TEXT_PRI.hexval()}" size="22"><b>{total}</b></font>', line),
+        Paragraph("checks total", label),
+        Spacer(1, 6),
+        Paragraph(f'<font color="{FAIL_CLR.hexval()}"><b>{fails}</b></font> issues', line),
+        Paragraph(f'<font color="{WARN_CLR.hexval()}"><b>{warns}</b></font> warnings', line),
+        Paragraph(f'<font color="{PASS_CLR.hexval()}"><b>{passes}</b></font> passing', line),
+    ]
 
 
 # ================================================================
@@ -223,10 +188,8 @@ def _styles():
 # ================================================================
 
 class _PageTpl:
-    def __init__(self, domain, grade, score, ts):
+    def __init__(self, domain, ts):
         self.domain = domain
-        self.grade = grade
-        self.score = score
         self.ts = ts
         self._page_count = 0
 
@@ -252,16 +215,14 @@ class _PageTpl:
 def _cover_page(data, S):
     """Build cover page elements."""
     domain = data.get("domain", "unknown")
-    sc = data.get("score", {})
-    grade = sc.get("grade", "?")
-    total = int(sc.get("total", 0))
+    checks = data.get("checks", []) or []
+    passes = sum(1 for c in checks if c.get("status") == "pass")
+    warns = sum(1 for c in checks if c.get("status") == "warn")
+    fails = sum(1 for c in checks if c.get("status") == "fail")
     es = data.get("executive_summary", {})
     now = datetime.now(timezone.utc).strftime("%B %d, %Y at %H:%M UTC")
 
     els = []
-
-    # Navy header block via table
-    gc = GRADE_COLORS.get(grade, NAVY)
 
     # Title block
     title_content = [
@@ -295,18 +256,18 @@ def _cover_page(data, S):
     els.append(sub_tbl)
     els.append(Spacer(1, 16))
 
-    # Grade + Score gauge (donut chart)
-    gauge = _score_gauge(total, grade, gc)
+    # Findings summary tally + verdict
+    summary_cell = _findings_summary(passes, warns, fails)
 
     verdict_text = es.get("verdict", "")
     verdict_cell = [
-        Paragraph("Overall Security Grade", S["subheading"]),
+        Paragraph("Overall Findings", S["subheading"]),
         Spacer(1, 4),
         Paragraph(_safe(verdict_text), S["body_large"]),
     ]
 
-    grade_row = Table([[gauge, verdict_cell]], colWidths=[1.8*inch, 4.7*inch])
-    grade_row.setStyle(TableStyle([
+    summary_row = Table([[summary_cell, verdict_cell]], colWidths=[1.8*inch, 4.7*inch])
+    summary_row.setStyle(TableStyle([
         ("VALIGN", (0,0), (-1,-1), "MIDDLE"),
         ("BACKGROUND", (0,0), (-1,-1), SURFACE_BG),
         ("BOX", (0,0), (-1,-1), 0.5, BORDER),
@@ -316,7 +277,7 @@ def _cover_page(data, S):
         ("RIGHTPADDING", (0,0), (-1,-1), 12),
         ("ROUNDEDCORNERS", [6,6,6,6]),
     ]))
-    els.append(grade_row)
+    els.append(summary_row)
     els.append(Spacer(1, 16))
 
     # Three key metrics
@@ -1605,14 +1566,11 @@ def generate_pdf(audit_result: dict) -> bytes:
     Returns PDF bytes suitable for streaming to the client.
     """
     domain = re.sub(r'<[^>]+>', '', audit_result.get("domain", "unknown"))
-    sc = audit_result.get("score", {})
-    grade = sc.get("grade", "?")
-    total = int(sc.get("total", 0))
     now = datetime.now(timezone.utc).strftime("%B %d, %Y at %H:%M UTC")
 
     buf = io.BytesIO()
     S = _styles()
-    tpl = _PageTpl(domain, grade, total, now)
+    tpl = _PageTpl(domain, now)
 
     doc = SimpleDocTemplate(
         buf,
@@ -1659,7 +1617,6 @@ def generate_pdf(audit_result: dict) -> bytes:
 if __name__ == "__main__":
     sample = {
         "domain": "example.com",
-        "score": {"grade": "B", "total": 72},
         "executive_summary": {
             "verdict": "Your domain has email authentication but attackers can still exploit subdomain spoofing.",
             "spoofing_protection": {"label": "Partial", "color": "amber", "detail": "2/4 vectors protected"},

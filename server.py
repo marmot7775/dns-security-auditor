@@ -102,11 +102,11 @@ except PermissionError:
 # Audit log (GDPR-safe -- no IP, no geolocation)
 # ============================================================
 
-def _log_audit(request: Request, domain: str, scope: str, grade: str,
+def _log_audit(request: Request, domain: str, scope: str,
                duration: float, checks: int, source: str = "web"):
     """Write a GDPR-safe JSON-lines audit log entry.
 
-    Logged: domain, timestamp, scope, grade, duration, check count,
+    Logged: domain, timestamp, scope, duration, check count,
             user-agent (browser/OS only), source (web/sse/pdf).
     NOT logged: IP address, geolocation, cookies, personal data.
     """
@@ -115,7 +115,6 @@ def _log_audit(request: Request, domain: str, scope: str, grade: str,
         "ts": datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"),
         "domain": domain,
         "scope": scope or "complete",
-        "grade": grade,
         "duration_s": duration,
         "checks": checks,
         "ua": ua[:200],
@@ -345,7 +344,6 @@ def _preflight_dns_check(domain: str) -> Optional[Dict]:
         "domain": domain,
         "checks": [],
         "priority_fixes": [],
-        "score": {"total": 0, "grade": "?"},
     }
     try:
         resolver = dns.resolver.Resolver()
@@ -400,7 +398,7 @@ async def audit_domain(
     Run a comprehensive DNS and email security audit.
 
     Returns:
-    - Security grade (A-F) with numeric score
+    - Per-check pass/warn/fail status with priority fixes
     - Individual check results (DMARC, SPF, DKIM, MX, MTA-STS, TLS-RPT, BIMI, DNSSEC, CAA, DANE, Nameservers, CT, Blocklist)
     - Priority fixes
     - Detected email vendors
@@ -445,7 +443,6 @@ async def audit_domain(
         result = {
             "domain": domain,
             "timestamp": datetime.now(timezone.utc).isoformat(),
-            "score": {"total": 0, "grade": "?"},
             "checks": [],
             "priority_fixes": [],
             "vendors": [],
@@ -454,11 +451,10 @@ async def audit_domain(
         }
 
     elapsed = round(time.time() - start, 2)
-    log.info("Audit complete: %s -- %.2fs, grade=%s (rid=%s)", domain, elapsed, result.get("score", {}).get("grade", "?"), request_id)
+    log.info("Audit complete: %s -- %.2fs (rid=%s)", domain, elapsed, request_id)
 
     # Audit log (GDPR-safe)
     _log_audit(request, domain, scope,
-               result.get("score", {}).get("grade", "?"),
                elapsed, len(result.get("checks", [])), source="web")
 
     # Cache result (skip caching errors -- they may be transient)
@@ -567,7 +563,6 @@ async def audit_stream(
             error_result = {
                 "domain": domain,
                 "timestamp": datetime.now(timezone.utc).isoformat(),
-                "score": {"total": 0, "grade": "?"},
                 "checks": [],
                 "priority_fixes": [],
                 "vendors": [],
@@ -593,14 +588,13 @@ async def audit_stream(
                     timeout_result = {
                         "domain": domain,
                         "timestamp": datetime.now(timezone.utc).isoformat(),
-                        "score": {"total": 0, "grade": "?"},
                         "checks": [],
                         "priority_fixes": [],
                         "vendors": [],
                         "error": "timeout",
                         "error_message": "Audit exceeded the 120 second time limit. Please try again.",
                     }
-                    _log_audit(request, domain, scope, "?", 120.0, 0, source="sse")
+                    _log_audit(request, domain, scope, 120.0, 0, source="sse")
                     yield f"data: {json.dumps({'done': True, 'result': timeout_result})}\n\n"
                     return
                 try:
@@ -619,11 +613,10 @@ async def audit_stream(
                     if "error" not in result:
                         _set_cached(cache_key, result)
                     elapsed = round(time.time() - sse_start_time, 2)
-                    log.info("SSE audit complete: %s -- %.2fs, grade=%s",
-                             domain, elapsed, result.get("score", {}).get("grade", "?"))
+                    log.info("SSE audit complete: %s -- %.2fs",
+                             domain, elapsed)
                     # Audit log (GDPR-safe)
                     _log_audit(request, domain, scope,
-                               result.get("score", {}).get("grade", "?"),
                                elapsed, len(result.get("checks", [])), source="sse")
                     result["request_id"] = request_id
                     yield f"data: {json.dumps({'done': True, 'result': result, 'request_id': request_id})}\n\n"

@@ -12,13 +12,12 @@ from typing import Dict, List
 _SEVERITY_ORDER = {"critical": 0, "high": 1, "medium": 2}
 
 
-def detect_anomalies(raw_results: dict, score_result: dict, has_mx: bool, is_defensive: bool = False, tree_walk: dict = None) -> list:
+def detect_anomalies(raw_results: dict, has_mx: bool, is_defensive: bool = False, tree_walk: dict = None) -> list:
     """
     Detect cross-check anomalies from raw audit results.
 
     Args:
         raw_results: Raw output dict from the audit engine, keyed by check name.
-        score_result: Output from EmailSecurityScorer (grade, score, etc.).
         has_mx: Whether the domain has MX records.
         is_defensive: Whether the domain is a non-mail domain with defensive DNS.
         tree_walk: Tree walk result for inherited DMARC policy detection.

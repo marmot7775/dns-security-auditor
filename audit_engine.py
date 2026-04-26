@@ -3643,14 +3643,14 @@ def _raw_check_ct_uncached(domain: str, raw_results: Dict[str, Any]) -> Dict[str
     except requests.exceptions.Timeout:
         _add_issue("warning", "CT data temporarily unavailable",
                    "Certificate Transparency data is sourced from crt.sh, which was temporarily unavailable. "
-                   "This does not affect your security grade.")
+                   "This does not affect the audit results.")
         result["status"] = "warning"
         result["unavailable_reason"] = "timeout"
         return result
     except (requests.exceptions.RequestException, ValueError) as e:
         _add_issue("warning", "CT data temporarily unavailable",
                    "Certificate Transparency data is sourced from crt.sh, which was temporarily unavailable. "
-                   "This does not affect your security grade.")
+                   "This does not affect the audit results.")
         result["status"] = "warning"
         result["unavailable_reason"] = "request_error"
         return result
@@ -4676,7 +4676,7 @@ def run_full_audit(domain: str, dkim_selector: Optional[str] = None,
 
     # --- Anomaly Detection ("What's Unusual") ---
     try:
-        anomalies = detect_anomalies(raw_results, score_result, has_mx, is_defensive, tree_walk=tree_walk_result)
+        anomalies = detect_anomalies(raw_results, has_mx, is_defensive, tree_walk=tree_walk_result)
     except Exception:
         log.debug("Anomaly detection failed", exc_info=True)
         anomalies = []
@@ -4786,14 +4786,6 @@ def run_full_audit(domain: str, dkim_selector: Optional[str] = None,
         "domain": domain,
         "timestamp": start_time.isoformat(),
         "elapsed_seconds": round(elapsed, 2),
-        "score": {
-            "total": score_result.get("total_score", 0),
-            "grade": score_result.get("grade", "?"),
-            "category_scores": score_result.get("category_scores", {}),
-            "weaknesses": score_result.get("weaknesses", []),
-            "strengths": score_result.get("strengths", []),
-            "recommendations": score_result.get("recommendations", []),
-        },
         "checks": checks,
         "priority_fixes": priority_fixes,
         "anomalies": anomalies,

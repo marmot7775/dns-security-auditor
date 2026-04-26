@@ -413,7 +413,7 @@ class TestAnomalyDetectorInheritedDmarc(unittest.TestCase):
             "dmarc": self._inherited_dmarc("reject"),
             "spf": {"record": None, "raw_record": None},
         }
-        result = detect_anomalies(raw, {}, has_mx=True)
+        result = detect_anomalies(raw, has_mx=True)
         a = _find_anomaly(result, "without SPF")
         assert a is not None, "Expected 'DMARC enforcement without SPF' anomaly"
         assert a["severity"] == "high"
@@ -424,7 +424,7 @@ class TestAnomalyDetectorInheritedDmarc(unittest.TestCase):
             "dmarc": self._inherited_dmarc("quarantine"),
             "spf": {"record": None, "raw_record": None},
         }
-        result = detect_anomalies(raw, {}, has_mx=True)
+        result = detect_anomalies(raw, has_mx=True)
         a = _find_anomaly(result, "without SPF")
         assert a is not None
 
@@ -434,7 +434,7 @@ class TestAnomalyDetectorInheritedDmarc(unittest.TestCase):
             "dmarc": self._inherited_dmarc("reject"),
             "spf": {"record": "v=spf1 include:sendgrid.net -all"},
         }
-        result = detect_anomalies(raw, {}, has_mx=True)
+        result = detect_anomalies(raw, has_mx=True)
         assert _find_anomaly(result, "without SPF") is None
 
     def test_inherited_none_does_not_fire_enforcement_anomaly(self):
@@ -443,7 +443,7 @@ class TestAnomalyDetectorInheritedDmarc(unittest.TestCase):
             "dmarc": self._inherited_dmarc("none"),
             "spf": {"record": None, "raw_record": None},
         }
-        result = detect_anomalies(raw, {}, has_mx=True)
+        result = detect_anomalies(raw, has_mx=True)
         assert _find_anomaly(result, "without SPF") is None
 
     # --- has_mx guard on the anomaly ---
@@ -456,7 +456,7 @@ class TestAnomalyDetectorInheritedDmarc(unittest.TestCase):
             "spf": {"record": None},
         }
         # Rule 1 fires regardless of has_mx
-        result = detect_anomalies(raw, {}, has_mx=False)
+        result = detect_anomalies(raw, has_mx=False)
         # Rule 1 does NOT check has_mx, so it fires
         assert _find_anomaly(result, "without SPF") is not None
 
@@ -468,7 +468,7 @@ class TestAnomalyDetectorInheritedDmarc(unittest.TestCase):
             "dmarc": {"record": None, "policy": None},
             "spf": {"record": None},
         }
-        result = detect_anomalies(raw, {}, has_mx=True)
+        result = detect_anomalies(raw, has_mx=True)
         assert _find_anomaly(result, "without SPF") is None
 
     # --- PSL-path inherited DMARC also works ---
@@ -485,7 +485,7 @@ class TestAnomalyDetectorInheritedDmarc(unittest.TestCase):
             },
             "spf": {},
         }
-        result = detect_anomalies(raw, {}, has_mx=True)
+        result = detect_anomalies(raw, has_mx=True)
         assert _find_anomaly(result, "without SPF") is not None
 
     # --- return type and structure ---
@@ -493,7 +493,6 @@ class TestAnomalyDetectorInheritedDmarc(unittest.TestCase):
     def test_return_is_list(self):
         result = detect_anomalies(
             {"dmarc": self._inherited_dmarc("reject"), "spf": {"record": "v=spf1 -all"}},
-            {},
             has_mx=True,
         )
         assert isinstance(result, list)
@@ -503,7 +502,7 @@ class TestAnomalyDetectorInheritedDmarc(unittest.TestCase):
             "dmarc": self._inherited_dmarc("reject"),
             "spf": {"record": None},
         }
-        result = detect_anomalies(raw, {}, has_mx=True)
+        result = detect_anomalies(raw, has_mx=True)
         for a in result:
             assert {"title", "description", "severity", "recommendation"} <= set(a.keys())
 
@@ -678,7 +677,7 @@ class TestNoEmDashesInInheritedOutput(unittest.TestCase):
             },
             "spf": {"record": None},
         }
-        anomalies = detect_anomalies(raw, {}, has_mx=True)
+        anomalies = detect_anomalies(raw, has_mx=True)
         text = self._all_anomaly_text(anomalies)
         assert self.EM_DASH not in text
 
