@@ -79,6 +79,9 @@ htmlcov/
 .tox/
 .nox/
 
+# tldextract local cache (cache_dir override; see audit_engine.py)
+.tldextract_cache/
+
 # Node (if any frontend tooling added later)
 node_modules/
 package-lock.json

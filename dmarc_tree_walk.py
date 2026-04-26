@@ -57,10 +57,21 @@ import dns.resolver
 import dns.name
 from typing import Dict, Any, Optional, List
 
+import os
+
 try:
     import tldextract
+    # ProtectHome=read-only on the prod systemd unit makes tldextract's
+    # default ~/.cache path unwritable. Pin the cache under the working
+    # directory (in ReadWritePaths) to keep the suffix-list refresh able
+    # to complete.
+    _tldextract_cache_dir = os.path.join(
+        os.path.dirname(os.path.abspath(__file__)), ".tldextract_cache"
+    )
+    _tld_extract = tldextract.TLDExtract(cache_dir=_tldextract_cache_dir)
 except ImportError:
     tldextract = None
+    _tld_extract = None
 
 # dmarcbis-41 §4.10-5: total query cap is 8, including the Author Domain
 # query. The walk loop therefore allows at most 7 queries (1 already
@@ -105,7 +116,7 @@ def _psl_org_domain(domain: str) -> Optional[str]:
     whose parents do not publish DMARC records.
     """
     if tldextract is not None:
-        ext = tldextract.extract(domain)
+        ext = _tld_extract(domain)
         if ext.domain and ext.suffix:
             return f"{ext.domain}.{ext.suffix}"
         return None

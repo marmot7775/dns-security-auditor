@@ -9,6 +9,7 @@ into the frontend's expected format.
 
 import ipaddress
 import logging
+import os
 import re
 import threading as _ct_threading
 import time
@@ -82,8 +83,16 @@ from dkim_key_age import DKIMKeyAgeAnalyzer
 from dmarc_tree_walk import dmarc_tree_walk
 try:
     import tldextract
+    # ProtectHome=read-only on the prod systemd unit makes tldextract's
+    # default ~/.cache path unwritable, which crashes the DMARC check.
+    # Pin the cache under the working directory (in ReadWritePaths).
+    _tldextract_cache_dir = os.path.join(
+        os.path.dirname(os.path.abspath(__file__)), ".tldextract_cache"
+    )
+    _tld_extract = tldextract.TLDExtract(cache_dir=_tldextract_cache_dir)
 except ImportError:
     tldextract = None
+    _tld_extract = None
 from spf_intelligence import smart_dkim_check
 
 from result_transformer import (
@@ -509,7 +518,7 @@ def _get_org_domain(domain: str) -> Optional[str]:
     Returns None if the domain cannot be parsed.
     """
     if tldextract is not None:
-        ext = tldextract.extract(domain)
+        ext = _tld_extract(domain)
         if not ext.domain or not ext.suffix:
             return None
         return f"{ext.domain}.{ext.suffix}"
