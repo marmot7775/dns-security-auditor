@@ -119,8 +119,6 @@ document.addEventListener('DOMContentLoaded', () => {
     } else {
         // Clear any browser-restored value when there's no ?d= param
         domainInput.value = '';
-        // Ensure focus after all DOM mutations complete
-        requestAnimationFrame(() => domainInput.focus());
     }
 
     // Back-to-top button
