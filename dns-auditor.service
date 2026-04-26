@@ -1,5 +1,5 @@
 [Unit]
-Description=DNS Security Auditor - FastAPI Server
+Description=DNS Security Auditor - FastAPI (Full)
 After=network.target
 
 [Service]
@@ -7,9 +7,30 @@ Type=simple
 User=marmot7
 WorkingDirectory=/home/marmot7/dns-security-auditor
 Environment="PATH=/home/marmot7/.venv/bin"
-ExecStart=/home/marmot7/.venv/bin/uvicorn server:app --host 0.0.0.0 --port 8000 --workers 2
+ExecStart=/home/marmot7/.venv/bin/uvicorn server:app --host 127.0.0.1 --port 8000
 Restart=always
 RestartSec=3
+LimitNOFILE=65535
+
+# Hardening
+NoNewPrivileges=true
+PrivateTmp=true
+PrivateDevices=true
+ProtectSystem=strict
+ProtectHome=read-only
+ReadWritePaths=/home/marmot7/dns-security-auditor
+ProtectKernelTunables=true
+ProtectKernelModules=true
+ProtectControlGroups=true
+RestrictNamespaces=true
+RestrictRealtime=true
+LockPersonality=true
+MemoryDenyWriteExecute=true
+RestrictSUIDSGID=true
+CapabilityBoundingSet=
+AmbientCapabilities=
+SystemCallFilter=@system-service
+SystemCallErrorNumber=EPERM
 
 [Install]
 WantedBy=multi-user.target
