@@ -858,9 +858,9 @@ def check_bimi(domain: str, dmarc_enforcing_override: bool = None) -> Dict[str, 
                         ))
 
                     # Read up to 1MB for SVG validation
-                    svg_bytes = b""
+                    svg_bytes = bytearray()
                     for chunk in resp.iter_content(chunk_size=8192):
-                        svg_bytes += chunk
+                        svg_bytes.extend(chunk)
                         if len(svg_bytes) > 1_048_576:
                             result["issues"].append(_make_issue(
                                 "warning", "BIMI logo exceeds 1MB",
