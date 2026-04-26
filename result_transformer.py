@@ -1866,11 +1866,11 @@ def _explain_policy_value(value: str) -> str:
             "Your domain is protected against spoofing."
         ),
         "quarantine": (
-            "Mail that fails authentication is sent to spam. One step below full protection "
-            "-- spoofed mail still reaches recipients, just in their junk folder."
+            "Mail that fails authentication is sent to spam. One step below full protection. "
+            "Spoofed mail still reaches recipients, just in their junk folder."
         ),
         "none": (
-            "Monitoring only -- no mail is blocked or quarantined. Spoofed and malicious email "
+            "Monitoring only: no mail is blocked or quarantined. Spoofed and malicious email "
             "claiming to be from your domain is still delivered to recipients. While monitoring is "
             "the correct first step, the goal is to progress to an enforcing policy "
             "(p=quarantine then p=reject). Without enforcement, your domain can be used to send "
@@ -2228,7 +2228,7 @@ def _build_tag_entry(tag: str, value: str, present: bool, tags: Dict, policy: st
                     "This domain declares itself as a Public Suffix Domain (like .com or .co.uk). "
                     "The DNS tree walk stops here and subdomains are treated as separate organizational "
                     "domains that will NOT inherit this DMARC policy. If this domain is not actually a "
-                    "public suffix, this is a critical misconfiguration -- subdomains lose policy "
+                    "public suffix, this is a critical misconfiguration: subdomains lose policy "
                     "inheritance entirely."
                 ),
                 "n": (
@@ -2236,7 +2236,7 @@ def _build_tag_entry(tag: str, value: str, present: bool, tags: Dict, policy: st
                     "This is the correct value for most domains."
                 ),
                 "u": (
-                    "Undeclared. Different receivers may handle the DNS tree walk differently -- "
+                    "Undeclared. Different receivers may handle the DNS tree walk differently: "
                     "some continue walking, others stop. This creates inconsistent enforcement across "
                     "Gmail, Microsoft, Yahoo, and others. Set psd=n explicitly."
                 ),
@@ -2430,7 +2430,7 @@ def _detect_dangerous_combinations(tags: Dict[str, str], policy: str) -> List[Di
             "text": (
                 "This domain claims to be a Public Suffix Domain. If incorrect, the DNS tree walk "
                 "stops prematurely and subdomains lose policy inheritance entirely. This is likely a "
-                "misconfiguration -- set psd=n if this is a regular domain."
+                "misconfiguration. Set psd=n if this is a regular domain."
             ),
             "tags": ["psd"],
         })
@@ -2445,7 +2445,7 @@ def _detect_dangerous_combinations(tags: Dict[str, str], policy: str) -> List[Di
             "title": "Contradictory np vs p policy",
             "text": (
                 "Stricter policy on non-existent subdomains than the root domain. This is "
-                "contradictory -- attackers will spoof the root domain directly."
+                "contradictory: attackers will spoof the root domain directly."
             ),
             "tags": ["np", "p"],
         })
@@ -2456,7 +2456,7 @@ def _detect_dangerous_combinations(tags: Dict[str, str], policy: str) -> List[Di
             "level": "critical",
             "title": "Contradictory sp vs p policy",
             "text": (
-                "Stricter policy on subdomains than the root domain. Same contradiction -- "
+                "Stricter policy on subdomains than the root domain. Same contradiction: "
                 "the root domain is the easier target."
             ),
             "tags": ["sp", "p"],
@@ -2576,7 +2576,7 @@ def _detect_dangerous_combinations(tags: Dict[str, str], policy: str) -> List[Di
             "level": "advisory",
             "title": "Monitoring mode",
             "text": (
-                "Monitoring mode. Your domain is not protected against spoofing -- mail that fails "
+                "Monitoring mode. Your domain is not protected against spoofing. Mail that fails "
                 "authentication is still delivered to recipients. Your domain can be used to send "
                 "phishing or malware to your customers and partners, which can damage your sending "
                 "reputation and erode trust with the people you do business with. Review your aggregate "
@@ -2685,7 +2685,7 @@ def _calculate_dmarcbis_health(tags: Dict[str, str], policy: str, config_warning
             "color": "amber",
             "summary": (
                 "This domain is in monitoring mode. Mail that fails authentication is still "
-                "delivered -- your domain is not yet protected against spoofing. Review your "
+                "delivered: your domain is not yet protected against spoofing. Review your "
                 "reports and progress toward an enforcing policy."
             ),
             "reasons": ["p=none (monitoring only)"],

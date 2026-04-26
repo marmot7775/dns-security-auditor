@@ -2807,7 +2807,7 @@ def _raw_check_nameservers(domain: str) -> Dict[str, Any]:
             "error",
             "Only one nameserver configured",
             "A single nameserver is a single point of failure. If it goes down, "
-            "your entire domain becomes unreachable -- no website, no email, nothing. "
+            "your entire domain becomes unreachable: no website, no email, nothing. "
             "RFC 1034 requires at least two nameservers.",
             "Add at least one secondary nameserver, preferably on a different network.",
         )

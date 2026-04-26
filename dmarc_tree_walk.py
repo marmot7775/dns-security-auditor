@@ -220,7 +220,7 @@ def dmarc_tree_walk(domain: str) -> Dict[str, Any]:
                 collected_records.append(record_info)
                 step_entry["collected"] = True
                 if psd == "y":
-                    step_entry["note"] = "psd=y at walk start — continuing per spec"
+                    step_entry["note"] = "psd=y at walk start: continuing per spec"
 
         # Move up: remove left-most label
         current_labels = current_labels[1:]

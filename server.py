@@ -663,7 +663,7 @@ async def audit_pdf(
             data = run_full_audit(domain, dkim_selector=selector, scope=scope)
         except Exception as e:
             log.error("PDF audit failed for %s: %s", domain, str(e)[:200], exc_info=True)
-            raise HTTPException(status_code=500, detail="Audit failed -- cannot generate PDF")
+            raise HTTPException(status_code=500, detail="Audit failed: cannot generate PDF")
         elapsed = round(time.time() - start, 2)
         log.info("PDF audit complete: %s -- %.2fs", domain, elapsed)
         _set_cached(cache_key, data)
