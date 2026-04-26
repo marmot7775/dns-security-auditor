@@ -4190,7 +4190,7 @@ def run_full_audit(domain: str, dkim_selector: Optional[str] = None,
                 checks.append(_timeout_card("DMARC"))
         except Exception as e:
             log.warning("DMARC check failed: %s", e, exc_info=True)
-            errors.append(f"DMARC: {str(e)}")
+            errors.append("DMARC: check failed")
             if _should_include("dmarc", scope_set):
                 checks.append(_error_card("DMARC", e))
         _notify("DMARC")
@@ -5296,7 +5296,12 @@ def _timeout_card(name: str) -> Dict:
 
 
 def _error_card(name: str, error: Exception) -> Dict:
-    """Generate a card for a check that threw an exception."""
+    """Generate a card for a check that threw an exception.
+
+    The raw exception is intentionally NOT echoed to the user. Callers
+    already log it with exc_info=True; including str(error) here has
+    leaked filesystem paths and other server-side detail in the past.
+    """
     return {
         "name": name,
         "status": "fail",
@@ -5305,7 +5310,7 @@ def _error_card(name: str, error: Exception) -> Dict:
         "record": None,
         "explanation": f"An unexpected error occurred while running the {name} check. This may be a temporary DNS issue.",
         "details": [
-            {"type": "error", "text": f"Error: {str(error)[:200]}"},
+            {"type": "error", "text": f"The {name} check could not be completed. Please try again."},
         ],
         "fix": "Try running the audit again. If the issue persists, the DNS server may be unresponsive.",
     }
