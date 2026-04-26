@@ -847,26 +847,27 @@ def _raw_check_dmarc(domain: str) -> Dict[str, Any]:
                 elif key_clean == "ri":
                     _add_issue(
                         "info",
-                        "Tag 'ri' is not defined in dmarcbis-41",
-                        "The ri (report interval) tag is absent from the "
-                        "dmarcbis-41 §4.7 tag registry. dmarcbis-41 §C.5.2 "
-                        "(Tags Removed) only explicitly removes pct, so ri is "
-                        "not strictly forbidden, but receivers will ignore it. "
-                        "In practice receivers send aggregate reports on their "
-                        "own schedule regardless of ri.",
-                        "Editorial suggestion (not spec-required): remove the ri tag for tidiness.",
+                        "Deprecated tag: 'ri' (removed in dmarcbis-41 §C.5.2)",
+                        "dmarcbis-41 §C.5.2 (Tags Removed) explicitly lists "
+                        "ri among the tags removed from the protocol, so it "
+                        "is also absent from the §4.7 tag registry. Current "
+                        "RFC 7489 receivers may still honor ri, but dmarcbis-"
+                        "compliant receivers will ignore it; in practice "
+                        "receivers send aggregate reports on their own "
+                        "schedule regardless of ri.",
+                        "Remove the ri tag.",
                     )
                 elif key_clean == "rf":
                     _add_issue(
                         "info",
-                        "Tag 'rf' is not defined in dmarcbis-41",
-                        "The rf (report format) tag is absent from the "
-                        "dmarcbis-41 §4.7 tag registry. dmarcbis-41 §C.5.2 "
-                        "(Tags Removed) only explicitly removes pct, so rf is "
-                        "not strictly forbidden. In practice the only value "
-                        "ever defined was 'afrf', so the tag never carried "
-                        "useful information.",
-                        "Editorial suggestion (not spec-required): remove the rf tag for tidiness.",
+                        "Deprecated tag: 'rf' (removed in dmarcbis-41 §C.5.2)",
+                        "dmarcbis-41 §C.5.2 (Tags Removed) explicitly lists "
+                        "rf among the tags removed from the protocol, so it "
+                        "is also absent from the §4.7 tag registry. The only "
+                        "value ever defined was 'afrf', so the tag never "
+                        "carried useful information; dmarcbis-compliant "
+                        "receivers will ignore it.",
+                        "Remove the rf tag.",
                     )
 
             tags[key_clean] = value_clean
@@ -1661,11 +1662,14 @@ def _assess_dmarcbis_readiness(dmarc_result: Dict) -> Dict:
       - editorial:        our own recommendation, derived from
                           best-practice rather than spec text.
 
-    Rationale: the spec is silent on np-value-relative-to-p, on rf/ri
-    removal (only pct is explicitly removed in §C.5.2), and on
-    progression from p=none to enforcement. Calling those changes
-    "spec-required" misrepresents the draft. Editorial recommendations
-    are still useful; they're flagged so the reader can weigh them.
+    Rationale: dmarcbis-41 §C.5.2 (Tags Removed) explicitly lists
+    pct, rf, and ri as removed from the protocol, so all three are
+    spec_required removals. The spec is still silent on
+    np-value-relative-to-p and on progression from p=none to
+    enforcement, so those remain editorial. Calling editorial
+    advice "spec-required" misrepresents the draft, and calling
+    spec-mandated removals "editorial" understates them; both are
+    flagged so the reader can weigh them.
     """
     deprecated_tags = []
     record = dmarc_result.get("record", "")
@@ -1705,14 +1709,12 @@ def _assess_dmarcbis_readiness(dmarc_result: Dict) -> Dict:
         deprecated_tags.append({
             "tag": "rf",
             "value": tags_in_record["rf"],
-            "source": "editorial",
-            "spec_reference": None,
+            "source": "spec_required",
+            "spec_reference": "dmarcbis-41 §C.5.2",
             "recommendation": (
-                "Editorial recommendation: rf is not defined in the "
-                "dmarcbis-41 tag registry (§4.7), and only 'afrf' was ever "
-                "valid under RFC 7489. dmarcbis does not explicitly remove "
-                "the tag in §C.5.2, but receivers will ignore it. Removing "
-                "is a tidiness choice, not a spec requirement."
+                "Remove the rf tag. dmarcbis-41 §C.5.2 lists rf as "
+                "removed from the protocol. Receivers implementing "
+                "dmarcbis will ignore this tag."
             ),
         })
 
@@ -1720,15 +1722,12 @@ def _assess_dmarcbis_readiness(dmarc_result: Dict) -> Dict:
         deprecated_tags.append({
             "tag": "ri",
             "value": tags_in_record["ri"],
-            "source": "editorial",
-            "spec_reference": None,
+            "source": "spec_required",
+            "spec_reference": "dmarcbis-41 §C.5.2",
             "recommendation": (
-                "Editorial recommendation: ri is not defined in the "
-                "dmarcbis-41 tag registry (§4.7). dmarcbis does not "
-                "explicitly remove the tag in §C.5.2; in practice "
-                "receivers send aggregate reports on their own schedule "
-                "regardless of ri. Removing is a tidiness choice, not a "
-                "spec requirement."
+                "Remove the ri tag. dmarcbis-41 §C.5.2 lists ri as "
+                "removed from the protocol. Receivers implementing "
+                "dmarcbis will ignore this tag."
             ),
         })
 

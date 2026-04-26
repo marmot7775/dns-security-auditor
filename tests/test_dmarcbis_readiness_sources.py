@@ -1,13 +1,14 @@
 """Tests for the dmarcbis readiness recommendation source classification.
 
 The audit must distinguish:
-  - spec_required: explicitly mandated in dmarcbis-41 (e.g. pct removal,
-    §C.5.2 / §A.6).
+  - spec_required: explicitly mandated in dmarcbis-41 (e.g. removal
+    of pct, rf, and ri per §C.5.2; pct also covered in §A.6).
   - editorial: our own guidance not mandated by spec (e.g. np value
     relative to p, since dmarcbis-41 §4.7 is silent on this).
 
-This file pins those classifications so silent regressions to "spec
-says you must" framing can't slip back in.
+This file pins those classifications so silent regressions in either
+direction (treating spec mandates as editorial, or editorial advice
+as spec-mandated) can't slip back in.
 """
 import sys
 import os
@@ -80,19 +81,21 @@ def test_np_recommendation_for_p_none_is_editorial():
     assert np["spec_reference"] is None
 
 
-def test_rf_and_ri_recommendations_are_editorial():
-    """dmarcbis-41 §C.5.2 only lists pct as removed. rf and ri are
-    absent from the §4.7 tag registry but not explicitly removed,
-    so any "remove this" recommendation is editorial."""
+def test_rf_and_ri_recommendations_are_spec_required():
+    """dmarcbis-41 §C.5.2 (Tags Removed) explicitly lists pct, rf,
+    and ri as removed from the protocol. All three removals are
+    spec_required, with §C.5.2 as the citation."""
     out = _run("v=DMARC1; p=reject; rf=afrf; ri=86400")
 
     by_tag = {d["tag"]: d for d in out["deprecated_tags"]}
-    assert by_tag["rf"]["source"] == "editorial", (
-        f"dmarcbis-41 §C.5.2 does not remove rf -> editorial, got {by_tag['rf']['source']}"
+    assert by_tag["rf"]["source"] == "spec_required", (
+        f"dmarcbis-41 §C.5.2 removes rf -> spec_required, got {by_tag['rf']['source']}"
     )
-    assert by_tag["ri"]["source"] == "editorial"
-    assert by_tag["rf"]["spec_reference"] is None
-    assert by_tag["ri"]["spec_reference"] is None
+    assert by_tag["ri"]["source"] == "spec_required", (
+        f"dmarcbis-41 §C.5.2 removes ri -> spec_required, got {by_tag['ri']['source']}"
+    )
+    assert "C.5.2" in (by_tag["rf"]["spec_reference"] or "")
+    assert "C.5.2" in (by_tag["ri"]["spec_reference"] or "")
 
 
 def test_recommendations_list_flattens_with_source_field():

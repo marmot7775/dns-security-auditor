@@ -1143,9 +1143,9 @@ def _build_dmarcbis_card_data(readiness: Optional[Dict], record: Optional[str]) 
                 else:
                     reason = f"Removed pct (dmarcbis-41 §C.5.2 / §A.6); was {val}%. Use t=y for testing instead."
             elif tag_name == "rf":
-                reason = "Removed rf (editorial; not in dmarcbis-41 §4.7 tag registry; only afrf was ever supported)."
+                reason = "Removed rf (dmarcbis-41 §C.5.2); only afrf was ever defined and dmarcbis receivers will ignore the tag."
             elif tag_name == "ri":
-                reason = "Removed ri (editorial; not in dmarcbis-41 §4.7 tag registry; receivers send reports on their own schedule)."
+                reason = "Removed ri (dmarcbis-41 §C.5.2); receivers send aggregate reports on their own schedule and dmarcbis receivers will ignore the tag."
             else:
                 reason = f"Removed {tag_name}."
             changes.append({
