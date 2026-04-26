@@ -4952,12 +4952,20 @@ def transform_dnssec(raw: Dict, domain: str = "") -> Dict:
     else:
         verdict = "DNS records cryptographically signed"
 
+    # signed_unanchored: DNSKEY published but no DS at parent. Effectively
+    # insecure for end users behind validating resolvers, so render with
+    # warn status and a distinct pill — never green.
+    if dnssec_state == "signed_unanchored":
+        verdict = "DNSKEY published but unanchored (no DS at parent)"
+
     # Downgrade status if issues exist. AD-bit corroboration keeps the
     # DNSSEC card at "pass" even when DS isn't directly observable.
     if any(a.get("deprecated") for a in algorithms):
         status = "fail"
     elif chain_valid is False:
         status = "fail"
+    elif dnssec_state == "signed_unanchored":
+        status = "warn"
     elif not has_ds and not validated_by_resolver:
         status = "warn"
 
@@ -4965,7 +4973,7 @@ def transform_dnssec(raw: Dict, domain: str = "") -> Dict:
     if not fix and not has_ds and not validated_by_resolver:
         fix = "Add a DS record at your domain registrar to complete the DNSSEC chain of trust."
 
-    return {
+    result = {
         "name": "DNSSEC",
         "status": status,
         "verdict": verdict,
@@ -4981,6 +4989,9 @@ def transform_dnssec(raw: Dict, domain: str = "") -> Dict:
         "fix_records": None,
         "ttl_info": format_ttl(raw.get("ttl")),
     }
+    if dnssec_state == "signed_unanchored":
+        result["pill_label"] = "Signed but unanchored"
+    return result
 
 
 # ============================================================

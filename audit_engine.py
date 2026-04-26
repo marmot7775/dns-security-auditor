@@ -2425,6 +2425,22 @@ def _raw_check_dnssec(domain: str) -> Dict[str, Any]:
       - RFC 4035 (DNSSEC Protocol Modifications)
       - RFC 8624 (Algorithm Implementation Requirements)
       - NIST SP 800-81-2 (Secure DNS Deployment Guide)
+
+    dnssec_state values (machine-readable four-state classification):
+      secure            = signed AND anchored. Validators can verify via
+                          the global trust chain (DNSKEY present + DS at
+                          parent).
+      signed_unanchored = DNSKEY present but no DS at parent. Validators
+                          cannot anchor; effectively insecure for end
+                          users behind validating resolvers, but signals
+                          operator intent to deploy DNSSEC. Often a
+                          transient state during initial deployment or
+                          post-rollover.
+      insecure          = unsigned. No DNSSEC deployed. Most domains.
+      bogus             = signed but signatures fail validation.
+                          SERVFAIL territory. Worse than insecure because
+                          validating resolvers refuse to resolve the
+                          domain.
     """
     # Algorithm names per IANA registry
     DNSSEC_ALGORITHMS = {
@@ -2458,6 +2474,10 @@ def _raw_check_dnssec(domain: str) -> Dict[str, Any]:
     # once after the DNSKEY block, instead of duplicating the call across
     # several exception handlers.
     should_probe_bogus = False
+    # Bogus is tracked separately so the four-state classification can be
+    # computed at the end of the function from the boolean flags rather
+    # than assigned imperatively in different branches.
+    is_bogus = False
 
     def _add_issue(severity, issue, plain_english, fix):
         result["issues"].append({
@@ -2595,7 +2615,7 @@ def _raw_check_dnssec(domain: str) -> Dict[str, Any]:
     # DNSSEC mode) return SERVFAIL, making the domain unresolvable for
     # users behind those resolvers.
     if should_probe_bogus and _probe_dnssec_bogus(domain):
-        result["dnssec_state"] = "bogus"
+        is_bogus = True
         _add_issue(
             "error",
             "DNSSEC validation failure (BOGUS state)",
@@ -2803,11 +2823,23 @@ def _raw_check_dnssec(domain: str) -> Dict[str, Any]:
             log.debug("DNSSEC chain verification error: %s", e)
             result["chain_valid"] = None
 
-    # Tri-state finalization: if DNSKEY came back, the zone is signed —
-    # call it "secure". Bogus is set above only when DNSKEY failed AND
-    # the probe confirmed validation failure; that decision wins.
-    if result["has_dnssec"] and result["dnssec_state"] != "bogus":
+    # Four-state finalization: compute dnssec_state from the boolean flags
+    # in priority order. See the function docstring for definitions.
+    #   1. bogus              — probe confirmed validation failure
+    #   2. insecure           — no DNSKEY observed
+    #   3. secure             — DNSKEY present AND DS at parent
+    #   4. signed_unanchored  — DNSKEY present but no DS at parent
+    # Bogus takes priority over has_ds presence: a bogus zone may have
+    # an orphaned DS at the parent, but the bogus signal is strictly
+    # more informative for downstream consumers.
+    if is_bogus:
+        result["dnssec_state"] = "bogus"
+    elif not result["has_dnssec"]:
+        result["dnssec_state"] = "insecure"
+    elif result["has_ds"]:
         result["dnssec_state"] = "secure"
+    else:
+        result["dnssec_state"] = "signed_unanchored"
 
     # Set final status
     severities = [i["severity"] for i in result["issues"]]

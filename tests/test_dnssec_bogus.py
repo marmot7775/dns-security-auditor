@@ -1,9 +1,13 @@
-"""Tests for DNSSEC tri-state classification (secure/insecure/bogus).
+"""Tests for DNSSEC four-state classification.
 
-Covers the three scenarios the bogus probe must distinguish:
+States: secure, signed_unanchored, insecure, bogus.
+
+Covers:
   (a) DNSKEY query fails AND probe finds SERVFAIL/NOERROR mismatch -> bogus.
   (b) DNSKEY query fails AND probe sees consistent answers -> insecure.
-  (c) DNSKEY query succeeds -> secure.
+  (c) DNSKEY succeeds AND DS found at parent -> secure.
+  (d) DNSKEY succeeds AND DS absent at parent -> signed_unanchored.
+  (e) Bogus signal takes priority over has_ds presence.
 
 Probe internals are exercised directly: dns.query.udp is patched to dispatch
 by destination IP, so 9.9.9.9 (validating) and 8.8.4.4 (unvalidating) can
@@ -131,6 +135,91 @@ def test_secure_state_for_signed_zone():
 
     assert result["has_dnssec"] is True
     assert result["dnssec_state"] == "secure"
+
+
+def test_signed_unanchored_state_when_dnskey_present_but_no_ds():
+    """DNSKEY succeeds + DS absent at parent -> dnssec_state=signed_unanchored.
+
+    Mocks: DNSKEY resolves; DS (Method 1) raises NoAnswer; parent NS
+    lookup (Method 2) raises so the parent-NS path is a no-op. The bogus
+    probe must NOT be reachable when DNSKEY succeeded.
+    """
+    dnskey = _FakeAnswer([_FakeRdata(13)], ad_flag=False)
+
+    resolver = MagicMock()
+
+    def _resolve(name, qtype):
+        if qtype == "DNSKEY":
+            return dnskey
+        if qtype == "DS":
+            raise dns.resolver.NoAnswer()
+        if qtype == "NS":
+            raise dns.exception.DNSException("NS lookup blocked")
+        if qtype == "A":
+            raise dns.exception.DNSException("A lookup blocked")
+        raise dns.exception.DNSException(f"unexpected qtype {qtype}")
+
+    resolver.resolve.side_effect = _resolve
+
+    with patch.object(audit_engine, "_get_dnssec_resolver", return_value=resolver), \
+         patch("dns.query.udp", side_effect=dns.exception.DNSException("udp blocked")), \
+         patch("dns.query.tcp", side_effect=dns.exception.DNSException("tcp blocked")), \
+         patch("audit_engine._lookup_ttl", return_value=None):
+        result = audit_engine._raw_check_dnssec("unanchored.example")
+
+    assert result["has_dnssec"] is True
+    assert result["has_ds"] is False
+    assert result["dnssec_state"] == "signed_unanchored"
+
+    # Existing "no DS at parent" warning must still fire (state for
+    # machines, issue for humans — both should coexist).
+    warnings = [i for i in result["issues"]
+                if i.get("severity") == "warning"
+                and "no ds record found at parent" in i.get("issue", "").lower()]
+    assert warnings, (
+        f"signed_unanchored must still surface the 'no DS at parent' warning. "
+        f"Got: {result['issues']}"
+    )
+
+
+def test_bogus_takes_priority_over_has_ds():
+    """is_bogus=True wins even when DS would otherwise be observable.
+
+    A bogus zone may technically have DS at the parent (orphaned,
+    mismatched key tag, etc.). The bogus signal is strictly more
+    informative, so dnssec_state must resolve to 'bogus' regardless of
+    has_ds. Forced via mocking: DNSKEY raises (so the bogus probe runs),
+    the probe returns True, and DS Method 1 returns records.
+    """
+    resolver = MagicMock()
+    ds = _FakeAnswer([_FakeRdata(13)])
+
+    def _resolve(name, qtype):
+        if qtype == "DNSKEY":
+            raise dns.resolver.NoAnswer()
+        if qtype == "DS":
+            return ds
+        if qtype == "NS":
+            raise dns.exception.DNSException("not exercised")
+        raise dns.exception.DNSException(f"unexpected qtype {qtype}")
+
+    resolver.resolve.side_effect = _resolve
+
+    udp = _make_udp_dispatcher(
+        validating_response=_make_response(dns.rcode.SERVFAIL, 0),
+        unvalidating_response=_make_response(dns.rcode.NOERROR, 1),
+    )
+
+    with patch.object(audit_engine, "_get_dnssec_resolver", return_value=resolver), \
+         patch("dns.query.udp", side_effect=udp), \
+         patch("dns.query.tcp", side_effect=dns.exception.DNSException("tcp blocked")), \
+         patch("audit_engine._lookup_ttl", return_value=None):
+        result = audit_engine._raw_check_dnssec("bogus-with-ds.example")
+
+    assert result["has_ds"] is True
+    assert result["dnssec_state"] == "bogus", (
+        f"bogus must take priority over has_ds. Got state={result['dnssec_state']}"
+    )
 
 
 def test_probe_returns_false_on_validating_resolver_exception():
