@@ -62,6 +62,13 @@ log = logging.getLogger("dns-auditor")
 
 # Rotating error log -- directory is configurable via LOG_DIR env var
 _log_dir = Path(LOG_DIR)
+
+# Audit logger (GDPR-safe -- no IP, no geolocation). Configured below once
+# the log directory is known to exist.
+audit_logger = logging.getLogger("dns-auditor.audit")
+audit_logger.propagate = False  # don't double-log to root
+audit_logger.setLevel(logging.INFO)
+
 try:
     _log_dir.mkdir(parents=True, exist_ok=True)
     error_file_handler = logging.handlers.RotatingFileHandler(
@@ -74,6 +81,19 @@ try:
         '%(asctime)s %(levelname)s %(message)s'
     ))
     log.addHandler(error_file_handler)
+
+    # Audit log: rotating, JSON-lines. Uses the logger's internal lock for
+    # thread safety. Note: with multiple uvicorn workers, RotatingFileHandler
+    # can still race during rotation (both processes may rename). Acceptable
+    # at this scale; use ConcurrentLogHandler if strict correctness is needed.
+    audit_handler = logging.handlers.RotatingFileHandler(
+        str(_log_dir / "audit.log"),
+        maxBytes=10_000_000,
+        backupCount=10,
+    )
+    audit_handler.setLevel(logging.INFO)
+    audit_handler.setFormatter(logging.Formatter("%(message)s"))
+    audit_logger.addHandler(audit_handler)
 except PermissionError:
     log.warning("Cannot create log directory %s -- file logging disabled", _log_dir)
 
@@ -81,10 +101,6 @@ except PermissionError:
 # ============================================================
 # Audit log (GDPR-safe -- no IP, no geolocation)
 # ============================================================
-
-AUDIT_LOG_PATH = Path(__file__).parent / "audit.log"
-_audit_log_lock = threading.Lock()
-
 
 def _log_audit(request: Request, domain: str, scope: str, grade: str,
                duration: float, checks: int, source: str = "web"):
@@ -106,9 +122,7 @@ def _log_audit(request: Request, domain: str, scope: str, grade: str,
         "source": source,
     }
     try:
-        with _audit_log_lock:
-            with open(AUDIT_LOG_PATH, "a") as f:
-                f.write(json.dumps(entry) + "\n")
+        audit_logger.info(json.dumps(entry))
     except Exception as e:
         log.warning("Audit log write failed: %s", e)
 
@@ -463,6 +477,7 @@ async def audit_stream(
     scope: Optional[str] = Query(None, description="Audit scope"),
 ):
     """Stream audit progress via Server-Sent Events."""
+    global _active_audits
     client_ip = _get_client_ip(request)
 
     # Capacity peek BEFORE rate-limit check: if the server is at the concurrent
@@ -506,7 +521,6 @@ async def audit_stream(
         return StreamingResponse(_preflight_error(), media_type="text/event-stream")
 
     # Reserve a concurrent-audit slot atomically (DoS protection)
-    global _active_audits
     with _active_audits_lock:
         if _active_audits >= _MAX_CONCURRENT_AUDITS:
             async def _busy_error():
