@@ -25,7 +25,7 @@
 - When editing static/privacy.html body content, update the "Last updated" date in the same commit.
 
 ## Architecture
-- API: /api/audit (JSON), /api/audit/stream (SSE), /api/audit/pdf
+- API: /api/audit (JSON), /api/audit/stream (SSE), /api/audit/{domain}/pdf
 - 6 audit scopes: complete, email_full, dmarc, transport, dns_infra, security_scan
 - Server-side scope filtering skips unneeded checks
 - Cache key format: "domain:selector:scope" (5 min TTL)

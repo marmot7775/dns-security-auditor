@@ -20,7 +20,7 @@ If you discover a security vulnerability in dns-security-auditor, please report 
 **Scope:**
 - The dns-security-auditor codebase
 - The dns-audit.com web application
-- DNS record parsing and scoring logic
+- DNS record parsing logic
 
 **Out of scope:**
 - Third-party services (Cloudflare, crt.sh)

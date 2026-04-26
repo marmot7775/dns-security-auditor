@@ -1,10 +1,10 @@
 """
 DNS Security Auditor - FastAPI Server
 ======================================
-GET  /api/audit?domain=example.com  -- run full audit
-GET  /api/audit/pdf?domain=...      -- download PDF report
+GET  /api/audit?domain=example.com   -- run full audit (JSON)
+GET  /api/audit/stream?domain=...    -- audit progress (SSE)
+GET  /api/audit/{domain}/pdf         -- download PDF report
 GET  /api/health                     -- health check
-GET  /docs                           -- interactive API docs
 GET  /                               -- serve frontend
 GET  /static/*                       -- serve static assets
 
