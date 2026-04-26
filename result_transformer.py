@@ -4779,14 +4779,49 @@ def transform_bimi(raw: Dict, domain: str, has_mx: bool = True) -> Dict:
 # DNSSEC
 # ============================================================
 
-def transform_dnssec(raw: Dict) -> Dict:
+def transform_dnssec(raw: Dict, domain: str = "") -> Dict:
     has_dnssec = raw.get("has_dnssec", False)
+    dnssec_state = raw.get("dnssec_state", "insecure")
     algorithms = raw.get("algorithms", [])
     key_count = raw.get("key_count", 0)
     has_ds = raw.get("has_ds", False)
     validated_by_resolver = raw.get("validated_by_resolver", False)
     issues = raw.get("issues", [])
     status = _map_status(raw.get("status", "ok"))
+
+    # Bogus state: DNSSEC is configured but signatures fail validation.
+    # This is an availability issue, not just a security one — render it
+    # with a fail status and a clear, actionable fix.
+    if dnssec_state == "bogus":
+        details = []
+        for issue in issues:
+            details.append(_issue_to_detail(issue))
+        bogus_fix = (
+            f"Run 'delv {domain}' locally for a chain analysis, or open "
+            f"<a href=\"https://dnsviz.net/d/{domain}/dnssec/\" target=\"_blank\" rel=\"noopener\">"
+            f"https://dnsviz.net/d/{domain}/dnssec/</a> in a browser. "
+            f"If a key rollover is in progress, coordinate with your registrar "
+            f"to update the DS record at the parent zone."
+        )
+        return {
+            "name": "DNSSEC",
+            "status": "fail",
+            "pill_label": "Bogus",
+            "verdict": "DNSSEC validation failure (zone is bogus)",
+            "record": None,
+            "explanation": (
+                "DNSSEC is configured but its signatures fail to validate. "
+                "Validating resolvers (Cloudflare 1.1.1.1, Quad9 9.9.9.9, "
+                "Google 8.8.8.8 in DNSSEC mode) return SERVFAIL for this "
+                "domain, so users behind those resolvers cannot reach it. "
+                "Common causes: expired RRSIGs, an orphaned DS record at the "
+                "parent after a key rollover, or a KSK/ZSK mismatch."
+            ),
+            "details": details,
+            "fix": bogus_fix,
+            "fix_records": None,
+            "ttl_info": format_ttl(raw.get("ttl")),
+        }
 
     if not has_dnssec:
         details = [

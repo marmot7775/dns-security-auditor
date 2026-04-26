@@ -59,6 +59,7 @@ import dns.query
 import dns.rdatatype
 import dns.dnssec
 import dns.name
+import dns.rcode
 
 
 def _is_private_ip(ip_str: str) -> bool:
@@ -2094,6 +2095,68 @@ def _raw_check_spf(domain: str) -> Dict[str, Any]:
     return result
 
 
+def _probe_dnssec_bogus(domain: str) -> bool:
+    """Probe whether a zone is in BOGUS DNSSEC state.
+
+    A zone is bogus when its signatures fail validation. Validating
+    resolvers return SERVFAIL while unvalidating paths see normal
+    answers. Causes include expired RRSIGs, orphaned DS at the parent
+    after a key rollover, and KSK/ZSK mismatch.
+
+    Returns True only when both:
+      - A query (with SOA fallback if A returns NXDOMAIN) sent to a
+        strict validating resolver (Quad9 9.9.9.9, DO=1) yields SERVFAIL.
+      - The same query sent with CD=1 (checking disabled) to 8.8.4.4
+        yields NOERROR with at least one answer record.
+
+    Any other outcome — including timeouts, exceptions, or one resolver
+    disagreeing with the other — returns False. The probe fails closed
+    so that ambiguous evidence cannot produce a false positive.
+    """
+    VALIDATING_NS = "9.9.9.9"
+    UNVALIDATING_NS = "8.8.4.4"
+    TIMEOUT = 6.0
+
+    def _ask(ns_ip: str, qtype: str, *, want_dnssec: bool, checking_disabled: bool):
+        try:
+            q = dns.message.make_query(domain, qtype, want_dnssec=want_dnssec)
+            if checking_disabled:
+                # CD=1 disables validation at recursive resolvers that
+                # otherwise validate by default (e.g. Google 8.8.x.x).
+                # Without this we can't distinguish bogus from unsigned.
+                q.flags |= dns.flags.CD
+            resp = dns.query.udp(q, ns_ip, timeout=TIMEOUT)
+            return resp.rcode(), len(resp.answer)
+        except (dns.exception.DNSException, OSError):
+            return None
+
+    try:
+        # Validating path: A first, fall back to SOA on NXDOMAIN.
+        v = _ask(VALIDATING_NS, "A", want_dnssec=True, checking_disabled=False)
+        if v is None:
+            return False
+        v_rcode, _ = v
+        probe_qtype = "A"
+        if v_rcode == dns.rcode.NXDOMAIN:
+            v = _ask(VALIDATING_NS, "SOA", want_dnssec=True, checking_disabled=False)
+            if v is None:
+                return False
+            v_rcode, _ = v
+            probe_qtype = "SOA"
+
+        if v_rcode != dns.rcode.SERVFAIL:
+            return False
+
+        # Unvalidating path: same qtype, CD=1.
+        u = _ask(UNVALIDATING_NS, probe_qtype, want_dnssec=False, checking_disabled=True)
+        if u is None:
+            return False
+        u_rcode, u_count = u
+        return u_rcode == dns.rcode.NOERROR and u_count > 0
+    except Exception:
+        return False
+
+
 def _raw_check_dnssec(domain: str) -> Dict[str, Any]:
     """Check DNSSEC configuration including algorithms and chain validation hints.
 
@@ -2121,6 +2184,7 @@ def _raw_check_dnssec(domain: str) -> Dict[str, Any]:
 
     result = {
         "has_dnssec": False,
+        "dnssec_state": "insecure",
         "algorithms": [],
         "key_count": 0,
         "has_ds": False,
@@ -2129,6 +2193,10 @@ def _raw_check_dnssec(domain: str) -> Dict[str, Any]:
         "issues": [],
         "status": "ok",
     }
+    # Track whether the DNSKEY query failed so we can run the bogus probe
+    # once after the DNSKEY block, instead of duplicating the call across
+    # several exception handlers.
+    should_probe_bogus = False
 
     def _add_issue(severity, issue, plain_english, fix):
         result["issues"].append({
@@ -2185,8 +2253,10 @@ def _raw_check_dnssec(domain: str) -> Dict[str, Any]:
                 )
     except dns.resolver.NoAnswer:
         result["has_dnssec"] = False
+        should_probe_bogus = True
     except dns.resolver.NXDOMAIN:
         result["has_dnssec"] = False
+        should_probe_bogus = True
         _add_issue(
             "error",
             "Domain does not exist (NXDOMAIN)",
@@ -2237,6 +2307,7 @@ def _raw_check_dnssec(domain: str) -> Dict[str, Any]:
                     )
         except dns.exception.DNSException:
             result["has_dnssec"] = False
+            should_probe_bogus = True
             _add_issue(
                 "warning",
                 "DNSSEC check timed out",
@@ -2247,12 +2318,36 @@ def _raw_check_dnssec(domain: str) -> Dict[str, Any]:
             )
     except dns.exception.DNSException as e:
         result["has_dnssec"] = False
+        should_probe_bogus = True
         _add_issue(
             "warning",
             f"DNSSEC check error: {type(e).__name__}",
             f"Could not determine DNSSEC status due to a resolver error. "
             "This may be a transient issue, not proof that DNSSEC is absent.",
             "Retry or verify manually with 'delv' or 'dig +dnssec DNSKEY <domain>'.",
+        )
+
+    # Bogus-state probe: when DNSKEY didn't return data, distinguish a
+    # zone that's unsigned (normal for most domains) from one whose
+    # signatures fail validation. Bogus is worse than unsigned: validating
+    # resolvers (Cloudflare 1.1.1.1, Quad9 9.9.9.9, Google 8.8.8.8 in
+    # DNSSEC mode) return SERVFAIL, making the domain unresolvable for
+    # users behind those resolvers.
+    if should_probe_bogus and _probe_dnssec_bogus(domain):
+        result["dnssec_state"] = "bogus"
+        _add_issue(
+            "error",
+            "DNSSEC validation failure (BOGUS state)",
+            "DNSSEC is configured but signatures fail to validate. Validating "
+            "resolvers (Cloudflare 1.1.1.1, Quad9 9.9.9.9, Google 8.8.8.8 in "
+            "DNSSEC mode) will return SERVFAIL for this domain, making it "
+            "unresolvable for users behind those resolvers. Common causes: "
+            "expired RRSIGs, orphaned DS record at parent after a key "
+            "rollover, or KSK/ZSK mismatch.",
+            "Run 'delv " + domain + "' locally for a chain analysis, or open "
+            "https://dnsviz.net/d/" + domain + "/dnssec/ in a browser. If a "
+            "key rollover is in progress, coordinate with your registrar to "
+            "update the DS record at the parent zone.",
         )
 
     # Check DS records at the parent (proves the chain is anchored)
@@ -2446,6 +2541,12 @@ def _raw_check_dnssec(domain: str) -> Dict[str, Any]:
         except Exception as e:
             log.debug("DNSSEC chain verification error: %s", e)
             result["chain_valid"] = None
+
+    # Tri-state finalization: if DNSKEY came back, the zone is signed —
+    # call it "secure". Bogus is set above only when DNSKEY failed AND
+    # the probe confirmed validation failure; that decision wins.
+    if result["has_dnssec"] and result["dnssec_state"] != "bogus":
+        result["dnssec_state"] = "secure"
 
     # Set final status
     severities = [i["severity"] for i in result["issues"]]
@@ -3798,7 +3899,7 @@ def run_full_audit(domain: str, dkim_selector: Optional[str] = None,
     if _should_include("dnssec", scope_set):
         _parallel_checks.append(("dnssec",
             lambda: _raw_check_dnssec(domain),
-            lambda raw: transform_dnssec(raw),
+            lambda raw: transform_dnssec(raw, domain),
             "DNSSEC"))
 
     if _should_include("caa", scope_set):
@@ -4136,7 +4237,7 @@ def run_full_audit(domain: str, dkim_selector: Optional[str] = None,
     # --- Priority Fixes ---
     raw_mx = raw_results.get("mx", {})
     has_mx = bool(raw_mx.get("records")) or bool(raw_mx.get("mx_details"))
-    priority_fixes = _build_priority_fixes(checks, score_result, has_mx=has_mx)
+    priority_fixes = _build_priority_fixes(checks, score_result, raw_results, has_mx=has_mx)
     _notify("Scoring")
 
     # --- Anomaly Detection ("What's Unusual") ---
@@ -4798,19 +4899,34 @@ def _build_resilience_analysis(
 # Priority Fixes
 # ============================================================
 
-def _build_priority_fixes(checks: List[Dict], score_result: Dict, has_mx: bool = True) -> List[str]:
+def _build_priority_fixes(checks: List[Dict], score_result: Dict, raw_results: Dict = None, has_mx: bool = True) -> List[str]:
     """
     Build prioritized fix list from check results and scorer recommendations.
     Maximum 5 items, ordered by severity. Deduplicates by check name.
 
     For non-mail domains (has_mx=False), skip email-infrastructure fixes
     since they're not applicable.
+
+    BOGUS DNSSEC sorts to the very top: it's an availability issue
+    (validating resolvers return SERVFAIL), not just a security one.
     """
     # Checks that only matter for mail-sending domains
     MAIL_ONLY_CHECKS = {"SPF", "MX Records", "MX", "MTA-STS", "TLS-RPT", "DKIM", "BIMI", "DANE"}
 
     fixes = []
     covered_checks = set()
+
+    # BOGUS DNSSEC: prepend before anything else. The domain is unresolvable
+    # for validating-resolver users, so this dwarfs other findings.
+    if raw_results and raw_results.get("dnssec", {}).get("dnssec_state") == "bogus":
+        for check in checks:
+            if check.get("name") == "DNSSEC" and check.get("fix"):
+                bogus_text = re.sub(r'<[^>]+>', '', check["fix"])
+                bogus_text = re.sub(r'\s+', ' ', bogus_text).strip()
+                if bogus_text:
+                    fixes.append(bogus_text)
+                    covered_checks.add("DNSSEC")
+                break
 
     # Scorer recommendations (already prioritized and more actionable)
     scorer_recs = score_result.get("recommendations", [])
