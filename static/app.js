@@ -575,7 +575,7 @@ function renderResults(data) {
     // Grade color-coding
     const gradeCard = document.querySelector('.grade-card');
     const gradeEl = document.getElementById('summary-grade');
-    const grade = data.score?.grade || '--';
+    const grade = data.score?.grade || '?';
     const isDefensive = data.defensive_dns;
 
     // Clear previous animation classes
@@ -3282,7 +3282,7 @@ function _buildShareSummary() {
     const d = lastAuditData;
     if (!d) return '';
     const domain = d.domain || '';
-    const grade = d.score?.grade || '--';
+    const grade = d.score?.grade || '?';
     const score = Math.round(d.score?.total || 0);
     const checks = d.checks || [];
     const passCount = checks.filter(c => c.status === 'pass').length;
