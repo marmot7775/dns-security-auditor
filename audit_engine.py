@@ -1500,16 +1500,8 @@ def _validate_dmarc_strict(record: str, dmarc_records_count: int = 1) -> Dict:
 
         uris = val.split(",")
         all_valid = True
-        for i, uri in enumerate(uris):
-            raw_uri = uri
+        for uri in uris:
             uri_stripped = uri.strip()
-
-            # Check for space before comma (in the raw value, not stripped)
-            if i > 0 and raw_uri != raw_uri.lstrip():
-                pass  # space after comma is just a warn
-            if i < len(uris) - 1:
-                # Check if there's a space before the comma in the original
-                pass
 
             if not uri_stripped.startswith("mailto:"):
                 _add("uri_validation", "URI_NO_MAILTO", "fail",
@@ -1524,17 +1516,6 @@ def _validate_dmarc_strict(record: str, dmarc_records_count: int = 1) -> Dict:
                     _add("uri_validation", "URI_BAD_EMAIL", "fail",
                          f"{tag_name} contains invalid email address in URI: {uri_stripped}")
                     all_valid = False
-
-        # Check for whitespace before commas in the raw value
-        if "," in val and re.search(r'\s,', val):
-            _add("uri_validation", "URI_WHITESPACE", "fail",
-                 f"Space in {tag_name} URI list breaks strict parsing. "
-                 "Remove spaces before commas.")
-            all_valid = False
-        elif "," in val and re.search(r',\s', val):
-            _add("uri_validation", "URI_SPACE_AFTER_COMMA", "warn",
-                 f"Space after comma in {tag_name} URI list. "
-                 "DMARCbis recommends no spaces in URI lists.")
 
         if all_valid:
             uri_count = len(uris)
