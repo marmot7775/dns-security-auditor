@@ -3632,6 +3632,7 @@ def _raw_check_ct_uncached(domain: str, raw_results: Dict[str, Any]) -> Dict[str
             params={"q": f"%.{domain}", "output": "json"},
             timeout=10,
             headers={"User-Agent": "dns-audit.com/1.0"},
+            allow_redirects=False,
         )
         resp.raise_for_status()
         if len(resp.content) > 10 * 1024 * 1024:  # 10 MB hard limit
