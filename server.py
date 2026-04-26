@@ -463,8 +463,17 @@ async def audit_stream(
     scope: Optional[str] = Query(None, description="Audit scope"),
 ):
     """Stream audit progress via Server-Sent Events."""
-    # Rate limiting
     client_ip = _get_client_ip(request)
+
+    # Capacity peek BEFORE rate-limit check: if the server is at the concurrent
+    # cap, reject without consuming a per-IP rate-limit slot. Otherwise an
+    # attacker who pins the cap can drain rate-limit slots faster than honest
+    # users. The actual reservation is still atomic below.
+    if _active_audits >= _MAX_CONCURRENT_AUDITS:
+        async def _busy_error():
+            yield f"data: {json.dumps({'error': 'Server is busy. Please try again in a moment.'})}\n\n"
+        return StreamingResponse(_busy_error(), media_type="text/event-stream")
+
     if not _check_rate_limit(client_ip):
         async def _rate_error():
             yield f"data: {json.dumps({'error': 'Rate limit exceeded. Please wait a minute before trying again.'})}\n\n"
