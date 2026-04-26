@@ -229,10 +229,14 @@ def _check_rate_limit(client_ip: str) -> bool:
             ]
             for ip in stale:
                 _rate_limits.pop(ip, None)
-            # If still too large, drop oldest half
+            # If still too large, drop the half with the oldest last-seen timestamps
             if len(_rate_limits) > _RATE_LIMIT_MAX_IPS:
-                to_drop = list(_rate_limits.keys())[:len(_rate_limits) // 2]
-                for ip in to_drop:
+                sorted_ips = sorted(
+                    _rate_limits.items(),
+                    key=lambda kv: max(kv[1]) if kv[1] else 0,
+                )
+                drop_count = len(_rate_limits) // 2
+                for ip, _ in sorted_ips[:drop_count]:
                     _rate_limits.pop(ip, None)
 
         # Prune old timestamps
