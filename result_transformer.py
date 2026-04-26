@@ -1034,21 +1034,26 @@ def _build_dmarcbis_card_data(readiness: Optional[Dict], record: Optional[str]) 
         "detail": None,
     })
 
-    # 2. No deprecated tags (pct, rf, ri)
+    # 2. No deprecated tags (pct, rf, ri). Each entry passes through its
+    # source / spec_reference so the frontend can render spec-required
+    # findings differently from editorial suggestions.
     dep_names = [d["tag"] for d in deprecated]
     if dep_names:
-        dep_reasons = {
-            "pct": "Replaced by t=y/t=n for testing; remove pct entirely",
-            "rf": "Only afrf was ever supported, making this tag redundant",
-            "ri": "No longer respected; receivers send reports daily",
-        }
         dep_details = [
-            {"tag": d["tag"], "reason": dep_reasons.get(d["tag"], "Deprecated in DMARCbis")}
+            {
+                "tag": d["tag"],
+                "reason": d.get("recommendation", ""),
+                "source": d.get("source", "editorial"),
+                "spec_reference": d.get("spec_reference"),
+            }
             for d in deprecated
         ]
+        # Worst-case status across deprecated entries: spec_required
+        # is rendered as "warn" (a real issue), editorial as "info".
+        checklist_status = "warn" if any(d.get("source") == "spec_required" for d in deprecated) else "info"
         checklist.append({
             "label": "No deprecated tags (pct, rf, ri)",
-            "status": "warn",
+            "status": checklist_status,
             "detail": ", ".join(dep_names),
             "deprecated_details": dep_details,
         })
@@ -1087,11 +1092,17 @@ def _build_dmarcbis_card_data(readiness: Optional[Dict], record: Optional[str]) 
         fallback_val = sp_val if sp_val else p_val
         checklist.append({
             "label": "NP policy defined (non-existent domains)",
-            "status": "warn",
+            # np absence is editorial: dmarcbis-41 §4.7 does not require
+            # an explicit np tag. Render as info so the user sees this
+            # as advice rather than a spec violation.
+            "status": "info",
             "detail": "missing",
             "suggestion": f"np={fallback_val}",
             "np_chain": np_chain,
             "np_fallback_note": f"Non-existent subdomains currently fall back to {fallback_tag}={fallback_val}",
+            "source": np_info.get("source", "editorial"),
+            "spec_reference": np_info.get("spec_reference"),
+            "recommendation": np_info.get("recommendation"),
         })
 
     # 4. PSD indicator declared
@@ -1124,25 +1135,41 @@ def _build_dmarcbis_card_data(readiness: Optional[Dict], record: Optional[str]) 
         tag_name = dep["tag"]
         if tag_name in new_record_tags:
             val = new_record_tags.pop(tag_name)
-            reason = f"{tag_name} tag is deprecated in DMARCbis"
+            source = dep.get("source", "editorial")
+            spec_ref = dep.get("spec_reference")
             if tag_name == "pct":
                 if val == "100":
-                    reason += "; value was already 100 (default)"
+                    reason = "Removed pct (dmarcbis-41 §C.5.2 / §A.6); value was already 100 (default)."
                 else:
-                    reason += f"; was {val}%. Use t=y for testing instead"
+                    reason = f"Removed pct (dmarcbis-41 §C.5.2 / §A.6); was {val}%. Use t=y for testing instead."
             elif tag_name == "rf":
-                reason += "; only afrf was ever supported"
+                reason = "Removed rf (editorial; not in dmarcbis-41 §4.7 tag registry; only afrf was ever supported)."
             elif tag_name == "ri":
-                reason += "; reports are now sent daily"
-            changes.append({"type": "removed", "tag": tag_name, "reason": reason})
+                reason = "Removed ri (editorial; not in dmarcbis-41 §4.7 tag registry; receivers send reports on their own schedule)."
+            else:
+                reason = f"Removed {tag_name}."
+            changes.append({
+                "type": "removed",
+                "tag": tag_name,
+                "reason": reason,
+                "source": source,
+                "spec_reference": spec_ref,
+            })
 
     if not np_info.get("present"):
-        np_source = "sp" if "sp" in new_record_tags else "p"
-        np_value = new_record_tags.get(np_source, "none")
+        np_src_tag = "sp" if "sp" in new_record_tags else "p"
+        np_value = new_record_tags.get(np_src_tag, "none")
         new_record_tags["np"] = np_value
         changes.append({
-            "type": "added", "tag": "np",
-            "reason": f"np tag added from {np_source} value to explicitly control non-existent subdomain policy",
+            "type": "added",
+            "tag": "np",
+            "reason": (
+                f"Editorial suggestion (not spec-required): added np from "
+                f"{np_src_tag} value to make non-existent subdomain policy "
+                f"explicit. dmarcbis-41 §4.7 does not require this."
+            ),
+            "source": np_info.get("source", "editorial"),
+            "spec_reference": np_info.get("spec_reference"),
         })
 
     # Reconstruct in standard tag order
@@ -1166,6 +1193,7 @@ def _build_dmarcbis_card_data(readiness: Optional[Dict], record: Optional[str]) 
         "total_count": len(checklist),
         "suggested_record": suggested_record,
         "changes": changes,
+        "recommendations": readiness.get("recommendations", []),
     }
 
 

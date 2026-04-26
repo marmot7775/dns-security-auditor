@@ -2376,14 +2376,25 @@ function renderDmarcbisReadiness(readiness) {
             ? `<span class="dbis-tag">${escapeHtml(item.detail)}</span>`
             : '';
 
-        // Per-tag deprecation details (expanded under the checklist item)
+        // Per-tag deprecation details (expanded under the checklist item).
+        // Each row shows a source badge so the reader can tell whether the
+        // change is mandated by dmarcbis-41 or our editorial suggestion.
         let subDetailsHtml = '';
         if (item.deprecated_details && item.deprecated_details.length > 0) {
             let depItems = '';
             item.deprecated_details.forEach(dep => {
+                const source = dep.source || 'editorial';
+                const isSpec = source === 'spec_required';
+                const badgeClass = isSpec ? 'dbis-source-spec' : 'dbis-source-editorial';
+                const badgeLabel = isSpec ? 'Spec-required' : 'Editorial';
+                const ref = dep.spec_reference
+                    ? `<span class="dbis-spec-ref">${escapeHtml(dep.spec_reference)}</span>`
+                    : '';
                 depItems += `
                     <div class="dbis-dep-item">
                         <span class="dbis-dep-tag">${escapeHtml(dep.tag)}</span>
+                        <span class="dbis-source-badge ${badgeClass}">${badgeLabel}</span>
+                        ${ref}
                         <span class="dbis-dep-reason">${escapeHtml(dep.reason)}</span>
                     </div>`;
             });
@@ -2400,10 +2411,22 @@ function renderDmarcbisReadiness(readiness) {
             let fallbackNote = item.np_fallback_note
                 ? `<div class="dbis-chain-note">${escapeHtml(item.np_fallback_note)}</div>`
                 : '';
+            // dmarcbis-41 §4.7 does not require np to be present, so any
+            // suggestion to add it is editorial. Render a badge + the
+            // full editorial recommendation text when one is available.
+            let editorialBlock = '';
+            if (item.recommendation) {
+                editorialBlock = `
+                    <div class="dbis-editorial-note">
+                        <span class="dbis-source-badge dbis-source-editorial">Editorial</span>
+                        <span class="dbis-editorial-text">${escapeHtml(item.recommendation)}</span>
+                    </div>`;
+            }
             subDetailsHtml += `<div class="dbis-np-chain">
                 <div class="dbis-chain-label">Non-existent subdomain policy precedence:</div>
                 <div class="dbis-chain-links">${chainItems}</div>
                 ${fallbackNote}
+                ${editorialBlock}
             </div>`;
         }
 

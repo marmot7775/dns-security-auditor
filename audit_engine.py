@@ -835,30 +835,38 @@ def _raw_check_dmarc(domain: str) -> Dict[str, Any]:
                 if key_clean == "pct":
                     _add_issue(
                         "warning",
-                        "Deprecated tag: 'pct' (removed in DMARCbis)",
-                        "The pct tag is removed in DMARCbis with no replacement. "
-                        "The intended approach is to use p=none for monitoring, then move "
-                        "directly to p=quarantine or p=reject. Current receivers still honor "
-                        "pct, but DMARCbis-compliant receivers will ignore it.",
-                        "Remove the pct tag. Use p=none for monitoring before moving to enforcement.",
+                        "Deprecated tag: 'pct' (removed in dmarcbis-41 §C.5.2)",
+                        "dmarcbis-41 §C.5.2 (Tags Removed) and §A.6 explicitly "
+                        "remove the pct tag. The dmarcbis testing mechanism is "
+                        "the t tag (§4.7): t=y signals receivers to apply the "
+                        "policy one level below the published p value. Current "
+                        "RFC 7489 receivers still honor pct, but dmarcbis-"
+                        "compliant receivers will ignore it.",
+                        "Remove the pct tag. If you were using pct<100 to test enforcement, set t=y instead.",
                     )
                 elif key_clean == "ri":
                     _add_issue(
                         "info",
-                        "Deprecated tag: 'ri' (removed in DMARCbis)",
-                        "The ri (report interval) tag is removed in DMARCbis. "
-                        "It was rarely honored by receivers. Most send aggregate "
-                        "reports on their own schedule regardless of ri.",
-                        "Remove the ri tag. Report frequency is determined by receivers.",
+                        "Tag 'ri' is not defined in dmarcbis-41",
+                        "The ri (report interval) tag is absent from the "
+                        "dmarcbis-41 §4.7 tag registry. dmarcbis-41 §C.5.2 "
+                        "(Tags Removed) only explicitly removes pct, so ri is "
+                        "not strictly forbidden, but receivers will ignore it. "
+                        "In practice receivers send aggregate reports on their "
+                        "own schedule regardless of ri.",
+                        "Editorial suggestion (not spec-required): remove the ri tag for tidiness.",
                     )
                 elif key_clean == "rf":
                     _add_issue(
                         "info",
-                        "Deprecated tag: 'rf' (removed in DMARCbis)",
-                        "The rf (report format) tag is removed in DMARCbis. "
-                        "The only value ever defined was 'afrf', making the tag "
-                        "redundant.",
-                        "Remove the rf tag.",
+                        "Tag 'rf' is not defined in dmarcbis-41",
+                        "The rf (report format) tag is absent from the "
+                        "dmarcbis-41 §4.7 tag registry. dmarcbis-41 §C.5.2 "
+                        "(Tags Removed) only explicitly removes pct, so rf is "
+                        "not strictly forbidden. In practice the only value "
+                        "ever defined was 'afrf', so the tag never carried "
+                        "useful information.",
+                        "Editorial suggestion (not spec-required): remove the rf tag for tidiness.",
                     )
 
             tags[key_clean] = value_clean
@@ -1639,16 +1647,30 @@ def _validate_dmarc_legacy(record: str, dmarc_records_count: int = 1) -> Dict:
 
 
 def _assess_dmarcbis_readiness(dmarc_result: Dict) -> Dict:
-    """Assess readiness for DMARCbis (draft-ietf-dmarc-dmarcbis).
+    """Assess readiness for DMARCbis (draft-ietf-dmarc-dmarcbis-41).
 
     Purely informational. Does NOT affect scoring or status.
+
+    Each recommendation carries a "source" field so the user can
+    distinguish spec-mandated changes from our own editorial guidance:
+
+      - spec_required:    explicitly mandated by dmarcbis-41 (with
+                          spec_reference pointing to the section).
+      - spec_recommended: SHOULD-level guidance from the draft. Reserved;
+                          we do not use it when the spec is silent.
+      - editorial:        our own recommendation, derived from
+                          best-practice rather than spec text.
+
+    Rationale: the spec is silent on np-value-relative-to-p, on rf/ri
+    removal (only pct is explicitly removed in §C.5.2), and on
+    progression from p=none to enforcement. Calling those changes
+    "spec-required" misrepresents the draft. Editorial recommendations
+    are still useful; they're flagged so the reader can weigh them.
     """
     deprecated_tags = []
     record = dmarc_result.get("record", "")
     policy = (dmarc_result.get("policy") or "").lower()
 
-    # Check for deprecated tags by scanning the raw record
-    # (the parser already stored values in result dict)
     tags_in_record = {}
     for part in record.split(";"):
         part = part.strip()
@@ -1659,21 +1681,55 @@ def _assess_dmarcbis_readiness(dmarc_result: Dict) -> Dict:
     if "pct" in tags_in_record:
         pct_val = tags_in_record["pct"]
         t_present = "t" in tags_in_record
-        action = "Remove. If testing enforcement, use t=y instead."
         if t_present:
-            action = "Remove. You already have t= set, making pct redundant."
-        deprecated_tags.append({"tag": "pct", "value": pct_val, "action": action})
+            action = (
+                "Remove pct. dmarcbis removes the tag (§C.5.2 / §A.6) and "
+                "you already have t= set, which is the dmarcbis replacement "
+                "for the testing role pct used to play."
+            )
+        else:
+            action = (
+                "Remove pct. dmarcbis removes the tag (§C.5.2 / §A.6); "
+                "if you were using pct<100 to test enforcement, set t=y "
+                "instead, which is the dmarcbis-defined test mode."
+            )
+        deprecated_tags.append({
+            "tag": "pct",
+            "value": pct_val,
+            "source": "spec_required",
+            "spec_reference": "dmarcbis-41 §C.5.2 / §A.6",
+            "recommendation": action,
+        })
 
     if "rf" in tags_in_record:
         deprecated_tags.append({
-            "tag": "rf", "value": tags_in_record["rf"],
-            "action": "Remove. Only 'afrf' was ever defined, making this tag redundant.",
+            "tag": "rf",
+            "value": tags_in_record["rf"],
+            "source": "editorial",
+            "spec_reference": None,
+            "recommendation": (
+                "Editorial recommendation: rf is not defined in the "
+                "dmarcbis-41 tag registry (§4.7), and only 'afrf' was ever "
+                "valid under RFC 7489. dmarcbis does not explicitly remove "
+                "the tag in §C.5.2, but receivers will ignore it. Removing "
+                "is a tidiness choice, not a spec requirement."
+            ),
         })
 
     if "ri" in tags_in_record:
         deprecated_tags.append({
-            "tag": "ri", "value": tags_in_record["ri"],
-            "action": "Remove. Receivers send daily reports regardless of this setting.",
+            "tag": "ri",
+            "value": tags_in_record["ri"],
+            "source": "editorial",
+            "spec_reference": None,
+            "recommendation": (
+                "Editorial recommendation: ri is not defined in the "
+                "dmarcbis-41 tag registry (§4.7). dmarcbis does not "
+                "explicitly remove the tag in §C.5.2; in practice "
+                "receivers send aggregate reports on their own schedule "
+                "regardless of ri. Removing is a tidiness choice, not a "
+                "spec requirement."
+            ),
         })
 
     # New DMARCbis tags
@@ -1681,21 +1737,56 @@ def _assess_dmarcbis_readiness(dmarc_result: Dict) -> Dict:
     t_val = dmarc_result.get("t")
     psd_val = dmarc_result.get("psd")
 
-    np_info = {"present": bool(np_val), "value": np_val, "recommendation": None}
+    np_info = {
+        "present": bool(np_val),
+        "value": np_val,
+        "source": None,
+        "spec_reference": None,
+        "recommendation": None,
+    }
     if not np_val:
+        # dmarcbis-41 §4.7 defines np but does NOT prescribe a value
+        # relative to p. The recommendations below are editorial: they
+        # reflect the email-security convention of treating mail from
+        # non-existent subdomains at least as strictly as mail from
+        # the apex, since no such mail can be legitimate.
+        np_info["source"] = "editorial"
+        np_info["spec_reference"] = None
         if policy == "reject":
-            np_info["recommendation"] = "Add np=reject to block mail from non-existent subdomains."
+            np_info["recommendation"] = (
+                "Editorial recommendation (not spec-required): consider "
+                "np=reject so mail from non-existent subdomains is rejected "
+                "the same as mail at p=reject. dmarcbis-41 §4.7 does not "
+                "prescribe an np value relative to p; if np is absent, the "
+                "fallback is sp then p."
+            )
         elif policy == "quarantine":
-            np_info["recommendation"] = "Add np=reject to block mail from non-existent subdomains."
+            np_info["recommendation"] = (
+                "Editorial recommendation (not spec-required): consider "
+                "np=reject so mail from non-existent subdomains is treated "
+                "more strictly than the apex p=quarantine. dmarcbis-41 §4.7 "
+                "does not prescribe an np value; if np is absent, the "
+                "fallback is sp then p."
+            )
         elif policy == "none":
-            np_info["recommendation"] = "Add np=quarantine to flag mail from non-existent subdomains."
+            np_info["recommendation"] = (
+                "Editorial recommendation (not spec-required): consider "
+                "np=quarantine to flag mail from non-existent subdomains "
+                "even while you keep p=none for monitoring. dmarcbis-41 "
+                "§4.7 does not prescribe an np value; if np is absent, "
+                "the fallback is sp then p."
+            )
         else:
-            np_info["recommendation"] = "Add np= once you have an enforcement policy."
+            np_info["recommendation"] = (
+                "Editorial recommendation (not spec-required): set np "
+                "explicitly once you have an enforcement policy in place. "
+                "dmarcbis-41 §4.7 leaves the value to the domain owner."
+            )
 
     t_info = {"present": bool(t_val), "value": t_val}
     psd_info = {"present": bool(psd_val), "value": psd_val}
 
-    # Determine readiness tier
+    # Readiness tier (informational only).
     has_deprecated = len(deprecated_tags) > 0
     has_np = bool(np_val)
 
@@ -1706,14 +1797,38 @@ def _assess_dmarcbis_readiness(dmarc_result: Dict) -> Dict:
     else:
         status = "compatible"
 
-    # Build summary
-    parts = []
-    parts.append("Your DMARC record is valid and works under both RFC 7489 and DMARCbis.")
-    if has_deprecated:
-        tag_names = ", ".join(t["tag"] for t in deprecated_tags)
-        parts.append(f"Remove the deprecated {tag_names} tag{'s' if len(deprecated_tags) > 1 else ''}.")
-    if not has_np and np_info["recommendation"]:
-        parts.append(np_info["recommendation"])
+    # Build a flattened recommendation list so the frontend can render
+    # spec-required and editorial findings with distinct treatments
+    # without re-walking the nested structures.
+    recommendations = []
+    for d in deprecated_tags:
+        recommendations.append({
+            "tag": d["tag"],
+            "value": d["value"],
+            "source": d["source"],
+            "spec_reference": d["spec_reference"],
+            "recommendation": d["recommendation"],
+        })
+    if np_info["recommendation"]:
+        recommendations.append({
+            "tag": "np",
+            "value": np_info["value"],
+            "source": np_info["source"],
+            "spec_reference": np_info["spec_reference"],
+            "recommendation": np_info["recommendation"],
+        })
+
+    # Build summary, separating spec-required from editorial points so
+    # readers can tell at a glance which changes the spec mandates.
+    parts = ["Your DMARC record is valid and works under both RFC 7489 and DMARCbis."]
+    spec_required_tags = [r["tag"] for r in recommendations if r["source"] == "spec_required"]
+    editorial_tags = [r["tag"] for r in recommendations if r["source"] == "editorial"]
+    if spec_required_tags:
+        names = ", ".join(spec_required_tags)
+        parts.append(f"Spec-required: remove {names} (dmarcbis-41).")
+    if editorial_tags:
+        names = ", ".join(editorial_tags)
+        parts.append(f"Editorial suggestion: review {names} (not spec-required).")
     if not has_deprecated and has_np:
         parts.append("No changes needed for DMARCbis compliance.")
 
@@ -1725,6 +1840,7 @@ def _assess_dmarcbis_readiness(dmarc_result: Dict) -> Dict:
             "t": t_info,
             "psd": psd_info,
         },
+        "recommendations": recommendations,
         "summary": " ".join(parts),
     }
 

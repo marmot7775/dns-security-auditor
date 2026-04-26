@@ -6912,6 +6912,53 @@ main .meth-page {
 .dbis-chain-arrow { color: var(--text-muted); font-size: var(--font-xs); }
 .dbis-chain-note { color: var(--text-muted); margin-top: 0.2rem; font-style: italic; }
 
+.dbis-source-badge {
+    display: inline-block;
+    font-size: 0.65rem;
+    font-weight: 700;
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
+    padding: 0.05rem 0.35rem;
+    border-radius: 3px;
+    flex-shrink: 0;
+}
+
+.dbis-source-spec {
+    background: var(--fail-bg);
+    color: var(--fail);
+    border: 1px solid var(--fail);
+}
+
+.dbis-source-editorial {
+    background: var(--surface);
+    color: var(--text-muted);
+    border: 1px solid var(--border);
+}
+
+.dbis-spec-ref {
+    font-family: var(--font-mono);
+    font-size: 0.7rem;
+    color: var(--text-muted);
+    flex-shrink: 0;
+}
+
+.dbis-editorial-note {
+    margin-top: 0.4rem;
+    padding: 0.35rem 0.5rem;
+    background: var(--surface);
+    border-left: 2px solid var(--border);
+    border-radius: 2px;
+    display: flex;
+    gap: 0.4rem;
+    align-items: flex-start;
+    font-size: 0.75rem;
+}
+
+.dbis-editorial-text {
+    color: var(--text-muted);
+    line-height: 1.45;
+}
+
 .dbis-suggested {
     margin-top: 0.85rem;
     padding-top: 0.75rem;
