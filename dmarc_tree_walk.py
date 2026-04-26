@@ -73,7 +73,7 @@ def _query_dmarc(domain: str) -> Optional[str]:
             txt = "".join(
                 s.decode() if isinstance(s, bytes) else s for s in rdata.strings
             )
-            if txt.strip().lower().startswith("v=dmarc1"):
+            if txt.strip().startswith("v=DMARC1"):
                 dmarc_records.append(txt.strip())
         # §4.10 steps 2 and 6: multiple valid records at one target -> discard all.
         if len(dmarc_records) == 1:
