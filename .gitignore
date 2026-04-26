@@ -86,6 +86,9 @@ package-lock.json
 # Misc
 *.sqlite3
 *.db
+*.db-shm
+*.db-wal
+*.db-journal
 
 audit.log
 audit.log
