@@ -288,14 +288,20 @@ def _check_report_authorization(domain: str, raw_dmarc: Dict, tree_walk_result: 
     issues = []
     ruf_present = False
 
-    # Determine org domain for external check
+    # Determine org domain for external check. Tree walk takes priority;
+    # fall back to the PSL-aware _get_org_domain so two-part TLDs like
+    # co.uk and com.au resolve correctly (an inline last-two-labels
+    # heuristic would yield "co.uk" for example.co.uk and falsely flag
+    # rua=mailto:dmarc@example.co.uk as external).
     org_domain = None
     if tree_walk_result and tree_walk_result.get("org_domain"):
         org_domain = tree_walk_result["org_domain"].lower().rstrip(".")
     else:
-        # Simple 2-label suffix
-        parts = domain.lower().rstrip(".").split(".")
-        org_domain = ".".join(parts[-2:]) if len(parts) >= 2 else domain.lower()
+        psl_org = _get_org_domain(domain)
+        if psl_org:
+            org_domain = psl_org.lower().rstrip(".")
+        else:
+            org_domain = domain.lower().rstrip(".")
 
     for tag_type in ("rua", "ruf"):
         raw_val = raw_dmarc.get(tag_type)
