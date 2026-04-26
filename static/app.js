@@ -1103,10 +1103,17 @@ function _renderDetailItem(d) {
         error: '&#10005;', warning: '&#9888;',
         info: '&#8250;', good: '&#10003;'
     }[d.type] || '&#8250;';
+    const businessRisk = d.business_risk
+        ? `<div class="business-risk-callout">
+            <span class="business-risk-label">Business impact:</span>
+            <span class="business-risk-text">${escapeHtml(d.business_risk)}</span>
+           </div>`
+        : '';
     return `
         <div class="detail-item ${typeClass}">
             <span class="detail-icon" aria-hidden="true">${icon}</span>
             <span>${escapeHtml(d.text || '')}</span>
+            ${businessRisk}
         </div>
     `;
 }

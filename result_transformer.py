@@ -58,10 +58,14 @@ def _issue_to_detail(issue: Dict) -> Dict[str, str]:
         "good": "good",
         "ok": "good",
     }
-    return {
+    detail = {
         "type": type_map.get(severity, "info"),
         "text": issue.get("plain_english") or issue.get("issue", ""),
     }
+    risk = issue.get("business_risk")
+    if risk:
+        detail["business_risk"] = risk
+    return detail
 
 
 def _first_fix(issues: List[Dict]) -> Optional[str]:
@@ -3924,6 +3928,9 @@ def _build_spf_deep_analysis(raw: Dict) -> Optional[Dict]:
 # ============================================================
 
 def transform_dkim(raw: Dict, domain: str, has_mx: bool = True) -> Dict:
+    # Lazy import avoids the audit_engine ↔ result_transformer cycle.
+    from audit_engine import BUSINESS_RISK
+
     found = raw.get("found_selectors", [])
     tested = raw.get("tested_count", 0)
 
@@ -3954,7 +3961,11 @@ def transform_dkim(raw: Dict, domain: str, has_mx: bool = True) -> Dict:
         selector_not_found = raw.get("selector_not_found")
         if selector_not_found:
             _details = [
-                {"type": "error", "text": f"No TXT record at {_e(selector_not_found)}._domainkey.{_e(domain)}"},
+                {
+                    "type": "error",
+                    "text": f"No TXT record at {_e(selector_not_found)}._domainkey.{_e(domain)}",
+                    "business_risk": BUSINESS_RISK.get("DKIM_SELECTOR_NOT_FOUND"),
+                },
                 {"type": "info", "text": "Check your email provider's admin console for the correct selector name"},
             ]
             for issue in raw.get("issues", []):
@@ -3981,7 +3992,11 @@ def transform_dkim(raw: Dict, domain: str, has_mx: bool = True) -> Dict:
             }
 
         _unknown_details = [
-            {"type": "info", "text": f"Checked {tested} common selectors, no public keys found"},
+            {
+                "type": "info",
+                "text": f"Checked {tested} common selectors, no public keys found",
+                "business_risk": BUSINESS_RISK.get("DKIM_NO_KEYS_FOUND"),
+            },
             {"type": "info", "text": "DKIM selectors are private and cannot be enumerated from outside"},
             {"type": "info", "text": "Enter your specific selector above for a definitive check"},
         ]
@@ -4036,10 +4051,15 @@ def transform_dkim(raw: Dict, domain: str, has_mx: bool = True) -> Dict:
             vendor_names.add(vendor)
 
         if strength == "weak":
-            details.append({
+            weak_detail = {
                 "type": "warning",
-                "text": f"{selector}: {bits}-bit {key_analysis.get('key_type', 'RSA')} key{vendor_str} - upgrade recommended"
-            })
+                "text": f"{selector}: {bits}-bit {key_analysis.get('key_type', 'RSA')} key{vendor_str} - upgrade recommended",
+            }
+            # Only attach business_risk to the first weak-key detail to avoid
+            # repeating the same callout once per selector.
+            if not weak_keys:
+                weak_detail["business_risk"] = BUSINESS_RISK.get("DKIM_WEAK_KEY")
+            details.append(weak_detail)
             weak_keys.append(selector)
         elif strength == "strong":
             details.append({

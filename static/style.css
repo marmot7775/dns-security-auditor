@@ -2634,6 +2634,7 @@ details.st-node>summary:hover {
 /* Detail items (sub-findings) */
 .detail-item {
     display: flex;
+    flex-wrap: wrap;
     align-items: flex-start;
     gap: 0.55rem;
     font-size: var(--font-sm);
@@ -2651,6 +2652,37 @@ details.st-node>summary:hover {
 .detail-item.warn-item { color: var(--warn); }
 .detail-item.fail-item { color: var(--fail); }
 .detail-item.info-item { color: var(--text-secondary); }
+
+/* Business impact callout (Prompt: SPF/DMARC/DKIM business_risk) */
+.business-risk-callout {
+    flex: 1 0 100%;
+    margin: 0.4rem 0 0.1rem 1.5rem;
+    padding: 0.5rem 0.75rem;
+    border-left: 3px solid var(--warn);
+    background: var(--warn-bg);
+    border-radius: 4px;
+    font-size: var(--font-sm);
+    line-height: 1.55;
+    color: var(--text-secondary);
+}
+.business-risk-label {
+    display: inline;
+    font-weight: 700;
+    color: var(--warn);
+    margin-right: 0.4rem;
+}
+.business-risk-text {
+    color: var(--text-secondary);
+}
+@media (max-width: 600px) {
+    .business-risk-callout {
+        margin-left: 0;
+    }
+    .business-risk-label {
+        display: block;
+        margin-bottom: 0.2rem;
+    }
+}
 
 /* Progressive disclosure */
 .details-toggle {

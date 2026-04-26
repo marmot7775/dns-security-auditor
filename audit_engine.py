@@ -141,6 +141,89 @@ VENDOR_SPF_INCLUDES = {
 
 
 # ============================================================
+# Business Risk Vocabulary
+# ============================================================
+# Plain-English business-impact callouts for selected SPF/DKIM/DMARC findings.
+# Audience: non-technical readers (executives, compliance, marketing).
+# Style rules: max 25 words per sentence, no em-dashes, no scare tactics,
+# second person ("your domain", "your customers"). Lead with consequence.
+
+BUSINESS_RISK = {
+    # ── SPF ──────────────────────────────────────────────────
+    "SPF_NO_RECORD": (
+        "Without SPF, attackers can send email claiming to be from your domain, "
+        "exposing customers to phishing and damaging brand trust."
+    ),
+    "SPF_MULTIPLE_RECORDS": (
+        "Multiple SPF records cause receivers to ignore all of them, so your "
+        "legitimate mail fails authentication and may be marked as spam."
+    ),
+    "SPF_PERMERROR": (
+        "SPF errors mean receivers cannot verify your legitimate mail; "
+        "spoofed mail may pass while real mail gets rejected, causing "
+        "customer service and deliverability problems."
+    ),
+    "SPF_PLUS_ALL": (
+        "Authorizing every server on the internet defeats SPF entirely and "
+        "lets anyone send email impersonating your domain."
+    ),
+    "SPF_NEUTRAL_ALL": (
+        "A neutral all mechanism tells receivers nothing about unauthorized "
+        "senders, so impersonation attempts against your customers are not blocked."
+    ),
+    "SPF_NO_ALL": (
+        "Without an all mechanism, receivers default to neutral and have no "
+        "guidance to reject spoofed mail from your domain."
+    ),
+    # ── DMARC ────────────────────────────────────────────────
+    "DMARC_NO_RECORD": (
+        "No DMARC record means receivers have no guidance on what to do with "
+        "unauthenticated mail. Google and Yahoo deprioritize or reject mail "
+        "from bulk senders without DMARC, harming legitimate deliverability."
+    ),
+    "DMARC_MULTIPLE_RECORDS": (
+        "When multiple DMARC records exist, receivers ignore the policy entirely, "
+        "so spoofing protections you intended to publish are not actually applied."
+    ),
+    "DMARC_P_NONE": (
+        "DMARC monitoring-only mode collects data but does not block spoofing. "
+        "Attackers can still impersonate your domain in phishing attacks against "
+        "customers and staff."
+    ),
+    "DMARC_NO_RUA": (
+        "Without aggregate reporting, you have no visibility into who is sending "
+        "mail as your domain. Spoofing attacks may already be happening undetected."
+    ),
+    "DMARC_PCT_LOW": (
+        "Partial enforcement leaves some failed messages delivered, so attackers "
+        "still succeed at impersonating your domain a fraction of the time."
+    ),
+    "DMARC_TEST_MODE": (
+        "Test mode signals receivers to apply a softer policy than published, so "
+        "attackers see the relaxed policy rather than your intended enforcement."
+    ),
+    "DMARC_PARSE_FAILURE": (
+        "An unparseable DMARC record gives receivers no policy to apply, leaving "
+        "your domain effectively unprotected against spoofing."
+    ),
+    # ── DKIM ─────────────────────────────────────────────────
+    "DKIM_NO_KEYS_FOUND": (
+        "Without DKIM, mail can be modified in transit and your domain reputation "
+        "cannot accumulate. Receivers have less reason to trust your mail, "
+        "increasing spam folder placement."
+    ),
+    "DKIM_SELECTOR_NOT_FOUND": (
+        "If your DKIM selector is missing or misconfigured, receivers cannot "
+        "verify your signatures and your mail is more likely to land in spam."
+    ),
+    "DKIM_WEAK_KEY": (
+        "A 1024-bit DKIM key can be cracked with current resources, allowing "
+        "attackers to forge signed mail that appears genuinely from your domain."
+    ),
+}
+
+
+# ============================================================
 # Scope Configuration
 # ============================================================
 
@@ -642,13 +725,18 @@ def _raw_check_dmarc(domain: str) -> Dict[str, Any]:
         "policy_recovery_applied": False,
     }
 
-    def _add_issue(severity, issue, plain_english, fix):
-        result["issues"].append({
+    def _add_issue(severity, issue, plain_english, fix, business_risk_key=None):
+        entry = {
             "severity": severity,
             "issue": issue,
             "plain_english": plain_english,
             "fix": fix,
-        })
+        }
+        if business_risk_key:
+            risk = BUSINESS_RISK.get(business_risk_key)
+            if risk:
+                entry["business_risk"] = risk
+        result["issues"].append(entry)
 
     def _add_syntax(issue, plain_english, fix):
         """Syntax errors are always severity=error."""
@@ -740,6 +828,7 @@ def _raw_check_dmarc(domain: str) -> Dict[str, Any]:
             "(even p=none) from bulk senders, and may throttle or deprioritize mail without one. "
             "You also have no aggregate reporting visibility into who is sending as your domain.",
             f"Publish a DMARC record at _dmarc.{domain} starting with p=none and an rua address for aggregate reporting.",
+            business_risk_key="DMARC_NO_RECORD",
         )
         return result
 
@@ -753,6 +842,7 @@ def _raw_check_dmarc(domain: str) -> Dict[str, Any]:
             "When multiple records exist, DMARC processing aborts entirely. "
             "None of them are valid. This is the same as having no DMARC at all.",
             "Remove duplicate DMARC records so only one remains.",
+            business_risk_key="DMARC_MULTIPLE_RECORDS",
         )
         result["record"] = dmarc_records[0]
         result["strict_validation"] = _validate_dmarc_strict(
@@ -1124,6 +1214,7 @@ def _raw_check_dmarc(domain: str) -> Dict[str, Any]:
                     f"Set {rec_tag_name}= to a valid value (none, "
                     f"quarantine, or reject) AND add a valid rua= URI "
                     f"such as rua=mailto:reports@yourdomain.com.",
+                    business_risk_key="DMARC_PARSE_FAILURE",
                 )
 
     # 6b3. Test mode (t=) — DMARCbis §4.5
@@ -1287,6 +1378,7 @@ def _raw_check_dmarc(domain: str) -> Dict[str, Any]:
             "no protection against spoofing. Failed emails still reach inboxes.",
             "Review aggregate reports to identify all legitimate senders, then "
             "upgrade to p=quarantine, and ultimately p=reject.",
+            business_risk_key="DMARC_P_NONE",
         )
     elif policy == "quarantine":
         pct = result["pct"]
@@ -1298,6 +1390,7 @@ def _raw_check_dmarc(domain: str) -> Dict[str, Any]:
                 f"The remaining {100 - pct}% are still delivered normally, as if "
                 "the policy were p=none.",
                 "Increase pct to 100 once you've confirmed legitimate mail is passing.",
+                business_risk_key="DMARC_PCT_LOW",
             )
     elif policy == "reject":
         pct = result["pct"]
@@ -1308,6 +1401,7 @@ def _raw_check_dmarc(domain: str) -> Dict[str, Any]:
                 f"Only {pct}% of messages that fail authentication are rejected. "
                 f"The remaining {100 - pct}% fall back to quarantine behavior.",
                 "Increase pct to 100 for full reject enforcement.",
+                business_risk_key="DMARC_PCT_LOW",
             )
 
     # DMARCbis t=y test mode (drops policy one level for cautious deployment)
@@ -1323,6 +1417,7 @@ def _raw_check_dmarc(domain: str) -> Dict[str, Any]:
             f"This is useful for cautious deployment of a new enforcement policy.",
             f"Remove t=y (or set t=n) once you're confident in your authentication "
             f"to apply the full p={policy} policy.",
+            business_risk_key="DMARC_TEST_MODE",
         )
 
     # Missing rua — critical visibility gap
@@ -1347,6 +1442,7 @@ def _raw_check_dmarc(domain: str) -> Dict[str, Any]:
             plain,
             f"Add rua=mailto:dmarc-reports@{domain}, or use a DMARC reporting "
             "service like dmarcian, EasyDMARC, or Valimail for readable dashboards.",
+            business_risk_key="DMARC_NO_RUA",
         )
 
     # ── Step 8: Merge syntax errors into issues and set final status ──
@@ -2022,13 +2118,18 @@ def _raw_check_spf(domain: str) -> Dict[str, Any]:
         "recommendations": [],
     }
 
-    def _add_issue(severity, issue, plain_english, fix):
-        result["issues"].append({
+    def _add_issue(severity, issue, plain_english, fix, business_risk_key=None):
+        entry = {
             "severity": severity,
             "issue": issue,
             "plain_english": plain_english,
             "fix": fix,
-        })
+        }
+        if business_risk_key:
+            risk = BUSINESS_RISK.get(business_risk_key)
+            if risk:
+                entry["business_risk"] = risk
+        result["issues"].append(entry)
 
     def _add_syntax(issue, plain_english, fix):
         """Syntax errors are always severity=error."""
@@ -2050,6 +2151,7 @@ def _raw_check_spf(domain: str) -> Dict[str, Any]:
             "No SPF record found",
             "No SPF record tells receivers which servers can send your email.",
             f"Publish an SPF record at {domain} listing your authorized sending servers.",
+            business_risk_key="SPF_NO_RECORD",
         )
         return result
 
@@ -2064,6 +2166,7 @@ def _raw_check_spf(domain: str) -> Dict[str, Any]:
             "ignore both records. Your legitimate mail will fail SPF authentication. "
             "Merge all authorized IP addresses and includes into a single v=spf1 record.",
             "Merge all SPF records into one. Combine all authorized IPs and includes into a single v=spf1 string.",
+            business_risk_key="SPF_MULTIPLE_RECORDS",
         )
         return result
 
@@ -2305,6 +2408,7 @@ def _raw_check_spf(domain: str) -> Dict[str, Any]:
             "SPF to return a permanent error (permerror). It fails entirely, "
             "as if no SPF record existed.",
             "Audit your includes and remove services you no longer use. Consolidate senders where possible.",
+            business_risk_key="SPF_PERMERROR",
         )
     elif lookup_count == 10:
         _add_issue(
@@ -2323,6 +2427,7 @@ def _raw_check_spf(domain: str) -> Dict[str, Any]:
             "The +all mechanism authorizes the entire internet to send email "
             "as your domain. This completely defeats the purpose of SPF.",
             "Change +all to -all (hard fail) or ~all (soft fail).",
+            business_risk_key="SPF_PLUS_ALL",
         )
     elif all_mech == "?all":
         _add_issue(
@@ -2331,6 +2436,7 @@ def _raw_check_spf(domain: str) -> Dict[str, Any]:
             "The ?all mechanism provides no opinion about unauthorized senders. "
             "It does not protect your domain from spoofing.",
             "Change ?all to -all or ~all.",
+            business_risk_key="SPF_NEUTRAL_ALL",
         )
     elif not all_mech and not has_redirect:
         _add_issue(
@@ -2341,6 +2447,7 @@ def _raw_check_spf(domain: str) -> Dict[str, Any]:
             "is neutral (?all), which provides no protection.",
             "Add ~all (softfail) to the end of the SPF record as a safe starting point. "
             "Once you are confident all legitimate senders are listed, tighten to -all (hardfail).",
+            business_risk_key="SPF_NO_ALL",
         )
 
     # ── Step 8: Merge syntax errors into issues and set final status ──
