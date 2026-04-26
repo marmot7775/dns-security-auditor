@@ -74,7 +74,6 @@ from checks_extra import check_mta_sts, check_tls_rpt, check_bimi
 from mx_check import check_mx
 from spf_recursive import count_spf_lookups, repair_spf_missing_spaces
 from advanced_fingerprinting import AdvancedVendorFingerprinter
-from security_scoring import EmailSecurityScorer
 from dkim_formatter import analyze_dkim_key_strength
 from anomaly_detector import detect_anomalies
 from remediation_planner import build_remediation_plan
@@ -4628,9 +4627,6 @@ def run_full_audit(domain: str, dkim_selector: Optional[str] = None,
             log.debug("Vendor fingerprinting failed", exc_info=True)
         _notify("Vendor Fingerprinting")
 
-    # --- Security Score ---
-    score_result = _calculate_score(raw_results, domain, tree_walk=tree_walk_result, fp_vendors=fp_vendors)
-
     # --- Vendor list for frontend ---
     vendors = _format_vendors(fp_vendors)
 
@@ -4671,7 +4667,7 @@ def run_full_audit(domain: str, dkim_selector: Optional[str] = None,
     # --- Priority Fixes ---
     raw_mx = raw_results.get("mx", {})
     has_mx = bool(raw_mx.get("records")) or bool(raw_mx.get("mx_details"))
-    priority_fixes = _build_priority_fixes(checks, score_result, raw_results, has_mx=has_mx)
+    priority_fixes = _build_priority_fixes(checks, raw_results, has_mx=has_mx)
     _notify("Scoring")
 
     # --- Anomaly Detection ("What's Unusual") ---
@@ -4810,113 +4806,6 @@ def run_full_audit(domain: str, dkim_selector: Optional[str] = None,
         "advisories": advisories if advisories else None,
         "errors": errors if errors else None,
     }
-
-
-# ============================================================
-# Score Calculation
-# ============================================================
-
-def _calculate_score(raw_results: Dict, domain: str, tree_walk: Optional[Dict] = None, fp_vendors: Optional[List] = None) -> Dict:
-    """Build the audit_results dict that EmailSecurityScorer expects."""
-    try:
-        # DMARC results — include inherited policy info
-        raw_dmarc = raw_results.get("dmarc", {})
-        # Use inherited policy from raw_dmarc (set by _enrich_dmarc_inheritance)
-        inherited_policy = raw_dmarc.get("inherited_policy")
-
-        dmarc_for_scorer = {
-            "record": raw_dmarc.get("record"),
-            "policy": raw_dmarc.get("policy", ""),
-            "pct": raw_dmarc.get("pct") or 100,
-            "rua": raw_dmarc.get("rua"),
-            "ruf": raw_dmarc.get("ruf"),
-            "sp": raw_dmarc.get("sp"),
-            "adkim": raw_dmarc.get("adkim"),
-            "aspf": raw_dmarc.get("aspf"),
-            "domain": domain,
-            "inherited_policy": inherited_policy,
-        }
-
-        # Detect non-mail-sending subdomains: no MX + inherited DMARC
-        raw_mx = raw_results.get("mx", {})
-        has_mx = bool(raw_mx.get("records")) or bool(raw_mx.get("mx_details"))
-
-        # SPF results
-        raw_spf = raw_results.get("spf", {})
-        spf_for_scorer = {
-            "record": raw_spf.get("record"),
-            "all": raw_spf.get("all_mechanism", ""),
-            "has_redirect": raw_spf.get("has_redirect", False),
-            "lookup_count": raw_spf.get("lookup_count", 0),
-            "include_count": raw_spf.get("include_count", 0),
-        }
-
-        # DKIM results
-        raw_dkim = raw_results.get("dkim", {})
-        dkim_for_scorer = {
-            "found_selectors": raw_dkim.get("found_selectors", []),
-        }
-
-        # Key age analysis
-        key_age = {"overdue": 0, "due_soon": 0, "current": 0}
-        try:
-            analyzer = DKIMKeyAgeAnalyzer(domain)
-            for sel in raw_dkim.get("found_selectors", []):
-                record = sel.get("record", "")
-                key_analysis = analyze_dkim_key_strength(record)
-                key_size = key_analysis.get("key_bits", 2048)
-                result = analyzer.analyze_key(sel.get("selector", ""), record, key_size)
-                status = result.get("rotation_status", "UNKNOWN")
-                if status == "OVERDUE":
-                    key_age["overdue"] += 1
-                elif status == "DUE_SOON":
-                    key_age["due_soon"] += 1
-                elif status == "CURRENT":
-                    key_age["current"] += 1
-        except Exception:
-            log.debug("DKIM key age analysis failed", exc_info=True)
-
-        # Vendor fingerprint (pre-computed, passed in)
-        vendor_for_scorer = {"vendors": [
-            {"vendor": v["vendor"], "confidence": v["confidence"]}
-            for v in (fp_vendors or [])
-        ]}
-
-        # MTA-STS / TLS-RPT / BIMI configured flags
-        mta_sts_configured = bool(raw_results.get("mta_sts", {}).get("txt_record"))
-        tls_rpt_configured = bool(raw_results.get("tls_rpt", {}).get("record"))
-        bimi_configured = bool(raw_results.get("bimi", {}).get("record"))
-        dane_configured = bool(raw_results.get("dane", {}).get("has_tlsa"))
-
-        # DNSSEC / CAA / Nameservers for best-practices scoring
-        raw_dnssec = raw_results.get("dnssec", {})
-        raw_caa = raw_results.get("caa", {})
-        raw_ns = raw_results.get("nameservers", {})
-
-        # Assemble for scorer
-        audit_input = {
-            "dmarc_results": dmarc_for_scorer,
-            "spf_results": spf_for_scorer,
-            "dkim_results": dkim_for_scorer,
-            "key_age_analysis": key_age,
-            "vendor_fingerprint": vendor_for_scorer,
-            "mta_sts": {"configured": mta_sts_configured},
-            "tls_rpt": {"configured": tls_rpt_configured},
-            "bimi": {"configured": bimi_configured},
-            "dane": {"configured": dane_configured},
-            "dnssec": raw_dnssec,
-            "caa": raw_caa,
-            "nameservers": raw_ns,
-            "has_mx": has_mx,
-        }
-
-        scorer = EmailSecurityScorer()
-        return scorer.calculate_score(audit_input)
-
-    except Exception as e:
-        import traceback, logging
-        logging.error("Scoring failed: %s\n%s", e, traceback.format_exc())
-        return {"total_score": 0, "grade": "?", "error": str(e)}
 
 
 # ============================================================
@@ -5325,65 +5214,54 @@ def _build_resilience_analysis(
 # Priority Fixes
 # ============================================================
 
-def _build_priority_fixes(checks: List[Dict], score_result: Dict, raw_results: Dict = None, has_mx: bool = True) -> List[str]:
+def _build_priority_fixes(checks: List[Dict], raw_results: Dict = None, has_mx: bool = True) -> List[str]:
     """
-    Build prioritized fix list from check results and scorer recommendations.
-    Maximum 5 items, ordered by severity. Deduplicates by check name.
+    Build prioritized fix list directly from check results.
+    Maximum 5 items: BOGUS DNSSEC first, then fails, then warnings.
+    Deduplicates by check name.
 
     For non-mail domains (has_mx=False), skip email-infrastructure fixes
     since they're not applicable.
 
-    BOGUS DNSSEC sorts to the very top: it's an availability issue
-    (validating resolvers return SERVFAIL), not just a security one.
+    BOGUS DNSSEC sorts to the very top: validating resolvers return
+    SERVFAIL, so the domain is effectively unresolvable for those users.
     """
-    # Checks that only matter for mail-sending domains
     MAIL_ONLY_CHECKS = {"SPF", "MX Records", "MX", "MTA-STS", "TLS-RPT", "DKIM", "BIMI", "DANE"}
 
-    fixes = []
-    covered_checks = set()
+    fixes: List[str] = []
+    covered_checks: set = set()
 
-    # BOGUS DNSSEC: prepend before anything else. The domain is unresolvable
-    # for validating-resolver users, so this dwarfs other findings.
+    def _clean(html_text: str) -> str:
+        text = re.sub(r'<[^>]+>', '', html_text)
+        return re.sub(r'\s+', ' ', text).strip()
+
     if raw_results and raw_results.get("dnssec", {}).get("dnssec_state") == "bogus":
         for check in checks:
             if check.get("name") == "DNSSEC" and check.get("fix"):
-                bogus_text = re.sub(r'<[^>]+>', '', check["fix"])
-                bogus_text = re.sub(r'\s+', ' ', bogus_text).strip()
-                if bogus_text:
-                    fixes.append(bogus_text)
+                text = _clean(check["fix"])
+                if text:
+                    fixes.append(text)
                     covered_checks.add("DNSSEC")
                 break
 
-    # Scorer recommendations (already prioritized and more actionable)
-    scorer_recs = score_result.get("recommendations", [])
-    for rec in scorer_recs:
-        # Strip emoji prefixes for clean display
-        clean = re.sub(r'^[^\w]*\s*(?:CRITICAL|HIGH|MEDIUM|LOW):\s*', '', rec)
-        if clean and clean not in fixes:
-            fixes.append(clean)
-            # Track which checks are covered to avoid duplicates
-            for keyword in ['DMARC', 'SPF', 'DKIM', 'MTA-STS', 'TLS-RPT', 'MX', 'CAA', 'Nameservers', 'DNSSEC', 'DANE']:
-                if keyword.lower() in clean.lower():
-                    covered_checks.add(keyword)
-
-    # Check-level fixes (only for checks the scorer didn't already cover)
-    for check in checks:
-        if check.get("status") == "fail" and check.get("fix"):
-            check_name = check.get("name", "")
-            if check_name in covered_checks:
+    for status in ("fail", "warn"):
+        for check in checks:
+            if check.get("status") != status:
                 continue
-            # Skip email-infrastructure fixes for non-mail domains
-            if not has_mx and check_name in MAIL_ONLY_CHECKS:
+            name = check.get("name", "")
+            if name in covered_checks:
                 continue
-            # Skip error cards (generic retry messages aren't actionable)
+            if not has_mx and name in MAIL_ONLY_CHECKS:
+                continue
             if check.get("pill_label") == "Error":
                 continue
-            # Strip HTML for the priority list
-            fix_text = re.sub(r'<[^>]+>', '', check["fix"])
-            # Collapse whitespace from removed HTML tags
-            fix_text = re.sub(r'\s+', ' ', fix_text).strip()
-            if fix_text and fix_text not in fixes:
-                fixes.append(fix_text)
+            fix = check.get("fix")
+            if not fix:
+                continue
+            text = _clean(fix)
+            if text and text not in fixes:
+                fixes.append(text)
+                covered_checks.add(name)
 
     return fixes[:5]
 

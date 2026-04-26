@@ -28,7 +28,7 @@ from typing import Dict, Optional
 
 from fastapi import FastAPI, Query, HTTPException, Request
 from fastapi.staticfiles import StaticFiles
-from fastapi.responses import FileResponse, JSONResponse, PlainTextResponse, Response, StreamingResponse
+from fastapi.responses import FileResponse, JSONResponse, PlainTextResponse, RedirectResponse, Response, StreamingResponse
 from fastapi.middleware.cors import CORSMiddleware
 from starlette.middleware.base import BaseHTTPMiddleware
 
@@ -178,7 +178,7 @@ class SecurityHeadersMiddleware(BaseHTTPMiddleware):
             response.headers["Cache-Control"] = "no-store"
         elif any(path.endswith(ext) for ext in ('.css', '.js', '.png', '.jpg', '.svg', '.woff2', '.woff', '.ico')):
             response.headers["Cache-Control"] = "public, max-age=14400"  # 4 hours
-        elif path in ('/', '/dmarcbis', '/dkim2', '/methodology', '/privacy', '/about'):
+        elif path in ('/', '/dmarcbis', '/dkim2', '/privacy', '/about'):
             response.headers["Cache-Control"] = "public, max-age=300"  # 5 minutes for HTML
         return response
 
@@ -767,12 +767,6 @@ async def sitemap_xml():
         "    <priority>0.7</priority>\n"
         "  </url>\n"
         "  <url>\n"
-        "    <loc>https://dns-audit.com/methodology</loc>\n"
-        "    <lastmod>2026-04-24</lastmod>\n"
-        "    <changefreq>monthly</changefreq>\n"
-        "    <priority>0.6</priority>\n"
-        "  </url>\n"
-        "  <url>\n"
         "    <loc>https://dns-audit.com/about</loc>\n"
         "    <lastmod>2026-04-24</lastmod>\n"
         "    <changefreq>monthly</changefreq>\n"
@@ -836,8 +830,8 @@ if STATIC_DIR.exists():
         return FileResponse(str(STATIC_DIR / "dkim2.html"))
 
     @app.get("/methodology", tags=["Pages"])
-    async def methodology():
-        return FileResponse(str(STATIC_DIR / "methodology.html"))
+    async def methodology_redirect():
+        return RedirectResponse(url="/about", status_code=301)
 
     @app.get("/about", tags=["Pages"])
     async def about():
