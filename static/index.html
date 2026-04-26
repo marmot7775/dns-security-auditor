@@ -4,18 +4,18 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>DNS Security Auditor | dns-audit.com</title>
-    <meta name="description" content="Free DNS security audit tool. Check DMARC, SPF, DKIM, MTA-STS, DNSSEC, DANE, CAA, BIMI, and TLS-RPT with a 100-point security score and actionable roadmap.">
+    <meta name="description" content="DNS and email security audit tool. Checks DMARC, SPF, DKIM, MX, MTA-STS, TLS-RPT, BIMI, DNSSEC, CAA. Reports findings and fixes.">
     <meta name="keywords" content="DNS audit, DMARC check, SPF validator, DKIM checker, email security, MTA-STS, BIMI, DNSSEC, domain security">
     <meta name="author" content="Neil Anuskiewicz">
     <meta property="og:type" content="website" />
     <meta property="og:site_name" content="DNS Security Auditor" />
     <meta property="og:url" content="https://dns-audit.com/" />
     <meta property="og:title" content="DNS Security Auditor | dns-audit.com" />
-    <meta property="og:description" content="Free DNS security audit tool. Check DMARC, SPF, DKIM, MTA-STS, DNSSEC, DANE, CAA, BIMI, and TLS-RPT with a 100-point security score and actionable roadmap." />
+    <meta property="og:description" content="DNS and email security audit tool. Checks DMARC, SPF, DKIM, MX, MTA-STS, TLS-RPT, BIMI, DNSSEC, CAA. Reports findings and fixes." />
     <meta property="og:image" content="https://dns-audit.com/static/og-image.png" />
     <meta name="twitter:card" content="summary">
     <meta name="twitter:title" content="DNS Security Auditor | dns-audit.com">
-    <meta name="twitter:description" content="Free DNS security audit tool. Check DMARC, SPF, DKIM, MTA-STS, DNSSEC, DANE, CAA, BIMI, and TLS-RPT with a 100-point security score and actionable roadmap.">
+    <meta name="twitter:description" content="DNS and email security audit tool. Checks DMARC, SPF, DKIM, MX, MTA-STS, TLS-RPT, BIMI, DNSSEC, CAA. Reports findings and fixes.">
     <link rel="canonical" href="https://dns-audit.com/" />
     <link rel="icon" type="image/svg+xml" href="/static/favicon.svg">
     <link rel="apple-touch-icon" sizes="180x180" href="/static/apple-touch-icon.png">
@@ -27,7 +27,7 @@
         "@type": "WebApplication",
         "name": "DNS Security Auditor",
         "url": "https://dns-audit.com",
-        "description": "Free DNS and email security audit tool checking DMARC, SPF, DKIM, MTA-STS, DNSSEC, DANE, CAA, BIMI, and TLS-RPT with 100-point scoring",
+        "description": "Free DNS and email security audit tool checking DMARC, SPF, DKIM, MTA-STS, DNSSEC, DANE, CAA, BIMI, and TLS-RPT with prioritized findings and fixes",
         "applicationCategory": "SecurityApplication",
         "operatingSystem": "Any",
         "offers": {
@@ -47,7 +47,7 @@
                 "name": "What does this DNS security audit check?",
                 "acceptedAnswer": {
                     "@type": "Answer",
-                    "text": "It checks 9 email and DNS security protocols: DMARC, SPF, DKIM, MTA-STS, DNSSEC, DANE, CAA, BIMI, and TLS-RPT, producing a 100-point security score with prioritized recommendations."
+                    "text": "It checks 9 email and DNS security protocols: DMARC, SPF, DKIM, MTA-STS, DNSSEC, DANE, CAA, BIMI, and TLS-RPT, with prioritized findings and fixes for each."
                 }
             },
             {
@@ -68,10 +68,10 @@
             },
             {
                 "@type": "Question",
-                "name": "What is a good DNS security score?",
+                "name": "What is the most important DNS record for email security?",
                 "acceptedAnswer": {
                     "@type": "Answer",
-                    "text": "A score of 90+ (A or A+) indicates strong email security. The most impactful improvements are DMARC with p=reject, valid SPF, DKIM signing, and MTA-STS."
+                    "text": "DMARC with a policy of reject is the highest-impact change. Set p=reject only after monitoring with rua reports for 30 or more days to confirm legitimate mail is aligning. SPF and DKIM provide the underlying authentication that DMARC enforces."
                 }
             }
         ]
@@ -125,7 +125,6 @@
                 <a href="/" class="nav-link nav-link-active">Home</a>
                 <a href="/dmarcbis" class="nav-link">DMARCbis Guide</a>
                 <a href="/dkim2" class="nav-link">DKIM2 Primer</a>
-                <a href="/methodology" class="nav-link">Methodology</a>
                 <a href="/privacy" class="nav-link">Privacy</a>
                 <a href="/about" class="nav-link">About</a>
             </nav>
@@ -238,10 +237,6 @@
             </div>
             <div id="executive-summary-slot"></div>
             <div class="summary-grid" id="summary-grid">
-                <div class="summary-card grade-card">
-                    <div class="summary-label">Security Grade</div>
-                    <div class="summary-value grade-value" id="summary-grade">?</div>
-                </div>
                 <div class="summary-card pass-card">
                     <div class="summary-label">Passing</div>
                     <div class="summary-value pass-value" id="summary-pass">0</div>
@@ -321,8 +316,6 @@
                     <a href="/dmarcbis" class="footer-link">DMARCbis Guide</a>
                     <span class="footer-dot">&middot;</span>
                     <a href="/dkim2" class="footer-link">DKIM2 Primer</a>
-                    <span class="footer-dot">&middot;</span>
-                    <a href="/methodology" class="footer-link">Methodology</a>
                     <span class="footer-dot">&middot;</span>
                     <a href="/privacy" class="footer-link">Privacy</a>
                     <span class="footer-dot">&middot;</span>

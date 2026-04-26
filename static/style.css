@@ -996,10 +996,6 @@ main {
     animation-delay: 0.2s;
 }
 
-.grade-card {
-    border-top-color: var(--primary);
-}
-
 .pass-card {
     border-top-color: var(--pass);
 }
@@ -1026,18 +1022,6 @@ main {
     font-weight: 700;
     letter-spacing: -0.02em;
     line-height: 1.15;
-}
-
-.grade-value {
-    color: var(--primary);
-    font-size: 3.5rem;
-}
-
-.score-subtext {
-    font-size: var(--font-sm);
-    color: var(--text-secondary);
-    font-weight: 500;
-    margin-top: 0.15rem;
 }
 
 .pass-value {
@@ -1229,8 +1213,6 @@ main {
 @media (prefers-reduced-motion: reduce) {
     .result-card,
     .summary-card,
-    .grade-value.animate-in,
-    .grade-value.grade-glow,
     .top-progress-bar,
     .back-to-top {
         opacity: 1;
@@ -3531,10 +3513,6 @@ details.st-node>summary:hover {
         font-size: 1.5rem;
     }
 
-    .grade-value {
-        font-size: 2rem;
-    }
-
     .banner-actions .share-btn span {
         font-size: 0.7rem;
     }
@@ -4339,40 +4317,6 @@ body {
 .protocol-name-tip[data-tooltip]:hover::after,
 .protocol-name-tip[data-tooltip]:focus::after {
     opacity: 1;
-}
-
-/* ==========================================================================
-   GRADE CARD ANIMATION
-   ========================================================================== */
-.grade-value.animate-in {
-    animation: gradeScale 300ms ease-out forwards;
-}
-
-@keyframes gradeScale {
-    from {
-        transform: scale(0.8);
-        opacity: 0.5;
-    }
-    to {
-        transform: scale(1);
-        opacity: 1;
-    }
-}
-
-.grade-value.grade-glow {
-    animation: gradeScale 300ms ease-out forwards, gradePulse 1s ease-out 300ms;
-}
-
-@keyframes gradePulse {
-    0% {
-        box-shadow: none;
-    }
-    50% {
-        box-shadow: 0 0 20px rgba(34, 197, 94, 0.3);
-    }
-    100% {
-        box-shadow: none;
-    }
 }
 
 /* ==========================================================================
@@ -8307,14 +8251,6 @@ main .meth-page {
     font-size: var(--font-xs);
     text-transform: uppercase;
     letter-spacing: 0.05em;
-}
-
-.comparison-grade-row td {
-    font-weight: 600;
-}
-
-.comparison-grade {
-    font-size: var(--font-base);
 }
 
 .comparison-winner {

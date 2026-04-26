@@ -76,7 +76,6 @@
                 <a href="/" class="nav-link">Home</a>
                 <a href="/dmarcbis" class="nav-link nav-link-active">DMARCbis Guide</a>
                 <a href="/dkim2" class="nav-link">DKIM2 Primer</a>
-                <a href="/methodology" class="nav-link">Methodology</a>
                 <a href="/privacy" class="nav-link">Privacy</a>
                 <a href="/about" class="nav-link">About</a>
             </nav>
@@ -507,7 +506,7 @@
                     <li>Confirm that all <code>rua=</code> and <code>ruf=</code> URIs include the <code>mailto:</code> prefix. Bare email addresses are no longer accepted.</li>
                 </ul>
                 <p>A word of caution on <code>np=</code>: this tag applies to all non-existent subdomains. If you use services that send email from dynamically created subdomains, or if marketing teams spin up campaign-specific subdomains without creating DNS records first, an <code>np=reject</code> policy will cause that mail to fail DMARC. Audit your sending infrastructure before adding this tag.</p>
-                <p><a href="/">Test your domain's current DMARC configuration</a> to see where you stand, or review the <a href="/methodology">scoring methodology</a> for details on how each protocol is evaluated.</p>
+                <p><a href="/">Test your domain's current DMARC configuration</a> to see where you stand.</p>
                 <p>An example of a DMARCbis-compliant record:</p>
                 <p><code>v=DMARC1; p=reject; sp=reject; np=reject; psd=n; fo=1; rua=mailto:dmarc@yourdomain.com</code></p>
             </div>
@@ -546,7 +545,6 @@
                     <li><a href="https://datatracker.ietf.org/doc/draft-ietf-dmarc-dmarcbis/41/" target="_blank" rel="noopener">DMARCbis draft-41 (IESG-approved version)</a></li>
                     <li><a href="https://dmarc.org/2025/12/summary-of-changes-in-dmarcbis/" target="_blank" rel="noopener">Summary of Changes in DMARCbis (dmarc.org)</a></li>
                     <li><a href="https://dmarcian.com/dmarcbis/" target="_blank" rel="noopener">dmarcian's DMARCbis Overview</a></li>
-                    <li><a href="/methodology">dns-audit.com Methodology</a></li>
                 </ul>
             </div>
 
@@ -565,8 +563,6 @@
                     <a href="/dmarcbis" class="footer-link">DMARCbis Guide</a>
                     <span class="footer-dot">&middot;</span>
                     <a href="/dkim2" class="footer-link">DKIM2 Primer</a>
-                    <span class="footer-dot">&middot;</span>
-                    <a href="/methodology" class="footer-link">Methodology</a>
                     <span class="footer-dot">&middot;</span>
                     <a href="/privacy" class="footer-link">Privacy</a>
                     <span class="footer-dot">&middot;</span>

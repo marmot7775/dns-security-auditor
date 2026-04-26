@@ -53,7 +53,6 @@
                 <a href="/" class="nav-link">Home</a>
                 <a href="/dmarcbis" class="nav-link">DMARCbis Guide</a>
                 <a href="/dkim2" class="nav-link">DKIM2 Primer</a>
-                <a href="/methodology" class="nav-link">Methodology</a>
                 <a href="/privacy" class="nav-link">Privacy</a>
                 <a href="/about" class="nav-link nav-link-active">About</a>
             </nav>
@@ -67,18 +66,17 @@
                 <h1>About dns-audit.com</h1>
 
                 <h2>What This Tool Does</h2>
-                <p>dns-audit.com performs comprehensive DNS and email security audits against current RFC standards. It evaluates DMARC, SPF, DKIM, MTA-STS, TLS-RPT, DANE, DNSSEC, CAA, BIMI, and nameserver configuration, then scores your domain on a 100-point scale across six weighted categories.</p>
+                <p>dns-audit.com performs comprehensive DNS and email security audits against current RFC standards. It evaluates DMARC, SPF, DKIM, MTA-STS, TLS-RPT, DANE, DNSSEC, CAA, BIMI, and nameserver configuration, then reports findings and fixes against current RFC standards.</p>
                 <p>Unlike most DNS lookup tools that simply display records, dns-audit.com analyzes your configuration for dangerous tag combinations, validates against RFC specifications, detects your email service providers, and provides actionable recommendations with copy-paste DNS records.</p>
 
                 <h2>DMARCbis Awareness</h2>
                 <p>This tool validates against both RFC 7489 (current DMARC) and draft-ietf-dmarc-dmarcbis, the upcoming revision. It implements the DMARCbis DNS Tree Walk algorithm for organizational domain discovery, supports new tags (np=, psd=, t=), flags deprecated tags (pct, ri, rf), and generates migration paths to DMARCbis-ready records.</p>
 
                 <h2>Methodology</h2>
-                <p>All checks use live DNS queries against published records. No data is collected from email headers or message content. DKIM selector discovery tests over 1,100 common patterns using SPF-based sender detection. Scoring weights prioritize authentication (DMARC 25, SPF 20, DKIM 15) over infrastructure, reflecting their direct impact on email deliverability and spoofing prevention.</p>
-                <p>Full scoring details are available on the <a href="/methodology">Methodology</a> page.</p>
+                <p>All checks use live DNS queries against published records. No data is collected from email headers or message content. DKIM selector discovery tests over 1,100 common patterns using SPF-based sender detection.</p>
 
                 <h2>Privacy</h2>
-                <p>dns-audit.com queries only publicly available DNS records. No user accounts, no cookies, no tracking. IP addresses are held in memory for rate limiting and are not written to disk. Audit logs record domain, grade, and timestamp only. Full details are in the <a href="/privacy">Privacy Policy</a>.</p>
+                <p>dns-audit.com queries only publicly available DNS records. No user accounts, no cookies, no tracking. IP addresses are held in memory for rate limiting and are not written to disk. Audit logs record audit metadata (domain, audit duration, browser identifier) only. Full details are in the <a href="/privacy">Privacy Policy</a>.</p>
 
                 <h2>Open Source</h2>
                 <p>The complete source code is available on <a href="https://github.com/marmot7775/dns-security-auditor" target="_blank" rel="noopener">GitHub</a> under the MIT License. Security researchers can review the <a href="https://github.com/marmot7775/dns-security-auditor/security/policy" target="_blank" rel="noopener">Security Policy</a> for responsible disclosure guidelines.</p>
@@ -101,8 +99,6 @@
                     <a href="/dmarcbis" class="footer-link">DMARCbis Guide</a>
                     <span class="footer-dot">&middot;</span>
                     <a href="/dkim2" class="footer-link">DKIM2 Primer</a>
-                    <span class="footer-dot">&middot;</span>
-                    <a href="/methodology" class="footer-link">Methodology</a>
                     <span class="footer-dot">&middot;</span>
                     <a href="/privacy" class="footer-link">Privacy</a>
                     <span class="footer-dot">&middot;</span>

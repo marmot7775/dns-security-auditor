@@ -348,7 +348,7 @@ const STEP_MESSAGES = {
     'Certificate Transparency': 'Querying certificate transparency logs...',
     'Blocklist': 'Checking IP and domain blocklists...',
     'Vendor Fingerprinting': 'Fingerprinting email services...',
-    'Scoring': 'Calculating security score...',
+    'Scoring': 'Finalizing audit...',
 };
 
 function showLoading() {
@@ -486,7 +486,7 @@ function renderResults(data) {
     _renderRequestId(data.request_id);
 
     // Prompt 2: Record to recent audits in localStorage
-    _recordRecentAudit(data.domain, data.score?.grade || '?');
+    _recordRecentAudit(data.domain);
 
     // -- Executive Summary (Prompt 16) -- render at the very top --
     const esSlot = document.getElementById('executive-summary-slot');
@@ -570,69 +570,6 @@ function renderResults(data) {
         document.title = `(${warnCount} warning${warnCount > 1 ? 's' : ''}) ${data.domain} | DNS Audit`;
     } else {
         document.title = `${data.domain} | DNS Audit`;
-    }
-
-    // Grade color-coding
-    const gradeCard = document.querySelector('.grade-card');
-    const gradeEl = document.getElementById('summary-grade');
-    const grade = data.score?.grade || '?';
-    const isDefensive = data.defensive_dns;
-
-    // Clear previous animation classes
-    gradeEl.classList.remove('animate-in', 'grade-glow');
-
-    if (isDefensive) {
-        // Non-mail domains get a shield icon instead of a letter grade
-        gradeEl.textContent = '\u26E8';
-        gradeEl.style.fontSize = '2rem';
-        if (gradeCard) {
-            gradeCard.style.borderTopColor = '#6366f1';
-            gradeCard.style.background = '#eef2ff';
-            gradeEl.style.color = '#4338ca';
-        }
-        // Replace label
-        const label = gradeCard?.querySelector('.summary-label');
-        if (label) label.textContent = 'Defensive DNS';
-    } else {
-        gradeEl.textContent = grade;
-        gradeEl.style.fontSize = '';
-        const gradeColors = {
-            'A+': { bg: '#ecfdf5', border: '#059669', text: '#064e3b' },
-            'A': { bg: '#ecfdf5', border: '#10b981', text: '#065f46' },
-            'B': { bg: '#eff6ff', border: '#3b82f6', text: '#1e40af' },
-            'C': { bg: '#fffbeb', border: '#f59e0b', text: '#92400e' },
-            'D': { bg: '#fff7ed', border: '#f97316', text: '#9a3412' },
-            'F': { bg: '#fef2f2', border: '#ef4444', text: '#991b1b' },
-        };
-        const gc = gradeColors[grade];
-        if (gc && gradeCard) {
-            gradeCard.style.borderTopColor = gc.border;
-            gradeCard.style.background = gc.bg;
-            gradeEl.style.color = gc.text;
-        }
-        // Restore label in case previous audit was defensive
-        const label = gradeCard?.querySelector('.summary-label');
-        if (label) label.textContent = 'Security Grade';
-        // Grade entrance animation (with glow for A/A+)
-        if (grade === 'A' || grade === 'A+') {
-            gradeEl.classList.add('grade-glow');
-        } else {
-            gradeEl.classList.add('animate-in');
-        }
-    }
-    // Score number with count-up animation
-    const scoreNum = data.score?.total;
-    let scoreEl = document.getElementById('summary-score');
-    if (scoreNum !== undefined && gradeCard) {
-        if (!scoreEl) {
-            scoreEl = document.createElement('div');
-            scoreEl.id = 'summary-score';
-            scoreEl.className = 'score-subtext';
-            gradeEl.parentNode.insertBefore(scoreEl, gradeEl.nextSibling);
-        }
-        _animateScore(scoreEl, Math.round(scoreNum));
-    } else if (scoreEl) {
-        scoreEl.remove();
     }
 
     // -- Authentication Resilience --
@@ -3159,23 +3096,6 @@ document.getElementById('pdf-btn').addEventListener('click', () => {
 })();
 
 // ============================================================
-// Score count-up animation
-// ============================================================
-
-function _animateScore(element, target) {
-    const duration = 600;
-    const start = performance.now();
-    function update(now) {
-        const elapsed = now - start;
-        const progress = Math.min(elapsed / duration, 1);
-        const eased = 1 - Math.pow(1 - progress, 3);
-        element.textContent = Math.round(eased * target) + ' / 100';
-        if (progress < 1) requestAnimationFrame(update);
-    }
-    requestAnimationFrame(update);
-}
-
-// ============================================================
 // Copy All Records
 // ============================================================
 
@@ -3244,10 +3164,11 @@ function _initShareDropdown() {
 
         dropdown.querySelector('[data-action="twitter"]').addEventListener('click', () => {
             const d = lastAuditData;
-            const grade = d?.score?.grade || '';
-            const score = Math.round(d?.score?.total || 0);
             const domain = d?.domain || '';
-            const text = `DNS security audit for ${domain}: Grade ${grade} (${score}/100)`;
+            const checks = d?.checks || [];
+            const passCount = checks.filter(c => c.status === 'pass').length;
+            const failCount = checks.filter(c => c.status === 'fail').length;
+            const text = `DNS security audit for ${domain}: ${passCount} passing, ${failCount} issues`;
             const url = _getShareUrl();
             window.open('https://twitter.com/intent/tweet?text=' + encodeURIComponent(text) + '&url=' + encodeURIComponent(url), '_blank', 'noopener');
             removeDropdown();
@@ -3289,8 +3210,6 @@ function _buildShareSummary() {
     const d = lastAuditData;
     if (!d) return '';
     const domain = d.domain || '';
-    const grade = d.score?.grade || '?';
-    const score = Math.round(d.score?.total || 0);
     const checks = d.checks || [];
     const passCount = checks.filter(c => c.status === 'pass').length;
     const warnCount = checks.filter(c => c.status === 'warn').length;
@@ -3300,7 +3219,6 @@ function _buildShareSummary() {
 
     let lines = [];
     lines.push(`DNS Security Audit: ${domain}`);
-    lines.push(`Grade: ${grade} (${score}/100)`);
 
     let statusLine = '';
     statusLine += `\u2713 ${passCount} Passing`;
@@ -3609,12 +3527,12 @@ function showToast(message) {
 // Recent Audits (Prompt 2)
 // ============================================================
 
-function _recordRecentAudit(domain, grade) {
+function _recordRecentAudit(domain) {
     try {
         let recent = JSON.parse(localStorage.getItem('recentAudits') || '[]');
         // Remove duplicate
         recent = recent.filter(r => r.domain !== domain);
-        recent.unshift({ domain, grade, timestamp: Date.now() });
+        recent.unshift({ domain, timestamp: Date.now() });
         // Keep only 10
         if (recent.length > 10) recent = recent.slice(0, 10);
         localStorage.setItem('recentAudits', JSON.stringify(recent));
@@ -3658,7 +3576,7 @@ function _renderRecentAudits() {
             const chip = document.createElement('button');
             chip.type = 'button';
             chip.className = 'recent-audit-chip';
-            chip.textContent = `${r.domain} (${r.grade})`;
+            chip.textContent = r.domain;
             chip.addEventListener('click', () => {
                 domainInput.value = r.domain;
                 runAudit(r.domain);
@@ -3776,18 +3694,14 @@ function _renderRequestId(requestId) {
 
 function _exportToCSV(data) {
     if (!data) return;
-    const rows = [['Domain', 'Grade', 'Score', 'Check', 'Status', 'Verdict', 'Priority Fixes', 'Timestamp']];
+    const rows = [['Domain', 'Check', 'Status', 'Verdict', 'Priority Fixes', 'Timestamp']];
     const ts = new Date().toISOString();
-    const grade = data.score?.grade || '?';
-    const score = Math.round(data.score?.total || 0);
     const fixes = (data.priority_fixes || []).map(f => f.title || f).join('; ');
 
     if (data.checks && data.checks.length > 0) {
         data.checks.forEach(check => {
             rows.push([
                 data.domain,
-                grade,
-                score,
                 check.name || '',
                 check.status || '',
                 (check.verdict || '').replace(/,/g, ';'),
@@ -3796,7 +3710,7 @@ function _exportToCSV(data) {
             ]);
         });
     } else {
-        rows.push([data.domain, grade, score, '', '', '', fixes, ts]);
+        rows.push([data.domain, '', '', '', fixes, ts]);
     }
 
     const csvContent = rows.map(r => r.map(cell => `"${String(cell).replace(/"/g, '""')}"`).join(',')).join('\n');
@@ -3929,11 +3843,6 @@ function _initComparisonMode() {
 }
 
 function _renderComparison(data1, data2, container) {
-    const grade1 = data1.score?.grade || '?';
-    const grade2 = data2.score?.grade || '?';
-    const score1 = Math.round(data1.score?.total || 0);
-    const score2 = Math.round(data2.score?.total || 0);
-
     let html = `
         <div class="comparison-table-wrap">
             <table class="comparison-table">
@@ -3945,11 +3854,6 @@ function _renderComparison(data1, data2, container) {
                     </tr>
                 </thead>
                 <tbody>
-                    <tr class="comparison-grade-row">
-                        <td><strong>Overall Grade</strong></td>
-                        <td><span class="comparison-grade">${escapeHtml(grade1)} (${score1}/100)</span></td>
-                        <td><span class="comparison-grade">${escapeHtml(grade2)} (${score2}/100)</span></td>
-                    </tr>
     `;
 
     // Build a map of checks for data2
@@ -3977,12 +3881,15 @@ function _renderComparison(data1, data2, container) {
 
     html += `</tbody></table></div>`;
 
-    // Summary: which domain is stronger
-    const stronger = score1 > score2 ? data1.domain : score2 > score1 ? data2.domain : null;
-    if (stronger) {
-        html += `<div class="comparison-summary">${escapeHtml(stronger)} has a stronger security posture</div>`;
+    // Summary: compare by failCount (fewer fails = stronger)
+    const fail1 = (data1.checks || []).filter(c => c.status === 'fail').length;
+    const fail2 = (data2.checks || []).filter(c => c.status === 'fail').length;
+    if (fail1 < fail2) {
+        html += `<div class="comparison-summary">${escapeHtml(data1.domain)} has fewer issues</div>`;
+    } else if (fail2 < fail1) {
+        html += `<div class="comparison-summary">${escapeHtml(data2.domain)} has fewer issues</div>`;
     } else {
-        html += `<div class="comparison-summary">Both domains have equivalent security scores</div>`;
+        html += `<div class="comparison-summary">Both domains have the same number of issues</div>`;
     }
 
     container.innerHTML = html;
