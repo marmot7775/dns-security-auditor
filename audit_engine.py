@@ -4153,6 +4153,35 @@ def run_full_audit(domain: str, dkim_selector: Optional[str] = None,
             "DANE"))
 
     if _should_include("dkim", scope_set):
+        # DKIM2 (draft-ietf-dkim-dkim2-spec) is a successor protocol in
+        # active IETF development. No major mailbox provider validates
+        # it yet and senders publish nothing new for it (it reuses DKIM
+        # keys), so there is nothing to look up. We only surface a
+        # static info-level note so the audit reflects awareness of the
+        # space without producing false signals. This is appended to the
+        # DKIM raw result after the check runs; transform_dkim renders
+        # raw["issues"] at the end of details.
+        def _append_dkim2_note(raw: Dict) -> None:
+            raw.setdefault("issues", []).append({
+                "severity": "info",
+                "issue": "DKIM2 (successor protocol) is in IETF development",
+                "plain_english": (
+                    "DKIM2 is a successor to DKIM currently in active IETF "
+                    "development. It addresses replay attacks, forwarding-"
+                    "induced authentication failures, and adds secure delayed "
+                    "bounces. No major mailbox provider has deployed it yet, "
+                    "and senders do not need to publish anything new for it "
+                    "(it reuses DKIM keys). We will check for DKIM2 signing "
+                    "once major mailbox providers begin validating it."
+                ),
+                "fix": (
+                    "No action required today. Track the IETF draft at "
+                    "https://datatracker.ietf.org/doc/draft-ietf-dkim-dkim2-spec/ "
+                    "if you want early visibility."
+                ),
+                "spec_reference": "draft-ietf-dkim-dkim2-spec",
+            })
+
         if dkim_selector and dkim_selector.strip():
             _dkim_sel = dkim_selector.strip()
             def _run_dkim_direct():
@@ -4174,6 +4203,7 @@ def run_full_audit(domain: str, dkim_selector: Optional[str] = None,
                 except dns.exception.DNSException:
                     _raw["selector_not_found"] = _dkim_sel
                     _raw["tested_count"] = 1
+                _append_dkim2_note(_raw)
                 return _raw
             _parallel_checks.append(("dkim", _run_dkim_direct,
                 lambda raw: transform_dkim(raw, domain, has_mx=has_mx), "DKIM"))
@@ -4182,8 +4212,11 @@ def run_full_audit(domain: str, dkim_selector: Optional[str] = None,
             def _dkim_progress(found_count):
                 if progress_callback:
                     progress_callback(f"DKIM:{found_count}", completed, total_checks)
-            _parallel_checks.append(("dkim",
-                lambda: smart_dkim_check(domain, _spf_rec, progress_callback=_dkim_progress),
+            def _run_dkim_smart():
+                _raw = smart_dkim_check(domain, _spf_rec, progress_callback=_dkim_progress)
+                _append_dkim2_note(_raw)
+                return _raw
+            _parallel_checks.append(("dkim", _run_dkim_smart,
                 lambda raw: transform_dkim(raw, domain, has_mx=has_mx), "DKIM"))
 
     if _should_include("ct", scope_set):

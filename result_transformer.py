@@ -3953,6 +3953,12 @@ def transform_dkim(raw: Dict, domain: str, has_mx: bool = True) -> Dict:
         # User provided a specific selector that wasn't found
         selector_not_found = raw.get("selector_not_found")
         if selector_not_found:
+            _details = [
+                {"type": "error", "text": f"No TXT record at {_e(selector_not_found)}._domainkey.{_e(domain)}"},
+                {"type": "info", "text": "Check your email provider's admin console for the correct selector name"},
+            ]
+            for issue in raw.get("issues", []):
+                _details.append(_issue_to_detail(issue))
             return {
                 "name": "DKIM",
                 "status": "fail",
@@ -3965,10 +3971,7 @@ def transform_dkim(raw: Dict, domain: str, has_mx: bool = True) -> Dict:
                     f"Verify the selector name is correct. You can find your DKIM "
                     f"selector in the DKIM-Signature header of a sent message (the s= value)."
                 ),
-                "details": [
-                    {"type": "error", "text": f"No TXT record at {_e(selector_not_found)}._domainkey.{_e(domain)}"},
-                    {"type": "info", "text": "Check your email provider's admin console for the correct selector name"},
-                ],
+                "details": _details,
                 "fix": (
                     f"Verify that DKIM is enabled in your email provider's settings and that the public key "
                     f"TXT record is published at <strong>{_e(selector_not_found)}._domainkey.{_e(domain)}</strong>."
@@ -3977,6 +3980,13 @@ def transform_dkim(raw: Dict, domain: str, has_mx: bool = True) -> Dict:
                 "deliverability": None,
             }
 
+        _unknown_details = [
+            {"type": "info", "text": f"Checked {tested} common selectors, no public keys found"},
+            {"type": "info", "text": "DKIM selectors are private and cannot be enumerated from outside"},
+            {"type": "info", "text": "Enter your specific selector above for a definitive check"},
+        ]
+        for issue in raw.get("issues", []):
+            _unknown_details.append(_issue_to_detail(issue))
         return {
             "name": "DKIM",
             "status": "warn",
@@ -3995,11 +4005,7 @@ def transform_dkim(raw: Dict, domain: str, has_mx: bool = True) -> Dict:
                 "but that does not mean DKIM is not configured. "
                 "To verify, enter your selector in the field above for a direct lookup."
             ).format(tested=tested),
-            "details": [
-                {"type": "info", "text": f"Checked {tested} common selectors, no public keys found"},
-                {"type": "info", "text": "DKIM selectors are private and cannot be enumerated from outside"},
-                {"type": "info", "text": "Enter your specific selector above for a definitive check"},
-            ],
+            "details": _unknown_details,
             "fix": None,
             "fix_records": None,
             "deliverability": (
