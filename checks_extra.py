@@ -12,6 +12,7 @@ from urllib.parse import urlparse
 
 try:
     import requests
+    from requests.adapters import HTTPAdapter
     REQUESTS_AVAILABLE = True
 except ImportError:
     REQUESTS_AVAILABLE = False
@@ -51,9 +52,38 @@ def _resolve_and_validate(hostname: str) -> str:
         raise ValueError(f"DNS resolution failed for {hostname}: {e}")
 
 
+if REQUESTS_AVAILABLE:
+    class _PinnedHostSSLAdapter(HTTPAdapter):
+        """Use the Host header for SNI and TLS cert validation.
+
+        Lets us connect to a DNS-pinned IP (SSRF protection) while still
+        validating the certificate against the original hostname, as
+        required by RFC 8461 §3.3 for MTA-STS. Pattern from
+        requests-toolbelt's HostHeaderSSLAdapter.
+        """
+
+        def send(self, request, **kwargs):
+            host_header = None
+            for header in request.headers:
+                if header.lower() == "host":
+                    host_header = request.headers[header]
+                    break
+            connection_pool_kw = self.poolmanager.connection_pool_kw
+            if host_header:
+                ssl_hostname = host_header.split(":", 1)[0]
+                connection_pool_kw["assert_hostname"] = ssl_hostname
+                connection_pool_kw["server_hostname"] = ssl_hostname
+            else:
+                connection_pool_kw.pop("assert_hostname", None)
+                connection_pool_kw.pop("server_hostname", None)
+            return super().send(request, **kwargs)
+
+
 def _safe_fetch(url: str, timeout: float = 10.0, **kwargs) -> "requests.Response":
     """Fetch a URL with SSRF protection. Resolves hostname once,
     validates the IP, then connects directly to the pinned IP.
+    TLS certificate verification is preserved against the original
+    hostname via SNI override.
     Raises ValueError if the target is a private/internal address."""
     parsed = urlparse(url)
     hostname = parsed.hostname
@@ -62,17 +92,33 @@ def _safe_fetch(url: str, timeout: float = 10.0, **kwargs) -> "requests.Response
 
     ip = _resolve_and_validate(hostname)
 
-    # Rewrite URL to connect to pinned IP, set Host header
-    pinned_url = url.replace(f"://{hostname}", f"://{ip}", 1)
-    headers = kwargs.pop("headers", {})
+    # IPv6 literals need brackets in URL netloc
+    ip_literal = f"[{ip}]" if ":" in ip else ip
+    new_netloc = f"{ip_literal}:{parsed.port}" if parsed.port else ip_literal
+    if parsed.username:
+        userinfo = parsed.username
+        if parsed.password:
+            userinfo += f":{parsed.password}"
+        new_netloc = f"{userinfo}@{new_netloc}"
+    pinned_url = parsed._replace(netloc=new_netloc).geturl()
+
+    headers = kwargs.pop("headers", None) or {}
+    # Strip any caller-supplied Host header; we set it explicitly.
+    headers = {k: v for k, v in headers.items() if k.lower() != "host"}
     headers["Host"] = hostname
 
-    return requests.get(
+    # Fresh session per call: urllib3 snapshots connection_pool_kw at pool
+    # creation, so a shared session could reuse a stale pool with the wrong
+    # SNI/assert_hostname for a different Host header.
+    session = requests.Session()
+    if parsed.scheme == "https":
+        session.mount("https://", _PinnedHostSSLAdapter())
+
+    return session.get(
         pinned_url,
         headers=headers,
         timeout=timeout,
         allow_redirects=False,
-        verify=False,  # Can't verify cert when connecting to IP directly
         **kwargs,
     )
 
