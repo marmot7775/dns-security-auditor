@@ -8212,20 +8212,16 @@ body {
 }
 
 .skip-to-content:focus {
-    position: fixed;
-    top: var(--space-md);
-    left: var(--space-md);
-    z-index: 10000;
-    width: auto;
-    height: auto;
+    position: absolute;
+    top: 0;
+    left: 50%;
+    transform: translateX(-50%);
+    z-index: 9999;
     padding: 0.75rem 1.5rem;
-    background-color: var(--primary);
+    background: var(--primary);
     color: var(--text-inverse);
-    text-decoration: none;
-    border-radius: var(--radius);
     font-weight: 600;
-    box-shadow: var(--shadow-lg);
-    outline: 2px solid var(--text-inverse);
-    outline-offset: 2px;
+    border-radius: 0 0 var(--radius) var(--radius);
+    text-decoration: none;
 }
 
