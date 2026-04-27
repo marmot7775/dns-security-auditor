@@ -93,11 +93,12 @@
 
             <!-- Lede -->
             <div class="dbis-section" id="lede">
-                <p>DMARC has a small problem at its core. To enforce the policies you publish, the receiving mail server needs to know where your organizational domain ends. Is <code>mail.example.co.uk</code> an organization called <code>mail.example</code> or an organization called <code>example</code>? The answer determines whether your policy applies, and getting it wrong means your enforcement fails open or breaks delivery.</p>
-                <p>The way DMARC has solved this since 2015 is by consulting a list. The list is called the <a href="https://publicsuffix.org/" target="_blank" rel="noopener">Public Suffix List</a>. It is a Mozilla project from 2007. It contains every public domain suffix on the internet. It is maintained by volunteers, hosted on GitHub, and bundled into receivers' mail systems on whatever schedule each receiver feels like.</p>
+                <p>DMARC, the email authentication standard that decides whether hundreds of millions of messages reach the inbox each day, has been depending on a list maintained by volunteers on GitHub.</p>
+                <p>I am not exaggerating for effect. The list is called the <a href="https://publicsuffix.org/" target="_blank" rel="noopener">Public Suffix List</a>. It is a Mozilla project from 2007 that contains every public domain suffix on the internet. Volunteers maintain it. Receivers download copies and use them to figure out where your organizational domain ends, which is the load-bearing decision that determines whether your DMARC policy applies to a given message.</p>
                 <p>DMARCbis, the upcoming update to the DMARC specification, replaces this with a mechanism called the DNS Tree Walk.</p>
                 <p>I want to be clear about something. The volunteers are the heroes of this story.</p>
                 <p>They have kept this thing alive for nearly twenty years. They have processed thousands of submissions from registries adding new TLDs, from companies declaring private suffixes, from the long tail of internet weirdness. They have done it for free. They have done it well.</p>
+                <blockquote class="dbis-pullquote">For the last ten years, the load-bearing decision in DMARC has been made by consulting a list maintained by volunteers.</blockquote>
                 <p>The absurdity is not the volunteers. The absurdity is that DMARC has been resting, structurally, on a list it does not own and volunteer labor it does not pay for, the entire time.</p>
             </div>
 
