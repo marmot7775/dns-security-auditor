@@ -179,7 +179,7 @@ class SecurityHeadersMiddleware(BaseHTTPMiddleware):
             response.headers["Cache-Control"] = "no-store"
         elif any(path.endswith(ext) for ext in ('.css', '.js', '.png', '.jpg', '.svg', '.woff2', '.woff', '.ico')):
             response.headers["Cache-Control"] = "public, max-age=14400"  # 4 hours
-        elif path in ('/', '/dmarcbis', '/dnssec', '/blog/dmarc-running-on-a-text-file', '/blog/dnssec-stopped-being-hard', '/privacy', '/about'):
+        elif path in ('/', '/dmarcbis', '/dnssec', '/blog/dnssec-stopped-being-hard', '/privacy', '/about'):
             response.headers["Cache-Control"] = "public, max-age=300"  # 5 minutes for HTML
         return response
 
@@ -758,15 +758,9 @@ async def sitemap_xml():
         "  </url>\n"
         "  <url>\n"
         "    <loc>https://dns-audit.com/dmarcbis</loc>\n"
-        "    <lastmod>2026-04-24</lastmod>\n"
-        "    <changefreq>monthly</changefreq>\n"
-        "    <priority>0.8</priority>\n"
-        "  </url>\n"
-        "  <url>\n"
-        "    <loc>https://dns-audit.com/blog/dmarc-running-on-a-text-file</loc>\n"
         "    <lastmod>2026-04-26</lastmod>\n"
         "    <changefreq>monthly</changefreq>\n"
-        "    <priority>0.7</priority>\n"
+        "    <priority>0.8</priority>\n"
         "  </url>\n"
         "  <url>\n"
         "    <loc>https://dns-audit.com/dnssec</loc>\n"
@@ -845,7 +839,7 @@ if STATIC_DIR.exists():
 
     @app.get("/blog/dmarc-running-on-a-text-file", tags=["Pages"])
     async def dmarc_running_on_a_text_file():
-        return FileResponse(str(STATIC_DIR / "dmarc-running-on-a-text-file.html"))
+        return RedirectResponse(url="/dmarcbis", status_code=301)
 
     @app.get("/blog/dnssec-stopped-being-hard", tags=["Pages"])
     async def dnssec_stopped_being_hard():
