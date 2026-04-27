@@ -3,33 +3,38 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>DNSSEC | dns-audit.com</title>
-    <meta name="description" content="DNSSEC has a reputation problem the protocol no longer deserves. A January 2026 dialogue between an ICANN technologist and a humanities-trained newcomer surfaces the part of the story almost nobody tells.">
-    <meta name="keywords" content="DNSSEC, DNS security, RFC 9615, RFC 7344, RFC 8078, ICANN, DNSSEC reputation, Roy Arends, deSEC, automated DNSSEC">
+    <title>DNSSEC stopped being hard. The reputation did not catch up. | dns-audit.com</title>
+    <meta name="description" content="The DNSSEC you remember required hands-on work at every step. The DNSSEC you can deploy at a major provider in 2026 is a checkbox. Here is what changed, what it actually protects against, and what good deployment looks like.">
+    <meta name="keywords" content="DNSSEC, DNS security, RFC 9615, RFC 7344, RFC 8078, RFC 6605, ECDSA, CDS, CDNSKEY, hosted DNSSEC, DNSSEC adoption, DNSSEC 2026">
     <meta name="author" content="Neil Anuskiewicz">
     <meta property="og:type" content="article" />
     <meta property="og:site_name" content="DNS Security Auditor" />
     <meta property="og:url" content="https://dns-audit.com/dnssec" />
-    <meta property="og:title" content="DNSSEC | dns-audit.com" />
-    <meta property="og:description" content="DNSSEC has a reputation problem the protocol no longer deserves. A January 2026 dialogue between an ICANN technologist and a humanities-trained newcomer surfaces the part of the story almost nobody tells." />
+    <meta property="og:title" content="DNSSEC stopped being hard. The reputation did not catch up." />
+    <meta property="og:description" content="The DNSSEC you remember required hands-on work at every step. The DNSSEC you can deploy at a major provider in 2026 is a checkbox. Here is what changed, what it actually protects against, and what good deployment looks like." />
     <meta property="og:image" content="https://dns-audit.com/static/og-image.png" />
     <meta name="twitter:card" content="summary" />
-    <meta name="twitter:title" content="DNSSEC | dns-audit.com" />
-    <meta name="twitter:description" content="DNSSEC has a reputation problem the protocol no longer deserves. A January 2026 dialogue between an ICANN technologist and a humanities-trained newcomer surfaces the part of the story almost nobody tells." />
+    <meta name="twitter:title" content="DNSSEC stopped being hard. The reputation did not catch up." />
+    <meta name="twitter:description" content="The DNSSEC you remember required hands-on work at every step. The DNSSEC you can deploy at a major provider in 2026 is a checkbox. Here is what changed, what it actually protects against, and what good deployment looks like." />
     <link rel="canonical" href="https://dns-audit.com/dnssec">
     <link rel="icon" type="image/svg+xml" href="/static/favicon.svg">
     <link rel="apple-touch-icon" sizes="180x180" href="/static/apple-touch-icon.png">
     <link rel="icon" type="image/png" sizes="32x32" href="/static/favicon-32.png">
-    <link rel="stylesheet" href="/static/style.css?v=8b202ac">
+    <link rel="stylesheet" href="/static/style.css?v=f826537">
     <script type="application/ld+json">
     {
         "@context": "https://schema.org",
         "@type": "TechArticle",
-        "headline": "DNSSEC",
-        "description": "DNSSEC has a reputation problem the protocol no longer deserves. A January 2026 dialogue between an ICANN technologist and a humanities-trained newcomer surfaces the part of the story almost nobody tells.",
+        "headline": "DNSSEC stopped being hard. The reputation did not catch up.",
+        "description": "The DNSSEC you remember required hands-on work at every step. The DNSSEC you can deploy at a major provider in 2026 is a checkbox. Here is what changed, what it actually protects against, and what good deployment looks like.",
         "url": "https://dns-audit.com/dnssec",
-        "proficiencyLevel": "Beginner",
-        "dependencies": "Basic understanding of DNS"
+        "author": {
+            "@type": "Person",
+            "name": "Neil Anuskiewicz"
+        },
+        "datePublished": "2026-04-26",
+        "proficiencyLevel": "Intermediate",
+        "dependencies": "Working knowledge of DNS"
     }
     </script>
     <script type="application/ld+json">
@@ -42,23 +47,23 @@
                 "name": "Is DNSSEC still hard to deploy in 2026?",
                 "acceptedAnswer": {
                     "@type": "Answer",
-                    "text": "No. RFC 7344 (CDS and CDNSKEY), RFC 8078, and RFC 9615 closed the manual registrar steps. Hosted DNSSEC at providers like Cloudflare, deSEC, and Route 53 turns signing into a toggle. Algorithm 13 (ECDSA P-256) eliminated the response size problems that caused early outages."
+                    "text": "At a major DNS provider on a major TLD, no. RFC 7344, RFC 8078, and RFC 9615 closed the registrar handoff that caused most outages. Cloudflare, deSEC, Route 53, NS1, and Google Cloud DNS turn signing into a checkbox. If your DNS is at a provider that did not implement these, you may need to migrate before DNSSEC is available to you."
                 }
             },
             {
                 "@type": "Question",
-                "name": "Does DNSSEC stop phishing or encrypt DNS queries?",
+                "name": "What does DNSSEC actually protect against?",
                 "acceptedAnswer": {
                     "@type": "Answer",
-                    "text": "No. DNSSEC is a data integrity system. It signs DNS records so resolvers can verify they were not altered in transit. It does not provide confidentiality (that is DoH or DoT), it does not stop phishing, and it does not authenticate email (that is SPF, DKIM, and DMARC)."
+                    "text": "Origin authentication and integrity for DNS answers. It closes cache poisoning, on-path tampering, and similar DNS-layer attacks. It does not stop phishing, does not encrypt queries (that is DoH or DoT), does not authenticate email (that is SPF, DKIM, DMARC), and does not protect against compromise of the signing infrastructure or the registrar account."
                 }
             },
             {
                 "@type": "Question",
-                "name": "What does a good DNSSEC deployment look like today?",
+                "name": "What does good DNSSEC deployment look like in 2026?",
                 "acceptedAnswer": {
                     "@type": "Answer",
-                    "text": "Sign with Algorithm 13 (ECDSA P-256), use NSEC instead of NSEC3 unless you need zone-content obfuscation, automate rollovers via CDS and CDNSKEY, and monitor RRSIG expiration at 7 days, 3 days, and 24 hours. Most DNSSEC outages are monitoring failures, not protocol failures."
+                    "text": "Algorithm 13 (ECDSA P-256), automated key rollover via CDS and CDNSKEY, a continuously monitored DS record at the registrar, end-to-end chain validation tested with DNSViz or Verisign's analyzer, hosted signing rather than hand-rolled, and a KSK rollover plan that has been rehearsed."
                 }
             }
         ]
@@ -74,7 +79,7 @@
             </a>
             <nav class="site-nav">
                 <a href="/" class="nav-link">Home</a>
-                <a href="/dmarcbis" class="nav-link">DMARCbis Guide</a>
+                <a href="/dmarcbis" class="nav-link">DMARCbis</a>
                 <a href="/dnssec" class="nav-link nav-link-active">DNSSEC</a>
                 <a href="/privacy" class="nav-link">Privacy</a>
                 <a href="/about" class="nav-link">About</a>
@@ -87,99 +92,108 @@
 
             <!-- Hero -->
             <div class="dbis-hero">
-                <h1><span>DNSSEC</span></h1>
-                <p class="dbis-hero-sub">DNSSEC has a reputation problem the protocol no longer deserves. Here is what I learned from a January 2026 dialogue between an ICANN technologist and a humanities-trained newcomer that should change how you think about a protocol you probably gave up on.</p>
+                <h1><span>DNSSEC stopped being hard</span></h1>
+                <p class="dbis-hero-sub">The reputation did not catch up. The DNSSEC you remember required hands-on work at every step. The DNSSEC you can deploy at a major provider in 2026 is a checkbox.</p>
             </div>
 
             <!-- Lede -->
             <div class="dbis-section" id="lede">
-                <p>In January, a researcher named Barbara Jantzen published a dialogue with Roy Arends, who has worked on DNSSEC at ICANN since the late 1990s.</p>
-                <p>The piece is called <a href="https://circleid.com/posts/the-excruciating-slow-rise-of-dnssec" target="_blank" rel="noopener">The Excruciating Slow Rise of DNSSEC</a>. It is one of the strangest technical articles I have read in years.</p>
-                <p>It is strange because Jantzen is not a technologist. She is trained in the humanities. She came to the DNS world through a job at deSEC, a non-profit DNSSEC operator, and what she noticed was not technical. It was emotional.</p>
-                <p>People in the DNS community, she observed, had feelings about DNSSEC. Not opinions. Feelings. They were embarrassed by it. They were angry about it. Some of them, quietly, were heartbroken.</p>
-                <p>She was right. And the heartbreak is the part of the DNSSEC story almost nobody tells.</p>
+                <p>You have an opinion about DNSSEC. There is a decent chance you formed it before 2017 and have not had a reason to revisit it since.</p>
+                <p>Mine looked like this. Complicated. Fragile. The kind of protocol that takes your domain offline at 2am, the kind you turn on when a regulator makes you and skip otherwise. I read <a href="https://sockpuppet.org/blog/2015/01/15/against-dnssec/" target="_blank" rel="noopener">Against DNSSEC</a> when it came out. I cited it more than once. The skepticism I absorbed in the rough years was earned. The <a href="https://ianix.com/pub/dnssec-outages.html" target="_blank" rel="noopener">IANIX outage list</a> was earned. Paul Vixie publicly soured on DNSSEC's adoption trajectory and the criticism stuck. None of that was wrong.</p>
+                <p>What was wrong was that I left the opinion there and stopped checking on it.</p>
+                <p>This piece is the check. A walkthrough of what changed, what DNSSEC actually does (less than its supporters claim, more than its critics admit), where it still falls short, and what good deployment looks like in 2026.</p>
+                <p>If at the end of it you decide DNSSEC is not for you, that is fine. I am not in the business of converting anyone. I would just rather you keep your skepticism for current reasons than for ten-year-old ones.</p>
             </div>
 
-            <!-- A protocol that was supposed to save the internet -->
-            <div class="dbis-section" id="protocol-supposed-to-save">
-                <h2>A protocol that was supposed to save the internet</h2>
-                <p>DNSSEC shipped in pieces between 1999 and 2010. Roy Arends was there for all of it. He was twenty-something when he started. He is in his fifties now.</p>
-                <p>In 2009, the year the first generic top-level domain was signed with DNSSEC, Arends thought the work was done. The math was right. The standards were ratified. The root zone was about to be signed. Adoption seemed inevitable. He moved on to the next thing.</p>
-                <p>Then a few years passed. Then a decade. And DNSSEC, somehow, was not winning. It was losing.</p>
-                <p>Outages happened. The IANIX outage list grew longer. Paul Vixie, one of the architects of the modern DNS, called DNSSEC a colossal flop in 2008 and the line stuck. In 2015, a security researcher named Thomas Ptacek published a blog post titled <a href="https://sockpuppet.org/blog/2015/01/15/against-dnssec/" target="_blank" rel="noopener">Against DNSSEC</a> that more or less ended the protocol's reputation in serious technical circles.</p>
-                <p>And then it just sat there. Not adopted. Not removed. Mostly mocked. A protocol that had been described, with a straight face in 2009, as the future of internet security.</p>
-                <p>If you spent fifteen years of your career on something and watched it become a punchline, how would you feel?</p>
+            <!-- The thing that quietly got fixed -->
+            <div class="dbis-section" id="quietly-fixed">
+                <h2>The thing that quietly got fixed</h2>
+                <p>The protocol you remember required hands-on work at every step. Sign your zone. Get the DS record from your DNS host into your registrar's web form. Keep it there through every key rollover. Forget the registrar step on a KSK rotation and the domain went dark for every recursive resolver doing validation, which by the late 2010s was a meaningful slice of the public internet. The math was always fine. The operations were the problem.</p>
+                <p>Three RFCs closed the operations problem.</p>
+                <p><a href="https://www.rfc-editor.org/rfc/rfc7344" target="_blank" rel="noopener">RFC 7344</a> (2014) introduced CDS and CDNSKEY records. Translation: your DNS host can publish "here is my new DS record" directly in your zone, and the registrar can pick it up automatically. No more web form. No more 2am.</p>
+                <p><a href="https://www.rfc-editor.org/rfc/rfc8078" target="_blank" rel="noopener">RFC 8078</a> (2017) formalized how parent zones should accept those changes. Most major TLDs adopted it.</p>
+                <p><a href="https://www.rfc-editor.org/rfc/rfc9615" target="_blank" rel="noopener">RFC 9615</a> (July 2024) closed the bootstrap problem: how to enable DNSSEC for the first time when no chain of trust yet exists. This was the chicken-and-egg case that had kept DNSSEC manual for years.</p>
+                <p>Algorithm 13 (ECDSA P-256, <a href="https://www.rfc-editor.org/rfc/rfc6605" target="_blank" rel="noopener">RFC 6605</a>) became the default. RSA-SHA256 still works, but ECDSA signatures are small enough to fit in a UDP response without forcing TCP fallback, which is where a meaningful share of "DNSSEC broke my domain" stories actually came from.</p>
+                <p><a href="https://www.rfc-editor.org/rfc/rfc7477" target="_blank" rel="noopener">CSYNC</a> (RFC 7477) sits next to CDS, doing the same job for NS and glue records. The child zone announces, the parent syncs, no human in the loop.</p>
+                <p>Add it up. The DNSSEC you remember was a manual sport played with a registrar UI you had to remember the password for. The DNSSEC you can deploy at a major provider in 2026 is a checkbox. Cloudflare made it a checkbox. deSEC made it a checkbox. Route 53, NS1, Google Cloud DNS, all checkboxes.</p>
+                <p>Most of this happened in the last six years. Most of it was boring. None of it generated a viral blog post called "Actually, Maybe DNSSEC Is Fine Now," because nobody writes those, because slow incremental improvement is the worst possible content for the internet to surface.</p>
             </div>
 
-            <!-- The part where they laughed -->
-            <div class="dbis-section" id="the-part-where-they-laughed">
-                <h2>The part where they laughed</h2>
-                <p>Here is the moment in the Jantzen and Arends dialogue that I cannot stop thinking about.</p>
-                <p>Jantzen wanted to test whether the heartbreak was real. So she did something bold. She wrote a stand-up comedy talk about DNSSEC and performed it at the IETF, the standards body where most of these people work, at an evening event called the Bad Attitude Pecha Kucha.</p>
-                <p>She was nervous. She did not know if it would land.</p>
-                <p>It landed. The room laughed so hard that Arends, sitting in the audience, looked at the other DNSSEC engineers around him and saw it on their faces. "All the tech people around me, who basically were on the same path as I was since 2000, looked at each other in recognition. And yes, we were on the floor laughing."</p>
-                <p>The technical term for what happened in that room is <strong>catharsis</strong>. The colloquial term is <strong>comic relief</strong>. What Jantzen had figured out, and what Arends confirmed, was that the people who built DNSSEC had been carrying something heavy for years and nobody had ever named it.</p>
-                <p>This is what the dialogue makes clear, and what almost no piece of DNSSEC writing acknowledges: the protocol's reputation problem and its emotional history are the same problem.</p>
+            <!-- What it actually protects against -->
+            <div class="dbis-section" id="protects-against">
+                <h2>What it actually protects against</h2>
+                <p>Most DNSSEC posts will tell you it "secures DNS." That sentence is doing a lot of work. Most of the work is dishonest.</p>
+                <p>Here is what DNSSEC actually does. It signs DNS answers. When your resolver asks "what is the IP for example.com," DNSSEC lets it verify the answer came from example.com's zone and was not changed in transit. Origin authentication. Integrity. That is the whole job.</p>
+                <p>That is not nothing. Cache poisoning is real. The Kaminsky attack of 2008 was real. On-path DNS tampering happens on coffee shop wifi, on cut-rate ISPs, and at the borders of entire countries. If your DANE or SSHFP records have ever done anything useful, DNSSEC is why they were not lies.</p>
+                <p>Here is what DNSSEC does not do, despite what some marketing copy implies.</p>
+                <p>It does not stop phishing. An attacker can register paypa1.com, sign it perfectly, and your validator will happily confirm the answer came from paypa1.com. DNSSEC has no opinion on whether you should have typed that URL.</p>
+                <p>It does not stop email spoofing. That is SPF, DKIM, and DMARC, all of which sit above DNSSEC and have nothing to do with it.</p>
+                <p>It does not encrypt your DNS queries. That is DoH or DoT. Different protocol, different problem, often confused.</p>
+                <p>It does not protect against an attacker who compromises your DNS provider's signing infrastructure. They can sign whatever they want.</p>
+                <p>It does not protect against an attacker who hijacks your domain at the registrar. They can change the DS record.</p>
+                <p>The honest pitch is narrower than the marketing pitch and stronger because of it. DNSSEC closes a specific class of DNS-layer attacks that no other protocol closes. If you do not deploy it, you are trusting every resolver and every network between you and your authoritative server. Some of them are not honest.</p>
             </div>
 
-            <!-- What this has to do with you -->
-            <div class="dbis-section" id="what-this-has-to-do-with-you">
-                <h2>What this has to do with you</h2>
-                <p>You probably have an opinion about DNSSEC.</p>
-                <p>It is probably some version of: complicated, fragile, a great way to take your domain offline at 2am. You read <a href="https://sockpuppet.org/blog/2015/01/15/against-dnssec/" target="_blank" rel="noopener">Against DNSSEC</a> once. You have probably referenced it in a Slack thread within the last eighteen months.</p>
-                <p>Here is what Jantzen's article forced me to admit.</p>
-                <div class="dbis-pullquote">My opinion of DNSSEC was formed in 2014. I never updated it.</div>
-                <p>I would guess yours was too.</p>
+            <!-- Where it still falls short -->
+            <div class="dbis-section" id="falls-short">
+                <h2>Where it still falls short</h2>
+                <p>Adoption sits in the low single digits of all registered domains in early 2026, somewhere in the 4 to 5 percent range depending on the source. Up from roughly 1 percent in 2017. Real progress. Real ceiling.</p>
+                <p>The story under that number is more interesting than the number itself. Adoption is not a domain-owner decision. It is a provider decision, and the domain owner mostly finds out which side of it they are on after the fact.</p>
+                <p>Think back to HTTPS adoption a decade ago. Site operators did not wake up one morning and decide they wanted TLS certificates. They had been told for years that HTTPS was important. Most of them filed it under "yes, eventually." Then Let's Encrypt happened, and Cloudflare flipped TLS on by default, and the hosting providers started auto-provisioning certs at signup, and the question stopped being "do you want HTTPS?" and started being "do you even know whether your site is on HTTPS?" The answer for most operators was that their provider had quietly turned it on while they were not looking.</p>
+                <p>DNSSEC is in the early innings of the same transition. The providers who automated it have high adoption among their customers. The providers who did not, do not.</p>
+                <p>A practical breakdown:</p>
+                <p>If your DNS is at Cloudflare, deSEC, Route 53, NS1, or Google Cloud DNS, you can have DNSSEC in about ninety seconds. Click a button. Done. The provider handles signing, key rollover, and DS record submission to the registrar (assuming the registrar supports CDS scanning, which most major ones now do).</p>
+                <p>If your DNS is at a budget tier of a registrar that does not list DNSSEC as a feature, or at a generic shared-hosting setup, you have a problem. Not a hard problem. A "you may need to switch DNS hosting" problem. That is real friction, and the article you are reading would be lying to claim otherwise.</p>
+                <p>If your TLD is .com, .net, .org, .io, .dev, .app, or any major ccTLD, the registry side is fine. CDS scanning works. The bottleneck is your registrar.</p>
+                <p>If your TLD is one of the long-tail TLDs with weak DNSSEC support, the bottleneck is the registry. Some TLDs still have incomplete automation, and you should check before assuming. The IANA <a href="https://www.internic.net/domain/" target="_blank" rel="noopener">TLD report</a> is the canonical reference.</p>
+                <p>The summary, honestly: at a major provider on a major TLD, deploying DNSSEC in 2026 is a checkbox. If you are not at one of those, you may need to migrate something before the checkbox is available to you. The protocol is no longer the bottleneck. The provider lottery is.</p>
             </div>
 
-            <!-- The protocol that quietly got fixed -->
-            <div class="dbis-section" id="protocol-quietly-got-fixed">
-                <h2>The protocol that quietly got fixed</h2>
-                <p>While the DNS community was busy being embarrassed about DNSSEC, the engineers kept working on it. They did not stop. They just stopped getting noticed.</p>
-                <p>In 2014, <a href="https://www.rfc-editor.org/rfc/rfc7344" target="_blank" rel="noopener">RFC 7344</a> introduced a way for DNS providers to publish key changes directly in the zone, eliminating the registrar handoff that had caused most of the outages. In 2017, <a href="https://www.rfc-editor.org/rfc/rfc8078" target="_blank" rel="noopener">RFC 8078</a> formalized how parents should pick those changes up. In July 2024, <a href="https://www.rfc-editor.org/rfc/rfc9615" target="_blank" rel="noopener">RFC 9615</a> closed the last loop, the part where you bootstrap DNSSEC for the first time without any existing chain of trust.</p>
-                <p>The 2am phone calls. The DS records out of sync with the registrar. The "DNSSEC took down our domain" outage stories that defined the reputation. Almost all of them traced back to operations problems that have now been fixed at the protocol level.</p>
-                <p>The DNSSEC you remember was a manual sport. The DNSSEC you can deploy now is, at any reasonable provider, a checkbox.</p>
-                <p>Cloudflare made it a checkbox. deSEC made it a checkbox. Route 53 made it a checkbox. Google Cloud DNS made it a checkbox. The .ch and .cz and .se ccTLDs have supported the automated handoff for years. The .bank and .insurance TLDs have nearly 50% adoption because the registries require it.</p>
-                <div class="dbis-pullquote">The problem is no longer the protocol. The problem is that nobody told you the protocol changed.</div>
+            <!-- What good looks like -->
+            <div class="dbis-section" id="what-good-looks-like">
+                <h2>What good looks like</h2>
+                <p>You can tell within thirty seconds whether someone deployed DNSSEC well or just deployed DNSSEC. Bad DNSSEC is signed. Good DNSSEC is signed and survives Tuesday.</p>
+                <p><strong>Algorithm 13 (ECDSA P-256).</strong> Not RSA-SHA256, not RSA-SHA1, not whatever your DNS provider was defaulting to in 2014. Smaller signatures, lower fragmentation risk, lower TCP-fallback risk. If you are signing fresh in 2026 and your provider still defaults to RSA, ask why.</p>
+                <p><strong>Automated key rollover via CDS and CDNSKEY.</strong> If your DNSSEC deployment requires a human to copy a DS record from one panel to another, you do not have a deployment. You have a future incident with a date attached. The whole point of the last decade of standards work was to make that part go away.</p>
+                <p><strong>A monitored DS record at the registrar.</strong> Not a one-time check. Continuous. The failure mode of DNSSEC is not "wrong key." It is "key that used to be right." If your DS drifts out of sync with your zone, your domain goes dark for every validating resolver. Pingdom does not catch this. Most uptime monitors do not. You need something that actually validates the chain.</p>
+                <p><strong>End-to-end validation tested, not assumed.</strong> Run <a href="https://dnsviz.net/" target="_blank" rel="noopener">DNSViz</a> on your domain. Run <a href="https://dnssec-analyzer.verisignlabs.com/" target="_blank" rel="noopener">Verisign's DNSSEC analyzer</a>. Run <a href="/">dns-audit.com</a>. All three will tell you whether your chain of trust is intact from root to your zone, or whether you have a quiet break that will get loud the next time a resolver upgrades its validation strictness.</p>
+                <p><strong>Hosted signing, not hand-rolled.</strong> Unless you are running DNS for a registry, a TLD, or a national CERT, you should not be running your own signers. The major providers run signers at a scale and reliability you will not match in-house, and they are the ones who made RFC 9615 actually work in production.</p>
+                <p><strong>A KSK rollover plan you have actually rehearsed.</strong> Once. Just once. Most operators have never rolled their KSK, which means the first time will be in production, under pressure, with a registrar interface they have not looked at in three years. Pick a quarter. Do a rollover. Take notes. Now it is muscle memory.</p>
+                <p>That is the bar. Most domains that "have DNSSEC" are signed and that is roughly where the work stopped. Signed is the floor. Signed, automated, monitored, hosted, validated, and rehearsed is the ceiling. Anything less is a domain that works until it does not.</p>
             </div>
 
-            <!-- The discourse that did not update -->
-            <div class="dbis-section" id="discourse-did-not-update">
-                <h2>The discourse that did not update</h2>
-                <p>This is the part that connects the heartbreak to the present.</p>
-                <p>The reason your opinion of DNSSEC has not updated is not your fault. It is a media problem. Slow incremental improvement is the worst possible content for the internet to surface. "DNSSEC quietly got better between 2017 and 2024 thanks to a series of operational standards" is not a viral headline. Nobody wrote it. Nobody read it.</p>
-                <p>What stuck instead were the dramatic stories. The outages. The contrarian takedown. The IANIX list growing longer year after year. Even though the <em>cause</em> of those outages was being engineered out of the protocol, the <em>story</em> of those outages was the only thing the broader tech community ever saw.</p>
-                <p>Jantzen calls this the salience effect. Drastic and fearsome news is more memorable than slow steady improvement. So an entire generation of operators formed their DNSSEC opinions during the rough years and never had a reason to revisit them.</p>
-                <p>Arends and his colleagues kept doing the work. They just did it in a room nobody was watching.</p>
+            <!-- The story almost nobody tells -->
+            <div class="dbis-section" id="the-story">
+                <h2>The story almost nobody tells</h2>
+                <p>In January 2026, a researcher named Barbara Jantzen published a long dialogue with Roy Arends, who has worked on DNSSEC since the late 1990s and is now at ICANN. The piece ran on CircleID under the title <a href="https://circleid.com/posts/the-excruciating-slow-rise-of-dnssec" target="_blank" rel="noopener">The Excruciating Slow Rise of DNSSEC</a>. It is one of the more unusual technical articles I have read in years.</p>
+                <p>It is unusual because Jantzen is not a DNS engineer. She trained in the humanities and joined deSEC, a non-profit DNSSEC operator, as a non-technical hire. What she noticed working alongside the people who had spent careers on this protocol was not technical. It was emotional. The DNSSEC engineers were carrying something. Embarrassment about how the rollout had gone. Frustration that the operational fixes from the last decade had not changed the public conversation. In some cases, something close to grief about a project they had given fifteen or twenty years to.</p>
+                <p>Jantzen tested whether the feeling was as real as it looked. She wrote a stand-up comedy set about DNSSEC and performed it at an IETF social event. By her account in the dialogue, it landed. The DNSSEC people in the room laughed at jokes about their own protocol, in front of each other, for what may have been the first time in public.</p>
+                <p>That is the part of the story almost nobody outside the DNS community knows. The protocol's reputation problem is partly a media problem and partly a human problem. The people who built it stopped expecting credit. The people who use it formed opinions in the bad years and never updated them. Jantzen's article is the first piece I have seen that names both halves at once.</p>
+                <p>It does not change the technical case for or against DNSSEC. It does change the way you might read the technical case. The thing you are skeptical of has been quietly fixed by people who stopped expecting anyone to notice.</p>
             </div>
 
-            <!-- The part where I tell you what to do -->
-            <div class="dbis-section key-takeaways" id="what-to-do">
-                <h2>The part where I tell you what to do</h2>
-                <p>I do not need you to deploy DNSSEC. The internet is fine. Your business is probably fine. Skipping it is, for many domains, a defensible call.</p>
-                <p>What I am asking is much smaller. <strong>Update your priors.</strong></p>
-                <p>The DNSSEC you have an opinion about is not the DNSSEC that exists. The reputation is ten years stale. The deployment friction is mostly gone if you are at a provider that bothered to keep up. The protocol is not asking you to suffer for it anymore.</p>
-                <p>Read <a href="https://circleid.com/posts/the-excruciating-slow-rise-of-dnssec" target="_blank" rel="noopener">Jantzen and Arends</a>. It is twenty minutes. It will change how you think about technical protocols, not just this one.</p>
-                <p>If you want the technical version, with current RFC numbers, threat model precision, and what good looks like in 2026, I wrote <a href="https://dns-audit.com/blog/dnssec-stopped-being-hard" target="_blank" rel="noopener">a long piece on the technical state of DNSSEC</a> that pairs with this one. That piece is the receipts. This piece is the reason the receipts matter.</p>
-                <p>And if you want to see what your own domain looks like under the current protocol, run it through <a href="/">dns-audit.com</a>. The animated tree walk shows the validation chain end-to-end. You will know in thirty seconds whether your DNS provider made the checkbox available to you, whether you flipped it, and whether the chain is actually intact.</p>
-                <p>Most domains discover one of three things: signed and clean, signed but broken at the registrar handoff, or unsigned because the provider never offered it. All three answers are useful. None of them are the answer you formed in 2014.</p>
-                <p style="text-align: center; margin-top: 1.5rem;"><a href="/" class="audit-cta">Check Your Domain's DNSSEC Status</a></p>
+            <!-- The closer -->
+            <div class="dbis-section" id="closer">
+                <h2>The closer</h2>
+                <p>Most posts about DNSSEC tell you to deploy it because deployment numbers must go up, or to skip it because deployment numbers prove it failed. Both takes are bad. Both treat DNSSEC like a cause.</p>
+                <p>DNSSEC is not a cause. It is infrastructure.</p>
+                <p>You enable it where it makes sense. You skip it where it does not.</p>
+                <p>If you are running a bank, a registrar, a CA, a software update channel, a government domain, or anything where a DNS hijack ends up on a regulator's desk, deploy it, deploy it well, deploy it to the bar above. The threat model is real and nothing else closes it.</p>
+                <p>If you are running a marketing site, a personal blog, or a domain that mostly redirects somewhere else, sign it if your provider makes it a checkbox, skip it if they do not. The threat model does not justify migrating DNS hosting for a brochure site, and you do not need to feel bad about that call.</p>
+                <p>What I want you to stop doing is repeating ten-year-old talking points like they are current. The "DNSSEC is too complicated" line was true in 2014 and is mostly false in 2026 if you are at a provider that bothered. The "DNSSEC doesn't even encrypt anything" line confuses the threat model with someone else's threat model. The "nobody uses it" line ignores that the people who need it most are quietly using it and you just do not hear from them, because their domains are not on fire.</p>
+                <p>Update your priors. Run <a href="/">dns-audit.com</a>, <a href="https://dnsviz.net/" target="_blank" rel="noopener">DNSViz</a>, or <a href="https://dnssec-analyzer.verisignlabs.com/" target="_blank" rel="noopener">Verisign's analyzer</a> on a domain you care about and see what the chain actually looks like. Then decide.</p>
+                <p>Most domains land in one of three places. Signed and clean. Signed but broken at the registrar handoff. Unsigned because the provider does not offer it. All three are useful answers. None of them is the answer you formed in 2014.</p>
             </div>
 
-            <!-- The part Jantzen got right -->
-            <div class="dbis-section" id="jantzen-got-right">
-                <h2>The part Jantzen got right</h2>
-                <p>Near the end of her dialogue with Arends, Jantzen quotes Joe Abley from Cloudflare. Abley is one of the engineers who has been at this for as long as Arends has. His line about DNSSEC is the one that finally let me let go of my old opinion:</p>
-                <blockquote>It doesn't have to be universally useful to have succeeded.</blockquote>
-                <p>DNSSEC was never going to be universal. The marketing in 2009 oversold that. The backlash in 2015 underbought it. The truth, twenty-five years after the work started, is in the middle. The protocol works. It does a specific job. It does that job better now than it ever has. The people who need it use it. The people who do not, do not. Nobody is keeping score, and the engineers who built it have stopped expecting anyone to.</p>
-                <p>That is a quieter ending than the one anyone wanted. It is also, I think, the one we have.</p>
-                <p>The DNSSEC story nobody tells is that the people who built it kept showing up after the world stopped paying attention. They fixed the operations. They wrote the automation. They published the bootstrap RFC last summer. They are still in the room.</p>
-                <p>That deserves at least a second look.</p>
-            </div>
-
-            <!-- Disclosure -->
-            <div class="dbis-section" id="disclosure">
-                <p><em>If you have an old opinion of DNSSEC, please do not act on it without checking whether it is still accurate. Run a domain you care about through <a href="/">dns-audit.com</a>, <a href="https://dnsviz.net/" target="_blank" rel="noopener">DNSViz</a>, or <a href="https://dnssec-analyzer.verisignlabs.com/" target="_blank" rel="noopener">Verisign's DNSSEC Analyzer</a>. Read <a href="https://circleid.com/posts/the-excruciating-slow-rise-of-dnssec" target="_blank" rel="noopener">Jantzen and Arends</a>. Then form a current one.</em></p>
+            <!-- Further reading -->
+            <div class="dbis-section" id="further-reading">
+                <h2>Further reading</h2>
+                <p><a href="https://www.sidn.nl/en/modern-internet-standards/dnssec" target="_blank" rel="noopener">SIDN's DNSSEC explainer</a>. The most thorough practitioner reference online.</p>
+                <p><a href="https://www.rfc-editor.org/rfc/rfc9615" target="_blank" rel="noopener">RFC 9615</a>, Automatic DNSSEC Bootstrapping (Thomassen and Wisiol, July 2024).</p>
+                <p><a href="https://www.rfc-editor.org/rfc/rfc7344" target="_blank" rel="noopener">RFC 7344</a>, Automating DNSSEC Delegation Trust Maintenance (2014).</p>
+                <p><a href="https://www.rfc-editor.org/rfc/rfc8078" target="_blank" rel="noopener">RFC 8078</a>, Managing DS Records from the Parent via CDS/CDNSKEY (2017).</p>
+                <p><a href="https://www.rfc-editor.org/rfc/rfc6605" target="_blank" rel="noopener">RFC 6605</a>, ECDSA for DNSSEC (Algorithm 13, 2012).</p>
+                <p><a href="https://www.rfc-editor.org/rfc/rfc7477" target="_blank" rel="noopener">RFC 7477</a>, CSYNC (2015).</p>
             </div>
 
         </div>
@@ -189,12 +203,12 @@
         <div class="container footer-inner">
             <div class="footer-left">
                 <div class="footer-brand-name">dns-audit.com</div>
-                <div class="footer-brand-desc">Free, open-source DNS<br>& email security auditing</div>
+                <div class="footer-brand-desc">Free, open-source DNS<br>&amp; email security auditing</div>
 
             </div>
             <div class="footer-right">
                 <div class="footer-nav">
-                    <a href="/dmarcbis" class="footer-link">DMARCbis Guide</a>
+                    <a href="/dmarcbis" class="footer-link">DMARCbis</a>
                     <span class="footer-dot">&middot;</span>
                     <a href="/dnssec" class="footer-link">DNSSEC</a>
                     <span class="footer-dot">&middot;</span>
