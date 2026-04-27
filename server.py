@@ -179,7 +179,7 @@ class SecurityHeadersMiddleware(BaseHTTPMiddleware):
             response.headers["Cache-Control"] = "no-store"
         elif any(path.endswith(ext) for ext in ('.css', '.js', '.png', '.jpg', '.svg', '.woff2', '.woff', '.ico')):
             response.headers["Cache-Control"] = "public, max-age=14400"  # 4 hours
-        elif path in ('/', '/dmarcbis', '/dnssec', '/privacy', '/about'):
+        elif path in ('/', '/dmarcbis', '/dnssec', '/blog/dmarc-running-on-a-text-file', '/blog/dnssec-stopped-being-hard', '/privacy', '/about'):
             response.headers["Cache-Control"] = "public, max-age=300"  # 5 minutes for HTML
         return response
 
@@ -763,7 +763,19 @@ async def sitemap_xml():
         "    <priority>0.8</priority>\n"
         "  </url>\n"
         "  <url>\n"
+        "    <loc>https://dns-audit.com/blog/dmarc-running-on-a-text-file</loc>\n"
+        "    <lastmod>2026-04-26</lastmod>\n"
+        "    <changefreq>monthly</changefreq>\n"
+        "    <priority>0.7</priority>\n"
+        "  </url>\n"
+        "  <url>\n"
         "    <loc>https://dns-audit.com/dnssec</loc>\n"
+        "    <lastmod>2026-04-26</lastmod>\n"
+        "    <changefreq>monthly</changefreq>\n"
+        "    <priority>0.7</priority>\n"
+        "  </url>\n"
+        "  <url>\n"
+        "    <loc>https://dns-audit.com/blog/dnssec-stopped-being-hard</loc>\n"
         "    <lastmod>2026-04-26</lastmod>\n"
         "    <changefreq>monthly</changefreq>\n"
         "    <priority>0.7</priority>\n"
@@ -830,6 +842,14 @@ if STATIC_DIR.exists():
     @app.get("/dnssec", tags=["Pages"])
     async def dnssec():
         return FileResponse(str(STATIC_DIR / "dnssec.html"))
+
+    @app.get("/blog/dmarc-running-on-a-text-file", tags=["Pages"])
+    async def dmarc_running_on_a_text_file():
+        return FileResponse(str(STATIC_DIR / "dmarc-running-on-a-text-file.html"))
+
+    @app.get("/blog/dnssec-stopped-being-hard", tags=["Pages"])
+    async def dnssec_stopped_being_hard():
+        return FileResponse(str(STATIC_DIR / "dnssec-stopped-being-hard.html"))
 
     @app.get("/methodology", tags=["Pages"])
     async def methodology_redirect():

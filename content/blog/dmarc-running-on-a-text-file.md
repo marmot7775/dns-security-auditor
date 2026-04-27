@@ -85,7 +85,7 @@ The DMARCbis upgrade is real. The work to get there is small. The thing you shou
 
 It is something closer to pride that you and the people doing this work were running the actual standard the whole time, while the official one was still being written.
 
-If you want the deep technical version with all the RFC numbers and the complete checklist, [I wrote a long piece on the technical state of DMARCbis](https://dns-audit.com/blog/dmarcbis-public-suffix-list-leaving) that pairs with this one. That piece is the receipts. This piece is the reason the receipts matter.
+If you want the deep technical version with all the RFC numbers and the complete checklist, [I wrote a long piece on the technical state of DMARCbis](https://dns-audit.com/dmarcbis) that pairs with this one. That piece is the receipts. This piece is the reason the receipts matter.
 
 The volunteers got us here. The operators kept it running. The IETF is finally writing it down.
 

@@ -1,0 +1,158 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Running on a Text File. You Did Fine. | dns-audit.com</title>
+    <meta name="description" content="DMARC was never officially a standard. The deliverability community made it the floor of email security anyway. Now the spec is catching up. Here is what changed, and why you are not behind.">
+    <meta name="keywords" content="DMARC, DMARCbis, Public Suffix List, DNS Tree Walk, deliverability, RFC 7489, email authentication">
+    <meta name="author" content="Neil Anuskiewicz">
+    <meta property="og:type" content="article" />
+    <meta property="og:site_name" content="DNS Security Auditor" />
+    <meta property="og:url" content="https://dns-audit.com/blog/dmarc-running-on-a-text-file" />
+    <meta property="og:title" content="Your DMARC Record Has Been Running on a Text File. You Did Fine." />
+    <meta property="og:description" content="DMARC was never officially a standard. The deliverability community made it the floor of email security anyway. Now the spec is catching up. Here is what changed, and why you are not behind." />
+    <meta property="og:image" content="https://dns-audit.com/static/og-image.png" />
+    <meta name="twitter:card" content="summary" />
+    <meta name="twitter:title" content="Your DMARC Record Has Been Running on a Text File. You Did Fine." />
+    <meta name="twitter:description" content="DMARC was never officially a standard. The deliverability community made it the floor of email security anyway. Now the spec is catching up. Here is what changed, and why you are not behind." />
+    <link rel="canonical" href="https://dns-audit.com/blog/dmarc-running-on-a-text-file">
+    <link rel="icon" type="image/svg+xml" href="/static/favicon.svg">
+    <link rel="apple-touch-icon" sizes="180x180" href="/static/apple-touch-icon.png">
+    <link rel="icon" type="image/png" sizes="32x32" href="/static/favicon-32.png">
+    <link rel="stylesheet" href="/static/style.css?v=8b202ac">
+    <script type="application/ld+json">
+    {
+        "@context": "https://schema.org",
+        "@type": "TechArticle",
+        "headline": "Your DMARC Record Has Been Running on a Text File. You Did Fine.",
+        "description": "DMARC was never officially a standard. The deliverability community made it the floor of email security anyway. Now the spec is catching up. Here is what changed, and why you are not behind.",
+        "url": "https://dns-audit.com/blog/dmarc-running-on-a-text-file",
+        "author": {
+            "@type": "Person",
+            "name": "Neil Anuskiewicz"
+        },
+        "datePublished": "2026-04-26",
+        "proficiencyLevel": "Beginner",
+        "dependencies": "Basic understanding of email authentication (SPF, DKIM, DMARC)"
+    }
+    </script>
+</head>
+<body>
+
+    <header class="site-header">
+        <div class="container header-inner">
+            <a href="/" class="logo">
+                <span class="logo-text">dns<span class="logo-accent">-audit</span>.com</span>
+            </a>
+            <nav class="site-nav">
+                <a href="/" class="nav-link">Home</a>
+                <a href="/dmarcbis" class="nav-link nav-link-active">DMARCbis Guide</a>
+                <a href="/dnssec" class="nav-link">DNSSEC</a>
+                <a href="/privacy" class="nav-link">Privacy</a>
+                <a href="/about" class="nav-link">About</a>
+            </nav>
+        </div>
+    </header>
+
+    <main>
+        <div class="dbis-page">
+
+            <!-- Hero -->
+            <div class="dbis-hero">
+                <h1><span>Running on a Text File</span></h1>
+                <p class="dbis-hero-sub">Your DMARC record has been depending on a list maintained by volunteers on GitHub. You did fine. Here is what changed, and why you are not behind.</p>
+            </div>
+
+            <!-- Lede -->
+            <div class="dbis-section" id="lede">
+                <p>DMARC, the email authentication standard that decides whether hundreds of millions of messages reach the inbox each day, has been depending on a list maintained by volunteers on GitHub.</p>
+                <p>I am not exaggerating for effect. The list is called the <a href="https://publicsuffix.org/" target="_blank" rel="noopener">Public Suffix List</a>. It is a Mozilla project from 2007 that contains every public domain suffix on the internet. Volunteers maintain it. Receivers download copies and use them to figure out where your organizational domain ends, which is the load-bearing decision that determines whether your DMARC policy applies to a given message.</p>
+                <p>DMARCbis, the upcoming update to the DMARC specification, replaces this with a mechanism called the DNS Tree Walk.</p>
+                <p>I want to be clear about something. The volunteers are the heroes of this story.</p>
+                <p>They have kept this thing alive for nearly twenty years. They have processed thousands of submissions from registries adding new TLDs, from companies declaring private suffixes, from the long tail of internet weirdness. They have done it for free. They have done it well.</p>
+                <blockquote class="dbis-pullquote">For the last ten years, the load-bearing decision in DMARC has been made by consulting a list maintained by volunteers.</blockquote>
+                <p>The absurdity is not the volunteers. The absurdity is that DMARC has been resting, structurally, on a list it does not own and volunteer labor it does not pay for, the entire time.</p>
+            </div>
+
+            <!-- You have been making this work anyway -->
+            <div class="dbis-section" id="making-it-work">
+                <h2>You have been making this work anyway</h2>
+                <p>Here is the part of the story I want you to feel.</p>
+                <p>DMARC was technically optional. RFC 7489 was published as an Informational document in 2015, which is IETF for "we are describing how this works, we are not asserting anyone has to do it this way." Vendors could implement it however they wanted. They mostly did not have to implement it at all.</p>
+                <p>But you did. Or someone in your industry did. Or a customer of yours pushed for it. Or your CISO read about a phishing incident and asked. Or Google and Yahoo announced their <a href="https://blog.google/products/gmail/gmail-security-authentication-spam-protection/" target="_blank" rel="noopener">2024 sender requirements</a> and suddenly bulk mail without DMARC was getting bounced at the front door.</p>
+                <p>The deliverability community spent ten years turning a Informational RFC and a volunteer-maintained text file into the actual floor of email security. Not because the standard required it. Because the people doing the work decided it should.</p>
+                <p>There is a M3AAWG mailing list that has been having the same conversations since the early 2010s. There are deliverability conferences where operators compare notes on how Gmail interpreted <code>pct=50</code> last week versus how Yahoo did. There is an entire informal apprenticeship system in this industry where senior practitioners teach junior practitioners how to read aggregate reports and triage alignment failures, none of which is documented in any RFC because none of which is the RFC's job.</p>
+                <p>You are part of that. Whether you know it or not. If you have a DMARC record at <code>p=reject</code> today, the reason it works is not because RFC 7489 is well-written. It is because thousands of operators figured out how to make it work despite RFC 7489 being incomplete, and because a few hundred volunteers kept the PSL fresh enough that the receivers could parse your record correctly, and because Gmail and Yahoo decided in 2024 that they were tired of waiting and made the standard mandatory by fiat.</p>
+                <p>The protocol caught up to the practice. Not the other way around.</p>
+            </div>
+
+            <!-- The fix is here. It is not clever. -->
+            <div class="dbis-section" id="the-fix">
+                <h2>The fix is here. It is not clever.</h2>
+                <p>DMARCbis, the long-awaited update to RFC 7489, will pull the PSL out of the protocol entirely.</p>
+                <p>What is replacing it? They are going to use DNS.</p>
+                <p>Yes. The DNS-based protocol is going to use DNS to answer a DNS question. Walk up the domain one label at a time, ask each level if it has a DMARC record, stop when you find one or hit eight levels deep. That is the entire upgrade.</p>
+                <p>If you are wondering why this took six years of working group meetings and forty-one drafts of the core specification, you are asking the right question. I do not have a satisfying answer. "Just use DNS for the DNS question" is the kind of obvious-in-retrospect fix that engineering teams need permission to ship, and it took the IETF a decade to give itself that permission.</p>
+                <p>What matters is that the fix is here. It is simple. It works. The receivers will start using it as soon as the spec publishes, which is currently blocked on the failure-reporting document that is on revision twenty-four and still being argued about. Final RFC publication is expected sometime in 2026, possibly into 2027, and the audit tools will catch up over a year or two after that.</p>
+                <p>You do not need to do anything dramatic. The DMARC record you have today still works. The PSL is not going anywhere overnight. The transition will happen in the background, mostly invisible to you, the way internet transitions usually do.</p>
+            </div>
+
+            <!-- What you actually need to do -->
+            <div class="dbis-section" id="what-to-do">
+                <h2>What you actually need to do</h2>
+                <p>If you want to be ready for DMARCbis, the work is small.</p>
+                <p>Drop the deprecated tags. The <code>pct=</code>, <code>rf=</code>, and <code>ri=</code> tags are going away. Most of them never worked consistently anyway. If your record has them, remove them.</p>
+                <p>Make sure your reporting URIs start with <code>mailto:</code>. The new parser is stricter than the old one. Bare email addresses that worked in 2018 will fail.</p>
+                <p>Add <code>psd=n</code> to declare you are not a public suffix. You are not, unless you are running a TLD registry, in which case you have bigger questions than this article.</p>
+                <p>Consider <code>np=reject</code> if you are already at <code>p=reject</code>. It closes the non-existent subdomain spoofing gap, which is a real attack surface. Audit your sending infrastructure first if you have third parties using subdomain branding.</p>
+                <p>Check that your external reporting destinations have authorization records. If your <code>rua=</code> points to a third-party DMARC processor, the destination domain needs to publish a record at <code>&lt;your-domain&gt;._report._dmarc.&lt;destination-domain&gt;</code> containing <code>v=DMARC1</code>. Without it, your reports go nowhere and you do not know.</p>
+                <p>That is the list. Five edits. Maybe ten minutes if your DNS is at a competent provider.</p>
+                <p>If you want to see exactly which of these apply to your specific record, run <a href="/">dns-audit.com</a> on your domain. The audit shows you the current state, the DMARCbis-ready state, and the changes needed to get from one to the other. The DNS tree walk is animated, so you can watch the new algorithm walk your domain in real time and see exactly what receivers will see when DMARCbis publishes.</p>
+                <p style="text-align: center; margin-top: 1.5rem;"><a href="/" class="audit-cta">Audit Your DMARC Record</a></p>
+            </div>
+
+            <!-- What I want you to take from this -->
+            <div class="dbis-section" id="take-from-this">
+                <h2>What I want you to take from this</h2>
+                <p>You have spent the last decade running production email security on a protocol that was technically not even a standard, depending on a text file maintained by volunteers, working around inconsistencies between receivers, and you made it work.</p>
+                <p>The IETF is going to publish a Standards Track RFC in 2026 or 2027 that formalizes most of what you have already been doing.</p>
+                <p>You are not behind. You are early. The new spec is paperwork catching up to operational reality.</p>
+                <p>When the audit tools start flagging <code>pct=</code> as deprecated, you will already know what to do because you have been getting those flags from your aggregate reports for years. When receivers start honoring <code>np=reject</code>, you will already understand the threat model because you have been arguing with your security team about non-existent subdomain spoofing since 2019. When the PSL finally gets pulled out of the protocol, you will not even notice, because you have been working around its quirks for so long they have become invisible.</p>
+                <p>The DMARCbis upgrade is real. The work to get there is small. The thing you should feel about all of it is not anxiety about being out of date.</p>
+                <p>It is something closer to pride that you and the people doing this work were running the actual standard the whole time, while the official one was still being written.</p>
+                <p>If you want the deep technical version with all the RFC numbers and the complete checklist, <a href="/dmarcbis">I wrote a long piece on the technical state of DMARCbis</a> that pairs with this one. That piece is the receipts. This piece is the reason the receipts matter.</p>
+                <p>The volunteers got us here. The operators kept it running. The IETF is finally writing it down.</p>
+                <p>You did fine.</p>
+                <p>Better than fine, actually. You did the hard part.</p>
+            </div>
+
+        </div>
+    </main>
+
+    <footer class="site-footer">
+        <div class="container footer-inner">
+            <div class="footer-left">
+                <div class="footer-brand-name">dns-audit.com</div>
+                <div class="footer-brand-desc">Free, open-source DNS<br>& email security auditing</div>
+
+            </div>
+            <div class="footer-right">
+                <div class="footer-nav">
+                    <a href="/dmarcbis" class="footer-link">DMARCbis Guide</a>
+                    <span class="footer-dot">&middot;</span>
+                    <a href="/dnssec" class="footer-link">DNSSEC</a>
+                    <span class="footer-dot">&middot;</span>
+                    <a href="/privacy" class="footer-link">Privacy</a>
+                    <span class="footer-dot">&middot;</span>
+                    <a href="/about" class="footer-link">About</a>
+                    <span class="footer-dot">&middot;</span>
+                    <a href="https://github.com/marmot7775/dns-security-auditor" target="_blank" rel="noopener" class="footer-link">GitHub</a>
+                </div>
+                <div class="footer-attribution">Built by Neil Anuskiewicz <a href="https://www.linkedin.com/in/neilanuskiewicz/" target="_blank" rel="noopener" class="footer-linkedin" title="Neil Anuskiewicz on LinkedIn"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" width="14" height="14" fill="currentColor"><path d="M20.447 20.452h-3.554v-5.569c0-1.328-.027-3.037-1.852-3.037-1.853 0-2.136 1.445-2.136 2.939v5.667H9.351V9h3.414v1.561h.046c.477-.9 1.637-1.85 3.37-1.85 3.601 0 4.267 2.37 4.267 5.455v6.286zM5.337 7.433a2.062 2.062 0 01-2.063-2.065 2.064 2.064 0 112.063 2.065zm1.782 13.019H3.555V9h3.564v11.452zM22.225 0H1.771C.792 0 0 .774 0 1.729v20.542C0 23.227.792 24 1.771 24h20.451C23.2 24 24 23.227 24 22.271V1.729C24 .774 23.2 0 22.222 0h.003z"/></svg></a></div>
+            </div>
+        </div>
+    </footer>
+
+</body>
+</html>
