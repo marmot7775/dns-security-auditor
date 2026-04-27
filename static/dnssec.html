@@ -102,7 +102,6 @@
                     <a href="/" class="nav-link">Audit</a>
                     <a href="/dmarcbis" class="nav-link">DMARCbis</a>
                     <a href="/dnssec" class="nav-link nav-link-active">DNSSEC</a>
-                    <a href="/privacy" class="nav-link">Privacy</a>
                     <a href="/about" class="nav-link">About</a>
                 </nav>
             </div>
@@ -117,7 +116,6 @@
             <p class="dbis-lede">What was wrong was that I left the opinion there and never came back to check on it.</p>
             <p class="dbis-lede">This piece is the check I finally did. It walks through what changed, what DNSSEC actually protects against, where it still falls short, and what good deployment looks like now. The honest scope: less than the marketing says, more than the skeptics concede.</p>
             <p>If you get to the end and decide DNSSEC is not for you, that's fine. I'm not here to convert anyone. I'd just rather you keep your skepticism for current reasons than for ten-year-old ones.</p>
-            
             <section class="dbis-section">
                 <h2>The thing that quietly got fixed</h2>
                 <p>The DNSSEC you remember required hands-on work at every step. Sign your zone. Get the DS record from your DNS host into your registrar's web form. Keep it there through every key rollover. Forget the registrar step on a KSK rotation and your domain went dark for every recursive resolver doing validation. By the late 2010s, that was a meaningful slice of the public internet.</p>
@@ -131,7 +129,6 @@
                 <p>Add it up. The DNSSEC you remember was a hands-on process run through a registrar UI you had to remember the password for. The DNSSEC you can deploy at a major provider in 2026 is a checkbox. Cloudflare made it a checkbox. deSEC made it a checkbox. Route 53, NS1, Google Cloud DNS: all checkboxes.</p>
                 <p>Most of this happened in the last six years. Most of it was boring. None of it generated a viral blog post called "Actually, Maybe DNSSEC Is Fine Now," because nobody writes those. Slow, incremental improvement is the worst possible content for the internet to surface.</p>
             </section>
-            
             <section class="dbis-section">
                 <h2>What it actually protects against</h2>
                 <p>Most DNSSEC posts will tell you it "secures DNS." That sentence is doing a lot of work. Too much, honestly.</p>
@@ -145,7 +142,6 @@
                 <p>It does not protect against an attacker who hijacks your domain at the registrar. They can change the DS record, and then they're the legitimate chain of trust.</p>
                 <p>The honest pitch is narrower than the marketing pitch and stronger because of it. DNSSEC closes a specific class of DNS-layer attacks that no other protocol closes. If you don't deploy it, you're trusting every resolver and every network between you and your authoritative server. Some of them are not honest.</p>
             </section>
-            
             <section class="dbis-section">
                 <h2>The story almost nobody tells</h2>
                 <p>In January 2026, a researcher named Barbara Jantzen published a long dialogue with Roy Arends. Arends has worked on DNSSEC since the late 1990s and is now at ICANN. He's one of the people who built the thing you've been skeptical of.</p>
@@ -157,7 +153,6 @@
                 <p>And the deployment story, as Jantzen argues, is partly a storytelling problem. The protocol's reputation got stuck in the bad years. The people who fixed it stopped expecting credit for the fixes. The people who formed opinions never updated them, because nobody gave them a reason to.</p>
                 <p>Jantzen's piece is the first I've seen that names both halves at once. It doesn't change the technical case for or against DNSSEC. But it might change the way you read the technical case. The protocol you wrote off has been quietly fixed by people who stopped expecting anyone to notice.</p>
             </section>
-            
             <section class="dbis-section">
                 <h2>Where it still falls short</h2>
                 <p>Adoption sits in the low single digits of all registered domains in early 2026. Something in the 4 to 5 percent range, depending on the source. Up from roughly 1 percent in 2017. Real progress. Real ceiling.</p>
@@ -171,7 +166,6 @@
                 <p>If your TLD is one of the long-tail TLDs with weak DNSSEC support, the bottleneck is the registry. Some TLDs still have incomplete automation. Check before assuming. The IANA TLD report is the canonical reference.</p>
                 <p>The honest summary: at a major provider on a major TLD, deploying DNSSEC in 2026 is straightforward. If you're not at one of those, you might need to migrate something before the checkbox is available to you. The protocol is no longer the bottleneck. The provider lottery still is.</p>
             </section>
-            
             <section class="dbis-section">
                 <h2>What good looks like</h2>
                 <p>You can tell within thirty seconds whether someone deployed DNSSEC well or just deployed DNSSEC. Bad DNSSEC is signed. Good DNSSEC is signed and survives Tuesday.</p>
@@ -183,7 +177,6 @@
                 <p><strong>A KSK rollover plan you've actually rehearsed.</strong> Once. Just once. Most operators have never rolled their KSK, which means the first time will be in production, under pressure, with a registrar interface they haven't looked at in three years. Pick a quarter. Do a rollover. Take notes. Now it's muscle memory.</p>
                 <p>That's the bar. Most domains that "have DNSSEC" are signed and that's roughly where the work stopped. Signed is the floor. Signed, automated, monitored, hosted, validated, and rehearsed is the ceiling. Anything less is a domain that works until it doesn't.</p>
             </section>
-            
             <section class="dbis-section">
                 <h2>The closer</h2>
                 <p>Most posts about DNSSEC tell you to deploy it because deployment numbers must go up, or to skip it because deployment numbers prove it failed. Neither take is honest. Both treat DNSSEC like a cause.</p>
@@ -198,7 +191,6 @@
                 <p>Give it a fresh look. Run DNSViz, Verisign's DNSSEC analyzer, or dns-audit.com on a domain you care about and see what the chain actually looks like. Then decide.</p>
                 <p>Most domains land in one of three places. Signed and clean. Signed but broken at the registrar handoff. Unsigned because the provider doesn't offer it. All three are useful answers. None of them is the answer you formed in 2014.</p>
             </section>
-            
             <section class="dbis-section">
                 <h2>Further reading</h2>
                 <p><a href="https://www.sidn.nl/en/modern-internet-standards/dnssec" target="_blank" rel="noopener">SIDN's DNSSEC explainer</a>. The most thorough practitioner reference online.</p>
@@ -221,8 +213,6 @@
                     <a href="/dmarcbis" class="footer-link">DMARCbis</a>
                     <span class="footer-dot">&middot;</span>
                     <a href="/dnssec" class="footer-link">DNSSEC</a>
-                    <span class="footer-dot">&middot;</span>
-                    <a href="/privacy" class="footer-link">Privacy</a>
                     <span class="footer-dot">&middot;</span>
                     <a href="/about" class="footer-link">About</a>
                     <span class="footer-dot">&middot;</span>
