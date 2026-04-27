@@ -115,7 +115,6 @@
 <body>
     <a href="#main-content" class="skip-to-content">Skip to content</a>
 
-    <!-- Header -->
     <header class="site-header">
         <div class="container header-inner">
             <a href="/" class="logo">
@@ -125,21 +124,16 @@
                 <a href="/" class="nav-link nav-link-active">Home</a>
                 <a href="/dmarcbis" class="nav-link">DMARCbis</a>
                 <a href="/dnssec" class="nav-link">DNSSEC</a>
-                <a href="/privacy" class="nav-link">Privacy</a>
                 <a href="/about" class="nav-link">About</a>
             </nav>
         </div>
     </header>
 
     <main class="container" id="main-content">
-
-        <!-- Hero / Input Section -->
         <section class="audit-input-section">
             <div class="audit-input-card">
                 <h1 class="audit-title">DNS &amp; Email Security Audit</h1>
                 <p class="audit-subtitle">Analysis of your email authentication and DNS security configuration. <a href="/dmarcbis" class="audit-subtitle-link">Check your domain's DMARCbis readiness</a>.</p>
-
-                <!-- Scope Selector -->
                 <div class="scope-selector" id="scope-selector" role="radiogroup" aria-label="Audit scope selection">
                     <div class="scope-label">Audit Scope</div>
                     <div class="scope-options">
@@ -169,7 +163,6 @@
                         </button>
                     </div>
                 </div>
-
                 <form id="audit-form" class="audit-form" autocomplete="off">
                     <div class="input-row input-unified">
                         <div class="input-wrapper">
@@ -196,7 +189,6 @@
             </div>
         </section>
 
-        <!-- Loading State -->
         <section id="loading-section" class="loading-section">
             <div class="loading-card">
                 <div class="loading-bar-track" role="progressbar" aria-valuenow="0" aria-valuemin="0" aria-valuemax="100" aria-label="Audit progress">
@@ -206,7 +198,6 @@
             </div>
         </section>
 
-        <!-- Results -->
         <section id="results-section" class="results-section">
             <div class="domain-banner" id="domain-banner">
                 <div class="domain-banner-left">
@@ -302,22 +293,19 @@
                 <div id="provider-intelligence-content"></div>
             </div>
         </section>
-
     </main>
 
     <footer class="site-footer">
         <div class="container footer-inner">
             <div class="footer-left">
                 <div class="footer-brand-name">dns-audit.com</div>
-                <div class="footer-brand-desc">Free, open-source DNS<br>& email security auditing</div>
+                <div class="footer-brand-desc">Free, open-source DNS<br>&amp; email security auditing</div>
             </div>
             <div class="footer-right">
                 <div class="footer-nav">
                     <a href="/dmarcbis" class="footer-link">DMARCbis</a>
                     <span class="footer-dot">&middot;</span>
                     <a href="/dnssec" class="footer-link">DNSSEC</a>
-                    <span class="footer-dot">&middot;</span>
-                    <a href="/privacy" class="footer-link">Privacy</a>
                     <span class="footer-dot">&middot;</span>
                     <a href="/about" class="footer-link">About</a>
                     <span class="footer-dot">&middot;</span>
@@ -334,8 +322,6 @@
             </div>
         </div>
     </footer>
-
     <script defer src="/static/app.js?v=1e8b94a"></script>
 </body>
 </html>
-
