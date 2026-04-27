@@ -28,255 +28,41 @@
         "headline": "DMARCbis",
         "description": "DMARC ran on a text file. DMARCbis brings it home to DNS. Here is what changed, why you are not behind, and the small list of edits to be ready.",
         "url": "https://dns-audit.com/dmarcbis",
-        "author": {
-            "@type": "Person",
-            "name": "Neil Anuskiewicz"
-        },
+        "author": { "@type": "Person", "name": "Neil Anuskiewicz" },
         "datePublished": "2026-04-26",
         "dateModified": "2026-04-27"
     }
     </script>
-
     <style>
-        .dbis-page {
-            max-width: 680px;
-            margin: 0 auto;
-            padding: 3rem 1.25rem 4rem;
-        }
-
-        .dbis-article {
-            font-family: var(--font-body);
-            color: var(--text-primary);
-        }
-
-        .dbis-lede {
-            font-size: 1.25rem;
-            line-height: 1.65;
-            color: var(--text-secondary);
-            margin-bottom: 2rem;
-            font-weight: 400;
-            letter-spacing: -0.01em;
-        }
-
-        .dbis-lede strong {
-            color: var(--text-primary);
-            font-weight: 600;
-        }
-
-        .dbis-section {
-            margin-top: 3rem;
-        }
-
-        .dbis-section h2 {
-            font-size: 1.35rem;
-            font-weight: 700;
-            color: var(--text-primary);
-            letter-spacing: -0.025em;
-            margin-bottom: 0.85rem;
-            line-height: 1.3;
-        }
-
-        .dbis-section p {
-            font-size: 1.0625rem;
-            color: var(--text-secondary);
-            line-height: 1.75;
-            margin-bottom: 1.1rem;
-        }
-
-        .dbis-section a {
-            color: var(--primary-light);
-            text-decoration: none;
-            font-weight: 500;
-            border-bottom: 1px solid var(--primary-border);
-            transition: border-color 0.15s var(--ease);
-        }
-
-        .dbis-section a:hover {
-            border-bottom-color: var(--primary-light);
-        }
-
-        .dbis-pullquote {
-            margin: 2.25rem 0;
-            padding: 1.25rem 1.5rem;
-            border-left: 3px solid var(--dmarcbis);
-            background: var(--surface);
-            font-size: 1.15rem;
-            font-weight: 500;
-            line-height: 1.6;
-            color: var(--text-primary);
-            letter-spacing: -0.01em;
-            border-radius: 0 8px 8px 0;
-        }
-
-        .dbis-section code {
-            font-family: var(--font-mono);
-            font-size: 0.88em;
-            background: var(--bg);
-            border: 1px solid var(--border);
-            padding: 0.1em 0.4em;
-            border-radius: 4px;
-            color: var(--primary-light);
-            white-space: nowrap;
-        }
-
-        .dbis-section strong {
-            color: var(--text-primary);
-            font-weight: 600;
-        }
-
-        .dbis-steps {
-            counter-reset: step;
-            list-style: none;
-            padding: 0;
-            margin: 1.25rem 0;
-        }
-
-        .dbis-steps li {
-            counter-increment: step;
-            display: flex;
-            align-items: flex-start;
-            gap: 0.85rem;
-            padding: 0.6rem 0;
-            font-size: 1rem;
-            color: var(--text-secondary);
-            line-height: 1.65;
-        }
-
-        .dbis-steps li::before {
-            content: counter(step);
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            min-width: 1.7rem;
-            height: 1.7rem;
-            border-radius: 50%;
-            background: var(--dmarcbis-bg);
-            color: var(--dmarcbis);
-            font-size: 0.8rem;
-            font-weight: 700;
-            flex-shrink: 0;
-            margin-top: 0.05rem;
-        }
-
-        .dbis-walk {
-            margin: 1.5rem 0;
-            display: flex;
-            flex-direction: column;
-            gap: 0;
-            font-family: var(--font-mono);
-            font-size: 0.9rem;
-        }
-
-        .dbis-walk-step {
-            display: flex;
-            align-items: center;
-            gap: 0.6rem;
-            padding: 0.45rem 0.75rem;
-            color: var(--text-secondary);
-            position: relative;
-        }
-
-        .dbis-walk-step::before {
-            content: '';
-            width: 8px;
-            height: 8px;
-            border-radius: 50%;
-            background: var(--border);
-            flex-shrink: 0;
-        }
-
-        .dbis-walk-step:not(:last-child)::after {
-            content: '';
-            position: absolute;
-            left: calc(0.75rem + 3px);
-            top: calc(0.45rem + 8px + 4px);
-            width: 2px;
-            height: calc(100% - 4px);
-            background: var(--border);
-        }
-
-        .dbis-walk-step.found::before {
-            background: var(--pass);
-        }
-
-        .dbis-walk-step.found {
-            color: var(--pass);
-            font-weight: 600;
-        }
-
-        .dbis-walk-label {
-            font-family: var(--font-body);
-            font-size: 0.75rem;
-            color: var(--text-muted);
-            margin-left: auto;
-            flex-shrink: 0;
-        }
-
-        .dbis-cta {
-            display: inline-flex;
-            align-items: center;
-            gap: 0.5rem;
-            padding: 0.75rem 1.5rem;
-            background: var(--dmarcbis);
-            color: #0a2d28;
-            font-size: 1rem;
-            font-weight: 600;
-            border-radius: 8px;
-            text-decoration: none;
-            border: none;
-            border-bottom: none;
-            transition: opacity 0.15s var(--ease), transform 0.1s var(--ease);
-        }
-
-        .dbis-cta:hover {
-            opacity: 0.88;
-            border-bottom: none;
-        }
-
-        .dbis-cta:active {
-            transform: scale(0.98);
-        }
-
-        .dbis-closing {
-            margin-top: 3.5rem;
-            padding-top: 2rem;
-            border-top: 1px solid var(--border);
-            text-align: center;
-        }
-
-        .dbis-closing p {
-            font-size: 1.0625rem;
-            color: var(--text-secondary);
-            line-height: 1.75;
-            margin-bottom: 0.5rem;
-        }
-
-        .dbis-closing .dbis-cta {
-            margin-top: 1rem;
-        }
-
-        @media (max-width: 600px) {
-            .dbis-page {
-                padding: 2rem 1rem 3rem;
-            }
-
-            .dbis-lede {
-                font-size: 1.1rem;
-            }
-
-            .dbis-section h2 {
-                font-size: 1.2rem;
-            }
-
-            .dbis-section p {
-                font-size: 1rem;
-            }
-
-            .dbis-pullquote {
-                font-size: 1.05rem;
-                padding: 1rem 1.15rem;
-            }
-        }
+        .dbis-page { max-width: 680px; margin: 0 auto; padding: 3rem 1.25rem 4rem; }
+        .dbis-article { font-family: var(--font-body); color: var(--text-primary); }
+        .dbis-lede { font-size: 1.25rem; line-height: 1.65; color: var(--text-secondary); margin-bottom: 2rem; font-weight: 400; letter-spacing: -0.01em; }
+        .dbis-lede strong { color: var(--text-primary); font-weight: 600; }
+        .dbis-section { margin-top: 3rem; }
+        .dbis-section h2 { font-size: 1.35rem; font-weight: 700; color: var(--text-primary); letter-spacing: -0.025em; margin-bottom: 0.85rem; line-height: 1.3; }
+        .dbis-section p { font-size: 1.0625rem; color: var(--text-secondary); line-height: 1.75; margin-bottom: 1.1rem; }
+        .dbis-section a { color: var(--primary-light); text-decoration: none; font-weight: 500; border-bottom: 1px solid var(--primary-border); transition: border-color 0.15s var(--ease); }
+        .dbis-section a:hover { border-bottom-color: var(--primary-light); }
+        .dbis-pullquote { margin: 2.25rem 0; padding: 1.25rem 1.5rem; border-left: 3px solid var(--dmarcbis); background: var(--surface); font-size: 1.15rem; font-weight: 500; line-height: 1.6; color: var(--text-primary); letter-spacing: -0.01em; border-radius: 0 8px 8px 0; }
+        .dbis-section code { font-family: var(--font-mono); font-size: 0.88em; background: var(--bg); border: 1px solid var(--border); padding: 0.1em 0.4em; border-radius: 4px; color: var(--primary-light); white-space: nowrap; }
+        .dbis-section strong { color: var(--text-primary); font-weight: 600; }
+        .dbis-steps { counter-reset: step; list-style: none; padding: 0; margin: 1.25rem 0; }
+        .dbis-steps li { counter-increment: step; display: flex; align-items: flex-start; gap: 0.85rem; padding: 0.6rem 0; font-size: 1rem; color: var(--text-secondary); line-height: 1.65; }
+        .dbis-steps li::before { content: counter(step); display: flex; align-items: center; justify-content: center; min-width: 1.7rem; height: 1.7rem; border-radius: 50%; background: var(--dmarcbis-bg); color: var(--dmarcbis); font-size: 0.8rem; font-weight: 700; flex-shrink: 0; margin-top: 0.05rem; }
+        .dbis-walk { margin: 1.5rem 0; display: flex; flex-direction: column; gap: 0; font-family: var(--font-mono); font-size: 0.9rem; }
+        .dbis-walk-step { display: flex; align-items: center; gap: 0.6rem; padding: 0.45rem 0.75rem; color: var(--text-secondary); position: relative; }
+        .dbis-walk-step::before { content: ''; width: 8px; height: 8px; border-radius: 50%; background: var(--border); flex-shrink: 0; }
+        .dbis-walk-step:not(:last-child)::after { content: ''; position: absolute; left: calc(0.75rem + 3px); top: calc(0.45rem + 8px + 4px); width: 2px; height: calc(100% - 4px); background: var(--border); }
+        .dbis-walk-step.found::before { background: var(--pass); }
+        .dbis-walk-step.found { color: var(--pass); font-weight: 600; }
+        .dbis-walk-label { font-family: var(--font-body); font-size: 0.75rem; color: var(--text-muted); margin-left: auto; flex-shrink: 0; }
+        .dbis-cta { display: inline-flex; align-items: center; gap: 0.5rem; padding: 0.75rem 1.5rem; background: var(--dmarcbis); color: #0a2d28; font-size: 1rem; font-weight: 600; border-radius: 8px; text-decoration: none; border: none; border-bottom: none; transition: opacity 0.15s var(--ease), transform 0.1s var(--ease); }
+        .dbis-cta:hover { opacity: 0.88; border-bottom: none; }
+        .dbis-cta:active { transform: scale(0.98); }
+        .dbis-closing { margin-top: 3.5rem; padding-top: 2rem; border-top: 1px solid var(--border); text-align: center; }
+        .dbis-closing p { font-size: 1.0625rem; color: var(--text-secondary); line-height: 1.75; margin-bottom: 0.5rem; }
+        .dbis-closing .dbis-cta { margin-top: 1rem; }
+        @media (max-width: 600px) { .dbis-page { padding: 2rem 1rem 3rem; } .dbis-lede { font-size: 1.1rem; } .dbis-section h2 { font-size: 1.2rem; } .dbis-section p { font-size: 1rem; } .dbis-pullquote { font-size: 1.05rem; padding: 1rem 1.15rem; } }
     </style>
 </head>
 <body>
@@ -304,236 +90,80 @@
             </div>
         </div>
     </header>
-
     <main class="dbis-page">
         <article class="dbis-article">
-
-            <h1 style="font-size: 2rem; font-weight: 700; letter-spacing: -0.03em; color: var(--text-primary); margin-bottom: 0.25rem; line-height: 1.2;">
-                DMARCbis
-            </h1>
-            <p style="font-size: 1rem; color: var(--text-muted); margin-bottom: 2rem;">
-                The protocol upgrade that makes the Public Suffix List optional
-            </p>
-
-            <p class="dbis-lede">
-                I need to tell you something <strong>mildly absurd</strong> about your email security.
-            </p>
-
-            <p class="dbis-lede">
-                For the past decade, your DMARC record has leaned on a text file maintained by volunteers on GitHub. Not a standard. Not a protocol. <strong>A list.</strong> Curated by humans who cared enough to track every top-level domain, every private suffix, every odd little corner of the internet's naming system. <strong>For free.</strong>
-            </p>
-
-            <p class="dbis-lede">
-                It sounds like a vulnerability. It was. And also, somehow, a quiet triumph. Both things can be true. In email security, they usually are.
-            </p>
-
+            <h1 style="font-size: 2rem; font-weight: 700; letter-spacing: -0.03em; color: var(--text-primary); margin-bottom: 0.25rem; line-height: 1.2;">DMARCbis</h1>
+            <p style="font-size: 1rem; color: var(--text-muted); margin-bottom: 2rem;">The protocol upgrade that makes the Public Suffix List optional</p>
+            <p class="dbis-lede">I need to tell you something <strong>mildly absurd</strong> about your email security.</p>
+            <p class="dbis-lede">For the past decade, your DMARC record has leaned on a text file maintained by volunteers on GitHub. Not a standard. Not a protocol. <strong>A list.</strong> Curated by humans who cared enough to track every top-level domain, every private suffix, every odd little corner of the internet's naming system. <strong>For free.</strong></p>
+            <p class="dbis-lede">It sounds like a vulnerability. It was. And also, somehow, a quiet triumph. That sounds like a contradiction. Email security is full of them.</p>
             <section class="dbis-section">
-                <p>
-                    Since its inception, DMARC has depended on the Public Suffix List to scope policy. The PSL started as a 2007 Mozilla Foundation project, back when "the internet" still felt like a collection of people who showed up to help. Over time it became the bedrock of global email security. A workaround that became permanent. The kind of thing nobody planned for, and then nobody could remove.
-                </p>
-
-                <p>
-                    Receivers reference it to answer a question that sounds simple but absolutely is not.
-                </p>
+                <p>Since its inception, DMARC has depended on the Public Suffix List to scope policy. The PSL started as a 2007 Mozilla Foundation project, back when "the internet" still felt like a collection of people who showed up to help. Over time it became the bedrock of global email security. A workaround that became permanent. Something nobody planned for. Something nobody could remove.</p>
+                <p>Receivers reference it to answer a question that sounds simple but absolutely is not.</p>
             </section>
-
-            <div class="dbis-pullquote">
-                Where does your organizational domain end?
-            </div>
-
+            <div class="dbis-pullquote">Where does your organizational domain end?</div>
             <section class="dbis-section">
-                <p>
-                    Take <code>mail.example.co.uk</code>. Is the organizational domain <code>example.co.uk</code> or <code>co.uk</code>? Get that wrong, and DMARC policy silently misses the message. No error. No alert. Just a gap where protection was supposed to be. That question is the <strong>load-bearing decision</strong>, and for a decade, a volunteer text file held the answer.
-                </p>
-
-                <p>
-                    The remarkable part is not that this existed. It is that it worked.
-                </p>
-
-                <p>
-                    Those volunteers tracked new TLDs, private suffixes, and the internet's edge cases, quietly and accurately, for free. No headlines. No thank-yous from the platforms that depended on them. They just kept the list current while everything around it scaled. If you have ever maintained something unglamorous that an entire industry relied on without knowing it, you understand the kind of devotion this takes.
-                </p>
-
-                <p>
-                    DMARC depended on something it did not own and could not guarantee. And it held.
-                </p>
+                <p>Take <code>mail.example.co.uk</code>. Is the organizational domain <code>example.co.uk</code> or <code>co.uk</code>? Get that wrong, and DMARC policy silently misses the message. No error. No alert. Just a gap where protection was supposed to be. That question is the <strong>load-bearing decision</strong>, and for a decade, a volunteer text file held the answer.</p>
+                <p>The remarkable part is not that this existed. It is that it worked.</p>
+                <p>Those volunteers tracked new TLDs, private suffixes, and the internet's edge cases, quietly and accurately, for free. No headlines. No thank-yous from the platforms that depended on them. They just kept the list current while everything around it scaled. If you have ever maintained something unglamorous that an entire industry relied on without knowing it, you understand the kind of devotion this takes.</p>
+                <p>DMARC depended on something it did not own and could not guarantee. And it held.</p>
             </section>
-
             <section class="dbis-section">
                 <h2>You made it work anyway</h2>
-
-                <p>
-                    Here is the part that matters more than the mechanism.
-                </p>
-
-                <p>
-                    RFC 7489 was not a Standards Track document. It was Informational. In IETF terms, that is a polite way of saying "here are some ideas, good luck."
-                </p>
-
-                <p>
-                    Vendors had room to interpret. And some of them did. Creatively.
-                </p>
-
-                <p>
-                    But operators did not wait for permission.
-                </p>
-
-                <p>
-                    They implemented DMARC anyway. They compared notes in forums and working groups. They built tooling. They debugged alignment failures, squinted at aggregate reports until the XML made sense, and taught each other what they learned. Communities like the Messaging, Malware and Mobile Anti-Abuse Working Group turned a loose document and a volunteer list into the actual floor of email security. That floor held. It still holds.
-                </p>
-
-                <p>
-                    If you are the person who set your domain's DMARC record, you might not have been in those forums debugging alignment failures. You might have inherited a record someone else configured. That is fine. You still benefited from the people who were in the trenches, and their work is why your record at <code>p=reject</code> actually means something when a receiver checks it.
-                </p>
-
-                <p>
-                    Then the market closed the loop. Gmail and Yahoo required DMARC for bulk senders in 2024. The protocol did not lead. Practice did. The people doing the work figured it out first, and the industry eventually caught up. That pattern repeats everywhere in internet infrastructure if you know where to look.
-                </p>
-
-                <p>
-                    You are part of that, whether you set the record yourself or inherited it from someone who cared before you did.
-                </p>
+                <p>Here is the part that matters more than the mechanism.</p>
+                <p>RFC 7489 was not a Standards Track document. It was Informational. In IETF terms, that is a polite way of saying "here are some ideas, good luck."</p>
+                <p>Vendors had room to interpret. And some of them did. Creatively.</p>
+                <p>But operators did not wait for permission.</p>
+                <p>They implemented DMARC anyway. They compared notes in forums and working groups. They built tooling. They debugged alignment failures, squinted at aggregate reports until the XML made sense, and taught each other what they learned. Communities like the Messaging, Malware and Mobile Anti-Abuse Working Group turned a loose document and a volunteer list into the actual floor of email security. That floor held. It still holds.</p>
+                <p>If you are the person who set your domain's DMARC record, you might not have been in those forums debugging alignment failures. You might have inherited a record someone else configured. That is fine. You still benefited from the people who were in the trenches, and their work is why your record at <code>p=reject</code> actually means something when a receiver checks it.</p>
+                <p>Then the market closed the loop. Gmail and Yahoo required DMARC for bulk senders in 2024. The protocol did not lead. Practice did. The people doing the work figured it out first, and the industry eventually caught up. You see this pattern across internet infrastructure once you start noticing it.</p>
+                <p>You are part of that, whether you set the record yourself or inherited it from someone who cared before you did.</p>
             </section>
-
-            <div class="dbis-pullquote">
-                A decade of volunteer-maintained infrastructure is a beautiful thing. It is also a single point of failure you are not supposed to name out loud.
-            </div>
-
+            <div class="dbis-pullquote">A decade of volunteer-maintained infrastructure is a beautiful thing. It is also a single point of failure you are not supposed to name out loud.</div>
             <section class="dbis-section">
                 <h2>The fix is specified. Deployment will take time.</h2>
-
-                <p>
-                    DMARCbis removes the Public Suffix List from the critical path.
-                </p>
-
-                <p>
-                    In its place is the <strong>DNS tree walk</strong>. I try not to use words like "elegant" lightly, but this is elegant.
-                </p>
-
-                <p>
-                    Instead of referencing a list, the receiver queries DNS directly. It starts at the full domain in the message and walks upward one label at a time, checking for a DMARC record at each step:
-                </p>
-
+                <p>DMARCbis removes the Public Suffix List from the critical path.</p>
+                <p>In its place is the <strong>DNS tree walk</strong>. This is elegant. I don't use that word often.</p>
+                <p>Instead of referencing a list, the receiver queries DNS directly. It starts at the full domain in the message and walks upward one label at a time, checking for a DMARC record at each step:</p>
                 <div class="dbis-walk">
-                    <div class="dbis-walk-step">
-                        <span>sub.example.com</span>
-                        <span class="dbis-walk-label">checking...</span>
-                    </div>
-                    <div class="dbis-walk-step">
-                        <span>example.com</span>
-                        <span class="dbis-walk-label">checking...</span>
-                    </div>
-                    <div class="dbis-walk-step found">
-                        <span>com</span>
-                        <span class="dbis-walk-label">stopped (TLD)</span>
-                    </div>
+                    <div class="dbis-walk-step"><span>sub.example.com</span><span class="dbis-walk-label">checking...</span></div>
+                    <div class="dbis-walk-step"><span>example.com</span><span class="dbis-walk-label">checking...</span></div>
+                    <div class="dbis-walk-step found"><span>com</span><span class="dbis-walk-label">stopped (TLD)</span></div>
                 </div>
-
-                <p>
-                    The DNS itself answers the question no list ever fully could. No download. No cache staleness. No volunteer keeping a text file current at 11pm because a new TLD launched.
-                </p>
-
-                <p>
-                    A DNS-based protocol finally uses DNS to answer its own question. It took a decade to get here. Sometimes the obvious move is the one you have to earn.
-                </p>
-
-                <p>
-                    This did not come from theory. The working group incorporated what operators learned in the trenches: inconsistencies in PSL handling, unreliable behavior of deprecated tags like <code>pct=</code>, and gaps like non-existent subdomain spoofing, which the <code>np=</code> tag now addresses. Real pain, turned into real fixes. That is how standards should work.
-                </p>
-
-                <p>
-                    Now the honest part: <strong>most receiving systems do not support it yet.</strong>
-                </p>
-
-                <p>
-                    The main specification has been approved by the IESG. Final RFC publication is held pending the companion failure-reporting document, likely landing in 2026 or early 2027. After that, receivers need to implement the tree walk in their parsers. That will be gradual. Nobody flips a switch on global email infrastructure over a weekend, and if they tell you they can, you should be suspicious.
-                </p>
-
-                <p>
-                    The Public Suffix List is not disappearing overnight. The record you have today continues to work, and it will continue to work throughout the transition. You do not need to panic. You do not even need to rush. You just need to know what is coming.
-                </p>
+                <p>The DNS itself answers the question no list ever fully could. No download. No cache staleness. No volunteer keeping a text file current at 11pm because a new TLD launched.</p>
+                <p>A DNS-based protocol finally uses DNS to answer its own question. It took a decade to get here. Sometimes the obvious move is the one you have to earn.</p>
+                <p>This did not come from theory. The working group incorporated what operators learned in the trenches: inconsistencies in PSL handling, unreliable behavior of deprecated tags like <code>pct=</code>, and gaps like non-existent subdomain spoofing, which the <code>np=</code> tag now addresses. Real pain, turned into real fixes.</p>
+                <p>Now the honest part: <strong>most receiving systems do not support it yet.</strong></p>
+                <p>The main specification has been approved by the IESG. Final RFC publication is held pending the companion failure-reporting document, likely landing in 2026 or early 2027. After that, receivers need to implement the tree walk in their parsers. That will be gradual. Nobody flips a switch on global email infrastructure over a weekend. If someone tells you otherwise, ask questions.</p>
+                <p>The Public Suffix List is not disappearing overnight. The record you have today continues to work, and it will continue to work throughout the transition. You do not need to panic. You do not even need to rush. You just need to know what is coming.</p>
             </section>
-
             <section class="dbis-section">
                 <h2>What you actually need to do</h2>
-
-                <p>
-                    The heavy lift is on the receiver side. On your side, there is a short list of straightforward edits. The kind you can do in one sitting, possibly with coffee.
-                </p>
-
+                <p>The heavy lift is on the receiver side. On your side, there is a short list of straightforward edits. The kind you can do in one sitting, possibly with coffee.</p>
                 <ol class="dbis-steps">
-                    <li>
-                        <div>
-                            <strong>Remove deprecated tags.</strong> <code>pct=</code>, <code>rf=</code>, and <code>ri=</code> are going away. Most were never handled consistently anyway, so you are not losing capability you were reliably using. Clean them out.
-                        </div>
-                    </li>
-                    <li>
-                        <div>
-                            <strong>Fix reporting URIs.</strong> Make sure they begin with <code>mailto:</code>. The new parser is stricter. This is the sort of thing that either works or silently fails, and "silently fails" is not the DMARC experience anyone wants.
-                        </div>
-                    </li>
-                    <li>
-                        <div>
-                            <strong>Understand <code>psd=n</code>.</strong> In most cases, you do not need to add anything. The default behavior already assumes you are not a public suffix. If you do not run a domain registry, you are already covered. The tag exists primarily for the registries themselves to declare <code>psd=y</code>.
-                        </div>
-                    </li>
-                    <li>
-                        <div>
-                            <strong>Consider <code>np=reject</code>.</strong> If you are already at <code>p=reject</code>, this closes the non-existent subdomain spoofing gap. Audit third-party senders first. The tag is optional, but the protection is real.
-                        </div>
-                    </li>
-                    <li>
-                        <div>
-                            <strong>Verify external reporting authorization.</strong> If <code>rua=</code> points to a third party, that destination must publish a special record to confirm it is authorized to receive your reports. Without it, reports silently fail. Another "silently fails" situation, and those are worth fixing preemptively.
-                        </div>
-                    </li>
+                    <li><div><strong>Remove deprecated tags.</strong> <code>pct=</code>, <code>rf=</code>, and <code>ri=</code> are going away. Most were never handled consistently anyway, so you are not losing capability you were reliably using. Clean them out.</div></li>
+                    <li><div><strong>Fix reporting URIs.</strong> Make sure they begin with <code>mailto:</code>. The new parser is stricter. This is the sort of thing that either works or silently fails, and "silently fails" is not the DMARC experience anyone wants.</div></li>
+                    <li><div><strong>Understand <code>psd=n</code>.</strong> In most cases, you do not need to add anything. The default behavior already assumes you are not a public suffix. If you do not run a domain registry, you are already covered. The tag exists primarily for the registries themselves to declare <code>psd=y</code>.</div></li>
+                    <li><div><strong>Consider <code>np=reject</code>.</strong> If you are already at <code>p=reject</code>, this closes the non-existent subdomain spoofing gap. Audit third-party senders first. The tag is optional, but the protection is real.</div></li>
+                    <li><div><strong>Verify external reporting authorization.</strong> If <code>rua=</code> points to a third party, that destination must publish a special record to confirm it is authorized to receive your reports. Without it, reports silently fail. Another "silently fails" situation, and those are worth fixing preemptively.</div></li>
                 </ol>
-
-                <p>
-                    That is the list. Minutes, not days. The hard part—deploying the tree walk across the world's mail systems—is not yours to carry. You just need to tidy up your side of the fence.
-                </p>
+                <p>That is the list. Minutes, not days. The hard part, deploying the tree walk across the world's mail systems, is not yours to carry. You just need to tidy up your side of the fence.</p>
             </section>
-
             <div class="dbis-closing">
-                <p>
-                    If you want to see exactly which of these apply to your record, I built <strong>dns-audit.com</strong> for this. It shows your current state, the DMARCbis-ready state, and the path between them. No guesswork.
-                </p>
-                <a href="/" class="dbis-cta">
-                    Audit your domain →
-                </a>
+                <p>If you want to see exactly which of these apply to your record, I built <strong>dns-audit.com</strong> for this. It shows your current state, the DMARCbis-ready state, and the path between them. No guesswork.</p>
+                <a href="/" class="dbis-cta">Audit your domain →</a>
             </div>
-
             <section class="dbis-section">
                 <h2>What to take from this</h2>
-
-                <p>
-                    For ten years, you have been running production email security on a protocol that was not formally a standard, with behavior that varied by receiver, and a parsing model that depended on a volunteer-maintained list.
-                </p>
-
-                <p>
-                    That sentence should not make sense. And yet here we are.
-                </p>
-
-                <p>
-                    DMARCbis does not replace the work this community did. It <strong>captures</strong> it. It writes down what operators already learned, in production, often the hard way, and gives it the formal architecture it always deserved. The DNS tree walk replaces the Public Suffix List. Deprecated edges are removed. Real gaps are closed. Parsing becomes stricter. The spec grows up.
-                </p>
-
-                <p>
-                    Your existing DMARC record keeps working. <code>v=DMARC1</code> is still <code>v=DMARC1</code>. The change is on the receiver side. The tree walk replaces the PSL in their parsers, not in your zone file. The edits on your end are small and clear: remove a few tags, tidy your reporting URIs, verify your authorization records. When tools flag the old syntax, you will already know why. When receivers implement <code>np=reject</code>, you will understand what it closes.
-                </p>
-
-                <p>
-                    You are not behind. You were early. The spec is finally catching up to the record you already have.
-                </p>
+                <p>For ten years, you have been running production email security on a protocol that was not formally a standard, with behavior that varied by receiver, and a parsing model that depended on a volunteer-maintained list.</p>
+                <p>That sentence should not make sense. It does anyway.</p>
+                <p>DMARCbis does not replace the work this community did. It <strong>captures</strong> it. It writes down what operators already learned, in production, often the hard way, and gives it the formal architecture it always deserved. The DNS tree walk replaces the Public Suffix List. Deprecated edges are removed. Real gaps are closed. Parsing becomes stricter. The spec grows up.</p>
+                <p>Your existing DMARC record keeps working. <code>v=DMARC1</code> is still <code>v=DMARC1</code>. The change is on the receiver side. The tree walk replaces the PSL in their parsers, not in your zone file. The edits on your end are small and clear: remove a few tags, tidy your reporting URIs, verify your authorization records. When tools flag the old syntax, you will already know why. When receivers implement <code>np=reject</code>, you will understand what it closes.</p>
+                <p>You are not behind. You were early. The spec is finally catching up to the record you already have.</p>
             </section>
-
-            <div class="dbis-pullquote" style="margin-bottom: 0;">
-                And somewhere, a volunteer who updated the Public Suffix List for the last ten years without anyone noticing just got a protocol-wide thank-you. Long overdue. If that volunteer is reading this: we saw it. We depended on you. Thank you.
-            </div>
-
+            <div class="dbis-pullquote" style="margin-bottom: 0;">And somewhere, a volunteer who updated the Public Suffix List for the last ten years without anyone noticing just got a protocol-wide thank-you. Long overdue. If that volunteer is reading this: we saw it. We depended on you. Thank you.</div>
         </article>
     </main>
-
     <footer class="site-footer">
         <div class="container footer-inner">
             <div class="footer-left">
@@ -558,4 +188,4 @@
         </div>
     </footer>
 </body>
-</html>`
+</html>
