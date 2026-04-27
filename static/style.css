@@ -4510,6 +4510,7 @@ body {
     padding: 0.1em 0.35em;
     border-radius: 4px;
     color: var(--primary-light);
+    overflow-wrap: anywhere;
 }
 
 /* Comparison table */
