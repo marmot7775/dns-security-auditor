@@ -33,7 +33,7 @@
             "name": "Neil Anuskiewicz"
         },
         "datePublished": "2026-04-26",
-        "proficiencyLevel": "Beginner",
+        "proficiencyLevel": "Intermediate",
         "dependencies": "Basic understanding of email authentication (SPF, DKIM, DMARC)"
     }
     </script>
@@ -60,10 +60,10 @@
             },
             {
                 "@type": "Question",
-                "name": "What is the DNS Tree Walk in DMARCbis?",
+                "name": "What is the DNS tree walk in DMARCbis?",
                 "acceptedAnswer": {
                     "@type": "Answer",
-                    "text": "The DNS Tree Walk replaces the Public Suffix List for organizational domain discovery. The receiver queries DNS at the exact domain and walks upward one label at a time, checking for a DMARC record at each level."
+                    "text": "The DNS tree walk replaces the Public Suffix List for organizational domain discovery. The receiver queries DNS at the exact domain and walks upward one label at a time, checking for a DMARC record at each level."
                 }
             }
         ]
@@ -127,7 +127,7 @@
             <div class="dbis-section" id="the-fix">
                 <h2>The fix is here. It is simple.</h2>
                 <p>DMARCbis removes the Public Suffix List from the critical path.</p>
-                <p>In its place is the DNS Tree Walk.</p>
+                <p>In its place is the DNS tree walk.</p>
                 <p>Instead of consulting a downloaded list, the receiver queries DNS directly. It starts at the exact domain in the message and walks upward one label at a time. At each step, it checks for a DMARC record. It stops when it finds one or reaches a defined limit.</p>
                 <p>That is the change.</p>
                 <p>A DNS-based protocol now uses DNS to answer its own question.</p>
@@ -147,8 +147,7 @@
                     <li><strong>Verify external reporting authorization.</strong> If <code>rua=</code> points to a third party, that destination must publish <code>&lt;your-domain&gt;._report._dmarc.&lt;destination-domain&gt; = v=DMARC1</code>. Without it, reports silently fail.</li>
                 </ul>
                 <p>That is the list. A handful of edits. Minutes, not days.</p>
-                <p>If you want to see exactly which apply to your record, run <a href="/">dns-audit.com</a> on your domain. The audit shows the current state, the DMARCbis-ready state, and the path between them. The DNS Tree Walk is animated, so you can watch the new algorithm walk your domain in real time.</p>
-                <p style="text-align: center; margin-top: 1.5rem;"><a href="/" class="audit-cta">Audit Your DMARC Record</a></p>
+                <p>If you want to see exactly which apply to your record, run <a href="/">dns-audit.com</a> on your domain. The audit shows the current state, the DMARCbis-ready state, and the path between them.</p>
             </div>
 
             <!-- What to take from this -->
@@ -157,7 +156,7 @@
                 <p>For ten years, you have been running production email security on a protocol that was not formally a standard, with behavior that varied by receiver, and a parsing model that depended on a volunteer-maintained list.</p>
                 <p>And it worked.</p>
                 <p>DMARCbis does not replace that work. It captures it.</p>
-                <p>The new specification folds a decade of operational reality into a Standards Track RFC. The DNS Tree Walk replaces the Public Suffix List. Deprecated edges are removed. Real gaps are closed. Parsing becomes stricter.</p>
+                <p>The new specification folds a decade of operational reality into a Standards Track RFC. The DNS tree walk replaces the Public Suffix List. Deprecated edges are removed. Real gaps are closed. Parsing becomes stricter.</p>
                 <p>None of this changes what you have been doing. It refines it.</p>
                 <p>When tools flag <code>pct=</code> as deprecated, you will already know why. When receivers enforce <code>np=reject</code>, you will understand the risk it addresses. When the Public Suffix List fades from the protocol, you will barely notice.</p>
                 <p>The upgrade is real. The work is small.</p>
