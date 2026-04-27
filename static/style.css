@@ -8225,3 +8225,125 @@ body {
     text-decoration: none;
 }
 
+/* ============================================================
+   Prose page enhancements (.dbis-section content)
+   Reusable across dmarcbis, dnssec, and future writeup pages
+   ============================================================ */
+
+.dbis-section ul,
+.dbis-section ol {
+    margin: 0.85rem 0 1rem;
+    padding-left: 1.4rem;
+    color: var(--text-secondary);
+    line-height: 1.7;
+}
+.dbis-section ul li,
+.dbis-section ol li {
+    margin-bottom: 0.45rem;
+    font-size: var(--font-base);
+}
+.dbis-section ul li::marker {
+    color: var(--dmarcbis);
+}
+.dbis-section ol li::marker {
+    color: var(--dmarcbis);
+    font-weight: 600;
+}
+.dbis-section ul li:last-child,
+.dbis-section ol li:last-child {
+    margin-bottom: 0;
+}
+
+.dbis-section h3 {
+    font-size: var(--font-lg);
+    font-weight: 600;
+    color: var(--text-primary);
+    letter-spacing: -0.015em;
+    margin: 1.6rem 0 0.55rem;
+}
+
+.dbis-section pre {
+    margin: 1rem 0;
+    padding: 0.85rem 1rem;
+    background: var(--bg);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    overflow-x: auto;
+    font-family: var(--font-mono);
+    font-size: var(--font-sm);
+    color: var(--text-primary);
+    line-height: 1.55;
+}
+.dbis-section pre code {
+    background: none;
+    border: none;
+    padding: 0;
+    color: inherit;
+    font-size: inherit;
+}
+
+.dbis-section blockquote {
+    margin: 1.25rem 0;
+    padding: 0.75rem 1.1rem;
+    border-left: 3px solid var(--border-strong);
+    background: var(--surface);
+    color: var(--text-primary);
+    font-style: italic;
+    line-height: 1.65;
+    border-radius: 0 6px 6px 0;
+}
+
+/* Pull quote: a single standout sentence that breaks the prose */
+.dbis-pullquote {
+    margin: 1.75rem 0;
+    padding: 1rem 1.25rem;
+    border-left: 3px solid var(--dmarcbis);
+    background: var(--surface);
+    color: var(--text-primary);
+    font-size: var(--font-lg);
+    font-weight: 500;
+    line-height: 1.55;
+    letter-spacing: -0.01em;
+    border-radius: 0 8px 8px 0;
+}
+
+/* Prose list: for "It does not X" / "Algorithm 13. ..." style series
+   that read as a list of named claims, each with an explanation */
+.dbis-prose-list {
+    list-style: none;
+    padding: 0;
+    margin: 1.1rem 0;
+}
+.dbis-prose-list > li {
+    position: relative;
+    padding: 0.85rem 0 0.85rem 1.4rem;
+    border-bottom: 1px solid var(--border);
+    color: var(--text-secondary);
+    line-height: 1.65;
+    font-size: var(--font-base);
+}
+.dbis-prose-list > li:first-child {
+    padding-top: 0.6rem;
+}
+.dbis-prose-list > li:last-child {
+    border-bottom: none;
+}
+.dbis-prose-list > li::before {
+    content: '';
+    position: absolute;
+    left: 0;
+    top: 1.25rem;
+    width: 6px;
+    height: 6px;
+    border-radius: 50%;
+    background: var(--dmarcbis);
+}
+.dbis-prose-list > li:first-child::before {
+    top: 1rem;
+}
+.dbis-prose-list > li strong {
+    color: var(--text-primary);
+    font-weight: 600;
+    display: inline;
+}
+

@@ -32,7 +32,7 @@ class DKIMKeyAgeAnalyzer:
         'versioned': [
             r'v(\d+)',           # v1, v2, v3
             r'key(\d+)',         # key1, key2
-            r'dkim(\d+)',        # dkim1, dkim2
+            r'dkim(\d+)',        # dkim1, dkim<N>
         ],
         'vendor_standard': {
             'google': 'Rotated by Google automatically',

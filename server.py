@@ -179,7 +179,7 @@ class SecurityHeadersMiddleware(BaseHTTPMiddleware):
             response.headers["Cache-Control"] = "no-store"
         elif any(path.endswith(ext) for ext in ('.css', '.js', '.png', '.jpg', '.svg', '.woff2', '.woff', '.ico')):
             response.headers["Cache-Control"] = "public, max-age=14400"  # 4 hours
-        elif path in ('/', '/dmarcbis', '/dkim2', '/privacy', '/about'):
+        elif path in ('/', '/dmarcbis', '/dnssec', '/privacy', '/about'):
             response.headers["Cache-Control"] = "public, max-age=300"  # 5 minutes for HTML
         return response
 
@@ -763,8 +763,8 @@ async def sitemap_xml():
         "    <priority>0.8</priority>\n"
         "  </url>\n"
         "  <url>\n"
-        "    <loc>https://dns-audit.com/dkim2</loc>\n"
-        "    <lastmod>2026-04-24</lastmod>\n"
+        "    <loc>https://dns-audit.com/dnssec</loc>\n"
+        "    <lastmod>2026-04-26</lastmod>\n"
         "    <changefreq>monthly</changefreq>\n"
         "    <priority>0.7</priority>\n"
         "  </url>\n"
@@ -827,9 +827,9 @@ if STATIC_DIR.exists():
     async def dmarcbis():
         return FileResponse(str(STATIC_DIR / "dmarcbis.html"))
 
-    @app.get("/dkim2", tags=["Pages"])
-    async def dkim2():
-        return FileResponse(str(STATIC_DIR / "dkim2.html"))
+    @app.get("/dnssec", tags=["Pages"])
+    async def dnssec():
+        return FileResponse(str(STATIC_DIR / "dnssec.html"))
 
     @app.get("/methodology", tags=["Pages"])
     async def methodology_redirect():
