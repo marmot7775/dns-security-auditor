@@ -4,17 +4,16 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>About | dns-audit.com</title>
-    <meta name="description" content="About dns-audit.com. Free open-source DNS and email security auditing tool built with FastAPI, checking 9 protocols with DMARCbis readiness assessment.">
+    <meta name="description" content="About dns-audit.com. Free open-source DNS and email security auditing tool. Built by Neil Anuskiewicz.">
     <meta property="og:type" content="website" />
     <meta property="og:site_name" content="DNS Security Auditor" />
     <meta property="og:url" content="https://dns-audit.com/about" />
     <meta property="og:title" content="About | dns-audit.com" />
-    <meta property="og:description" content="About dns-audit.com. Free open-source DNS and email security auditing tool built with FastAPI, checking 9 protocols with DMARCbis readiness assessment." />
+    <meta property="og:description" content="About dns-audit.com. Free open-source DNS and email security auditing tool. Built by Neil Anuskiewicz." />
     <meta property="og:image" content="https://dns-audit.com/static/og-image.png" />
     <meta name="twitter:card" content="summary" />
     <meta name="twitter:title" content="About | dns-audit.com" />
-    <meta name="twitter:description" content="About dns-audit.com. Free open-source DNS and email security auditing tool built with FastAPI, checking 9 protocols with DMARCbis readiness assessment." />
-    <meta name="twitter:image" content="https://dns-audit.com/static/og-image.png" />
+    <meta name="twitter:description" content="About dns-audit.com. Free open-source DNS and email security auditing tool. Built by Neil Anuskiewicz." />
     <link rel="canonical" href="https://dns-audit.com/about">
     <link rel="icon" type="image/svg+xml" href="/static/favicon.svg">
     <link rel="apple-touch-icon" sizes="180x180" href="/static/apple-touch-icon.png">
@@ -28,71 +27,65 @@
         "url": "https://dns-audit.com",
         "applicationCategory": "SecurityApplication",
         "operatingSystem": "Web",
-        "offers": {
-            "@type": "Offer",
-            "price": "0",
-            "priceCurrency": "USD"
-        },
-        "author": {
-            "@type": "Person",
-            "name": "Neil Anuskiewicz",
-            "url": "https://www.linkedin.com/in/neilanuskiewicz/"
-        }
+        "offers": { "@type": "Offer", "price": "0", "priceCurrency": "USD" },
+        "author": { "@type": "Person", "name": "Neil Anuskiewicz", "url": "https://www.linkedin.com/in/neilanuskiewicz/" }
     }
     </script>
+    <style>
+        .about-page { max-width: 680px; margin: 0 auto; padding: 3rem 1.25rem 4rem; }
+        .about-page h1 { font-size: 2rem; font-weight: 700; letter-spacing: -0.03em; color: var(--text-primary); margin-bottom: 2rem; line-height: 1.2; }
+        .about-page p { font-size: 1.0625rem; color: var(--text-secondary); line-height: 1.75; margin-bottom: 1.1rem; }
+        .about-page a { color: var(--primary-light); text-decoration: none; font-weight: 500; border-bottom: 1px solid var(--primary-border); transition: border-color 0.15s var(--ease); }
+        .about-page a:hover { border-bottom-color: var(--primary-light); }
+        .about-page strong { color: var(--text-primary); font-weight: 600; }
+        .about-closing { margin-top: 2.5rem; padding-top: 1.5rem; border-top: 1px solid var(--border); }
+        @media (max-width: 600px) { .about-page { padding: 2rem 1rem 3rem; } .about-page h1 { font-size: 1.6rem; } .about-page p { font-size: 1rem; } }
+    </style>
 </head>
 <body>
-
-    <!-- Header -->
     <header class="site-header">
         <div class="container header-inner">
             <a href="/" class="logo">
-                <span class="logo-text">dns<span class="logo-accent">-audit</span>.com</span>
+                <div class="logo-terminal">
+                    <div class="logo-titlebar">
+                        <span class="logo-dot logo-dot-red"></span>
+                        <span class="logo-dot logo-dot-yellow"></span>
+                        <span class="logo-dot logo-dot-green"></span>
+                    </div>
+                    <div class="logo-cmd">
+                        <span class="logo-prompt">$</span> <span class="logo-bin">dns-audit</span> <span class="logo-flag">--dmarc</span>
+                    </div>
+                </div>
+                <span class="logo-text"><span class="logo-accent">dns</span>-audit</span>
             </a>
-            <nav class="site-nav">
-                <a href="/" class="nav-link">Home</a>
-                <a href="/dmarcbis" class="nav-link">DMARCbis</a>
-                <a href="/dnssec" class="nav-link">DNSSEC</a>
-                <a href="/privacy" class="nav-link">Privacy</a>
-                <a href="/about" class="nav-link nav-link-active">About</a>
-            </nav>
+            <div class="header-right">
+                <nav class="site-nav" aria-label="Main navigation">
+                    <a href="/" class="nav-link">Audit</a>
+                    <a href="/dmarcbis" class="nav-link">DMARCbis</a>
+                    <a href="/dnssec" class="nav-link">DNSSEC</a>
+                    <a href="/privacy" class="nav-link">Privacy</a>
+                    <a href="/about" class="nav-link nav-link-active">About</a>
+                </nav>
+            </div>
         </div>
     </header>
-
-    <main class="container">
-        <section class="about-section">
-            <div class="about-card">
-
-                <h1>About dns-audit.com</h1>
-
-                <h2>What This Tool Does</h2>
-                <p>dns-audit.com performs comprehensive DNS and email security audits against current RFC standards. It evaluates DMARC, SPF, DKIM, MTA-STS, TLS-RPT, DANE, DNSSEC, CAA, BIMI, and nameserver configuration, then reports findings and fixes against current RFC standards.</p>
-                <p>Unlike most DNS lookup tools that simply display records, dns-audit.com analyzes your configuration for dangerous tag combinations, validates against RFC specifications, detects your email service providers, and provides actionable recommendations with copy-paste DNS records.</p>
-
-                <h2>DMARCbis Awareness</h2>
-                <p>This tool validates against both RFC 7489 (current DMARC) and draft-ietf-dmarc-dmarcbis, the upcoming revision. It implements the DMARCbis DNS Tree Walk algorithm for organizational domain discovery, supports new tags (np=, psd=, t=), flags deprecated tags (pct, ri, rf), and generates migration paths to DMARCbis-ready records.</p>
-
-                <h2>Methodology</h2>
-                <p>All checks use live DNS queries against published records. No data is collected from email headers or message content. DKIM selector discovery tests over 1,100 common patterns using SPF-based sender detection.</p>
-
-                <h2>Privacy</h2>
-                <p>dns-audit.com queries only publicly available DNS records. No user accounts, no cookies, no tracking. IP addresses are held in memory for rate limiting and are not written to disk. Audit logs record audit metadata (domain, audit duration, browser identifier) only. Full details are in the <a href="/privacy">Privacy Policy</a>.</p>
-
-                <h2>Open Source</h2>
-                <p>The complete source code is available on <a href="https://github.com/marmot7775/dns-security-auditor" target="_blank" rel="noopener">GitHub</a> under the MIT License. Security researchers can review the <a href="https://github.com/marmot7775/dns-security-auditor/security/policy" target="_blank" rel="noopener">Security Policy</a> for responsible disclosure guidelines.</p>
-
-                <h2>Built By</h2>
-                <p>dns-audit.com was created by <a href="https://www.linkedin.com/in/neilanuskiewicz/" target="_blank" rel="noopener">Neil Anuskiewicz</a>.</p>
-
-            </div>
-        </section>
+    <main class="about-page">
+        <h1>About</h1>
+        <p>I built dns-audit.com because the tools I wanted didn't exist.</p>
+        <p>Most DNS tools show you what records you have. They leave you to figure out whether those records are correct, whether the tag combination is dangerous, whether the RFC you're reading is the one that's actually current. I wanted something that did the analysis, showed the work, referenced the specific RFC section it was checking against, and gave me the exact records I needed to fix what was wrong.</p>
+        <p>So I built it.</p>
+        <p>It checks your DNS and email security configuration against current standards, flags misconfigurations, and gives you copy-paste fixes. DMARC validation runs against RFC 7489, the standard receivers use today. SPF, DKIM, DNSSEC, MTA-STS, TLS-RPT, DANE, CAA, BIMI, and nameserver configuration are all covered. The tool also looks ahead to DMARCbis and shows you what will need to change when the new spec lands.</p>
+        <p>If you manage DNS for a domain someone depends on, this tool was built for you.</p>
+        <p>It's free. No accounts, no cookies, no tracking. The code is open source under the MIT License. You can <a href="https://github.com/marmot7775/dns-security-auditor" target="_blank" rel="noopener">read it, run it locally, or fork it</a>.</p>
+        <div class="about-closing">
+            <p>I'm Neil Anuskiewicz. I hope it catches an issue before it turns into an email deliverability headache.</p>
+        </div>
     </main>
-
     <footer class="site-footer">
         <div class="container footer-inner">
             <div class="footer-left">
                 <div class="footer-brand-name">dns-audit.com</div>
-                <div class="footer-brand-desc">Free, open-source DNS<br>& email security auditing</div>
+                <div class="footer-brand-desc">Free, open-source DNS<br>&amp; email security auditing</div>
             </div>
             <div class="footer-right">
                 <div class="footer-nav">
