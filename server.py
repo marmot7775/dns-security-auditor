@@ -728,6 +728,16 @@ async def health():
     return {"status": "ok"}
 
 
+@app.get("/health", tags=["System"])
+async def health_deep():
+    """Deep health check: verifies DNS resolution works."""
+    try:
+        dns.resolver.resolve("example.com", "A", lifetime=2)
+        return {"status": "ok"}
+    except Exception:
+        return JSONResponse(content={"status": "error"}, status_code=500)
+
+
 # ============================================================
 # SEO: robots.txt & sitemap.xml
 # ============================================================
