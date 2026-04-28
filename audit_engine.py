@@ -4146,7 +4146,6 @@ def run_full_audit(domain: str, dkim_selector: Optional[str] = None,
     checks = []
     raw_results = {}
     errors = []
-    is_defensive = False  # Will be recomputed after MX/SPF are available
 
     # Resolve scope to a set of check keys (None = run everything)
     if scope and scope not in SCOPE_CHECKS:
@@ -4154,6 +4153,9 @@ def run_full_audit(domain: str, dkim_selector: Optional[str] = None,
     scope_set = SCOPE_CHECKS.get(scope) if scope else None
     total_checks = _count_checks_for_scope(scope_set)
     completed = 0
+
+    # Initialize is_defensive early to avoid NameError
+    is_defensive = False
 
     def _notify(step_name):
         nonlocal completed
@@ -4185,7 +4187,7 @@ def run_full_audit(domain: str, dkim_selector: Optional[str] = None,
             _enrich_dmarc_inheritance(raw_dmarc, domain, tree_walk_result)
             raw_results["dmarc"] = raw_dmarc
             if _should_include("dmarc", scope_set):
-                checks.append(transform_dmarc(raw_dmarc, tree_walk=tree_walk_result))
+                checks.append(transform_dmarc(raw_dmarc, tree_walk=tree_walk_result, is_no_mail=is_defensive))
         except FuturesTimeoutError:
             errors.append("DMARC: timed out")
             if _should_include("dmarc", scope_set):
@@ -4421,7 +4423,7 @@ def run_full_audit(domain: str, dkim_selector: Optional[str] = None,
 
     # --- Detect Defensive DNS pattern (moved early -- roadmap needs it) ---
     defensive_signals = []
-    is_defensive = False
+    is_defensive = False  # Already declared at top, reassign here after data is ready
     if "dmarc" in raw_results and "mx" in raw_results and "spf" in raw_results:
         _raw_mx = raw_results["mx"]
         _raw_spf = raw_results["spf"]
@@ -4464,16 +4466,12 @@ def run_full_audit(domain: str, dkim_selector: Optional[str] = None,
 
     # --- Re-transform DMARC card now that is_defensive is known ---
     if is_defensive:
-        for i, card in enumerate(checks):
-            if card.get("name") == "DMARC":
-                raw_dmarc = raw_results.get("dmarc")
-                if raw_dmarc:
-                    checks[i] = transform_dmarc(
-                        raw_dmarc,
-                        tree_walk=tree_walk_result,
-                        is_no_mail=True
-                    )
-                break
+        raw_dmarc = raw_results.get("dmarc")
+        if raw_dmarc:
+            for i, card in enumerate(checks):
+                if card.get("name") == "DMARC":
+                    checks[i] = transform_dmarc(raw_dmarc, tree_walk=tree_walk_result, is_no_mail=True)
+                    break
 
     # --- DMARC Evaluation Summary (post-processor, zero DNS queries) ---
     dmarc_eval = None
@@ -4769,7 +4767,7 @@ def run_full_audit(domain: str, dkim_selector: Optional[str] = None,
 
     # --- Assemble final response ---
     elapsed = (datetime.now(timezone.utc) - start_time).total_seconds()
-    _roadmap = build_security_roadmap(checks)
+    _roadmap = build_security_roadmap(checks, is_no_mail=is_defensive)
 
     return {
         "domain": domain,

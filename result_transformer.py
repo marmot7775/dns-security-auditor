@@ -276,7 +276,7 @@ def build_executive_summary(checks: List[Dict], roadmap: Dict) -> Dict:
 # Email Security Roadmap (Prompt 11)
 # ============================================================
 
-def build_security_roadmap(checks: List[Dict]) -> Dict:
+def build_security_roadmap(checks: List[Dict], is_no_mail: bool = False) -> Dict:
     """Synthesize all check results into a prioritized action plan.
 
     Takes the transformed checks list and returns a roadmap with
