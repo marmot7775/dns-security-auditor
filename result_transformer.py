@@ -1447,6 +1447,8 @@ def transform_dmarc(raw: Dict, tree_walk: Optional[Dict] = None, is_no_mail: boo
                 })
         elif raw.get("rua"):
             details.append({"type": "good", "text": "Aggregate reporting (rua) is configured"})
+        elif is_no_mail:
+            details.append({"type": "info", "text": "Aggregate reporting (rua) not configured (optional for non-mail domain)"})
         else:
             details.append({"type": "warning", "text": "No aggregate reporting (rua) configured"})
 
