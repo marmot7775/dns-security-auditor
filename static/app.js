@@ -3926,4 +3926,72 @@ function _renderComparison(data1, data2, container) {
     });
 })();
 
+(function() {
+    const STORAGE_KEY = 'recentAudits';
+    const MAX_ITEMS = 5;
+    const container = document.getElementById('recent-audits');
+    const chipsContainer = document.getElementById('recent-audits-chips');
+    const clearBtn = document.getElementById('recent-audits-clear');
+    const domainInput = document.getElementById('domain-input');
+    const auditForm = document.getElementById('audit-form');
+
+    if (!container || !chipsContainer) return;
+
+    function getRecent() {
+        try {
+            const raw = localStorage.getItem(STORAGE_KEY);
+            return raw ? JSON.parse(raw) : [];
+        } catch {
+            return [];
+        }
+    }
+
+    function saveRecent(domains) {
+        localStorage.setItem(STORAGE_KEY, JSON.stringify(domains));
+    }
+
+    function addDomain(domain) {
+        let domains = getRecent();
+        domains = domains.filter(d => d.toLowerCase() !== domain.toLowerCase());
+        domains.unshift(domain);
+        if (domains.length > MAX_ITEMS) domains.pop();
+        saveRecent(domains);
+        render();
+    }
+
+    function render() {
+        const domains = getRecent();
+        if (!domains.length) {
+            container.style.display = 'none';
+            return;
+        }
+        container.style.display = 'block';
+        chipsContainer.innerHTML = '';
+        domains.forEach(domain => {
+            const chip = document.createElement('button');
+            chip.type = 'button';
+            chip.className = 'recent-audit-chip';
+            chip.textContent = domain;
+            chip.addEventListener('click', () => {
+                domainInput.value = domain;
+                auditForm.dispatchEvent(new Event('submit', { cancelable: true }));
+            });
+            chipsContainer.appendChild(chip);
+        });
+    }
+
+    auditForm.addEventListener('submit', () => {
+        const domain = domainInput.value.trim();
+        if (domain) addDomain(domain);
+    });
+
+    clearBtn.addEventListener('click', () => {
+        localStorage.removeItem(STORAGE_KEY);
+        container.style.display = 'none';
+        chipsContainer.innerHTML = '';
+    });
+
+    render();
+})();
+
 
