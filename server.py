@@ -745,46 +745,6 @@ async def robots_txt():
     )
 
 
-@app.get("/sitemap.xml", tags=["SEO"])
-async def sitemap_xml():
-    xml = (
-        '<?xml version="1.0" encoding="UTF-8"?>\n'
-        '<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">\n'
-        "  <url>\n"
-        "    <loc>https://dns-audit.com/</loc>\n"
-        "    <lastmod>2026-04-24</lastmod>\n"
-        "    <changefreq>weekly</changefreq>\n"
-        "    <priority>1.0</priority>\n"
-        "  </url>\n"
-        "  <url>\n"
-        "    <loc>https://dns-audit.com/dmarcbis</loc>\n"
-        "    <lastmod>2026-04-26</lastmod>\n"
-        "    <changefreq>monthly</changefreq>\n"
-        "    <priority>0.8</priority>\n"
-        "  </url>\n"
-        "  <url>\n"
-        "    <loc>https://dns-audit.com/dnssec</loc>\n"
-        "    <lastmod>2026-04-26</lastmod>\n"
-        "    <changefreq>monthly</changefreq>\n"
-        "    <priority>0.7</priority>\n"
-        "  </url>\n"
-        "  <url>\n"
-        "    <loc>https://dns-audit.com/about</loc>\n"
-        "    <lastmod>2026-04-24</lastmod>\n"
-        "    <changefreq>monthly</changefreq>\n"
-        "    <priority>0.5</priority>\n"
-        "  </url>\n"
-        "  <url>\n"
-        "    <loc>https://dns-audit.com/privacy</loc>\n"
-        "    <lastmod>2026-04-24</lastmod>\n"
-        "    <changefreq>yearly</changefreq>\n"
-        "    <priority>0.3</priority>\n"
-        "  </url>\n"
-        "</urlset>\n"
-    )
-    return Response(content=xml, media_type="application/xml")
-
-
 # ============================================================
 # 404 handler
 # ============================================================
@@ -874,4 +834,26 @@ async def health():
             content={"status": "error", "detail": str(e)},
             status_code=500,
         )
+
+
+@app.get("/sitemap.xml")
+async def sitemap():
+    """Generate a simple sitemap for search engines."""
+    base = "https://dns-audit.com"
+    pages = [
+        {"loc": "/", "changefreq": "weekly", "priority": "1.0"},
+        {"loc": "/dmarcbis", "changefreq": "monthly", "priority": "0.8"},
+        {"loc": "/dnssec", "changefreq": "monthly", "priority": "0.8"},
+        {"loc": "/about", "changefreq": "monthly", "priority": "0.5"},
+    ]
+    xml = '<?xml version="1.0" encoding="UTF-8"?>\n'
+    xml += '<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">\n'
+    for p in pages:
+        xml += f"  <url>\n"
+        xml += f"    <loc>{base}{p['loc']}</loc>\n"
+        xml += f"    <changefreq>{p['changefreq']}</changefreq>\n"
+        xml += f"    <priority>{p['priority']}</priority>\n"
+        xml += f"  </url>\n"
+    xml += '</urlset>'
+    return Response(content=xml, media_type="application/xml")
 
