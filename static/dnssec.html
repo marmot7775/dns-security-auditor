@@ -107,7 +107,7 @@
                 <p>The math was always fine. The operations were the problem.</p>
                 <p>Three RFCs closed the operations problem. None of them went viral. All of them mattered.</p>
                 <p>RFC 7344, back in 2014, introduced CDS and CDNSKEY records. The idea is the kind that seems obvious after someone else thinks of it: your DNS host publishes "here is my new DS record" directly in your zone, and the registrar picks it up automatically. No web form. No 2am copy-paste session. No forgetting which registrar has which login.</p>
-                <p>RFC 8078 followed in 2017, formalizing how parent zones should accept those changes. Most major TLDs adopted it.</p>
+                <p>RFC 8078 followed in 2017, extending CDS/CDNSKEY to cover initial DS provisioning and removal of a secure entry point, not just rollover. Most major TLD registries now run CDS scanners that pick those signals up automatically.</p>
                 <p>Then in July 2024, RFC 9615 closed the bootstrap problem: how to enable DNSSEC for the first time when no chain of trust yet exists. This was the chicken-and-egg case that had kept the whole thing manual for years. Solved.</p>
                 <p>Algorithm 13, ECDSA P-256, became the default. It's defined in RFC 6605 from 2012, but it took most of a decade for providers to make it standard. RSA-SHA256 still works, but ECDSA signatures are small enough to fit in a UDP response without forcing TCP fallback. A meaningful share of the "DNSSEC broke my domain" stories came from exactly that: the fallback. Smaller signatures, fewer fragments, less drama.</p>
                 <p>CSYNC, RFC 7477, sits next to CDS and does the same job for NS and glue records. The child zone announces, the parent syncs. No human in the loop.</p>
@@ -129,7 +129,7 @@
             </section>
             <section class="dbis-section">
                 <h2>Where it still falls short</h2>
-                <p>Adoption sits in the low single digits of all registered domains in early 2026. Something in the 4 to 5 percent range, depending on the source. Up from roughly 1 percent in 2017. Real progress. Real ceiling.</p>
+                <p>Adoption depends on what you measure. Signed zones in the major TLDs sit in the low single digits of registered domains; Verisign's quarterly reports put .com near 4 percent and .net near 5 percent in early 2026. <a href="https://stats.labs.apnic.net/dnssec" target="_blank" rel="noopener">APNIC Labs</a> measures resolver-side validation closer to a third of queries globally, climbing year over year. Both numbers are moving up. Signing is the slower one. Real progress. Real ceiling.</p>
                 <p>The story underneath that number is more interesting than the number itself. Adoption isn't really a domain-owner decision. It's a provider decision. The domain owner mostly finds out which side they're on after the fact.</p>
                 <p>Think back to HTTPS adoption a decade ago. Site operators didn't wake up one morning and decide they wanted TLS certificates. They'd been told for years that HTTPS was important. Most of them filed it under "yes, eventually." Then Let's Encrypt launched. Cloudflare flipped TLS on by default. Hosting providers started auto-provisioning certificates at signup. The question stopped being "do you want HTTPS?" and started being "do you even know whether your site is on HTTPS?" Most operators just woke up one day to find their provider had turned it on.</p>
                 <p>DNSSEC is in the early innings of the same transition. The providers who automated it have high adoption among their customers. The providers who didn't, don't.</p>
@@ -173,7 +173,7 @@
                 <p><a href="https://www.rfc-editor.org/rfc/rfc8078" target="_blank" rel="noopener">RFC 8078</a>, Managing DS Records from the Parent via CDS/CDNSKEY (2017).</p>
                 <p><a href="https://www.rfc-editor.org/rfc/rfc6605" target="_blank" rel="noopener">RFC 6605</a>, ECDSA for DNSSEC (Algorithm 13, 2012).</p>
                 <p><a href="https://www.rfc-editor.org/rfc/rfc7477" target="_blank" rel="noopener">RFC 7477</a>, CSYNC (2015).</p>
-                <p><a href="https://circleid.com/" target="_blank" rel="noopener">CircleID</a> has published recent commentary on the gap between DNSSEC's protocol maturity and its public reputation, including pieces involving Barbara Jantzen and Roy Arends. Worth reading if the social side of protocol adoption interests you.</p>
+                <p><a href="https://circleid.com/posts/the-excruciating-slow-rise-of-dnssec" target="_blank" rel="noopener">"The Excruciating Slow Rise of DNSSEC"</a>, a January 2026 dialogue between Barbara Jantzen and Roy Arends on CircleID. Worth reading if the social side of protocol adoption interests you.</p>
             </section>
         </article>
     </main>
