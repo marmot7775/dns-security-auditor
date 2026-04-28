@@ -1202,6 +1202,15 @@ def _build_dmarcbis_card_data(readiness: Optional[Dict], record: Optional[str]) 
 
 
 def transform_dmarc(raw: Dict, tree_walk: Optional[Dict] = None, is_no_mail: bool = False) -> Dict:
+    # On no-mail domains, missing rua is not a visibility gap because there is
+    # no legitimate mail to monitor. Drop the issue so it stops driving the
+    # status, details, fix, and downstream summaries.
+    if is_no_mail and raw.get("issues"):
+        raw["issues"] = [
+            i for i in raw["issues"]
+            if i.get("issue") != "No aggregate reporting (rua) configured"
+        ]
+
     status = _map_status(raw.get("status", "error"))
     policy = raw.get("policy", "")
     record = raw.get("record")
@@ -1363,7 +1372,7 @@ def transform_dmarc(raw: Dict, tree_walk: Optional[Dict] = None, is_no_mail: boo
         explanation = f"DMARC record found but the policy value is unexpected: '{policy}'."
 
     # Reporting note
-    if record and not raw.get("rua"):
+    if record and not raw.get("rua") and not is_no_mail:
         if policy in ("quarantine", "reject"):
             explanation += (
                 " <strong>Warning:</strong> No aggregate reporting (rua) is configured. "
@@ -1377,6 +1386,12 @@ def transform_dmarc(raw: Dict, tree_walk: Optional[Dict] = None, is_no_mail: boo
                 "Without rua, you have no visibility into who is sending as your domain "
                 "or whether authentication is passing."
             )
+    elif record and is_no_mail and policy in ("quarantine", "reject"):
+        explanation += (
+            " This domain is configured to not send or receive email "
+            "(null MX, null SPF). Aggregate reporting (rua) is optional "
+            "because there is no legitimate mail to monitor."
+        )
 
     # Details
     details = []
@@ -1534,7 +1549,7 @@ def transform_dmarc(raw: Dict, tree_walk: Optional[Dict] = None, is_no_mail: boo
                 k, _, v = part.partition("=")
                 _parsed[k.strip().lower()] = v.strip()
         _pol = _parsed.get("p", "").lower()
-        config_warnings = _detect_dangerous_combinations(_parsed, _pol)
+        config_warnings = _detect_dangerous_combinations(_parsed, _pol, is_no_mail=is_no_mail)
         health = _calculate_dmarcbis_health(_parsed, _pol, config_warnings)
         _domain = raw.get("domain", "")
         migration = _build_migration_path(_parsed, _pol, health["status"], domain=_domain)
@@ -1616,7 +1631,7 @@ def transform_dmarc(raw: Dict, tree_walk: Optional[Dict] = None, is_no_mail: boo
         "spec_comparison": _build_spec_comparison(
             raw.get("strict_validation"), raw.get("legacy_validation")
         ),
-        "attack_surface": _build_attack_surface(raw, display_record or record),
+        "attack_surface": _build_attack_surface(raw, display_record or record, is_no_mail=is_no_mail),
         "tag_breakdown": tag_breakdown,
         "record_builder": no_record_builder,
         "comparison_intelligence": no_record_comparison,
@@ -1744,7 +1759,7 @@ def _build_spec_comparison(strict: Optional[Dict], legacy: Optional[Dict]) -> Op
 # Attack Surface View
 # ============================================================
 
-def _build_attack_surface(raw: Dict, record: Optional[str]) -> Optional[Dict]:
+def _build_attack_surface(raw: Dict, record: Optional[str], is_no_mail: bool = False) -> Optional[Dict]:
     """Build the 4-vector email spoofing attack surface analysis."""
     if not record:
         return None
@@ -1859,7 +1874,15 @@ def _build_attack_surface(raw: Dict, record: Optional[str]) -> Optional[Dict]:
     report_dests = raw.get("report_destinations", [])
     has_unauthorized = any(d.get("authorized") is False for d in report_dests)
 
-    if not rua:
+    if not rua and is_no_mail:
+        v4 = {
+            "name": "Reporting Intelligence",
+            "status": "protected",
+            "color": "green",
+            "summary": "Not applicable (non-mail domain).",
+            "detail": "This domain does not send or receive email, so there is no legitimate mail to monitor. Aggregate reporting (rua) is optional.",
+        }
+    elif not rua:
         v4 = {
             "name": "Reporting Intelligence",
             "status": "partial",
@@ -2401,7 +2424,7 @@ def _entry(tag: str, value, is_default: bool, is_absent: bool,
 # Dangerous Combination Detection (Prompt 2)
 # ============================================================
 
-def _detect_dangerous_combinations(tags: Dict[str, str], policy: str) -> List[Dict]:
+def _detect_dangerous_combinations(tags: Dict[str, str], policy: str, is_no_mail: bool = False) -> List[Dict]:
     """Check for dangerous tag combinations. Returns a list of warnings
     with level ("critical" or "advisory"), title, and text."""
     warnings: List[Dict] = []
@@ -2437,8 +2460,8 @@ def _detect_dangerous_combinations(tags: Dict[str, str], policy: str) -> List[Di
             "tags": ["p"],
         })
 
-    # 1. Any policy + no rua
-    if not rua:
+    # 1. Any policy + no rua (skipped on no-mail domains: no legitimate mail to monitor)
+    if not rua and not is_no_mail:
         if policy == "reject":
             msg = (
                 "No aggregate reporting configured. At p=reject, you are rejecting mail that "
