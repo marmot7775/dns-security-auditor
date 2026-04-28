@@ -179,7 +179,7 @@ class SecurityHeadersMiddleware(BaseHTTPMiddleware):
             response.headers["Cache-Control"] = "no-store"
         elif any(path.endswith(ext) for ext in ('.css', '.js', '.png', '.jpg', '.svg', '.woff2', '.woff', '.ico')):
             response.headers["Cache-Control"] = "public, max-age=14400"  # 4 hours
-        elif path in ('/', '/dmarcbis', '/dnssec', '/privacy', '/about'):
+        elif path in ('/', '/dmarcbis', '/dnssec', '/about'):
             response.headers["Cache-Control"] = "public, max-age=300"  # 5 minutes for HTML
         return response
 
@@ -778,10 +778,6 @@ if STATIC_DIR.exists():
     @app.get("/")
     async def index():
         return FileResponse(str(STATIC_DIR / "index.html"))
-
-    @app.get("/privacy", tags=["Pages"])
-    async def privacy():
-        return FileResponse(str(STATIC_DIR / "privacy.html"))
 
     @app.get("/dmarcbis", tags=["Pages"])
     async def dmarcbis():
