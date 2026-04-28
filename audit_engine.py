@@ -4146,6 +4146,7 @@ def run_full_audit(domain: str, dkim_selector: Optional[str] = None,
     checks = []
     raw_results = {}
     errors = []
+    is_defensive = False  # Will be recomputed after MX/SPF are available
 
     # Resolve scope to a set of check keys (None = run everything)
     if scope and scope not in SCOPE_CHECKS:
@@ -4460,6 +4461,19 @@ def run_full_audit(domain: str, dkim_selector: Optional[str] = None,
                 check["verdict"] = "Not applicable (non-mail domain)"
                 check["fix"] = None
                 check["fix_records"] = None
+
+    # --- Re-transform DMARC card now that is_defensive is known ---
+    if is_defensive:
+        for i, card in enumerate(checks):
+            if card.get("name") == "DMARC":
+                raw_dmarc = raw_results.get("dmarc")
+                if raw_dmarc:
+                    checks[i] = transform_dmarc(
+                        raw_dmarc,
+                        tree_walk=tree_walk_result,
+                        is_no_mail=True
+                    )
+                break
 
     # --- DMARC Evaluation Summary (post-processor, zero DNS queries) ---
     dmarc_eval = None
