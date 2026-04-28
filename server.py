@@ -728,16 +728,6 @@ async def health():
     return {"status": "ok"}
 
 
-@app.get("/health", tags=["System"])
-async def health_deep():
-    """Deep health check: verifies DNS resolution works."""
-    try:
-        dns.resolver.resolve("example.com", "A", lifetime=2)
-        return {"status": "ok"}
-    except Exception:
-        return JSONResponse(content={"status": "error"}, status_code=500)
-
-
 # ============================================================
 # SEO: robots.txt & sitemap.xml
 # ============================================================
@@ -868,4 +858,20 @@ else:
     @app.get("/")
     async def index():
         return {"message": "DNS Security Auditor API. Put static files in ./static/"}
+
+
+@app.get("/health")
+async def health():
+    """
+    Health check endpoint for monitoring and load balancers.
+    Returns 200 if the application and DNS resolution are functional.
+    """
+    try:
+        dns.resolver.resolve("example.com", "A", lifetime=2)
+        return {"status": "ok", "dns_resolution": "working"}
+    except Exception as e:
+        return JSONResponse(
+            content={"status": "error", "detail": str(e)},
+            status_code=500,
+        )
 
