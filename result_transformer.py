@@ -1201,7 +1201,7 @@ def _build_dmarcbis_card_data(readiness: Optional[Dict], record: Optional[str]) 
     }
 
 
-def transform_dmarc(raw: Dict, tree_walk: Optional[Dict] = None) -> Dict:
+def transform_dmarc(raw: Dict, tree_walk: Optional[Dict] = None, is_no_mail: bool = False) -> Dict:
     status = _map_status(raw.get("status", "error"))
     policy = raw.get("policy", "")
     record = raw.get("record")
@@ -1474,20 +1474,37 @@ def transform_dmarc(raw: Dict, tree_walk: Optional[Dict] = None) -> Dict:
             # quarantine or reject inherited, no fix needed
             fix = None
     elif not record:
-        fix = (
-            f"Publish a DMARC TXT record at <strong>_dmarc.{_e(domain_name)}</strong> with <strong>p=none</strong>. "
-            f"Requires an <strong>rua=</strong> reporting address: either your own mailbox "
-            f"(reports arrive as compressed XML) or a DMARC reporting service that provides a dashboard."
-        )
+        if is_no_mail:
+            fix = (
+                f"This domain is configured to not send or receive email "
+                f"(null MX, null SPF, no DKIM). To protect against spoofing, "
+                f"publish a DMARC record at <strong>_dmarc.{_e(domain_name)}</strong> with "
+                f"<strong>p=reject</strong>. Aggregate reporting (rua) is optional "
+                f"because there is no legitimate mail to monitor."
+            )
+        else:
+            fix = (
+                f"Publish a DMARC TXT record at <strong>_dmarc.{_e(domain_name)}</strong> with <strong>p=none</strong>. "
+                f"Requires an <strong>rua=</strong> reporting address: either your own mailbox "
+                f"(reports arrive as compressed XML) or a DMARC reporting service that provides a dashboard."
+            )
     elif raw.get("syntax_errors") or any(i.get("severity") == "error" for i in raw.get("issues", [])):
         # Prioritize syntax/error fixes over generic policy advice
         fix = _first_fix(raw.get("syntax_errors", [])) or _first_fix(raw.get("issues", []))
     elif policy == "none":
-        fix = (
-            "Review your DMARC aggregate reports to identify all legitimate senders and confirm "
-            "they pass SPF or DKIM with aligned domains. Once you are confident in your sender "
-            "inventory, move to an enforcement policy (<strong>p=quarantine</strong> or <strong>p=reject</strong>)."
-        )
+        if is_no_mail:
+            fix = (
+                "This domain does not send email. A monitoring policy (p=none) provides "
+                "no protection against spoofing. Upgrade to <strong>p=reject</strong> to "
+                "reject all mail that fails authentication. Reporting is optional because "
+                "there is no legitimate mail to monitor."
+            )
+        else:
+            fix = (
+                "Review your DMARC aggregate reports to identify all legitimate senders and confirm "
+                "they pass SPF or DKIM with aligned domains. Once you are confident in your sender "
+                "inventory, move to an enforcement policy (<strong>p=quarantine</strong> or <strong>p=reject</strong>)."
+            )
     else:
         fix = _first_fix(raw.get("issues", []))
 
