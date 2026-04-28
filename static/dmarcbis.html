@@ -63,12 +63,12 @@
     <main class="dbis-page">
         <article class="dbis-article">
             <h1 style="font-size: 2rem; font-weight: 700; letter-spacing: -0.03em; color: var(--text-primary); margin-bottom: 0.25rem; line-height: 1.2;">DMARCbis</h1>
-            <p style="font-size: 1rem; color: var(--text-muted); margin-bottom: 2rem;">The protocol upgrade that makes the Public Suffix List optional</p>
+            <p style="font-size: 1rem; color: var(--text-muted); margin-bottom: 2rem;">The protocol upgrade that retires the Public Suffix List from the spec</p>
             <p class="dbis-lede">I need to tell you something <strong>mildly absurd</strong> about your email security.</p>
             <p class="dbis-lede">For the past decade, your DMARC record has leaned on a text file maintained by volunteers on GitHub. Not a standard. Not a protocol. <strong>A list.</strong> Curated by humans who cared enough to track every top-level domain, every private suffix, every odd little corner of the internet's naming system. <strong>For free.</strong></p>
-            <p class="dbis-lede">It sounds like a vulnerability. It was. And also, somehow, a quiet triumph. That sounds like a contradiction. Email security is full of them.</p>
+            <p class="dbis-lede">It sounds like a vulnerability. It almost was. And also, somehow, a quiet triumph. That sounds like a contradiction. Email security is full of them.</p>
             <section class="dbis-section">
-                <p>Since its inception, DMARC has depended on the Public Suffix List to scope policy. The PSL started as a 2007 Mozilla Foundation project, back when "the internet" still felt like a collection of people who showed up to help. Over time it became the bedrock of global email security. A workaround that became permanent. Something nobody planned for. Something nobody could remove.</p>
+                <p>From the start, DMARC has scoped policy through the Public Suffix List. The PSL started as a 2007 Mozilla Foundation project, back when "the internet" still felt like a collection of people who showed up to help. Over time it became the bedrock of global email security. A workaround that became permanent. Something nobody planned for. Something nobody could remove.</p>
                 <p>Receivers reference it to answer a question that sounds simple but absolutely is not.</p>
             </section>
             <div class="dbis-pullquote">Where does your organizational domain end?</div>
@@ -113,7 +113,7 @@
                 <ol class="dbis-steps">
                     <li><div><strong>Remove deprecated tags.</strong> <code>pct=</code>, <code>rf=</code>, and <code>ri=</code> are going away. Most were never handled consistently anyway, so you are not losing capability you were reliably using. Clean them out.</div></li>
                     <li><div><strong>Fix reporting URIs.</strong> Make sure they begin with <code>mailto:</code>. The new parser is stricter. This is the sort of thing that either works or silently fails, and "silently fails" is not the DMARC experience anyone wants.</div></li>
-                    <li><div><strong>Understand <code>psd=n</code>.</strong> In most cases, you do not need to add anything. The default behavior already assumes you are not a public suffix. If you do not run a domain registry, you are already covered. The tag exists primarily for the registries themselves to declare <code>psd=y</code>.</div></li>
+                    <li><div><strong>Understand <code>psd=</code>.</strong> The tag has three values: <code>y</code> (you are a public suffix domain), <code>n</code> (you are an organizational domain), and <code>u</code> (unknown, let the tree walk decide). When the tag is absent, dmarcbis treats it as <code>u</code> and resolves your domain via the tree walk procedure. Most operators do not need to publish <code>psd=</code> at all. If you run a registry or a public suffix domain, declare <code>psd=y</code>. Otherwise the tree walk will correctly identify you as the organizational domain.</div></li>
                     <li><div><strong>Consider <code>np=reject</code>.</strong> If you are already at <code>p=reject</code>, this closes the non-existent subdomain spoofing gap. Audit third-party senders first. The tag is optional, but the protection is real.</div></li>
                     <li><div><strong>Verify external reporting authorization.</strong> If <code>rua=</code> points to a third party, that destination must publish a special record to confirm it is authorized to receive your reports. Without it, reports silently fail. Another "silently fails" situation, and those are worth fixing preemptively.</div></li>
                 </ol>
