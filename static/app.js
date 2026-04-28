@@ -3893,5 +3893,37 @@ function _renderComparison(data1, data2, container) {
     container.innerHTML = html;
 }
 
+(function() {
+    const toggle = document.getElementById('theme-toggle');
+    if (!toggle) return;
+
+    const sunIcon = toggle.querySelector('.theme-icon-sun');
+    const moonIcon = toggle.querySelector('.theme-icon-moon');
+
+    function setTheme(theme) {
+        document.documentElement.dataset.theme = theme;
+        localStorage.setItem('theme', theme);
+        if (theme === 'light') {
+            sunIcon.style.display = 'none';
+            moonIcon.style.display = 'block';
+        } else {
+            sunIcon.style.display = 'block';
+            moonIcon.style.display = 'none';
+        }
+    }
+
+    const saved = localStorage.getItem('theme');
+    if (saved) {
+        setTheme(saved);
+    } else {
+        const prefersDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
+        setTheme(prefersDark ? 'dark' : 'light');
+    }
+
+    toggle.addEventListener('click', () => {
+        const current = document.documentElement.dataset.theme;
+        setTheme(current === 'light' ? 'dark' : 'light');
+    });
+})();
 
 
