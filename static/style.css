@@ -8268,6 +8268,188 @@ body {
 .dbis-walk-step.found { color: var(--pass); font-weight: 600; }
 .dbis-walk-label { font-family: var(--font-body); font-size: 0.75rem; color: var(--text-muted); margin-left: auto; flex-shrink: 0; }
 
+/* Side-by-side comparison: PSL Lookup vs DNS Tree Walk */
+.dbis-compare {
+    margin: 2rem 0 2.25rem;
+    padding: 0;
+}
+.dbis-compare-kicker {
+    font-size: 0.75rem;
+    font-weight: 600;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: var(--text-muted);
+    text-align: center;
+    margin: 0 0 1rem;
+}
+.dbis-compare-grid {
+    display: grid;
+    grid-template-columns: 1fr;
+    gap: 1rem;
+}
+.dbis-compare-col {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 1.1rem 1.15rem 1.25rem;
+    position: relative;
+}
+.dbis-compare-old {
+    background: var(--bg-raised, var(--surface));
+    border-color: var(--border);
+}
+.dbis-compare-new {
+    border-color: var(--dmarcbis-border);
+    box-shadow: inset 0 2px 0 0 var(--dmarcbis);
+    padding-top: 1.2rem;
+}
+.dbis-compare-head {
+    display: flex;
+    align-items: center;
+    gap: 0.55rem;
+    margin-bottom: 0.95rem;
+    padding-bottom: 0.75rem;
+    border-bottom: 1px solid var(--border);
+}
+.dbis-compare-tag {
+    display: inline-block;
+    font-family: var(--font-mono);
+    font-size: 0.65rem;
+    font-weight: 700;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    padding: 0.18rem 0.45rem;
+    border-radius: 4px;
+    line-height: 1;
+}
+.dbis-compare-tag-old {
+    background: var(--border);
+    color: var(--text-tertiary);
+}
+.dbis-compare-tag-new {
+    background: var(--dmarcbis-bg);
+    color: var(--dmarcbis);
+    border: 1px solid var(--dmarcbis-border);
+}
+.dbis-compare-title {
+    font-size: 0.95rem;
+    font-weight: 600;
+    color: var(--text-primary);
+    letter-spacing: -0.01em;
+    margin: 0;
+    line-height: 1.3;
+}
+.dbis-compare-old .dbis-compare-title { color: var(--text-secondary); }
+.dbis-compare-steps {
+    list-style: none;
+    counter-reset: none;
+    padding: 0;
+    margin: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 0.65rem;
+}
+.dbis-compare-step {
+    display: flex;
+    align-items: flex-start;
+    gap: 0.7rem;
+    padding: 0.45rem 0.55rem;
+    border-radius: 6px;
+    transition: background 0.15s var(--ease);
+}
+.dbis-compare-step:hover {
+    background: var(--surface-hover);
+}
+.dbis-compare-num {
+    flex-shrink: 0;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 1.4rem;
+    height: 1.4rem;
+    border-radius: 6px;
+    background: var(--bg);
+    border: 1px solid var(--border);
+    font-family: var(--font-mono);
+    font-size: 0.72rem;
+    font-weight: 600;
+    color: var(--text-tertiary);
+    line-height: 1;
+    margin-top: 0.1rem;
+}
+.dbis-compare-new .dbis-compare-num {
+    background: var(--dmarcbis-bg);
+    border-color: var(--dmarcbis-border);
+    color: var(--dmarcbis);
+}
+.dbis-compare-body {
+    display: flex;
+    flex-direction: column;
+    gap: 0.2rem;
+    min-width: 0;
+    flex: 1;
+}
+.dbis-compare-action {
+    font-family: var(--font-body);
+    font-size: 0.9rem;
+    font-weight: 500;
+    color: var(--text-primary);
+    line-height: 1.4;
+}
+.dbis-compare-old .dbis-compare-action { color: var(--text-secondary); font-weight: 500; }
+.dbis-compare-detail {
+    display: inline-flex;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 0.35rem;
+    font-size: 0.8rem;
+    color: var(--text-tertiary);
+    line-height: 1.5;
+}
+.dbis-compare-detail code {
+    font-family: var(--font-mono);
+    font-size: 0.78rem;
+    background: var(--bg);
+    border: 1px solid var(--border);
+    color: var(--text-secondary);
+    padding: 0.08em 0.4em;
+    border-radius: 4px;
+    white-space: nowrap;
+    overflow-wrap: anywhere;
+}
+.dbis-compare-new .dbis-compare-detail code {
+    color: var(--dmarcbis);
+    border-color: var(--dmarcbis-border);
+}
+.dbis-compare-icon {
+    flex-shrink: 0;
+    vertical-align: -2px;
+}
+.dbis-compare-icon-ext { color: var(--text-muted); }
+.dbis-compare-icon-ok { color: var(--pass); }
+.dbis-compare-step-ext .dbis-compare-detail { color: var(--text-muted); font-style: italic; }
+.dbis-compare-step-found {
+    background: var(--dmarcbis-bg);
+    border: 1px solid var(--dmarcbis-border);
+}
+.dbis-compare-step-found:hover { background: var(--dmarcbis-bg); }
+.dbis-compare-step-found .dbis-compare-action { color: var(--text-primary); font-weight: 600; }
+.dbis-compare-caption {
+    margin: 1.25rem 0 0;
+    font-size: 0.875rem;
+    line-height: 1.6;
+    color: var(--text-muted);
+    font-style: italic;
+    text-align: center;
+}
+
+@media (min-width: 720px) {
+    .dbis-compare-grid {
+        grid-template-columns: 1fr 1fr;
+        gap: 1.1rem;
+    }
+}
+
 /* CTA and closing */
 .dbis-cta { display: inline-flex; align-items: center; gap: 0.5rem; padding: 0.75rem 1.5rem; background: var(--dmarcbis); color: #0a2d28; font-size: 1rem; font-weight: 600; border-radius: 8px; text-decoration: none; border: none; border-bottom: none; transition: opacity 0.15s var(--ease), transform 0.1s var(--ease); }
 .dbis-cta:hover { opacity: 0.88; border-bottom: none; }
