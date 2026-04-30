@@ -66,17 +66,17 @@
             <p style="font-size: 1rem; color: var(--text-muted); margin-bottom: 2rem;">The protocol upgrade that retires the Public Suffix List from the spec</p>
             <p class="dbis-lede">I need to tell you something <strong>mildly absurd</strong> about your email security.</p>
             <p class="dbis-lede">For the past decade, your DMARC record has leaned on a text file maintained by volunteers on GitHub. Not a standard. Not a protocol. <strong>A list.</strong> Curated by humans who cared enough to track every top-level domain, every private suffix, every odd little corner of the internet's naming system. <strong>For free.</strong></p>
-            <p class="dbis-lede">It sounds like a vulnerability. It almost was. And also, somehow, a quiet triumph. That sounds like a contradiction. Email security is full of them.</p>
+            <p class="dbis-lede">It sounds like a vulnerability. Somehow it became a quiet triumph instead.</p>
             <section class="dbis-section">
-                <p>Since its inception, DMARC has depended on the Public Suffix List to scope policy. The PSL started as a 2007 Mozilla Foundation project, back when "the internet" still felt like a collection of people who showed up to help. Over time it became the bedrock of global email security. A workaround that became permanent. Something nobody planned for. Something nobody could remove.</p>
+                <p>Since its inception, DMARC has depended on the Public Suffix List to scope policy. The PSL started as a 2007 Mozilla Foundation project, back when "the internet" still felt like a collection of people who showed up to help. Over time it became the bedrock of global email security. A workaround that became permanent, that nobody planned for and nobody could remove.</p>
                 <p>Receivers reference it to answer a question that sounds simple but isn't.</p>
             </section>
             <div class="dbis-pullquote">Where does your organizational domain end?</div>
             <section class="dbis-section">
                 <p>Take <code>mail.example.co.uk</code>. Is the organizational domain <code>example.co.uk</code> or <code>co.uk</code>? Get that wrong, and DMARC policy silently misses the message. No error. No alert. Just a gap where protection was supposed to be. That question is the <strong>load-bearing decision</strong>, and for a decade, a volunteer text file held the answer.</p>
                 <p>The remarkable part is not that this existed. It is that it worked.</p>
-                <p>Those volunteers tracked new TLDs, private suffixes, and the internet's edge cases, quietly and accurately, for free. No headlines. No thank-yous from the platforms that depended on them. They just kept the list current while everything around it scaled. If you have ever maintained something unglamorous that an entire industry relied on without knowing it, you understand the kind of devotion this takes.</p>
-                <p>DMARC depended on something it did not own and could not guarantee. And it held.</p>
+                <p>Those volunteers tracked new TLDs, private suffixes, and the internet's edge cases, quietly and accurately, for free. No headlines. No thank-yous from the platforms that depended on them. They just kept the list current while everything around it scaled. Most of those volunteers are unknown to the industry that depends on them.</p>
+                <p>DMARC depended on something it did not own. It held anyway.</p>
             </section>
             <section class="dbis-section">
                 <h2>You made it work anyway</h2>
@@ -84,9 +84,9 @@
                 <p>RFC 7489 was not a Standards Track document. It was published as Informational, on the Independent Submission stream, which means it didn't even go through IETF working group consensus. In IETF terms, that is a polite way of saying "here are some ideas, good luck."</p>
                 <p>Vendors had room to interpret. And some of them did. Creatively.</p>
                 <p>But operators did not wait for permission.</p>
-                <p>They implemented DMARC anyway. They compared notes in forums and working groups. They built tooling. They debugged alignment failures, squinted at aggregate reports until the XML made sense, and taught each other what they learned. Communities like the Messaging, Malware and Mobile Anti-Abuse Working Group turned a loose document and a volunteer list into the actual floor of email security. That floor held. It still holds.</p>
-                <p>If you are the person who set your domain's DMARC record, you might not have been in those forums debugging alignment failures. You might have inherited a record someone else configured. That is fine. You still benefited from the people who were in the trenches, and their work is why your record at <code>p=reject</code> actually means something when a receiver checks it.</p>
-                <p>Then the market closed the loop. Gmail and Yahoo required DMARC for bulk senders in 2024. The protocol did not lead. Practice did. The people doing the work figured it out first, and the industry eventually caught up.</p>
+                <p>They implemented DMARC anyway. They compared notes in forums and working groups. They built tooling. They debugged alignment failures, squinted at aggregate reports until the XML made sense, and taught each other what they learned. Communities like the Messaging, Malware and Mobile Anti-Abuse Working Group turned a loose document and a volunteer list into the actual floor of email security.</p>
+                <p>If you are the person who set your domain's DMARC record, you might not have been in those forums debugging alignment failures. You might have inherited a record someone else configured. That is fine. You still benefited from the people who were in the trenches, and their work is why p=reject is something receivers actually act on.</p>
+                <p>Then Gmail and Yahoo required DMARC for bulk senders in 2024, because they had spam problems they wanted to solve. The community had been building the foundation for years. The mandate finished a job operators had already started.</p>
                 <p>You are part of that, whether you set the record yourself or inherited it from someone who cared before you did.</p>
             </section>
             <div class="dbis-pullquote">A decade of volunteer-maintained infrastructure held. It was also a single point of failure.</div>
@@ -96,13 +96,12 @@
                 <p>In its place is the <strong>DNS tree walk</strong>.</p>
                 <p>Instead of referencing a list, the receiver queries DNS directly. It starts at the full domain in the message and walks upward one label at a time, checking for a DMARC record at each step:</p>
                 <div class="dbis-walk">
-                    <div class="dbis-walk-step"><span>sub.example.com</span><span class="dbis-walk-label">checking...</span></div>
-                    <div class="dbis-walk-step"><span>example.com</span><span class="dbis-walk-label">checking...</span></div>
-                    <div class="dbis-walk-step found"><span>com</span><span class="dbis-walk-label">stopped (TLD)</span></div>
+                    <div class="dbis-walk-step"><span>_dmarc.sub.example.com</span><span class="dbis-walk-label">no record</span></div>
+                    <div class="dbis-walk-step found"><span>_dmarc.example.com</span><span class="dbis-walk-label">record found, use this policy</span></div>
                 </div>
                 <p>The DNS itself answers the question no list ever fully could. No download. No cache staleness. No volunteer keeping a text file current at 11pm because a new TLD launched.</p>
                 <p>A DNS-based protocol finally uses DNS to answer its own question. It took a decade to get here.</p>
-                <p>This did not come from theory. The working group incorporated what operators learned in the trenches: inconsistencies in PSL handling, unreliable behavior of deprecated tags like <code>pct=</code>, and gaps like non-existent subdomain spoofing, which the <code>np=</code> tag now addresses. Real pain, turned into real fixes.</p>
+                <p>This did not come from theory. The working group incorporated what operators learned in the trenches: inconsistencies in PSL handling, unreliable behavior of deprecated tags like <code>pct=</code>, and gaps like non-existent subdomain spoofing, which the <code>np=</code> tag now addresses.</p>
                 <p>Now the honest part: <strong>most receiving systems do not support it yet.</strong></p>
                 <p>The main specification has been approved by the IESG. Final RFC publication is held pending the companion failure-reporting document, likely landing in 2026 or early 2027. After that, receivers need to implement the tree walk in their parsers. That will be gradual. Nobody flips a switch on global email infrastructure over a weekend. If someone tells you otherwise, ask questions.</p>
                 <p>The Public Suffix List is not disappearing overnight. The record you have today continues to work, and it will continue to work throughout the transition. You do not need to panic. You do not even need to rush. You just need to know what is coming.</p>
@@ -124,14 +123,8 @@
                 <a href="/" class="dbis-cta">Audit your domain →</a>
             </div>
             <section class="dbis-section">
-                <h2>What to take from this</h2>
-                <p>For ten years, you have been running production email security on an Informational document that left vendor behavior up to interpretation, with a parsing model that depended on a volunteer-maintained list.</p>
-                <p>That sentence should not make sense. It does anyway.</p>
-                <p>DMARCbis does not replace the work this community did. It <strong>captures</strong> it. It writes down what operators already learned, in production, often the hard way, and gives it the formal architecture it always deserved. The DNS tree walk replaces the Public Suffix List. Deprecated edges are removed. Real gaps are closed. Parsing becomes stricter. The spec grows up.</p>
-                <p>Your existing DMARC record keeps working. <code>v=DMARC1</code> is still <code>v=DMARC1</code>. The change is on the receiver side. The tree walk replaces the PSL in their parsers, not in your zone file. The edits on your end are small and clear: remove a few tags, tidy your reporting URIs, verify your authorization records. When tools flag the old syntax, you will already know why. When receivers implement <code>np=reject</code>, you will understand what it closes.</p>
-                <p>You are not behind. You were early. The spec is finally catching up to the record you already have.</p>
+                <p>The volunteers who maintained the Public Suffix List for the last decade quietly kept the floor of email security from giving way. DMARCbis writes their work into the spec. That is the upgrade.</p>
             </section>
-            <div class="dbis-pullquote" style="margin-bottom: 0;">Somewhere, the volunteers who maintained the Public Suffix List for the last ten years just got a protocol-wide thank-you. Long overdue.</div>
         </article>
     </main>
     <footer class="site-footer">
