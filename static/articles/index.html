@@ -50,22 +50,87 @@
         <div class="container">
             <header class="articles-header">
                 <h1>Articles</h1>
-                <p class="articles-intro">Long-form pieces on DNS and email security. Written by Neil Anuskiewicz.</p>
+                <p class="articles-intro">Long-form pieces on DNS and email security.</p>
             </header>
+            <div class="articles-controls">
+                <div class="articles-tag-bar" role="group" aria-label="Filter articles by tag">
+                    <button type="button" class="articles-tag-pill is-active" data-filter="all" aria-pressed="true">All</button>
+                    <button type="button" class="articles-tag-pill" data-filter="dmarc" aria-pressed="false">DMARC</button>
+                    <button type="button" class="articles-tag-pill" data-filter="dnssec" aria-pressed="false">DNSSEC</button>
+                </div>
+            </div>
             <div class="articles-list">
-                <article class="article-entry">
-                    <h2 class="article-title"><a href="/articles/dmarcbis">DMARCbis</a></h2>
-                    <p class="article-description">DMARC has been leaning on a volunteer-maintained text file for a decade. DMARCbis replaces the Public Suffix List with the DNS itself.</p>
-                    <p class="article-meta"><time datetime="2026-04-26">April 2026</time><span class="article-meta-dot">&middot;</span>6 min read</p>
+                <article class="article-card article-card-dmarcbis" data-tags="dmarc">
+                    <div class="article-card-accent"></div>
+                    <div class="article-card-content">
+                        <div class="article-card-tags">
+                            <span class="article-card-tag">DMARC</span>
+                        </div>
+                        <h2 class="article-card-title"><a href="/articles/dmarcbis">DMARCbis</a></h2>
+                        <p class="article-card-description">DMARC has been leaning on a volunteer-maintained text file for a decade. DMARCbis replaces the Public Suffix List with the DNS itself.</p>
+                        <p class="article-card-meta">
+                            <time datetime="2026-04-26">April 2026</time>
+                            <span class="article-card-meta-dot">&middot;</span>
+                            6 min read
+                        </p>
+                    </div>
                 </article>
-                <article class="article-entry">
-                    <h2 class="article-title"><a href="/articles/dnssec">DNSSEC stopped being hard</a></h2>
-                    <p class="article-description">The reputation never caught up. The DNSSEC you can deploy at a major provider in 2026 is a checkbox, and most of what changed since 2017 went unnoticed.</p>
-                    <p class="article-meta"><time datetime="2026-04-26">April 2026</time><span class="article-meta-dot">&middot;</span>10 min read</p>
+                <article class="article-card article-card-dnssec" data-tags="dnssec">
+                    <div class="article-card-accent"></div>
+                    <div class="article-card-content">
+                        <div class="article-card-tags">
+                            <span class="article-card-tag">DNSSEC</span>
+                        </div>
+                        <h2 class="article-card-title"><a href="/articles/dnssec">DNSSEC stopped being hard</a></h2>
+                        <p class="article-card-description">The reputation never caught up. The DNSSEC you can deploy at a major provider in 2026 is a checkbox, and most of what changed since 2017 went unnoticed.</p>
+                        <p class="article-card-meta">
+                            <time datetime="2026-04-26">April 2026</time>
+                            <span class="article-card-meta-dot">&middot;</span>
+                            10 min read
+                        </p>
+                    </div>
                 </article>
             </div>
         </div>
     </main>
+    <script>
+    (function () {
+        var pills = document.querySelectorAll('.articles-tag-pill');
+        var cards = document.querySelectorAll('.article-card');
+
+        function applyFilter(filter) {
+            cards.forEach(function (card) {
+                var tags = (card.getAttribute('data-tags') || '').split(/\s+/);
+                var match = filter === 'all' || tags.indexOf(filter) !== -1;
+                if (match) {
+                    card.classList.remove('is-hidden');
+                    card.style.display = '';
+                    requestAnimationFrame(function () { card.classList.remove('is-fading'); });
+                } else {
+                    card.classList.add('is-fading');
+                    setTimeout(function () {
+                        if (card.classList.contains('is-fading')) {
+                            card.classList.add('is-hidden');
+                            card.style.display = 'none';
+                        }
+                    }, 200);
+                }
+            });
+        }
+
+        pills.forEach(function (pill) {
+            pill.addEventListener('click', function () {
+                pills.forEach(function (p) {
+                    p.classList.remove('is-active');
+                    p.setAttribute('aria-pressed', 'false');
+                });
+                pill.classList.add('is-active');
+                pill.setAttribute('aria-pressed', 'true');
+                applyFilter(pill.getAttribute('data-filter'));
+            });
+        });
+    })();
+    </script>
     <footer class="site-footer">
         <div class="container footer-inner">
             <div class="footer-left">
