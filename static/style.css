@@ -8467,6 +8467,30 @@ body {
 .about-page strong { color: var(--text-primary); font-weight: 600; }
 .about-closing { margin-top: 2.5rem; padding-top: 1.5rem; border-top: 1px solid var(--border); }
 
+/* Articles index page */
+.articles-page { padding: 3rem 0 4rem; }
+.articles-header { margin-bottom: var(--space-2xl); }
+.articles-header h1 { font-family: var(--font-body); font-size: 2.25rem; font-weight: 700; letter-spacing: -0.03em; color: var(--text-primary); margin: 0 0 0.5rem; line-height: 1.2; }
+.articles-intro { font-family: var(--font-body); font-size: 1rem; color: var(--text-secondary); line-height: 1.6; margin: 0; max-width: 56ch; }
+.articles-list { margin-top: 0; }
+.article-entry { margin-top: var(--space-xl); padding-top: var(--space-xl); border-top: 1px solid var(--border-light); }
+.article-entry:first-child { margin-top: 0; padding-top: 0; border-top: none; }
+.article-title { font-family: var(--font-body); font-size: 1.625rem; font-weight: 600; letter-spacing: -0.02em; line-height: 1.25; margin: 0 0 0.5rem; }
+.article-title a { color: var(--text-primary); text-decoration: none; transition: color 0.15s var(--ease); }
+.article-title a:hover, .article-title a:focus-visible { color: var(--primary-hover); }
+.article-description { font-family: var(--font-body); font-size: 1rem; color: var(--text-secondary); line-height: 1.6; margin: 0 0 0.75rem; max-width: 60ch; }
+.article-meta { font-family: var(--font-body); font-size: var(--font-sm); color: var(--text-muted); margin: 0; line-height: 1.5; }
+.article-meta-dot { margin: 0 0.5rem; color: var(--text-muted); }
+@media (max-width: 719px) {
+    .articles-page { padding: 2rem 0 3rem; }
+    .articles-header h1 { font-size: 1.875rem; }
+    .article-entry { margin-top: var(--space-lg); padding-top: var(--space-lg); }
+    .article-title { font-size: 1.4rem; }
+}
+
+/* Audit form privacy note */
+.audit-privacy-note { font-family: var(--font-body); font-size: var(--font-sm); color: var(--text-muted); text-align: center; margin: 0.875rem 0 0; line-height: 1.5; }
+
 /* Responsive */
 @media (max-width: 600px) {
     .dbis-page, .about-page { padding: 2rem 1rem 3rem; }

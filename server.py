@@ -779,21 +779,34 @@ if STATIC_DIR.exists():
     async def index():
         return FileResponse(str(STATIC_DIR / "index.html"))
 
+    @app.get("/articles", tags=["Pages"])
+    @app.get("/articles/", tags=["Pages"])
+    async def articles_index():
+        return FileResponse(str(STATIC_DIR / "articles" / "index.html"))
+
+    @app.get("/articles/dmarcbis", tags=["Pages"])
+    async def articles_dmarcbis():
+        return FileResponse(str(STATIC_DIR / "articles" / "dmarcbis.html"))
+
+    @app.get("/articles/dnssec", tags=["Pages"])
+    async def articles_dnssec():
+        return FileResponse(str(STATIC_DIR / "articles" / "dnssec.html"))
+
     @app.get("/dmarcbis", tags=["Pages"])
-    async def dmarcbis():
-        return FileResponse(str(STATIC_DIR / "dmarcbis.html"))
+    async def dmarcbis_redirect():
+        return RedirectResponse(url="/articles/dmarcbis", status_code=301)
 
     @app.get("/dnssec", tags=["Pages"])
-    async def dnssec():
-        return FileResponse(str(STATIC_DIR / "dnssec.html"))
+    async def dnssec_redirect():
+        return RedirectResponse(url="/articles/dnssec", status_code=301)
 
     @app.get("/blog/dmarc-running-on-a-text-file", tags=["Pages"])
     async def dmarc_running_on_a_text_file():
-        return RedirectResponse(url="/dmarcbis", status_code=301)
+        return RedirectResponse(url="/articles/dmarcbis", status_code=301)
 
     @app.get("/blog/dnssec-stopped-being-hard", tags=["Pages"])
     async def dnssec_stopped_being_hard():
-        return RedirectResponse(url="/dnssec", status_code=301)
+        return RedirectResponse(url="/articles/dnssec", status_code=301)
 
     @app.get("/methodology", tags=["Pages"])
     async def methodology_redirect():
@@ -838,8 +851,9 @@ async def sitemap():
     base = "https://dns-audit.com"
     pages = [
         {"loc": "/", "changefreq": "weekly", "priority": "1.0"},
-        {"loc": "/dmarcbis", "changefreq": "monthly", "priority": "0.8"},
-        {"loc": "/dnssec", "changefreq": "monthly", "priority": "0.8"},
+        {"loc": "/articles/", "changefreq": "weekly", "priority": "0.8"},
+        {"loc": "/articles/dmarcbis", "changefreq": "monthly", "priority": "0.8"},
+        {"loc": "/articles/dnssec", "changefreq": "monthly", "priority": "0.8"},
         {"loc": "/about", "changefreq": "monthly", "priority": "0.5"},
     ]
     xml = '<?xml version="1.0" encoding="UTF-8"?>\n'
