@@ -68,7 +68,7 @@
             <p class="dbis-lede">For the past decade, your DMARC record has leaned on a text file maintained by volunteers on GitHub. Not a standard. Not a protocol. <strong>A list.</strong> Curated by humans who cared enough to track every top-level domain, every private suffix, every odd little corner of the internet's naming system. <strong>For free.</strong></p>
             <p class="dbis-lede">It sounds like a vulnerability. Somehow it became a quiet triumph instead.</p>
             <section class="dbis-section">
-                <p>Since its inception, DMARC has depended on the Public Suffix List to scope policy. The PSL started as a 2007 Mozilla Foundation project, back when "the internet" still felt like a collection of people who showed up to help. Over time it became the bedrock of global email security. A workaround that became permanent, that nobody planned for and nobody could remove.</p>
+                <p>Since its inception, DMARC has relied on the Public Suffix List to determine the organizational domain used for policy discovery and identifier alignment. The PSL started as a 2007 Mozilla Foundation project, back when "the internet" still felt like a collection of people who showed up to help. Over time it became the bedrock of global email security. A workaround that became permanent, that nobody planned for and nobody could remove.</p>
                 <p>Receivers reference it to answer a question that sounds simple but isn't.</p>
             </section>
             <div class="dbis-pullquote">Where does your organizational domain end?</div>
@@ -92,6 +92,52 @@
             <div class="dbis-pullquote">A decade of volunteer-maintained infrastructure held. It was also a single point of failure.</div>
             <section class="dbis-section">
                 <h2>The fix is specified. Deployment will take time.</h2>
+                <figure class="dbis-table-fig" aria-labelledby="dbis-changes-caption">
+                    <div class="dbis-table-wrap">
+                        <table class="dbis-table">
+                            <thead>
+                                <tr>
+                                    <th>What changes</th>
+                                    <th>RFC 7489 (today)</th>
+                                    <th>DMARCbis</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                <tr>
+                                    <td>Org domain lookup</td>
+                                    <td>Public Suffix List</td>
+                                    <td>DNS tree walk</td>
+                                </tr>
+                                <tr>
+                                    <td><code>pct</code> tag</td>
+                                    <td>Supported</td>
+                                    <td>Removed</td>
+                                </tr>
+                                <tr>
+                                    <td><code>rf</code> and <code>ri</code> tags</td>
+                                    <td>Optional</td>
+                                    <td>Removed</td>
+                                </tr>
+                                <tr>
+                                    <td><code>np</code> tag</td>
+                                    <td>Not defined</td>
+                                    <td>New</td>
+                                </tr>
+                                <tr>
+                                    <td><code>psd</code> tag</td>
+                                    <td>Not defined</td>
+                                    <td>New</td>
+                                </tr>
+                                <tr>
+                                    <td>Document status</td>
+                                    <td>Informational</td>
+                                    <td>Standards Track</td>
+                                </tr>
+                            </tbody>
+                        </table>
+                    </div>
+                    <figcaption id="dbis-changes-caption" class="dbis-compare-caption">What changes between RFC 7489 and DMARCbis.</figcaption>
+                </figure>
                 <p>DMARCbis removes the Public Suffix List from the critical path.</p>
                 <p>In its place is the <strong>DNS tree walk</strong>.</p>
                 <p>Instead of referencing a list, the receiver queries DNS directly. It starts at the full domain in the message and walks upward one label at a time, checking for a DMARC record at each step:</p>
@@ -188,7 +234,7 @@
                 <p>The DNS itself answers the question no list ever fully could. No download. No cache staleness. No volunteer keeping a text file current at 11pm because a new TLD launched.</p>
                 <p>A DNS-based protocol finally uses DNS to answer its own question. It took a decade to get here.</p>
                 <p>This did not come from theory. The working group incorporated what operators learned in the trenches: inconsistencies in PSL handling, unreliable behavior of deprecated tags like <code>pct=</code>, and gaps like non-existent subdomain spoofing, which the <code>np=</code> tag now addresses.</p>
-                <p>Now the honest part: <strong>most receiving systems do not support it yet.</strong></p>
+                <p>Now the honest part: as of 2026, most receivers still evaluate DMARC using RFC 7489 behavior. Tree walk support is rolling out, slowly.</p>
                 <p>The main specification has been approved by the IESG. Final RFC publication is held pending the companion failure-reporting document, likely landing in 2026 or early 2027. After that, receivers need to implement the tree walk in their parsers. That will be gradual. Nobody flips a switch on global email infrastructure over a weekend. If someone tells you otherwise, ask questions.</p>
                 <p>The Public Suffix List is not disappearing overnight. The record you have today continues to work, and it will continue to work throughout the transition. You do not need to panic. You do not even need to rush. You just need to know what is coming.</p>
             </section>
