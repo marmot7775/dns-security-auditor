@@ -8582,6 +8582,18 @@ body {
     line-height: 1.5;
 }
 .article-card-meta-dot { margin: 0 var(--space-xs); color: var(--text-muted); }
+.articles-empty {
+    display: none;
+    margin: 0;
+    padding: var(--space-xl);
+    text-align: center;
+    font-family: var(--font-body);
+    font-size: var(--font-sm);
+    color: var(--text-muted);
+    border: 1px dashed var(--border);
+    border-radius: var(--radius-lg);
+}
+.articles-empty.is-visible { display: block; }
 
 @media (hover: hover) {
     .article-card:hover {
