@@ -8496,9 +8496,15 @@ body {
 }
 .articles-tag-pill.is-active,
 .articles-tag-pill[aria-pressed="true"] {
-    background: var(--primary-subtle);
-    border-color: var(--primary-border);
-    color: var(--primary-light);
+    background: var(--primary);
+    border-color: var(--primary);
+    color: var(--text-inverse);
+}
+.articles-tag-pill.is-active:hover,
+.articles-tag-pill[aria-pressed="true"]:hover {
+    background: var(--primary-hover);
+    border-color: var(--primary-hover);
+    color: var(--text-inverse);
 }
 .articles-tag-pill:focus-visible {
     outline: 2px solid var(--primary);
