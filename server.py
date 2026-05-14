@@ -792,6 +792,10 @@ if STATIC_DIR.exists():
     async def articles_dnssec():
         return FileResponse(str(STATIC_DIR / "articles" / "dnssec.html"))
 
+    @app.get("/articles/dane", tags=["Pages"])
+    async def articles_dane():
+        return FileResponse(str(STATIC_DIR / "articles" / "dane.html"))
+
     @app.get("/dmarcbis", tags=["Pages"])
     async def dmarcbis_redirect():
         return RedirectResponse(url="/articles/dmarcbis", status_code=301)
@@ -799,6 +803,10 @@ if STATIC_DIR.exists():
     @app.get("/dnssec", tags=["Pages"])
     async def dnssec_redirect():
         return RedirectResponse(url="/articles/dnssec", status_code=301)
+
+    @app.get("/dane", tags=["Pages"])
+    async def dane_redirect():
+        return RedirectResponse(url="/articles/dane", status_code=301)
 
     @app.get("/blog/dmarc-running-on-a-text-file", tags=["Pages"])
     async def dmarc_running_on_a_text_file():
@@ -854,6 +862,7 @@ async def sitemap():
         {"loc": "/articles/", "changefreq": "weekly", "priority": "0.8"},
         {"loc": "/articles/dmarcbis", "changefreq": "monthly", "priority": "0.8"},
         {"loc": "/articles/dnssec", "changefreq": "monthly", "priority": "0.8"},
+        {"loc": "/articles/dane", "changefreq": "monthly", "priority": "0.8"},
         {"loc": "/about", "changefreq": "monthly", "priority": "0.5"},
     ]
     xml = '<?xml version="1.0" encoding="UTF-8"?>\n'

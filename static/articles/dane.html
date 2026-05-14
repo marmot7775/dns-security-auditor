@@ -1,0 +1,124 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>DANE didn't fail. The web version did. | dns-audit.com</title>
+    <meta name="description" content="DANE for browsers and DANE for SMTP got buried in the same obituary. Only one of them was actually dead. The honest 2026 picture of where DANE stands and what it protects.">
+    <meta name="keywords" content="DANE, TLSA, SMTP DANE, RFC 7672, MTA-STS, DNSSEC, email security, transport security, STARTTLS stripping, DANE-EE, TLS-RPT">
+    <meta name="author" content="Neil Anuskiewicz">
+    <meta property="og:type" content="article" />
+    <meta property="og:site_name" content="DNS Security Auditor" />
+    <meta property="og:url" content="https://dns-audit.com/articles/dane" />
+    <meta property="og:title" content="DANE didn't fail. The web version did." />
+    <meta property="og:description" content="DANE for browsers and DANE for SMTP got buried in the same obituary. Only one of them was actually dead. The honest 2026 picture of where DANE stands and what it protects." />
+    <meta property="og:image" content="https://dns-audit.com/static/og-image.png" />
+    <meta name="twitter:card" content="summary" />
+    <meta name="twitter:title" content="DANE didn't fail. The web version did." />
+    <meta name="twitter:description" content="DANE for browsers and DANE for SMTP got buried in the same obituary. Only one of them was actually dead. The honest 2026 picture of where DANE stands and what it protects." />
+    <link rel="canonical" href="https://dns-audit.com/articles/dane">
+    <link rel="icon" type="image/svg+xml" href="/static/favicon.svg">
+    <link rel="apple-touch-icon" sizes="180x180" href="/static/apple-touch-icon.png">
+    <link rel="icon" type="image/png" sizes="32x32" href="/static/favicon-32.png">
+    <link rel="stylesheet" href="/static/style.css?v=8562c84">
+    <script type="application/ld+json">
+    {
+        "@context": "https://schema.org",
+        "@type": "TechArticle",
+        "headline": "DANE didn't fail. The web version did.",
+        "description": "DANE for browsers and DANE for SMTP got buried in the same obituary. Only one of them was actually dead. The honest 2026 picture of where DANE stands and what it protects.",
+        "url": "https://dns-audit.com/articles/dane",
+        "author": { "@type": "Person", "name": "Neil Anuskiewicz" },
+        "datePublished": "2026-05-13",
+        "dateModified": "2026-05-13"
+    }
+    </script>
+</head>
+<body>
+    <header class="site-header">
+        <div class="container header-inner">
+            <a href="/" class="logo">
+                <div class="logo-terminal">
+                    <div class="logo-titlebar">
+                        <span class="logo-dot logo-dot-red"></span>
+                        <span class="logo-dot logo-dot-yellow"></span>
+                        <span class="logo-dot logo-dot-green"></span>
+                    </div>
+                    <div class="logo-cmd">
+                        <span class="logo-prompt">$</span> <span class="logo-bin">dns-audit</span> <span class="logo-flag">--dmarc</span>
+                    </div>
+                </div>
+                <span class="logo-text"><span class="logo-accent">dns</span>-audit</span>
+            </a>
+            <div class="header-right">
+                <nav class="site-nav" aria-label="Main navigation">
+                    <a href="/" class="nav-link">Home</a>
+                    <a href="/articles/" class="nav-link nav-link-active">Articles</a>
+                    <a href="/about" class="nav-link">About</a>
+                </nav>
+            </div>
+        </div>
+    </header>
+    <main class="dbis-page">
+        <article class="dbis-article">
+            <h1 style="font-size: 2rem; font-weight: 700; letter-spacing: -0.03em; color: var(--text-primary); margin-bottom: 0.25rem; line-height: 1.2;">DANE didn't fail. The web version did.</h1>
+            <p style="font-size: 1rem; color: var(--text-muted); margin-bottom: 2rem;">You read that DANE failed. You were half right.</p>
+            <p class="dbis-lede">DANE for browsers and DANE for SMTP got buried in the same obituary, and only one of them was actually dead.</p>
+            <p class="dbis-lede">The version meant to put TLS keys in DNS for browsers, supplementing or replacing certificate authorities, is gone. Chrome never shipped it. Firefox never shipped it. Adam Langley <a href="https://www.imperialviolet.org/2015/01/17/notdane.html" target="_blank" rel="noopener">wrote the obituary in 2015</a> and the obituary stuck.</p>
+            <p class="dbis-lede">The other version, DANE for SMTP (<a href="https://datatracker.ietf.org/doc/html/rfc7672" target="_blank" rel="noopener">RFC 7672</a>), now covers <a href="https://www.zivver.com/blog/use-of-email-security-standards-in-the-netherlands-september-2025-only-14-dane-6-mta-sts" target="_blank" rel="noopener">about a quarter of inbound email by volume to Dutch mailboxes</a>, with a much smaller share by domain count. Microsoft turned on DANE for Exchange Online in two stages. Outbound rolled out through 2022. Inbound went GA in <a href="https://techcommunity.microsoft.com/blog/exchange/announcing-general-availability-of-inbound-smtp-dane-with-dnssec-for-exchange-on/4281292" target="_blank" rel="noopener">October 2024</a>. Most "DANE is dead" posts collapse the two protocols into one story and end up wrong on both halves.</p>
+            <section class="dbis-section">
+                <h2>Why the web case was impossible</h2>
+                <p>The Chrome story is the cleanest to tell because the people involved wrote it down. Langley's arguments came down to three structural realities that haven't changed.</p>
+                <p>DNS is messy at the edge. Chrome ran experiments looking up records they knew existed on connections they knew were working. Four to five percent of users couldn't get the answer back. Captive portals, ISPs, and middleboxes were stripping the records. A browser that hard-fails on a missing lookup gets called broken. A browser that ignores the failure isn't doing security.</p>
+                <p>The web already had a different plan. Certificate Transparency was the long-term bet for catching misissuance, and CT needs certificates from trusted CAs. Anyone can publish a TLSA record. That's a feature for an SMTP operator who wants to skip the CA. It's a problem for a transparency log that wants a known, manageable set of roots. On top of that, DNSSEC zones were full of 1024-bit RSA keys the web PKI had spent a decade purging from its own trust stores. No browser was going to import the mess.</p>
+            </section>
+            <section class="dbis-section">
+                <h2>The email side never stopped</h2>
+                <p>RFC 7672 shipped in October 2015, the same year as the web obituary. It solved a problem browsers didn't have. SMTP between mail servers has always run on opportunistic TLS. Most servers try to encrypt but have no way to verify the identity of the receiver. A network attacker who strips the STARTTLS command from the greeting gets cleartext mail. The CA system doesn't help here because SMTP server certs rarely map cleanly to MX hostnames.</p>
+                <p>DANE for SMTP closes that gap. The receiver publishes an authoritative TLSA record, signs the zone with DNSSEC, and the sender validates the chain. Now the sender has a cryptographic mandate. If the attacker tries to downgrade to cleartext or swap in a different cert, the connection fails closed.</p>
+                <p>This worked where the web case failed because the endpoints are servers, not user devices. Servers run validating resolvers that don't get blocked by hotel Wi-Fi. And mail has retry semantics. A temporary DNSSEC failure is a deferral. It never becomes a user-facing error page.</p>
+            </section>
+            <section class="dbis-section">
+                <h2>What DANE actually protects</h2>
+                <p>The scope is narrow on purpose. DANE stops STARTTLS stripping. It stops attackers from using certificates issued by rogue or compromised CAs. It also lets self-signed certificates work, which is a quiet win for internal mail routing.</p>
+                <p>It does nothing for mail at rest. Once the message lands in the inbox, DANE's job is done. It does not authenticate the sender. SPF, DKIM, and DMARC still own that. DANE is the armored car for the transport hop. SPF and DKIM are the wax seals on the letter inside. You need both.</p>
+            </section>
+            <section class="dbis-section">
+                <h2>The state of play in 2026</h2>
+                <p>SMTP DANE is real, useful, and regionally dominant. It has also produced a split over trust models.</p>
+                <p>Google <a href="https://www.captaindns.com/en/blog/dane-tlsa-complete-guide" target="_blank" rel="noopener">does outbound DANE validation</a>, but won't publish TLSA records for Google Workspace domains and prefers MTA-STS for inbound. MTA-STS fetches a transport policy over HTTPS and pins the receiver's identity through the web PKI, with CT logs as the auditable backstop. Google's position is that the web PKI is more accountable than the DNS root for cryptographic identity, and that trusting the DNS hierarchy for transport keys is a step back.</p>
+                <p>That isn't stubbornness. It's a position. And it produces a provider lottery. If your inbound mail lands at Microsoft or a European provider, you have DANE on the wire. If you're a Google Workspace shop, you don't, unless you front it with a secure email gateway like Proofpoint or Mimecast. Plenty of enterprises now do exactly that. They get DANE protection at the gateway hop even when their mailbox provider won't publish TLSA records.</p>
+            </section>
+            <section class="dbis-section">
+                <h2>The operational trap, and what changed it</h2>
+                <p>DANE couples your certificate renewal to your DNS. The classic failure mode is the admin who renews the mail server cert and forgets to update the TLSA record. Because DANE fails closed, inbound mail stops. In regulated environments that's the deal you signed up for. For everyone else it used to be a source of constant low-grade anxiety.</p>
+                <p>Two things changed the calculus. DNSSEC stopped being hard. The sign-the-zone checkbox at major DNS providers means the foundation isn't the barrier it was a decade ago. And cert automation caught up. ACME-aware tooling that rotates TLSA alongside the certificate (uacme, danectl, the DANE paths in modern Postfix and Exim deployments) turns the coupling into a scripted handoff. Use DANE-EE (3 1 1) with the SPKI selector and the hash survives renewals as long as you keep the key pair. The friction isn't gone, but it's tractable.</p>
+            </section>
+            <section class="dbis-section">
+                <h2>The honest version</h2>
+                <p>Most posts will tell you DANE either lost or won. Neither line holds up.</p>
+                <p>DANE for the web is gone. The reasons are still good. DANE for SMTP is where transport security has converged for anyone serious about it. If you handle sensitive correspondence or regulated data, publish TLSA records and validate inbound. Pair with MTA-STS for senders that won't do DNSSEC. Pair both with <a href="https://datatracker.ietf.org/doc/html/rfc8460" target="_blank" rel="noopener">TLS-RPT</a> so you find your failures before your senders do.</p>
+                <p>If you haven't looked at the protocol since 2018, the picture has moved.</p>
+            </section>
+        </article>
+    </main>
+    <footer class="site-footer">
+        <div class="container footer-inner">
+            <div class="footer-left">
+                <div class="footer-brand-name">dns-audit.com</div>
+                <div class="footer-brand-desc">Free, open-source DNS<br>&amp; email security auditing</div>
+            </div>
+            <div class="footer-right">
+                <div class="footer-nav">
+                    <a href="/articles/" class="footer-link">Articles</a>
+                    <span class="footer-dot">&middot;</span>
+                    <a href="/about" class="footer-link">About</a>
+                    <span class="footer-dot">&middot;</span>
+                    <a href="https://github.com/marmot7775/dns-security-auditor" target="_blank" rel="noopener" class="footer-link">GitHub</a>
+                </div>
+                <div class="footer-attribution">Built by Neil Anuskiewicz <a href="https://www.linkedin.com/in/neilanuskiewicz/" target="_blank" rel="noopener" class="footer-linkedin" title="Neil Anuskiewicz on LinkedIn"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" width="14" height="14" fill="currentColor"><path d="M20.447 20.452h-3.554v-5.569c0-1.328-.027-3.037-1.852-3.037-1.853 0-2.136 1.445-2.136 2.939v5.667H9.351V9h3.414v1.561h.046c.477-.9 1.637-1.85 3.37-1.85 3.601 0 4.267 2.37 4.267 5.455v6.286zM5.337 7.433a2.062 2.062 0 01-2.063-2.065 2.064 2.064 0 112.063 2.065zm1.782 13.019H3.555V9h3.564v11.452zM22.225 0H1.771C.792 0 0 .774 0 1.729v20.542C0 23.227.792 24 1.771 24h20.451C23.2 24 24 23.227 24 22.271V1.729C24 .774 23.2 0 22.222 0h.003z"/></svg></a></div>
+            </div>
+        </div>
+    </footer>
+</body>
+</html>
