@@ -3,19 +3,19 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>DMARCbis | dns-audit.com</title>
-    <meta name="description" content="DMARC ran on a text file. DMARCbis brings it home to DNS. Here is what changed, why you are not behind, and the small list of edits to be ready.">
-    <meta name="keywords" content="DMARCbis, DMARC, email authentication, RFC 7489, DNS tree walk, np tag, psd tag, public suffix list, deliverability">
+    <title>DMARCbis is now RFC 9989 | dns-audit.com</title>
+    <meta name="description" content="DMARC ran on a text file. RFC 9989 brings it home to DNS. Here is what changed, why you are not behind, and the small list of edits to be ready.">
+    <meta name="keywords" content="DMARCbis, DMARC, email authentication, RFC 7489, RFC 9989, RFC 9990, RFC 9991, DNS tree walk, np tag, psd tag, t tag, public suffix list, deliverability">
     <meta name="author" content="Neil Anuskiewicz">
     <meta property="og:type" content="article" />
     <meta property="og:site_name" content="DNS Security Auditor" />
     <meta property="og:url" content="https://dns-audit.com/articles/dmarcbis" />
-    <meta property="og:title" content="DMARCbis | dns-audit.com" />
-    <meta property="og:description" content="DMARC ran on a text file. DMARCbis brings it home to DNS. Here is what changed, why you are not behind, and the small list of edits to be ready." />
+    <meta property="og:title" content="DMARCbis is now RFC 9989 | dns-audit.com" />
+    <meta property="og:description" content="DMARC ran on a text file. RFC 9989 brings it home to DNS. Here is what changed, why you are not behind, and the small list of edits to be ready." />
     <meta property="og:image" content="https://dns-audit.com/static/og-image.png" />
     <meta name="twitter:card" content="summary" />
-    <meta name="twitter:title" content="DMARCbis | dns-audit.com" />
-    <meta name="twitter:description" content="DMARC ran on a text file. DMARCbis brings it home to DNS. Here is what changed, why you are not behind, and the small list of edits to be ready." />
+    <meta name="twitter:title" content="DMARCbis is now RFC 9989 | dns-audit.com" />
+    <meta name="twitter:description" content="DMARC ran on a text file. RFC 9989 brings it home to DNS. Here is what changed, why you are not behind, and the small list of edits to be ready." />
     <link rel="canonical" href="https://dns-audit.com/articles/dmarcbis">
     <link rel="icon" type="image/svg+xml" href="/static/favicon.svg">
     <link rel="apple-touch-icon" sizes="180x180" href="/static/apple-touch-icon.png">
@@ -25,12 +25,12 @@
     {
         "@context": "https://schema.org",
         "@type": "TechArticle",
-        "headline": "DMARCbis",
-        "description": "DMARC ran on a text file. DMARCbis brings it home to DNS. Here is what changed, why you are not behind, and the small list of edits to be ready.",
+        "headline": "RFC 9989",
+        "description": "DMARC ran on a text file. RFC 9989 brings it home to DNS. Here is what changed, why you are not behind, and the small list of edits to be ready.",
         "url": "https://dns-audit.com/articles/dmarcbis",
         "author": { "@type": "Person", "name": "Neil Anuskiewicz" },
         "datePublished": "2026-04-26",
-        "dateModified": "2026-04-27"
+        "dateModified": "2026-08-03"
     }
     </script>
 </head>
@@ -61,8 +61,9 @@
     </header>
     <main class="dbis-page">
         <article class="dbis-article">
-            <h1 style="font-size: 2rem; font-weight: 700; letter-spacing: -0.03em; color: var(--text-primary); margin-bottom: 0.25rem; line-height: 1.2;">DMARCbis</h1>
-            <p style="font-size: 1rem; color: var(--text-muted); margin-bottom: 2rem;">The protocol upgrade that retires the Public Suffix List from the spec</p>
+            <h1 style="font-size: 2rem; font-weight: 700; letter-spacing: -0.03em; color: var(--text-primary); margin-bottom: 0.25rem; line-height: 1.2;">DMARCbis is now RFC 9989</h1>
+            <p style="font-size: 1rem; color: var(--text-muted); margin-bottom: 2rem;">RFC 9989 retires the Public Suffix List from the spec</p>
+            <p class="article-card-meta" style="margin-bottom: 2rem;">Updated <time datetime="2026-08">August 2026</time></p>
             <p class="dbis-lede">I need to tell you something <strong>mildly absurd</strong> about your email security.</p>
             <p class="dbis-lede">For the past decade, your DMARC record has leaned on a text file maintained by volunteers on GitHub. Not a standard. Not a protocol. <strong>A list.</strong> Curated by humans who cared enough to track every top-level domain, every private suffix, every odd little corner of the internet's naming system. <strong>For free.</strong></p>
             <p class="dbis-lede">It sounds like a vulnerability. Somehow it became a quiet triumph instead.</p>
@@ -98,7 +99,7 @@
                                 <tr>
                                     <th>What changes</th>
                                     <th>RFC 7489 (today)</th>
-                                    <th>DMARCbis</th>
+                                    <th>RFC 9989</th>
                                 </tr>
                             </thead>
                             <tbody>
@@ -118,6 +119,11 @@
                                     <td>Removed</td>
                                 </tr>
                                 <tr>
+                                    <td><code>t</code> tag</td>
+                                    <td>Not defined</td>
+                                    <td>New, replaces <code>pct</code></td>
+                                </tr>
+                                <tr>
                                     <td><code>np</code> tag</td>
                                     <td>Not defined</td>
                                     <td>New</td>
@@ -135,7 +141,7 @@
                             </tbody>
                         </table>
                     </div>
-                    <figcaption id="dbis-changes-caption" class="dbis-compare-caption">What changes between RFC 7489 and DMARCbis.</figcaption>
+                    <figcaption id="dbis-changes-caption" class="dbis-compare-caption">What changes between RFC 7489 and RFC 9989.</figcaption>
                 </figure>
                 <p>DMARCbis removes the Public Suffix List from the critical path.</p>
                 <p>In its place is the <strong>DNS tree walk</strong>.</p>
@@ -234,18 +240,22 @@
                 <p>A DNS-based protocol finally uses DNS to answer its own question. It took a decade to get here.</p>
                 <p>This did not come from theory. The working group incorporated what operators learned in the trenches: inconsistencies in PSL handling, unreliable behavior of deprecated tags like <code>pct=</code>, and gaps like non-existent subdomain spoofing, which the <code>np=</code> tag now addresses.</p>
                 <p>Now the honest part: as of 2026, most receivers still evaluate DMARC using RFC 7489 behavior. Tree walk support is rolling out, slowly.</p>
-                <p>The main specification has been approved by the IESG. Final RFC publication is held pending the companion failure-reporting document, likely landing in 2026 or early 2027. After that, receivers need to implement the tree walk in their parsers. That will be gradual. Nobody flips a switch on global email infrastructure over a weekend. If someone tells you otherwise, ask questions.</p>
+                <p>The specification is done. In May 2026 the IETF published RFC 9989, RFC 9990, and RFC 9991, covering the core protocol, aggregate reporting, and failure reporting. Together they obsolete RFC 7489 and put DMARC on the Standards Track for the first time. The failure-reporting document that held up publication for years is RFC 9991, and it landed with the rest.</p>
+                <p>Publication is not deployment. Receivers still have to implement the tree walk in their parsers, and that will be gradual. Nobody flips a switch on global email infrastructure over a weekend. If someone tells you otherwise, ask questions.</p>
                 <p>The Public Suffix List is not disappearing overnight. The record you have today continues to work, and it will continue to work throughout the transition. You do not need to panic. You do not even need to rush. You just need to know what is coming.</p>
             </section>
             <section class="dbis-section">
                 <h2>What you actually need to do</h2>
                 <p>The heavy lift is on the receiver side. On your side, there is a short list of straightforward edits. The kind you can do in one sitting.</p>
                 <ol class="dbis-steps">
-                    <li><div><strong>Remove deprecated tags.</strong> <code>pct=</code>, <code>rf=</code>, and <code>ri=</code> are going away. Most were never handled consistently anyway, so you are not losing capability you were reliably using. Clean them out.</div></li>
+                    <li><div><strong>Remove deprecated tags.</strong> <code>pct=</code>, <code>rf=</code>, and <code>ri=</code> are gone. Clean them out.
+                        <p>If you were using <code>pct=</code> to ramp enforcement in stages, there is no replacement. The new <code>t=</code> tag is on or off. <code>t=y</code> is testing mode, roughly the old <code>pct=0</code>. <code>t=n</code> is full enforcement, roughly <code>pct=100</code>. Nothing in between.</p>
+                        <p>That sounds like a loss and is not. Receivers applied percentage sampling inconsistently, so the dial you thought you were turning was never fully connected. Your safety now comes from how long you sit in discovery and from <code>sp=</code>, which lets you enforce on subdomains before the organizational domain. Both of those actually work.</p>
+                    </div></li>
                     <li><div><strong>Fix reporting URIs.</strong> Make sure they begin with <code>mailto:</code>. The new parser is stricter. This is the sort of thing that either works or silently fails, and "silently fails" is not the DMARC experience anyone wants.</div></li>
                     <li><div><strong>Understand <code>psd=</code>.</strong> The tag has three values: <code>y</code> (you are a public suffix domain), <code>n</code> (you are an organizational domain), and <code>u</code> (unknown, let the tree walk decide). When the tag is absent, dmarcbis treats it as <code>u</code> and resolves your domain via the tree walk procedure. Most operators do not need to publish <code>psd=</code> at all. If you run a registry or a public suffix domain, declare <code>psd=y</code>. Otherwise the tree walk will correctly identify you as the organizational domain.</div></li>
                     <li><div><strong>Consider <code>np=reject</code>.</strong> If you are already at <code>p=reject</code>, this closes the non-existent subdomain spoofing gap. Audit third-party senders first. The tag is optional, but the protection is real.</div></li>
-                    <li><div><strong>Verify external reporting authorization.</strong> If <code>rua=</code> points to a third party, that destination must publish a special record to confirm it is authorized to receive your reports. Without it, reports silently fail.</div></li>
+                    <li><div><strong>Verify external reporting authorization.</strong> If <code>rua=</code> points to a domain you do not control, that domain has to publish a TXT record at <code>yourdomain.example._report._dmarc.thirdparty.example</code> containing <code>v=DMARC1</code>, confirming it accepts reports on your behalf. Most platforms set this up for you. Check anyway. Without it receivers drop the reports and nothing tells you they did.</div></li>
                 </ol>
                 <p>That is the list. Minutes, not days. The hard part, deploying the tree walk across the world's mail systems, is not yours to carry. You just need to tidy up your side of the fence.</p>
             </section>

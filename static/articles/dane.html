@@ -92,7 +92,7 @@
             <section class="dbis-section">
                 <h2>The operational trap, and what changed it</h2>
                 <p>DANE couples your certificate renewal to your DNS. The classic failure mode is the admin who renews the mail server cert and forgets to update the TLSA record. Because DANE fails closed, inbound mail stops. In regulated environments that's the deal you signed up for. For everyone else it used to be a source of constant low-grade anxiety.</p>
-                <p>Two things changed the calculus. DNSSEC stopped being hard. The sign-the-zone checkbox at major DNS providers means the foundation isn't the barrier it was a decade ago. And cert automation caught up. ACME-aware tooling that rotates TLSA alongside the certificate (uacme, danectl, the DANE paths in modern Postfix and Exim deployments) turns the coupling into a scripted handoff. Use DANE-EE (3 1 1) with the SPKI selector and the hash survives renewals as long as you keep the key pair. The friction isn't gone, but it's tractable.</p>
+                <p>Two things changed the calculus. <a href="/articles/dnssec">DNSSEC stopped being hard</a>. The sign-the-zone checkbox at major DNS providers means the foundation isn't the barrier it was a decade ago. And cert automation caught up. ACME-aware tooling that rotates TLSA alongside the certificate (uacme, danectl, the DANE paths in modern Postfix and Exim deployments) turns the coupling into a scripted handoff. Use DANE-EE (3 1 1) with the SPKI selector and the hash survives renewals as long as you keep the key pair. The friction isn't gone, but it's tractable.</p>
             </section>
             <section class="dbis-section">
                 <h2>The honest version</h2>

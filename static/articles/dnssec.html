@@ -117,7 +117,7 @@
                 <h2>What it actually protects against</h2>
                 <p>Most DNSSEC posts will tell you it "secures DNS." That sentence is doing a lot of work. Too much, honestly.</p>
                 <p>Here's what DNSSEC actually does. It signs DNS answers. When your resolver asks "what's the IP for example.com," DNSSEC lets it verify that the answer really came from example.com's zone and wasn't changed along the way. Origin authentication. Integrity. That's the whole job.</p>
-                <p>That's not nothing. Cache poisoning is real. The Kaminsky attack of 2008 was real. On-path DNS tampering happens on coffee shop wifi, on cut-rate ISPs, and at the borders of entire countries. If your DANE or SSHFP records have ever done anything useful, DNSSEC is why they weren't lies.</p>
+                <p>That's not nothing. Cache poisoning is real. The Kaminsky attack of 2008 was real. On-path DNS tampering happens on coffee shop wifi, on cut-rate ISPs, and at the borders of entire countries. If your <a href="/articles/dane">DANE</a> or SSHFP records have ever done anything useful, DNSSEC is why they weren't lies.</p>
                 <p>Now here's what DNSSEC does not do, despite what some marketing copy implies.</p>
                 <p>It does not stop phishing. An attacker can register paypa1.com, sign it perfectly, and your validator will happily confirm the answer came from paypa1.com. DNSSEC has no opinion on whether you should have typed that URL.</p>
                 <p>It does not stop email spoofing. That's SPF, DKIM, and DMARC. All three sit above DNSSEC and have nothing to do with it.</p>
