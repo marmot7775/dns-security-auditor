@@ -27,10 +27,9 @@ import io
 import re
 import tempfile
 from datetime import datetime, timezone
-from typing import Dict, List, Optional, Any
 
 from reportlab.lib import colors
-from reportlab.lib.enums import TA_LEFT, TA_CENTER, TA_RIGHT
+from reportlab.lib.enums import TA_CENTER
 from reportlab.lib.pagesizes import letter
 from reportlab.lib.styles import ParagraphStyle
 from reportlab.lib.units import inch
@@ -38,7 +37,6 @@ from reportlab.platypus import (
     SimpleDocTemplate, Paragraph, Spacer, Table, TableStyle,
     KeepTogether, HRFlowable, PageBreak, CondPageBreak,
 )
-from reportlab.graphics import renderPDF
 
 # ================================================================
 # Brand colors
@@ -241,7 +239,7 @@ def _cover_page(data, S):
     # Domain + date row under title
     sub_content = [
         [Paragraph(f"<b>{_safe(domain)}</b>", S["title_sub"]),
-         Paragraph(f"dns-audit.com", S["title_sub"])],
+         Paragraph("dns-audit.com", S["title_sub"])],
     ]
     sub_tbl = Table(sub_content, colWidths=[4.5*inch, 2.0*inch])
     sub_tbl.setStyle(TableStyle([
@@ -656,7 +654,7 @@ def _dmarc_deep_dive(data, S):
 
     # Status + verdict
     hdr = Table([
-        [Paragraph(f"<b>DMARC</b>", S["heading"]),
+        [Paragraph("<b>DMARC</b>", S["heading"]),
          Paragraph(f'<font color="{s_clr.hexval()}" size="10"><b> {s_lbl} </b></font>', S["body"])],
     ], colWidths=[5.5*inch, 1.0*inch])
     hdr.setStyle(TableStyle([

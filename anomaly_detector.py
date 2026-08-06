@@ -6,7 +6,7 @@ single check can catch on its own. Results appear in the "What's Unusual?"
 section of the audit report.
 """
 
-from typing import Dict, List
+from typing import List
 
 
 _SEVERITY_ORDER = {"critical": 0, "high": 1, "medium": 2}

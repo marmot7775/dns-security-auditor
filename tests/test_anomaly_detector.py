@@ -2,7 +2,6 @@
 Tests for anomaly_detector.py -- cross-check anomaly detection module.
 """
 
-import pytest
 from anomaly_detector import detect_anomalies
 
 

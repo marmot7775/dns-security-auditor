@@ -13,7 +13,6 @@ import logging
 import os
 import sqlite3
 import threading
-from datetime import datetime, timezone
 from typing import Any, Dict, List, Optional
 
 log = logging.getLogger(__name__)

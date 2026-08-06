@@ -19,7 +19,7 @@ Each card looks like:
 }
 """
 
-from typing import Any, Dict, List, Optional, Tuple
+from typing import Dict, List, Optional, Tuple
 from datetime import datetime, timezone
 from html import escape as _e
 
@@ -247,7 +247,7 @@ def build_executive_summary(checks: List[Dict], roadmap: Dict) -> Dict:
     if deliverability_issues:
         top_issue = deliverability_issues[0]
         if "blocklist" in top_issue:
-            deliverability_summary = f"Your domain is listed on a blocklist. This is likely causing delivery failures right now."
+            deliverability_summary = "Your domain is listed on a blocklist. This is likely causing delivery failures right now."
         elif "no DMARC" in top_issue:
             deliverability_summary = "Without DMARC, your business emails may be landing in spam. Gmail and Yahoo now require DMARC for reliable delivery."
         elif "p=none" in top_issue:
@@ -782,7 +782,7 @@ def build_consistency_findings(
                     findings.append({
                         "protocol": "DMARC",
                         "badge": "Informational",
-                        "title": f"DMARC reports sent to external domain",
+                        "title": "DMARC reports sent to external domain",
                         "detail": (
                             f"Your DMARC aggregate reports are sent to {rua_domain}, "
                             f"which is not authorized in your SPF record. This is normal "
@@ -1345,28 +1345,28 @@ def transform_dmarc(raw: Dict, tree_walk: Optional[Dict] = None, is_no_mail: boo
         )
     elif policy == "none":
         explanation = (
-            f"Your DMARC policy is set to <strong>p=none</strong> (monitoring mode). "
-            f"Your record is technically valid, but it provides no active protection. "
-            f"Receivers deliver all mail normally, even when authentication fails. "
-            f"While p=none is a necessary starting point for collecting aggregate report data, "
-            f"modern security compliance views this as a pre-deployment state. "
-            f"To protect deliverability and prevent spoofing, move toward an enforcement policy "
-            f"(<strong>p=quarantine</strong> or <strong>p=reject</strong>) once your legitimate "
-            f"mail streams are aligned."
+            "Your DMARC policy is set to <strong>p=none</strong> (monitoring mode). "
+            "Your record is technically valid, but it provides no active protection. "
+            "Receivers deliver all mail normally, even when authentication fails. "
+            "While p=none is a necessary starting point for collecting aggregate report data, "
+            "modern security compliance views this as a pre-deployment state. "
+            "To protect deliverability and prevent spoofing, move toward an enforcement policy "
+            "(<strong>p=quarantine</strong> or <strong>p=reject</strong>) once your legitimate "
+            "mail streams are aligned."
         )
     elif policy == "quarantine":
         explanation = (
-            f"The enforcing DMARC policy <strong>p=quarantine</strong> requests that mail receivers "
-            f"to send messages to spam when neither SPF nor DKIM passes with an aligned domain. "
-            f"Only one of SPF or DKIM needs to pass with alignment for the message to be delivered normally. "
-            f"DKIM is the more resilient mechanism because it survives mail forwarding."
+            "The enforcing DMARC policy <strong>p=quarantine</strong> requests that mail receivers "
+            "to send messages to spam when neither SPF nor DKIM passes with an aligned domain. "
+            "Only one of SPF or DKIM needs to pass with alignment for the message to be delivered normally. "
+            "DKIM is the more resilient mechanism because it survives mail forwarding."
         )
     elif policy == "reject":
         explanation = (
-            f"The enforcing DMARC policy <strong>p=reject</strong> requests that mail receivers "
-            f"to reject messages outright when neither SPF nor DKIM passes with an aligned domain. "
-            f"Only one of SPF or DKIM needs to pass with alignment for the message to be delivered. "
-            f"DKIM is the more resilient mechanism because it survives mail forwarding."
+            "The enforcing DMARC policy <strong>p=reject</strong> requests that mail receivers "
+            "to reject messages outright when neither SPF nor DKIM passes with an aligned domain. "
+            "Only one of SPF or DKIM needs to pass with alignment for the message to be delivered. "
+            "DKIM is the more resilient mechanism because it survives mail forwarding."
         )
     else:
         explanation = f"DMARC record found but the policy value is unexpected: '{policy}'."
@@ -1797,7 +1797,7 @@ def _build_attack_surface(raw: Dict, record: Optional[str], is_no_mail: bool = F
             "status": "partial",
             "color": "amber",
             "summary": "Spoofed mail goes to spam but still reaches recipients.",
-            "detail": f"Spoofed messages land in spam/junk folders. Recipients may still see and interact with them.",
+            "detail": "Spoofed messages land in spam/junk folders. Recipients may still see and interact with them.",
         }
     else:
         v1 = {
@@ -1830,7 +1830,7 @@ def _build_attack_surface(raw: Dict, record: Optional[str], is_no_mail: bool = F
     else:
         gap_note = ""
         if sp == "none" and policy in ("reject", "quarantine"):
-            gap_note = f" Your root domain is protected but subdomains are not. Attackers will use subdomains to bypass your policy."
+            gap_note = " Your root domain is protected but subdomains are not. Attackers will use subdomains to bypass your policy."
         v2 = {
             "name": "Subdomain Spoofing",
             "status": "exposed",
@@ -1916,7 +1916,7 @@ def _build_attack_surface(raw: Dict, record: Optional[str], is_no_mail: bool = F
 
     if len(exposed) >= 2:
         overall = {"level": "critical", "label": "Critical Risk", "color": "red",
-                   "summary": f"This domain has multiple paths for email spoofing attacks."}
+                   "summary": "This domain has multiple paths for email spoofing attacks."}
     elif len(exposed) == 1:
         overall = {"level": "high", "label": "High Risk", "color": "red",
                    "summary": f"This domain can be spoofed through {exposed[0]['name'].lower()}."}
@@ -1938,7 +1938,7 @@ def _build_attack_surface(raw: Dict, record: Optional[str], is_no_mail: bool = F
         elif weakest["name"] == "Non-Existent Subdomain Spoofing":
             attacker_path = f"If an attacker wanted to spoof this domain, they would target non-existent subdomains like secure-login.{domain} since there is no np= policy to prevent it."
         elif weakest["name"] == "Reporting Intelligence":
-            attacker_path = f"An unauthorized party may be receiving aggregate reports revealing your email infrastructure."
+            attacker_path = "An unauthorized party may be receiving aggregate reports revealing your email infrastructure."
 
     return {
         "overall": overall,
@@ -3812,7 +3812,6 @@ def _build_spf_deep_analysis(raw: Dict) -> Optional[Dict]:
     if not record:
         return None
 
-    import re
 
     parts = record.strip().split()
     mechanisms = []
@@ -5093,10 +5092,10 @@ def transform_caa(raw: Dict, domain: str) -> Dict:
             ),
             "details": details,
             "fix": (
-                f"Publish CAA records specifying which Certificate Authorities may issue certificates "
-                f"for your domain. Requires knowing which CA(s) you use. Use <code>issue</code> to "
-                f"authorize your CA, <code>issuewild</code> for wildcard policy, and <code>iodef</code> "
-                f"to receive violation alerts."
+                "Publish CAA records specifying which Certificate Authorities may issue certificates "
+                "for your domain. Requires knowing which CA(s) you use. Use <code>issue</code> to "
+                "authorize your CA, <code>issuewild</code> for wildcard policy, and <code>iodef</code> "
+                "to receive violation alerts."
             ),
             "fix_records": None,
         }
@@ -5216,7 +5215,7 @@ def transform_dane(raw: Dict, domain: str) -> Dict:
         return {
             "name": "DANE",
             "status": "warn",
-            "verdict": f"TLSA found but DNSSEC missing",
+            "verdict": "TLSA found but DNSSEC missing",
             "record": None,
             "explanation": (
                 "DANE TLSA records are published for your MX hosts, but DNSSEC is not enabled. "

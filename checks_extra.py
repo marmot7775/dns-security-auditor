@@ -4,7 +4,6 @@ DNS Security Auditor
 """
 
 import ipaddress
-import re
 import socket
 import defusedxml.ElementTree as ET
 from typing import Any, Dict, List, Optional, Tuple
@@ -574,7 +573,7 @@ def _validate_tls_rpt_record(record: str) -> Tuple[Dict[str, str], List[Dict]]:
         value = value.strip()
         if key in tags:
             issues.append(_make_issue("warning", f"Duplicate TLS-RPT tag: '{key}'",
-                f"'{key}' appears more than once.", "", f"Remove the duplicate."))
+                f"'{key}' appears more than once.", "", "Remove the duplicate."))
             continue
         if key not in _TLSRPT_VALID_TAGS:
             issues.append(_make_issue("warning", f"Unknown TLS-RPT tag: '{key}'",
@@ -702,7 +701,7 @@ def _validate_bimi_record(record: str) -> Tuple[Dict[str, str], List[Dict]]:
         value = value.strip()
         if key in tags:
             issues.append(_make_issue("warning", f"Duplicate BIMI tag: '{key}'",
-                f"'{key}' appears more than once.", "", f"Remove duplicate."))
+                f"'{key}' appears more than once.", "", "Remove duplicate."))
             continue
         tags[key] = value
 

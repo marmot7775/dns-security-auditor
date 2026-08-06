@@ -8,7 +8,7 @@ Shows:
 - Actionable recommendations
 """
 
-from typing import List, Dict, Optional
+from typing import List, Dict
 import re
 
 def analyze_dkim_key_strength(dkim_record: str) -> Dict:

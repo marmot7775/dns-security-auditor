@@ -868,11 +868,11 @@ async def sitemap():
     xml = '<?xml version="1.0" encoding="UTF-8"?>\n'
     xml += '<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">\n'
     for p in pages:
-        xml += f"  <url>\n"
+        xml += "  <url>\n"
         xml += f"    <loc>{base}{p['loc']}</loc>\n"
         xml += f"    <changefreq>{p['changefreq']}</changefreq>\n"
         xml += f"    <priority>{p['priority']}</priority>\n"
-        xml += f"  </url>\n"
+        xml += "  </url>\n"
     xml += '</urlset>'
     return Response(content=xml, media_type="application/xml")
 

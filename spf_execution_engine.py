@@ -8,7 +8,7 @@ Post-processes existing audit data to produce:
 Zero extra DNS queries. Transforms data already computed by the audit.
 """
 
-from typing import Any, Dict, List, Optional
+from typing import Dict, List, Optional
 from spf_intelligence import SPF_VENDOR_MAP
 
 

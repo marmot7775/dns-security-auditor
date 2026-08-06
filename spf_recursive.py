@@ -366,7 +366,7 @@ if __name__ == "__main__":
     print(f"Status: {result['status'].upper()}")
     print(f"Summary: {result['summary']}")
 
-    print(f"\nLookup Chain:")
+    print("\nLookup Chain:")
     for entry in result["chain"]:
         indent = "  " * entry["depth"]
         domain_str = entry["domain"]
@@ -376,7 +376,7 @@ if __name__ == "__main__":
         print(f"{indent}{domain_str}: {lookups} lookups ({mechs}){error}")
 
     if result["issues"]:
-        print(f"\nIssues:")
+        print("\nIssues:")
         for issue in result["issues"]:
             print(f"  [{issue['severity'].upper()}] {issue['issue']}")
             print(f"    Fix: {issue['fix']}")

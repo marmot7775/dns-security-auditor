@@ -11,7 +11,7 @@ import time
 import dns.resolver
 import dns.exception
 from concurrent.futures import ThreadPoolExecutor, as_completed
-from typing import List, Dict, Set, Optional, Callable
+from typing import List, Dict, Optional, Callable
 
 # Hard limits for DKIM selector discovery
 DKIM_DISCOVERY_TIMEOUT = 30   # seconds for entire discovery
@@ -391,7 +391,7 @@ if __name__ == "__main__":
     # Show prioritized selector order
     from comprehensive_selectors import COMPREHENSIVE_DKIM_SELECTORS as DKIM_SELECTORS
     prioritized = get_prioritized_selectors(sample_spf, DKIM_SELECTORS)
-    print(f"\nPrioritized selector order (first 10):")
+    print("\nPrioritized selector order (first 10):")
     for i, sel in enumerate(prioritized[:10], 1):
         print(f"  {i}. {sel}")
     

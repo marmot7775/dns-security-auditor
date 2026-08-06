@@ -25,7 +25,6 @@ import dns.resolver
 import dns.exception
 from typing import Dict, List, Optional
 from collections import defaultdict
-import json
 
 class AdvancedVendorFingerprinter:
     """
@@ -380,7 +379,7 @@ class AdvancedVendorFingerprinter:
     def _generate_report(self, results: List[Dict]) -> str:
         """Generate human-readable report"""
         lines = []
-        lines.append(f"\n📊 VENDOR FINGERPRINTING RESULTS")
+        lines.append("\n📊 VENDOR FINGERPRINTING RESULTS")
         lines.append("=" * 60)
         lines.append(f"\nDomain: {self.domain}")
         lines.append(f"Total Signals: {len(self.signals)}\n")

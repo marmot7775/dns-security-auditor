@@ -78,7 +78,6 @@ from advanced_fingerprinting import AdvancedVendorFingerprinter
 from dkim_formatter import analyze_dkim_key_strength
 from anomaly_detector import detect_anomalies
 from remediation_planner import build_remediation_plan
-from dkim_key_age import DKIMKeyAgeAnalyzer
 
 from dmarc_tree_walk import dmarc_tree_walk
 try:
@@ -1035,7 +1034,7 @@ def _raw_check_dmarc(domain: str) -> Dict[str, Any]:
             # Fragment without '=' — could be bare mailto: or junk
             if "mailto:" in part.lower():
                 _add_syntax(
-                    f"Bare mailto: address without tag prefix",
+                    "Bare mailto: address without tag prefix",
                     "A 'mailto:' address appears without a rua= or ruf= tag prefix. "
                     "Receivers will ignore it and no reports will be sent.",
                     "Change to: rua=mailto:address@example.com",
@@ -1180,15 +1179,15 @@ def _raw_check_dmarc(domain: str) -> Dict[str, Any]:
                     f"Invalid {rec_tag_name}= value: {rec_tag_name}="
                     f"{rec_tag_value}. Spec recovery: dmarcbis treats "
                     f"record as p=none, RFC 7489 receivers may ignore.",
-                    f"Per dmarcbis-41 §4.10.1, because rua= contains "
-                    f"at least one syntactically valid reporting URI, "
-                    f"dmarcbis-compliant receivers MUST act as if a "
-                    f"record containing p=none was retrieved and "
-                    f"continue processing. RFC 7489 has no such "
-                    f"recovery rule; older receivers may instead "
-                    f"ignore the record entirely. Interop hazard — "
-                    f"fix the value rather than relying on this "
-                    f"fallback.",
+                    "Per dmarcbis-41 §4.10.1, because rua= contains "
+                    "at least one syntactically valid reporting URI, "
+                    "dmarcbis-compliant receivers MUST act as if a "
+                    "record containing p=none was retrieved and "
+                    "continue processing. RFC 7489 has no such "
+                    "recovery rule; older receivers may instead "
+                    "ignore the record entirely. Interop hazard — "
+                    "fix the value rather than relying on this "
+                    "fallback.",
                     f"Set {rec_tag_name}= to one of: none, quarantine, "
                     f"reject. Do not rely on the dmarcbis recovery "
                     f"fallback to mask the invalid value.",
@@ -2233,7 +2232,7 @@ def _raw_check_spf(domain: str) -> Dict[str, Any]:
                 f"'{part}' has a colon but no value. There may be a space between "
                 "the mechanism and its argument. SPF mechanisms cannot have spaces "
                 "between the name, colon, and value.",
-                f"Remove the space: write as one token, e.g., ip4:1.2.3.4",
+                "Remove the space: write as one token, e.g., ip4:1.2.3.4",
             )
 
         # ── Identify mechanism type ─────────────────────────
@@ -2258,7 +2257,7 @@ def _raw_check_spf(domain: str) -> Dict[str, Any]:
                     f"Unknown modifier: '{mod_name}'",
                     f"'{mod_name}' is not a recognized SPF modifier. "
                     "It may be a typo or misplaced DMARC/DKIM tag.",
-                    f"Valid SPF modifiers are: redirect, exp.",
+                    "Valid SPF modifiers are: redirect, exp.",
                 )
 
         elif ":" in raw_lower:
@@ -2312,7 +2311,7 @@ def _raw_check_spf(domain: str) -> Dict[str, Any]:
                             _add_issue(
                                 "warning",
                                 f"Overly broad SPF range: ip6:{mech_value} (/{prefix})",
-                                f"This IPv6 range is very broad and authorizes a large number of addresses.",
+                                "This IPv6 range is very broad and authorizes a large number of addresses.",
                                 "Narrow the range to only the IPs your mail servers actually use.",
                             )
                     else:
@@ -2718,7 +2717,7 @@ def _raw_check_dnssec(domain: str) -> Dict[str, Any]:
         _add_issue(
             "warning",
             f"DNSSEC check error: {type(e).__name__}",
-            f"Could not determine DNSSEC status due to a resolver error. "
+            "Could not determine DNSSEC status due to a resolver error. "
             "This may be a transient issue, not proof that DNSSEC is absent.",
             "Retry or verify manually with 'delv' or 'dig +dnssec DNSKEY <domain>'.",
         )
@@ -3063,7 +3062,7 @@ def _raw_check_caa(domain: str) -> Dict[str, Any]:
                 "CAA controls regular certificate issuance but does not separately restrict "
                 "wildcard certificates. Wildcard issuance falls back to the issue tag. "
                 "Adding issuewild gives you explicit control over wildcard certificates.",
-                f'Add a CAA record: 0 issuewild "yourca.com" or 0 issuewild ";" to block wildcard issuance.',
+                'Add a CAA record: 0 issuewild "yourca.com" or 0 issuewild ";" to block wildcard issuance.',
             )
 
         if result["has_issue"] and not result["has_iodef"]:
@@ -3656,7 +3655,7 @@ def _raw_check_ct_uncached(domain: str, raw_results: Dict[str, Any]) -> Dict[str
         result["status"] = "warning"
         result["unavailable_reason"] = "timeout"
         return result
-    except (requests.exceptions.RequestException, ValueError) as e:
+    except (requests.exceptions.RequestException, ValueError):
         _add_issue("warning", "CT data temporarily unavailable",
                    "Certificate Transparency data is sourced from crt.sh, which was temporarily unavailable. "
                    "This does not affect the audit results.")
@@ -3835,7 +3834,7 @@ def _raw_check_ct_uncached(domain: str, raw_results: Dict[str, Any]) -> Dict[str
                 f"Certificate from {mm['cert_issuer']} not in CAA",
                 f"CT logs show certificates issued by {mm['cert_issuer']}, but CAA only allows: {', '.join(mm['caa_allows'])}. "
                 "These may be older certs issued before CAA was configured.",
-                f"Verify these certificates are expected. Update CAA to include this issuer or revoke unauthorized certs.",
+                "Verify these certificates are expected. Update CAA to include this issuer or revoke unauthorized certs.",
             )
     if expiring_soon:
         result["status"] = "warning"

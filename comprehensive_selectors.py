@@ -417,7 +417,7 @@ if __name__ == "__main__":
     print(" COMPREHENSIVE DKIM SELECTOR DATABASE")
     print("=" * 70)
     print(f"\n Total Unique Selectors: {len(COMPREHENSIVE_DKIM_SELECTORS)}")
-    print(f"\n By Category:")
+    print("\n By Category:")
     print(f"   Google:              {len(GOOGLE_SELECTORS)}")
     print(f"   Microsoft:           {len(MICROSOFT_SELECTORS)}")
     print(f"   Proofpoint:          {len(PROOFPOINT_SELECTORS)}")
