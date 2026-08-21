@@ -705,11 +705,11 @@ def _validate_bimi_record(record: str) -> Tuple[Dict[str, str], List[Dict]]:
             continue
         tags[key] = value
 
-    valid_tags = {"v", "l", "a"}
+    valid_tags = {"v", "l", "a", "lps", "avp"}
     for key in tags:
         if key not in valid_tags:
-            issues.append(_make_issue("warning", f"Unknown BIMI tag: '{key}'",
-                "Valid BIMI tags are: v, l, a.", "", f"Remove '{key}'."))
+            issues.append(_make_issue("info", f"Unknown BIMI tag: '{key}'",
+                "Valid BIMI tags are: v, l, a, lps, avp. Receivers ignore unrecognized tags per spec.", "", ""))
 
     if "v" not in tags:
         issues.append(_make_issue("error", "Missing 'v' tag",

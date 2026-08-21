@@ -1120,7 +1120,7 @@ function renderCheckBody(check) {
     // Legacy Validation (hidden by default, shown in Legacy mode)
     if (check.legacy_validation) {
         html += `<div class="spec-legacy" style="display:none;">`;
-        html += renderStrictValidation(check.legacy_validation);
+        html += renderStrictValidation(check.legacy_validation, 'RFC 7489');
         html += `</div>`;
     }
 
@@ -1621,7 +1621,7 @@ document.addEventListener('click', function(e) {
 // DMARCbis Strict Validation
 // ============================================================
 
-function renderStrictValidation(sv) {
+function renderStrictValidation(sv, specLabel = 'DMARCbis') {
     if (!sv || !sv.categories || sv.categories.length === 0) return '';
 
     const statusIcon = {
@@ -1667,7 +1667,7 @@ function renderStrictValidation(sv) {
         <div class="sv-block">
             <div class="sv-header">
                 <div class="sv-header-left">
-                    <span class="sv-badge">DMARCbis</span>
+                    <span class="sv-badge">${escapeHtml(specLabel)}</span>
                     <span class="sv-title">Strict Record Validation</span>
                 </div>
                 <div class="sv-header-right">

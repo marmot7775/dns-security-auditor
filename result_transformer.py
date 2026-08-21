@@ -2144,14 +2144,6 @@ def _build_tag_entry(tag: str, value: str, present: bool, tags: Dict, policy: st
                        "Defaults to relaxed (r). Subdomain alignment is permitted.",
                        "current", dmarcbis_note=note)
             value = "r"
-        if value == "r" and policy == "reject":
-            e["warnings"].append({
-                "level": "info",
-                "text": (
-                    "Consider strict alignment for tighter security at reject enforcement, "
-                    "but verify your mail flows first."
-                ),
-            })
         return e
 
     # ── aspf= ───────────────────────────────────────────────
@@ -2172,14 +2164,6 @@ def _build_tag_entry(tag: str, value: str, present: bool, tags: Dict, policy: st
                        "Defaults to relaxed (r).",
                        "current", dmarcbis_note=note)
             value = "r"
-        if value == "r" and policy == "reject":
-            e["warnings"].append({
-                "level": "info",
-                "text": (
-                    "Consider strict alignment for tighter security at reject enforcement, "
-                    "but verify your mail flows first."
-                ),
-            })
         return e
 
     # ── fo= ─────────────────────────────────────────────────
@@ -2436,8 +2420,6 @@ def _detect_dangerous_combinations(tags: Dict[str, str], policy: str, is_no_mail
     t_val = tags.get("t")
     psd = tags.get("psd")
     fo = tags.get("fo", "0")
-    adkim = tags.get("adkim", "r")
-    aspf = tags.get("aspf", "r")
     rua = tags.get("rua")
     ruf = tags.get("ruf")
     deprecated_present = [t for t in ("pct", "rf", "ri") if t in tags]
@@ -2617,19 +2599,6 @@ def _detect_dangerous_combinations(tags: Dict[str, str], policy: str, is_no_mail
             "tags": ["fo", "ruf"],
         })
 
-    # 14. adkim=r + aspf=r + p=reject
-    if adkim == "r" and aspf == "r" and policy == "reject":
-        warnings.append({
-            "level": "advisory",
-            "title": "Relaxed alignment at reject",
-            "text": (
-                "Both alignment modes are relaxed at the strictest enforcement level. Consider "
-                "tightening at least one to strict for defense in depth, after verifying your mail "
-                "flows support it."
-            ),
-            "tags": ["adkim", "aspf", "p"],
-        })
-
     # 15. Deprecated tags present
     if deprecated_present:
         warnings.append({
@@ -2793,7 +2762,7 @@ def _calculate_dmarcbis_health(tags: Dict[str, str], policy: str, config_warning
     _attention_titles = {
         "Test mode weakens reject", "Test mode weakens np=reject",
         "Test mode on p=none", "Undeclared PSD status",
-        "Underutilized failure reporting", "Relaxed alignment at reject",
+        "Underutilized failure reporting",
     }
     attention_triggers = [w["title"] for w in advisory if w["title"] in _attention_titles]
 
@@ -3424,18 +3393,6 @@ def _ready_suggestions(tags: Dict[str, str]) -> List[Dict]:
         suggestions.append({
             "tag": "ruf",
             "reason": "Consider adding failure reporting (ruf=) for per-message forensic data.",
-        })
-    adkim = tags.get("adkim", "r")
-    aspf = tags.get("aspf", "r")
-    if adkim == "r" and tags.get("p") == "reject":
-        suggestions.append({
-            "tag": "adkim",
-            "reason": "Consider adkim=s (strict alignment) for tighter DKIM validation at p=reject.",
-        })
-    if aspf == "r" and tags.get("p") == "reject":
-        suggestions.append({
-            "tag": "aspf",
-            "reason": "Consider aspf=s (strict alignment) for tighter SPF validation at p=reject.",
         })
     return suggestions
 

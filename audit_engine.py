@@ -15,7 +15,7 @@ import threading as _ct_threading
 import time
 from concurrent.futures import ThreadPoolExecutor, TimeoutError as FuturesTimeoutError, as_completed
 from datetime import datetime, timezone
-from html import escape as _e
+from html import escape as _e, unescape as _u
 from typing import Any, Dict, List, Optional
 
 log = logging.getLogger(__name__)
@@ -5222,7 +5222,9 @@ def _build_priority_fixes(checks: List[Dict], raw_results: Dict = None, has_mx: 
     covered_checks: set = set()
 
     def _clean(html_text: str) -> str:
-        text = re.sub(r'<[^>]+>', '', html_text)
+        text = re.sub(r'<br\s*/?>', ' ', html_text, flags=re.IGNORECASE)
+        text = re.sub(r'<[^>]+>', '', text)
+        text = _u(text)
         return re.sub(r'\s+', ' ', text).strip()
 
     if raw_results and raw_results.get("dnssec", {}).get("dnssec_state") == "bogus":
