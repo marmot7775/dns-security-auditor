@@ -17,3 +17,8 @@ idna>=3.4
 
 # DNSSEC RRSIG signature verification, and RSA key generation in tests
 cryptography>=42.0.0
+
+# PDF audit reports. pdf_report.py imports reportlab and server.py imports
+# pdf_report, so /api/audit/{domain}/pdf returns 503 without it. Runtime
+# dependency, not a test-only one: the deploy installs requirements.txt only.
+reportlab>=4.0.0
