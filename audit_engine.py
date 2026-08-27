@@ -1065,7 +1065,12 @@ def _raw_check_dmarc(domain: str) -> Dict[str, Any]:
                         "Remove the rf tag.",
                     )
 
-            tags[key_clean] = value_clean
+            # First occurrence wins on a duplicate tag, matching
+            # _validate_dmarc_strict / _validate_dmarc_legacy's tag_dict
+            # so the same report doesn't disagree with itself about
+            # which value applies.
+            if key_clean not in tags:
+                tags[key_clean] = value_clean
         else:
             # Fragment without '=' — could be bare mailto: or junk
             if "mailto:" in part.lower():
