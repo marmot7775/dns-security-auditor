@@ -1417,7 +1417,7 @@ function renderSpecToggle(comparison) {
 
     // "See the Future" callout
     let futureHtml = '';
-    if (comparison.see_the_future && comparison.dmarcbis_only_items.length > 0) {
+    if (comparison.legacy_only_pass && comparison.dmarcbis_only_items.length > 0) {
         let itemsHtml = comparison.dmarcbis_only_items.map(item =>
             `<div class="st-future-item">
                 <span class="st-future-code">${escapeHtml(item.code)}</span>
@@ -1426,8 +1426,8 @@ function renderSpecToggle(comparison) {
         ).join('');
         futureHtml = `
             <div class="st-future spec-dmarcbis">
-                <div class="st-future-title">This record passes under RFC 7489 but has issues under DMARCbis</div>
-                <div class="st-future-subtitle">${comparison.dmarcbis_only_count} problem${comparison.dmarcbis_only_count !== 1 ? 's' : ''} found that only appear under strict DMARCbis validation. Fixing these now ensures your record continues to work as receivers adopt the new standard.</div>
+                <div class="st-future-title">This record passes under the obsolete RFC 7489 but has issues under RFC 9989</div>
+                <div class="st-future-subtitle">${comparison.dmarcbis_only_count} problem${comparison.dmarcbis_only_count !== 1 ? 's' : ''} found that only appear under strict DMARCbis validation. RFC 9989 replaced RFC 7489 in May 2026, so these are problems with the record today, not problems it will have later.</div>
                 ${itemsHtml}
             </div>`;
     }
@@ -1439,15 +1439,15 @@ function renderSpecToggle(comparison) {
     }
     let deltaLegacy = '';
     if (comparison.dmarcbis_only_count > 0) {
-        deltaLegacy = `<div class="st-delta spec-legacy" style="display:none;">Legacy mode is more lenient. ${comparison.dmarcbis_only_count} issue${comparison.dmarcbis_only_count !== 1 ? 's' : ''} flagged by DMARCbis ${comparison.dmarcbis_only_count !== 1 ? 'are' : 'is'} accepted under RFC 7489.</div>`;
+        deltaLegacy = `<div class="st-delta spec-legacy" style="display:none;">The obsolete RFC 7489 was more lenient. ${comparison.dmarcbis_only_count} issue${comparison.dmarcbis_only_count !== 1 ? 's' : ''} flagged by RFC 9989 ${comparison.dmarcbis_only_count !== 1 ? 'were' : 'was'} accepted under it.</div>`;
     }
 
     return `
         <div class="st-toggle-bar">
             <div class="st-toggle-label">Validation Mode</div>
             <div class="st-toggle-pills" role="radiogroup" aria-label="Validation mode">
-                <button class="st-pill st-pill-legacy" data-mode="legacy" role="radio" aria-checked="false">RFC 7489 (Legacy)</button>
-                <button class="st-pill st-pill-dmarcbis st-pill-active" data-mode="dmarcbis" role="radio" aria-checked="true">DMARCbis (Strict)</button>
+                <button class="st-pill st-pill-legacy" data-mode="legacy" role="radio" aria-checked="false">RFC 7489 (Obsolete)</button>
+                <button class="st-pill st-pill-dmarcbis st-pill-active" data-mode="dmarcbis" role="radio" aria-checked="true">RFC 9989 (Current)</button>
             </div>
         </div>
         ${deltaDmarcbis}

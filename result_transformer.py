@@ -1309,7 +1309,7 @@ def transform_dmarc(raw: Dict, tree_walk: Optional[Dict] = None, is_no_mail: boo
         if _method == "tree_walk":
             _method_note = (
                 " Policy was discovered via the "
-                "<a href=\"https://datatracker.ietf.org/doc/draft-ietf-dmarc-dmarcbis/\" target=\"_blank\" rel=\"noopener\">DMARCbis</a> "
+                "<a href=\"https://www.rfc-editor.org/rfc/rfc9989.html\" target=\"_blank\" rel=\"noopener\">RFC 9989</a> "
                 "DNS tree walk."
             )
         else:
@@ -1760,13 +1760,15 @@ def _build_spec_comparison(strict: Optional[Dict], legacy: Optional[Dict]) -> Op
     # Determine if legacy passes but strict fails
     legacy_passes = legacy.get("fail_count", 0) == 0
     strict_fails_count = strict.get("fail_count", 0)
-    see_the_future = legacy_passes and strict_fails_count > 0
+    # Named for what it means: the record only passes because the receiver is
+    # still on the obsolete RFC 7489.
+    legacy_only_pass = legacy_passes and strict_fails_count > 0
 
     return {
         "dmarcbis_only_count": len(dmarcbis_only_items),
         "both_count": len(both),
         "dmarcbis_only_items": dmarcbis_only_items,
-        "see_the_future": see_the_future,
+        "legacy_only_pass": legacy_only_pass,
         "legacy_pass_count": legacy.get("pass_count", 0),
         "legacy_fail_count": legacy.get("fail_count", 0),
         "legacy_warn_count": legacy.get("warn_count", 0),
@@ -2299,7 +2301,8 @@ def _build_tag_entry(tag: str, value: str, present: bool, tags: Dict, policy: st
                        f"Policy applies to {value}% of failing messages. "
                        "The pct tag is deprecated in DMARCbis. Only values of 0 and 100 were reliably "
                        "honored. DMARCbis replaces this with t=y/t=n for predictable testing. Current "
-                       "receivers still honor pct but DMARCbis receivers will ignore it. To migrate: "
+                       "Receivers that have not moved off RFC 7489 still honor pct, but RFC 9989 "
+                       "receivers ignore it. To migrate: "
                        "use t=y for testing or remove pct for full enforcement.",
                        "deprecated")
             e["warnings"].append({
@@ -2939,7 +2942,7 @@ def _build_comparison_intelligence(
     elif policy == "reject":
         statement = (
             "Stronger than 45% of the top 1000 in enforcement, "
-            "but among the 99.9% not yet DMARCbis-ready."
+            "but among the 99.9% not yet aligned with RFC 9989."
         )
         position_pct = 75
         position_label = "Ahead of ~45%"
@@ -2965,8 +2968,9 @@ def _build_comparison_intelligence(
         "position_label": position_label,
         "adoption_stats": adoption_stats,
         "adoption_tagline": (
-            "DMARCbis adoption is effectively zero. Early adopters gain a "
-            "security advantage and set the standard for their industry."
+            "Uptake of the RFC 9989 tags is still close to zero across the top 1000, "
+            "even though the RFC is published and obsoletes RFC 7489. Adopting them now "
+            "puts a domain ahead of its industry."
         ),
     }
 
@@ -2982,10 +2986,12 @@ def _build_why_dmarcbis(tags: Dict[str, str], policy: str, health_status: str, d
 
     # Section 1: What is DMARCbis (always shown)
     sections.append({
-        "title": "What is DMARCbis?",
+        "title": "What is RFC 9989 (DMARCbis)?",
         "content": (
-            "DMARCbis is the next version of the DMARC email authentication standard, developed by "
-            "the IETF DMARC Working Group to replace RFC 7489. It addresses real-world problems "
+            "RFC 9989 is the DMARC standard. Published in May 2026 on the IETF Standards Track, it "
+            "obsoletes RFC 7489 and RFC 9091, the documents that defined DMARC until then. It is "
+            "still widely called DMARCbis, the name it carried through the working group. It "
+            "addresses real-world problems "
             "discovered over a decade of DMARC deployment: inconsistent parsing across receivers, "
             "unreliable percentage-based rollout, no protection for non-existent subdomains, and "
             "dependence on the manually-maintained Public Suffix List."
@@ -3074,8 +3080,9 @@ def _build_why_dmarcbis(tags: Dict[str, str], policy: str, health_status: str, d
             {"tag": "Deprecated tags still in use", "pct": 30.6},
         ],
         "adoption_tagline": (
-            "DMARCbis adoption is effectively zero. Early adopters gain a "
-            "security advantage and set the standard for their industry."
+            "Uptake of the RFC 9989 tags is still close to zero across the top 1000, "
+            "even though the RFC is published and obsoletes RFC 7489. Adopting them now "
+            "puts a domain ahead of its industry."
         ),
     })
 
