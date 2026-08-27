@@ -385,10 +385,10 @@ DMARC_REPORT_SERVICES = {
 def _check_report_authorization(domain: str, raw_dmarc: Dict, tree_walk_result: Optional[Dict] = None) -> Optional[Dict]:
     """Check whether external DMARC report destinations are authorized.
 
-    RFC 7489 S7.1: When rua/ruf points to an external domain, that domain
-    must publish a TXT record at {audited}._report._dmarc.{dest} containing
-    'v=DMARC1' to authorize report delivery. Without this, reports are
-    silently dropped.
+    RFC 9990 S4 (Verifying External Destinations), previously RFC 7489 S7.1:
+    when rua/ruf points to an external domain, that domain must publish a TXT
+    record at {audited}._report._dmarc.{dest} containing 'v=DMARC1' to
+    authorize report delivery. Without this, reports are silently dropped.
     """
     resolver = _get_resolver()
     destinations = []

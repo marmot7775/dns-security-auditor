@@ -1479,7 +1479,7 @@ def _about_page(data, S):
         ),
         Spacer(1, 4),
         Paragraph(
-            '<font size="10" color="#2dd4bf">The first RFC 9989-aware DNS security audit tool</font>',
+            '<font size="10" color="#2dd4bf">DMARC audited against RFC 9989, 9990, and 9991</font>',
             ParagraphStyle("BR2", alignment=TA_CENTER, leading=14)
         ),
     ]

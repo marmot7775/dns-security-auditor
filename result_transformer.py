@@ -2217,6 +2217,11 @@ def _build_tag_entry(tag: str, value: str, present: bool, tags: Dict, policy: st
 
     # ── fo= ─────────────────────────────────────────────────
     if tag == "fo":
+        note = (
+            "The fo tag is defined in RFC 9989 Section 4.7, but the reports it "
+            "governs are specified in RFC 9991. Most large receivers, Google and "
+            "Microsoft among them, no longer send failure reports at all."
+        )
         if present:
             explanation = {
                 "0": (
@@ -2228,11 +2233,11 @@ def _build_tag_entry(tag: str, value: str, present: bool, tags: Dict, policy: st
                 "s": "Reports on SPF failure regardless of alignment.",
             }.get(value, f"Failure reporting option: {value}.")
             return _entry(tag, value, False, False, "Failure Reporting Options",
-                          explanation, "current")
+                          explanation, "current", dmarcbis_note=note)
         else:
             return _entry(tag, "0", True, True, "Failure Reporting Options",
                           "Defaults to fo=0. Reports only on complete failure of both mechanisms.",
-                          "current")
+                          "current", dmarcbis_note=note)
 
     # ── rua= ────────────────────────────────────────────────
     if tag == "rua":
