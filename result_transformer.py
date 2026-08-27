@@ -4785,7 +4785,9 @@ def transform_tls_rpt(raw: Dict, domain: str, has_mx: bool = True) -> Dict:
 
 def _build_tls_rpt_deep(raw: Dict) -> Optional[Dict]:
     """TLS-RPT deep analysis: destinations, cross-protocol relationships."""
-    destinations = raw.get("destinations", [])
+    # The check emits "report_destinations", which transform_tls_rpt four
+    # lines above already reads correctly.
+    destinations = raw.get("report_destinations", [])
 
     dest_types = []
     for d in destinations:
