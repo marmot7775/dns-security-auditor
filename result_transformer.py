@@ -1237,7 +1237,10 @@ def transform_dmarc(raw: Dict, tree_walk: Optional[Dict] = None, is_no_mail: boo
         status = "fail"
         pill_label = "Missing"
     elif policy == "reject":
+        pct = raw.get("pct", 100)
         verdict = "p=reject (authentication failures are rejected)"
+        if pct is not None and pct < 100:
+            verdict += f" (pct={pct})"
         # p=reject is always a pass regardless of what the audit engine returned
         # (the engine may flag "warning" for missing rua, but the policy itself is correct)
         status = "pass"
@@ -1780,10 +1783,18 @@ def _build_attack_surface(raw: Dict, record: Optional[str], is_no_mail: bool = F
     rua = tags.get("rua")
     domain = raw.get("domain", "yourdomain.com")
 
+    pct_raw = tags.get("pct")
+    try:
+        pct = int(pct_raw) if pct_raw not in (None, "") else 100
+    except ValueError:
+        pct = 100
+
     vectors = []
 
     # ── Vector 1: Direct Domain Spoofing ────────────────────
-    if policy == "reject":
+    # pct= scopes what fraction of failing mail the policy is even applied
+    # to (RFC 7489 §6.3), so a policy is only fully enforcing at pct=100.
+    if policy == "reject" and pct >= 100:
         v1 = {
             "name": "Direct Domain Spoofing",
             "status": "protected",
@@ -1791,7 +1802,15 @@ def _build_attack_surface(raw: Dict, record: Optional[str], is_no_mail: bool = F
             "summary": "Mail failing authentication is blocked.",
             "detail": f"An attacker attempting to send as user@{domain} would have their message rejected by receiving mail servers.",
         }
-    elif policy == "quarantine":
+    elif policy == "reject" and pct > 0:
+        v1 = {
+            "name": "Direct Domain Spoofing",
+            "status": "partial",
+            "color": "amber",
+            "summary": f"Only {pct}% of failing mail is rejected (pct={pct}).",
+            "detail": f"pct={pct} means receivers apply p=reject to only {pct}% of messages that fail authentication; the rest are delivered as if p=none. An attacker sending as user@{domain} has roughly a {100 - pct}% chance their spoofed message is delivered normally.",
+        }
+    elif policy == "quarantine" and pct >= 100:
         v1 = {
             "name": "Direct Domain Spoofing",
             "status": "partial",
@@ -1799,12 +1818,23 @@ def _build_attack_surface(raw: Dict, record: Optional[str], is_no_mail: bool = F
             "summary": "Spoofed mail goes to spam but still reaches recipients.",
             "detail": "Spoofed messages land in spam/junk folders. Recipients may still see and interact with them.",
         }
+    elif policy == "quarantine" and pct > 0:
+        v1 = {
+            "name": "Direct Domain Spoofing",
+            "status": "partial",
+            "color": "amber",
+            "summary": f"Only {pct}% of failing mail is quarantined (pct={pct}).",
+            "detail": f"pct={pct} means receivers apply p=quarantine to only {pct}% of messages that fail authentication; the rest are delivered normally.",
+        }
     else:
+        exposure_note = ""
+        if policy in ("reject", "quarantine") and pct <= 0:
+            exposure_note = f" pct=0 means the p={policy} policy is applied to none of the failing messages."
         v1 = {
             "name": "Direct Domain Spoofing",
             "status": "exposed",
             "color": "red",
-            "summary": f"Spoofed mail is delivered normally (p={policy or 'none'}).",
+            "summary": f"Spoofed mail is delivered normally (p={policy or 'none'}).{exposure_note}",
             "detail": f"An attacker could send an email appearing to be from ceo@{domain} to your employees requesting a wire transfer. Without enforcement, this email is delivered to their inbox with no warning.",
         }
     vectors.append(v1)
