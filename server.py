@@ -13,6 +13,7 @@ Usage:
 """
 
 import asyncio
+import functools
 import json
 import logging
 import logging.handlers
@@ -21,6 +22,8 @@ import re
 import threading
 import time
 import uuid
+
+import anyio.to_thread
 from collections import defaultdict
 from datetime import datetime, timezone
 from pathlib import Path
@@ -430,27 +433,48 @@ async def audit_domain(
         cached_with_rid = {**cached, "request_id": request_id, "cached": True}
         return JSONResponse(content=cached_with_rid)
 
-    # Pre-flight DNS check
-    preflight_err = _preflight_dns_check(domain)
+    # Pre-flight DNS check (offloaded -- this does blocking socket I/O)
+    preflight_err = await anyio.to_thread.run_sync(_preflight_dns_check, domain)
     if preflight_err:
         log.info("Preflight failed for %s: %s", domain, preflight_err.get("error"))
         return JSONResponse(content=preflight_err)
 
-    # Run audit
+    # Reserve a concurrent-audit slot atomically (DoS protection).
+    # Shared with /api/audit/stream: both endpoints invoke the same
+    # expensive run_full_audit(), so they draw from one global budget
+    # rather than /api/audit being unbounded.
+    global _active_audits
+    with _active_audits_lock:
+        if _active_audits >= _MAX_CONCURRENT_AUDITS:
+            return JSONResponse(
+                status_code=503,
+                content={"detail": "Server is busy. Please try again in a moment."},
+                headers={"Retry-After": "5"},
+            )
+        _active_audits += 1
+
+    # Run audit (offloaded -- this is fully synchronous and would otherwise
+    # block the event loop, stalling every other request on this worker).
     start = time.time()
     try:
-        result = run_full_audit(domain, dkim_selector=selector, scope=scope)
-    except Exception as e:
-        log.error("Audit failed for %s: %s", domain, str(e)[:200], exc_info=True)
-        result = {
-            "domain": domain,
-            "timestamp": datetime.now(timezone.utc).isoformat(),
-            "checks": [],
-            "priority_fixes": [],
-            "vendors": [],
-            "error": "server_error",
-            "error_message": "Audit could not complete. Please try again.",
-        }
+        try:
+            result = await anyio.to_thread.run_sync(
+                functools.partial(run_full_audit, domain, dkim_selector=selector, scope=scope)
+            )
+        except Exception as e:
+            log.error("Audit failed for %s: %s", domain, str(e)[:200], exc_info=True)
+            result = {
+                "domain": domain,
+                "timestamp": datetime.now(timezone.utc).isoformat(),
+                "checks": [],
+                "priority_fixes": [],
+                "vendors": [],
+                "error": "server_error",
+                "error_message": "Audit could not complete. Please try again.",
+            }
+    finally:
+        with _active_audits_lock:
+            _active_audits -= 1
 
     elapsed = round(time.time() - start, 2)
     log.info("Audit complete: %s -- %.2fs (rid=%s)", domain, elapsed, request_id)
@@ -682,7 +706,9 @@ async def audit_pdf(
     else:
         start = time.time()
         try:
-            data = run_full_audit(domain, dkim_selector=selector, scope=scope)
+            data = await anyio.to_thread.run_sync(
+                functools.partial(run_full_audit, domain, dkim_selector=selector, scope=scope)
+            )
         except Exception as e:
             log.error("PDF audit failed for %s: %s", domain, str(e)[:200], exc_info=True)
             raise HTTPException(status_code=500, detail="Audit failed: cannot generate PDF")
@@ -698,9 +724,9 @@ async def audit_pdf(
             media_type="text/plain",
         )
 
-    # Generate PDF
+    # Generate PDF (offloaded -- rendering is CPU-bound synchronous work)
     try:
-        pdf_bytes = generate_pdf(data)
+        pdf_bytes = await anyio.to_thread.run_sync(generate_pdf, data)
     except Exception as e:
         log.error("PDF generation failed for %s: %s", domain, str(e)[:200], exc_info=True)
         raise HTTPException(status_code=500, detail="PDF generation failed")
