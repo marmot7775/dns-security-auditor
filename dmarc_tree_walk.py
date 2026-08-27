@@ -322,9 +322,7 @@ def dmarc_tree_walk(domain: str) -> Dict[str, Any]:
     current_labels = list(start_labels)
     collected_records: List[Dict[str, Any]] = []
     stop_record: Optional[Dict[str, Any]] = None
-    stop_at_first_walk = False
     walk_query_count = 0
-    is_first_walk_query = True
 
     # §4.10 step 7: "Repeat ... until the process stops or there are no
     # more labels remaining." Walk down to 1 label inclusive (TLD); the
@@ -367,13 +365,9 @@ def dmarc_tree_walk(domain: str) -> Dict[str, Any]:
             }
 
             # §4.10 steps 2 and 6: stop on psd=n or psd=y at any walk
-            # query, including the first one. The "psd=y at starting
-            # walk target" case is handled by §4.10.2 rule 2 (which
-            # excludes that domain), causing rule 3 fewest-labels with
-            # one record to apply -- that domain becomes the Org Domain.
+            # query, including the first one.
             if psd == "n" or psd == "y":
                 stop_record = record_info
-                stop_at_first_walk = is_first_walk_query
                 step_entry["stop_reason"] = f"psd={psd}"
                 break
 
@@ -385,7 +379,6 @@ def dmarc_tree_walk(domain: str) -> Dict[str, Any]:
 
         # §4.10 step 7: drop the left-most label and continue.
         current_labels = current_labels[1:]
-        is_first_walk_query = False
 
     # Annotate the step where the §4.10-5 query budget was exhausted, if
     # the walk ran out of queries before stopping naturally.
@@ -396,9 +389,26 @@ def dmarc_tree_walk(domain: str) -> Dict[str, Any]:
     # ------------------------------------------------------------------
     # §4.10.2 Org Domain selection (after the walk finishes):
     #   Rule 1: psd=n  -> that record's domain is the Org Domain.
-    #   Rule 2: psd=y at a domain other than the starting walk target
-    #           -> Org Domain is the domain one label below it.
+    #   Rule 2: psd=y at a domain other than the one where the Tree
+    #           Walk started -> Org Domain is the domain one label
+    #           below it.
     #   Rule 3: otherwise, the record with the fewest labels.
+    #
+    # "The domain where the Tree Walk started" (rule 2's exclusion) is
+    # the Author Domain itself, per RFC 9989 §4.10.2's own worked
+    # example: "if in the course of a Tree Walk a DMARC Policy Record
+    # is queried for at first '_dmarc.mail.example.com' and then
+    # '_dmarc.example.com', and a valid DMARC Policy Record containing
+    # the 'psd' tag set to 'y' is found at '_dmarc.example.com', then
+    # 'mail.example.com' is the domain one label below 'example.com'
+    # ... and is thus the Organizational Domain." The excluded domain
+    # is the original Author Domain, not whichever domain the technical
+    # walk phase happens to query first (which per §4.10.1 paragraph 5
+    # is already the immediate parent for <8-label Author Domains).
+    # This whole branch only runs when the Author Domain had no record
+    # of its own, so it is never a candidate here -- rule 2's exclusion
+    # never applies in this branch. _walk_after_author_hit's psd=y
+    # handling reads the exclusion the same way.
     # ------------------------------------------------------------------
     policy_record = None
     org_domain = None
@@ -411,18 +421,9 @@ def dmarc_tree_walk(domain: str) -> Dict[str, Any]:
             org_domain = stop_record["domain"]
             policy_record = stop_record
             psd_flag = "n"
-        elif psd == "y" and stop_at_first_walk:
-            # §4.10.2 rule 2 explicitly excludes the starting walk
-            # target from the "one level below" treatment. With a
-            # single record collected (the stop_record itself), rule 3
-            # selects fewest labels -> the starting walk domain IS
-            # the Organizational Domain.
-            org_domain = stop_record["domain"]
-            policy_record = stop_record
-            psd_flag = "y"
         elif psd == "y":
-            # §4.10.2 rule 2: psd=y at a non-starting target -> Org
-            # Domain is the name one label below the PSD.
+            # §4.10.2 rule 2: psd=y (never the Author Domain in this
+            # branch) -> Org Domain is the name one label below the PSD.
             psd_labels = stop_record["labels"]
             org_candidate = None
             for rec in collected_records:

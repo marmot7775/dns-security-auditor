@@ -54,10 +54,17 @@ def test_eight_label_shortening_starts_at_seven_labels_and_walks_to_tld():
     )
 
 
-def test_psd_y_at_first_walk_query_stops_and_sets_org_domain_to_that_target():
-    """§4.10 step 2: psd=y at first walk query stops the walk.
-    §4.10.2 rule 2 excludes the starting target; rule 3 with a single
-    collected record means the starting walk domain IS the Org Domain.
+def test_psd_y_at_first_walk_query_yields_registrant_as_org_domain():
+    """§4.10 step 2: psd=y at the first walk query stops the walk.
+
+    §4.10.2 rule 2's exclusion is keyed to the Author Domain (the domain
+    Policy Discovery started for), not the first *walk* query target
+    (which per §4.10.1 paragraph 5 is already the immediate parent for
+    <8-label Author Domains). The Author Domain here (alpha.example.com)
+    has no record and is never a walk candidate, so the psd=y record at
+    example.com is "other than" the excluded domain: rule 2 applies and
+    the Org Domain is the name one label below it, i.e. the Author
+    Domain itself. The policy still comes from the psd=y record.
     """
     domain = "alpha.example.com"
     records = {
@@ -70,7 +77,7 @@ def test_psd_y_at_first_walk_query_stops_and_sets_org_domain_to_that_target():
         result = tw.dmarc_tree_walk(domain)
 
     assert result["psd_flag"] == "y"
-    assert result["org_domain"] == "example.com"
+    assert result["org_domain"] == "alpha.example.com"
     assert result["policy_source"] == "example.com"
     walk_steps = [s for s in result["steps"] if s.get("level") == "tree_walk"]
     assert any(s.get("stop_reason") == "psd=y" for s in walk_steps), (
