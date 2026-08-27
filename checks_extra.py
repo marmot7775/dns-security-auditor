@@ -731,7 +731,7 @@ def _validate_bimi_record(record: str) -> Tuple[Dict[str, str], List[Dict]]:
         if parsed.scheme.lower() != "https":
             issues.append(_make_issue("error", "Logo URL is not HTTPS",
                 "Must use HTTPS.", "", "Change to HTTPS."))
-        if not logo_url.lower().endswith(".svg"):
+        if not parsed.path.lower().endswith(".svg"):
             issues.append(_make_issue("warning", "Logo URL does not end in .svg",
                 "BIMI logos must be SVG Tiny PS format.", "", "Use an SVG file with baseProfile='tiny-ps'."))
 
