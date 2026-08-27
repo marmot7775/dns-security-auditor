@@ -881,8 +881,9 @@ async def health():
         dns.resolver.resolve("example.com", "A", lifetime=2)
         return {"status": "ok", "dns_resolution": "working"}
     except Exception as e:
+        log.error("Health check DNS resolution failed: %s", str(e)[:200])
         return JSONResponse(
-            content={"status": "error", "detail": str(e)},
+            content={"status": "error"},
             status_code=500,
         )
 
