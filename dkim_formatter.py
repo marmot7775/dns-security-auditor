@@ -11,6 +11,8 @@ Shows:
 from typing import List, Dict
 import re
 
+from dkim_tag_analyzer import _decode_rsa_key_bits
+
 def analyze_dkim_key_strength(dkim_record: str) -> Dict:
     """
     Analyze DKIM key strength and return security assessment.
@@ -44,21 +46,20 @@ def analyze_dkim_key_strength(dkim_record: str) -> Dict:
     # RSA (default key type per RFC 6376)
     result['key_type'] = 'RSA'
 
-    # Estimate key size from base64 length
-    # RSA 1024-bit ~ 172 base64 chars
-    # RSA 2048-bit ~ 344 base64 chars
-    # RSA 4096-bit ~ 684 base64 chars
-    key_len = len(key_data)
+    # Decode the DER SubjectPublicKeyInfo to get the real modulus bit
+    # length. Guessing from base64 string length is unreliable: a real
+    # 1024-bit key's SPKI is 216 base64 chars, not ~172.
+    key_bits = _decode_rsa_key_bits(key_data)
+    if key_bits is None:
+        result['status'] = 'invalid'
+        result['warning'] = 'Could not decode RSA public key'
+        return result
 
-    if key_len < 200:
-        result['key_bits'] = 1024
+    result['key_bits'] = key_bits
+    if key_bits < 2048:
         result['status'] = 'weak'
-        result['warning'] = '1024-bit RSA key, upgrade to 2048-bit'
-    elif key_len < 500:
-        result['key_bits'] = 2048
-        result['status'] = 'strong'
+        result['warning'] = f'{key_bits}-bit RSA key, upgrade to 2048-bit'
     else:
-        result['key_bits'] = 4096
         result['status'] = 'strong'
 
     return result

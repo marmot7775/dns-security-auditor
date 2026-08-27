@@ -14,5 +14,5 @@ fpdf2==2.8.7
 defusedxml==0.7.1
 idna>=3.4
 
-# Optional: DNSSEC RRSIG signature verification
-# cryptography>=42.0.0
+# DNSSEC RRSIG signature verification, and RSA key generation in tests
+cryptography>=42.0.0
