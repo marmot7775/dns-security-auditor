@@ -4654,8 +4654,10 @@ def transform_mta_sts(raw: Dict, domain: str, has_mx: bool = True) -> Dict:
 def _build_mta_sts_deep(raw: Dict, domain: str) -> Optional[Dict]:
     """MTA-STS deep analysis: mode breakdown, max age, setup guidance."""
     mode = raw.get("policy_mode")
-    max_age = raw.get("max_age")
-    policy_file = raw.get("policy_file_content")
+    # check_mta_sts publishes the parsed policy fields under the policy_
+    # prefix (checks_extra.py). There is no bare "max_age" key, and nothing
+    # anywhere produces "policy_file_content".
+    max_age = raw.get("policy_max_age")
 
     mode_explanations = {
         "testing": (
