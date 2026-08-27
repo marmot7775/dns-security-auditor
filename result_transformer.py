@@ -376,10 +376,16 @@ def build_security_roadmap(checks: List[Dict], is_no_mail: bool = False) -> Dict
 
     # ── Low ─────────────────────────────────────────────────
     bimi = check_map.get("BIMI", {})
-    if bimi.get("status") != "pass":
+    if bimi.get("records_found", 0) == 0:
+        if bimi.get("status") != "pass":  # "pass" here means N/A (no-mail domain)
+            items.append({"priority": "low", "protocol": "BIMI",
+                          "action": "Consider adding BIMI for brand visibility",
+                          "impact": "BIMI displays your logo in supported email clients."})
+    elif bimi.get("status") != "pass":
+        action = bimi.get("fix") or "Review your BIMI configuration"
         items.append({"priority": "low", "protocol": "BIMI",
-                      "action": "Consider adding BIMI for brand visibility",
-                      "impact": "BIMI displays your logo in supported email clients."})
+                      "action": action,
+                      "impact": "An issue with your existing BIMI setup may prevent your logo from displaying."})
 
     # Count by tier
     tiers = {"critical": 0, "high": 0, "medium": 0, "low": 0}
@@ -4803,6 +4809,7 @@ def transform_bimi(raw: Dict, domain: str, has_mx: bool = True) -> Dict:
                 "pill_label": "N/A",
                 "verdict": "No mail domain",
                 "record": None,
+                "records_found": 0,
                 "explanation": (
                     "BIMI displays a brand logo next to emails in supporting mail clients. "
                     "This domain has no MX records, so it does not handle email and "
@@ -4824,6 +4831,7 @@ def transform_bimi(raw: Dict, domain: str, has_mx: bool = True) -> Dict:
             "pill_label": "Not configured",
             "verdict": "No BIMI record found",
             "record": None,
+            "records_found": 0,
             "explanation": (
                 "BIMI (Brand Indicators for Message Identification) is not a security protocol. "
                 "It is a brand recognition feature that displays your logo next to emails in "
@@ -4895,6 +4903,7 @@ def transform_bimi(raw: Dict, domain: str, has_mx: bool = True) -> Dict:
         "status": status,
         "verdict": verdict,
         "record": record,
+        "records_found": records_found,
         "explanation": explanation,
         "details": details,
         "fix": fix,
