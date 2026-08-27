@@ -3674,6 +3674,18 @@ def _raw_check_ct(domain: str, raw_results: Dict[str, Any]) -> Dict[str, Any]:
     return result
 
 
+def _parse_ct_timestamp(value: Optional[str]) -> Optional[datetime]:
+    """Parse a crt.sh not_before/not_after string into an aware datetime."""
+    if not value:
+        return None
+    try:
+        return datetime.fromisoformat(
+            value.replace("T", " ").split(".")[0]
+        ).replace(tzinfo=timezone.utc)
+    except (ValueError, AttributeError):
+        return None
+
+
 def _raw_check_ct_uncached(domain: str, raw_results: Dict[str, Any]) -> Dict[str, Any]:
     """Query crt.sh for Certificate Transparency logs and analyze findings.
 
@@ -3795,14 +3807,14 @@ def _raw_check_ct_uncached(domain: str, raw_results: Dict[str, Any]) -> Dict[str
         # Parse dates
         not_after_str = cert.get("not_after")
         not_before_str = cert.get("not_before")
-        not_after = None
-        if not_after_str:
-            try:
-                not_after = datetime.fromisoformat(not_after_str.replace("T", " ").split(".")[0]).replace(tzinfo=timezone.utc)
-            except (ValueError, AttributeError):
-                pass
+        not_after = _parse_ct_timestamp(not_after_str)
+        not_before = _parse_ct_timestamp(not_before_str)
 
-        is_active = not_after and not_after > now
+        # A certificate is active only inside its validity window. Checking
+        # not_after alone counted not-yet-valid certificates as active.
+        is_active = bool(
+            not_after and not_after > now and not (not_before and not_before > now)
+        )
         if is_active:
             active_count += 1
 
@@ -3825,8 +3837,10 @@ def _raw_check_ct_uncached(domain: str, raw_results: Dict[str, Any]) -> Dict[str
                     "days_left": days_left,
                 })
 
-        # Recently expired (within 90 days)
-        if not_after and not is_active:
+        # Recently expired (within 90 days). "not active" now also covers
+        # not-yet-valid certs, whose not_after is in the future, so test the
+        # expiry directly rather than inferring it from is_active.
+        if not_after and not_after <= now:
             days_expired = (now - not_after).days
             if days_expired <= 90:
                 expired_recent.append({
