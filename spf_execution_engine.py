@@ -569,7 +569,7 @@ def build_dmarc_roadmap(raw_dmarc: Dict, raw_spf: Dict, raw_dkim: Dict,
     })
 
     # Step 5: p=quarantine with t=y test mode
-    _has_test_mode = raw_dmarc.get("t", "").lower() == "y" if raw_dmarc else False
+    _has_test_mode = (raw_dmarc.get("t") or "").lower() == "y" if raw_dmarc else False
     step5_complete = policy in ("quarantine", "reject") or _has_test_mode
     if current_stage in ("quarantine", "partial_reject", "full_reject"):
         step5_complete = True
