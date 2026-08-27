@@ -4316,6 +4316,7 @@ def run_full_audit(domain: str, dkim_selector: Optional[str] = None,
     # Phase 2: Parallel checks (all inputs from Phase 1 are ready)
     # ================================================================
     _bimi_dmarc = raw_results.get("dmarc") or {}
+    _bimi_dmarc_found = bool(_bimi_dmarc.get("record")) or bool(_bimi_dmarc.get("inherited_policy"))
     _bimi_dmarc_enforcing = (
         (_bimi_dmarc.get("policy") or "").lower() in ("quarantine", "reject")
         or (_bimi_dmarc.get("inherited_policy") or "").lower() in ("quarantine", "reject")
@@ -4338,8 +4339,10 @@ def run_full_audit(domain: str, dkim_selector: Optional[str] = None,
 
     if _should_include("bimi", scope_set):
         _bimi_enforcing = _bimi_dmarc_enforcing  # capture for closure
+        _bimi_found = _bimi_dmarc_found  # capture for closure
         _parallel_checks.append(("bimi",
-            lambda: check_bimi(domain, dmarc_enforcing_override=_bimi_enforcing),
+            lambda: check_bimi(domain, dmarc_enforcing_override=_bimi_enforcing,
+                                dmarc_found_override=_bimi_found),
             lambda raw: transform_bimi(raw, domain, has_mx=has_mx),
             "BIMI"))
 

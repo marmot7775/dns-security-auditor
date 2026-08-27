@@ -749,7 +749,23 @@ def _validate_bimi_record(record: str) -> Tuple[Dict[str, str], List[Dict]]:
     return tags, issues
 
 
-def check_bimi(domain: str, dmarc_enforcing_override: bool = None) -> Dict[str, Any]:
+def _parse_dmarc_tag(record: str, tag: str) -> Optional[str]:
+    """Parse a single tag's value out of a DMARC record.
+
+    Unlike a substring search (e.g. "p=reject" in record), this will not
+    false-positive on sp=reject when checking the p= tag.
+    """
+    for part in record.split(";"):
+        part = part.strip()
+        if "=" not in part:
+            continue
+        key, _, value = part.partition("=")
+        if key.strip().lower() == tag:
+            return value.strip().lower()
+    return None
+
+
+def check_bimi(domain: str, dmarc_enforcing_override: bool = None, dmarc_found_override: bool = None) -> Dict[str, Any]:
     result = {
         "check": "BIMI", "domain": domain,
         "record": None, "records_found": 0, "tags": {},
@@ -793,10 +809,14 @@ def check_bimi(domain: str, dmarc_enforcing_override: bool = None) -> Dict[str, 
     result["vmc_url"] = tags.get("a") or None
 
     # DMARC prerequisite check
-    # Use override from audit orchestrator (accounts for inherited policies)
-    if dmarc_enforcing_override is not None:
-        dmarc_found = True
-        dmarc_enforcing = dmarc_enforcing_override
+    # Use overrides from audit orchestrator (accounts for inherited policies).
+    # DMARC presence and enforcement are passed separately: the orchestrator
+    # always supplies a bool for enforcement, so a None-check on the
+    # enforcement value alone can never distinguish "no DMARC record" from
+    # "DMARC found but not enforcing".
+    if dmarc_found_override is not None:
+        dmarc_found = dmarc_found_override
+        dmarc_enforcing = bool(dmarc_enforcing_override)
     else:
         dmarc_records = _lookup_txt(f"_dmarc.{domain}")
         dmarc_found = False
@@ -804,9 +824,7 @@ def check_bimi(domain: str, dmarc_enforcing_override: bool = None) -> Dict[str, 
         for rec in dmarc_records:
             if rec.strip().lower().startswith("v=dmarc1"):
                 dmarc_found = True
-                rec_lower = rec.lower()
-                if "p=quarantine" in rec_lower or "p=reject" in rec_lower:
-                    dmarc_enforcing = True
+                dmarc_enforcing = _parse_dmarc_tag(rec, "p") in ("quarantine", "reject")
                 break
 
     if not dmarc_found:
