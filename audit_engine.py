@@ -296,7 +296,7 @@ def _get_dnssec_resolver(timeout: float = 8.0):
     return resolver
 
 
-def _lookup_txt(name: str) -> List[str]:
+def _lookup_txt(name: str, raise_on_failure: bool = False) -> List[str]:
     """Look up TXT records, correctly concatenating multi-string records.
 
     Per RFC 7208 Section 3.3, multi-string TXT records MUST be
@@ -305,6 +305,13 @@ def _lookup_txt(name: str) -> List[str]:
     mid-IP-address).  SPF-specific code downstream uses
     repair_spf_missing_spaces() to handle domains (like GitHub) that
     store each mechanism as a separate string without embedded spaces.
+
+    By default, every DNS outcome collapses to an empty list, which is
+    correct for callers that only care whether a record exists. Pass
+    raise_on_failure=True when the caller must distinguish "no record
+    published" (NXDOMAIN/NoAnswer, still returned as []) from "the
+    lookup itself failed" (SERVFAIL, REFUSED, timeout), which is
+    re-raised instead of being silently treated as absence.
     """
     try:
         resolver = _get_resolver()
@@ -327,12 +334,18 @@ def _lookup_txt(name: str) -> List[str]:
         return []
     except dns.resolver.NoNameservers:
         log.debug("SERVFAIL/REFUSED for TXT lookup: %s", name)
+        if raise_on_failure:
+            raise
         return []
     except dns.exception.Timeout:
         log.debug("Timeout for TXT lookup: %s", name)
+        if raise_on_failure:
+            raise
         return []
     except dns.exception.DNSException as e:
         log.debug("DNS error for TXT lookup %s: %s", name, e)
+        if raise_on_failure:
+            raise
         return []
 
 
@@ -436,16 +449,21 @@ def _check_report_authorization(domain: str, raw_dmarc: Dict, tree_walk_result: 
                 auth_fqdn = f"{domain}._report._dmarc.{dest_domain}"
                 dest_info["authorization_record"] = auth_fqdn
                 try:
-                    txt_records = _lookup_txt(auth_fqdn)
+                    txt_records = _lookup_txt(auth_fqdn, raise_on_failure=True)
                     authorized = any(
                         r.strip().startswith("v=DMARC1")
                         for r in txt_records
                     )
                     dest_info["authorized"] = authorized
                 except dns.exception.DNSException:
-                    dest_info["authorized"] = False
+                    # The lookup itself failed (SERVFAIL, REFUSED, timeout) --
+                    # this is not the same as the destination having no
+                    # authorization record published. Report indeterminate
+                    # rather than telling the user their reports are dropped.
+                    dest_info["authorized"] = None
+                    dest_info["authorization_check_failed"] = True
 
-                if not dest_info["authorized"]:
+                if dest_info["authorized"] is False:
                     issues.append({
                         "severity": "error",
                         "issue": f"External report destination not authorized: {email}",
@@ -457,6 +475,20 @@ def _check_report_authorization(domain: str, raw_dmarc: Dict, tree_walk_result: 
                         "fix": (
                             f"Ask the administrator of {dest_domain} to add a TXT record at "
                             f"{auth_fqdn} with value: v=DMARC1"
+                        ),
+                    })
+                elif dest_info.get("authorization_check_failed"):
+                    issues.append({
+                        "severity": "warning",
+                        "issue": f"Could not verify report authorization for: {email}",
+                        "plain_english": (
+                            f"The DNS lookup for {auth_fqdn} failed (timeout or server "
+                            f"error), so it's undetermined whether {dest_domain} has "
+                            f"authorized {domain} to send it DMARC reports."
+                        ),
+                        "fix": (
+                            f"Re-run the audit later, or manually verify that {auth_fqdn} "
+                            f"contains 'v=DMARC1'."
                         ),
                     })
             else:
