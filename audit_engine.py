@@ -4009,7 +4009,7 @@ def _raw_check_blacklist(domain: str, raw_results: Dict[str, Any]) -> Dict[str, 
             return None
 
     # Check domain against domain-based lists
-    for list_name, list_host, tier, delist_url in DOMAIN_LISTS:
+    for list_name, list_host, _tier, _delist_url in DOMAIN_LISTS:
         query = f"{domain}.{list_host}"
         return_code = _dnsbl_lookup(query)
         listed = return_code is not None
@@ -4034,42 +4034,45 @@ def _raw_check_blacklist(domain: str, raw_results: Dict[str, Any]) -> Dict[str, 
             "return_code": return_code, "meaning": meaning,
         })
 
-    # Count total listings
-    total_listings = 0
-    tier1_listings = []
-    tier2_listings = []
-
+    # Count total listings, keeping each list's tier and delisting URL
+    listings = []
     for dr in result["domain_results"]:
-        if dr.get("listed"):
-            total_listings += 1
-            for list_name, _, tier, delist_url in DOMAIN_LISTS:
-                if list_name == dr["list"]:
-                    if tier == 1:
-                        tier1_listings.append(f"{domain} on {dr['list']}")
-                    else:
-                        tier2_listings.append(f"{domain} on {dr['list']}")
-                    break
+        if not dr.get("listed"):
+            continue
+        for list_name, _, tier, delist_url in DOMAIN_LISTS:
+            if list_name == dr["list"]:
+                listings.append({
+                    "text": f"{domain} on {dr['list']}",
+                    "tier": tier,
+                    "delist_url": delist_url,
+                })
+                break
 
-    result["total_listings"] = total_listings
+    result["total_listings"] = len(listings)
 
-    # Set status and issues
-    if tier1_listings:
-        result["status"] = "error"
-        for listing in tier1_listings:
-            _add_issue(
-                "error",
-                f"Listed: {listing}",
-                f"{listing}. This is a major blocklist that can cause significant email deliverability issues.",
-            )
-    if tier2_listings:
-        if result["status"] == "ok":
-            result["status"] = "warning"
-        for listing in tier2_listings:
-            _add_issue(
-                "warning",
-                f"Listed: {listing}",
-                f"{listing}. This is a secondary blocklist with less impact on deliverability.",
-            )
+    # Set status and issues. Severity follows the list's tier, so adding a
+    # tier-2 entry to DOMAIN_LISTS needs no new branch here.
+    for listing in sorted(listings, key=lambda x: x["tier"]):
+        if listing["tier"] == 1:
+            result["status"] = "error"
+            severity = "error"
+            impact = "This is a major blocklist that can cause significant email deliverability issues."
+        else:
+            if result["status"] == "ok":
+                result["status"] = "warning"
+            severity = "warning"
+            impact = "This is a secondary blocklist with less impact on deliverability."
+
+        fix = None
+        if listing["delist_url"]:
+            fix = f"Request delisting at {listing['delist_url']}"
+
+        _add_issue(
+            severity,
+            f"Listed: {listing['text']}",
+            f"{listing['text']}. {impact}",
+            fix,
+        )
 
     return result
 
