@@ -453,6 +453,7 @@ def build_dmarc_roadmap(raw_dmarc: Dict, raw_spf: Dict, raw_dkim: Dict,
         and tree_walk.get("is_subdomain")
     )
 
+    inherited_policy = ""
     if inherited:
         inherited_policy = (tree_walk.get("effective_policy") or "").lower()
         current_stage = "inherited"
@@ -475,7 +476,10 @@ def build_dmarc_roadmap(raw_dmarc: Dict, raw_spf: Dict, raw_dkim: Dict,
 
     stage_labels = {
         "none": "No DMARC",
-        "inherited": "Inherited policy",
+        "inherited": (
+            f"Inherited policy (p={inherited_policy})" if inherited_policy
+            else "Inherited policy"
+        ),
         "monitor": "Monitoring (p=none)",
         "partial_quarantine": f"Quarantine (pct={pct}%)",
         "quarantine": "Quarantine (p=quarantine)",
