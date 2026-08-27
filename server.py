@@ -576,7 +576,12 @@ async def audit_stream(
         progress_q.put(msg)
 
     def _run_audit():
-        global _active_audits
+        # Note: the concurrency slot reserved above is released in
+        # _event_stream's finally, not here. This thread can keep running
+        # after the client disconnects (e.g. stuck in one slow blocking DNS
+        # call with no progress_callback checkpoint in between), so tying
+        # the release to this thread's completion would hold the slot open
+        # long after the stream itself has closed.
         try:
             result = run_full_audit(domain, dkim_selector=selector, scope=scope,
                                     progress_callback=_progress_callback)
@@ -596,15 +601,13 @@ async def audit_stream(
                 "error_message": "Audit could not complete. Please try again.",
             }
             progress_q.put({"_done": True, "_result": error_result})
-        finally:
-            with _active_audits_lock:
-                _active_audits -= 1
 
     sse_start_time = time.time()
     audit_thread = threading.Thread(target=_run_audit, daemon=True)
     audit_thread.start()
 
     async def _event_stream():
+        global _active_audits
         loop = asyncio.get_running_loop()
         try:
             while True:
@@ -651,6 +654,11 @@ async def audit_stream(
                     yield f"data: {json.dumps(msg)}\n\n"
         finally:
             cancel_event.set()  # Ensure thread stops if generator exits for any reason
+            # Release the concurrency slot here, not when the background
+            # thread finishes -- the stream ending (disconnect, completion,
+            # or timeout) is what should free capacity for new clients.
+            with _active_audits_lock:
+                _active_audits -= 1
 
     return StreamingResponse(
         _event_stream(),
