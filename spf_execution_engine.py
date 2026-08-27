@@ -66,14 +66,6 @@ def _walk_tree(node: Dict, flat_steps: List[Dict], running_total: int,
             child_node = children[child_idx] if child_idx < len(children) else None
             child_idx += 1
 
-            # Count child lookups
-            child_lookups = child_node["total"] - child_node.get("lookups_here", 0) if child_node else 0
-            child_local = child_node.get("lookups_here", 0) if child_node else 0
-            subtree_cost = 1 + (child_node["total"] if child_node else 0) - 1  # -1 because the include itself is already counted
-            # Actually: include costs 1 lookup + child's total
-            total_cost = 1 + (child_node["total"] if child_node else 0)
-            mechanism_end = mechanism_start - 1 + (child_node["total"] if child_node else 0)
-
             # Only match vendor on top-level includes (depth 0)
             vendor, vendor_category = (None, None)
             if depth == 0:
@@ -81,9 +73,6 @@ def _walk_tree(node: Dict, flat_steps: List[Dict], running_total: int,
                 vendor, vendor_category = _match_vendor(value)
 
             status = "ok"
-            if not exceeded_flagged[0] and running_total + (child_node["total"] if child_node else 0) > limit:
-                # Check if this mechanism pushes us over
-                pass
 
             # Process children recursively to get accurate running_total
             old_total = running_total
@@ -145,6 +134,24 @@ def _walk_tree(node: Dict, flat_steps: List[Dict], running_total: int,
                 "lookup_range": None,
                 "running_total": running_total,
                 "status": "ok",
+                "depth": depth,
+            })
+
+        else:
+            # Modifiers such as exp= and anything the parser could not
+            # classify. These cost no lookup, but emitting nothing left them
+            # invisible in the visualization even though audit_engine flags
+            # them separately.
+            flat_steps.append({
+                "mechanism": raw or mtype,
+                "type": mtype,
+                "qualifier": qualifier,
+                "vendor": None,
+                "vendor_category": None,
+                "lookup_cost": 0,
+                "lookup_range": None,
+                "running_total": running_total,
+                "status": "unknown",
                 "depth": depth,
             })
 

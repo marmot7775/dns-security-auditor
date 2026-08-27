@@ -1981,6 +1981,15 @@ h3.result-title,
     background: var(--fail);
 }
 
+.se-unknown .se-dot {
+    border-color: var(--warn);
+    background: transparent;
+}
+
+.se-unknown .se-mechanism {
+    color: var(--text-secondary);
+}
+
 .se-step:not(.se-last)::before {
     content: '';
     position: absolute;
@@ -2045,6 +2054,19 @@ h3.result-title,
     color: var(--text-secondary);
     background: rgba(148, 163, 184, 0.1);
     border: 1px solid var(--border);
+}
+
+.se-unknown-badge {
+    display: inline-block;
+    font-size: var(--font-xs);
+    font-weight: 600;
+    padding: 0.1rem 0.4rem;
+    border-radius: 4px;
+    letter-spacing: 0.02em;
+    white-space: nowrap;
+    color: var(--warn);
+    background: var(--warn-bg);
+    border: 1px solid var(--warn-border);
 }
 
 .se-counter {

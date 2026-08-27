@@ -2753,7 +2753,9 @@ function renderSpfExecution(exec) {
     html += '<div class="se-steps">';
     exec.flat_steps.forEach((step, i) => {
         const isLast = i === exec.flat_steps.length - 1;
-        const statusClass = step.status === 'exceeded' ? 'se-exceeded' : 'se-ok';
+        const statusClass = step.status === 'exceeded' ? 'se-exceeded'
+            : step.status === 'unknown' ? 'se-unknown'
+            : 'se-ok';
         const connector = isLast ? 'se-last' : '';
         const depthClass = `se-depth-${Math.min(step.depth, 3)}`;
         const stepDelay = (0.05 + i * stepInterval).toFixed(2);
@@ -2770,6 +2772,11 @@ function renderSpfExecution(exec) {
         if (step.vendor) {
             const catClass = step.vendor_category ? `se-vendor-${step.vendor_category}` : '';
             html += ` <span class="se-vendor-badge ${catClass}">${escapeHtml(step.vendor)}</span>`;
+        }
+
+        // Unrecognized term badge
+        if (step.status === 'unknown') {
+            html += ` <span class="se-unknown-badge">not recognized</span>`;
         }
 
         // Lookup counter pill
