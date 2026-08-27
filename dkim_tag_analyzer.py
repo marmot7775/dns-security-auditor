@@ -618,20 +618,38 @@ class DKIMValidator:
 
         # Ed25519
         if self.key_type == "ed25519":
-            if len(raw_bytes) not in (32, 44):
-                self.issues.append(DKIMIssue(
-                    Priority.P1_HIGH, "p",
-                    f"Unusual Ed25519 key size ({len(raw_bytes)} bytes)",
-                    "Ed25519 keys should be 32 bytes (raw) or 44 bytes (SPKI).",
-                    fix="Regenerate the Ed25519 key pair.",
-                ))
-            else:
+            if len(raw_bytes) in (32, 44):
                 self.key_bits = 256
                 self.issues.append(DKIMIssue(
                     Priority.P4_INFO, "p",
                     "Ed25519 key - 256-bit (strong)",
                     "Equivalent to ~RSA 3072-bit security.",
                 ))
+                return
+
+            # Wrong size for Ed25519. If the data decodes as an RSA
+            # SubjectPublicKeyInfo, the record declares one algorithm and
+            # publishes another, so say that rather than reporting an odd
+            # Ed25519 key size. This is the check that used to sit below the
+            # RSA branch, where no k=ed25519 record ever reached it.
+            rsa_bits = _decode_rsa_key_bits(clean_b64)
+            if rsa_bits:
+                self.key_bits = rsa_bits
+                self.issues.append(DKIMIssue(
+                    Priority.P0_CRITICAL, "k",
+                    "Key type / key data mismatch",
+                    f"Record says k=ed25519 but the key data is a {rsa_bits}-bit RSA key.",
+                    fix="Change k=rsa or regenerate as Ed25519.",
+                    impact="DKIM verification fails.",
+                ))
+                return
+
+            self.issues.append(DKIMIssue(
+                Priority.P1_HIGH, "p",
+                f"Unusual Ed25519 key size ({len(raw_bytes)} bytes)",
+                "Ed25519 keys should be 32 bytes (raw) or 44 bytes (SPKI).",
+                fix="Regenerate the Ed25519 key pair.",
+            ))
             return
 
         # RSA - try DER decode first, fallback to estimation
@@ -671,16 +689,6 @@ class DKIMValidator:
                 Priority.P4_INFO, "p",
                 f"RSA key: ~{self.key_bits} bits",
                 "Key size is within acceptable range.",
-            ))
-
-        # Algorithm/key mismatch
-        if self.key_type == "ed25519" and self.key_bits and self.key_bits > 256:
-            self.issues.append(DKIMIssue(
-                Priority.P0_CRITICAL, "k",
-                "Key type / key data mismatch",
-                "Record says k=ed25519 but key data is RSA-sized.",
-                fix="Change k=rsa or regenerate as Ed25519.",
-                impact="DKIM verification fails.",
             ))
 
     # -- Report builder ---
