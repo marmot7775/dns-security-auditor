@@ -41,13 +41,15 @@ class DKIMKeyAgeAnalyzer:
         }
     }
     
-    # Rotation recommendations by key size
+    # Rotation recommendations by key size band. Each key is the lower bound
+    # of the band, not a size that has to match exactly: see
+    # _rotation_schedule_for.
     ROTATION_SCHEDULE = {
         1024: {
             'max_age_months': 3,
             'recommended_months': 1,
             'urgency': 'CRITICAL',
-            'reason': '1024-bit keys are weak and should be rotated immediately'
+            'reason': 'RSA keys of 1024 bits or fewer are weak and should be rotated immediately'
         },
         2048: {
             'max_age_months': 12,
@@ -63,6 +65,27 @@ class DKIMKeyAgeAnalyzer:
         }
     }
     
+    @classmethod
+    def _rotation_schedule_for(cls, key_size) -> Dict:
+        """Return the rotation schedule for the band key_size falls into.
+
+        ROTATION_SCHEDULE is keyed by 1024, 2048 and 4096, so an exact match
+        lookup sent every other size to the 2048 default. A 512-bit or 768-bit
+        key, weaker than the 1024-bit key rated CRITICAL, was given the
+        STANDARD schedule and told to rotate within 12 months.
+        """
+        if isinstance(key_size, bool) or not isinstance(key_size, (int, float)):
+            return cls.ROTATION_SCHEDULE[2048]
+        if key_size <= 0:
+            # Revoked or undecodable. Nothing is known about the key itself,
+            # so fall back to the standard period rather than call it weak.
+            return cls.ROTATION_SCHEDULE[2048]
+        if key_size <= 1024:
+            return cls.ROTATION_SCHEDULE[1024]
+        if key_size < 4096:
+            return cls.ROTATION_SCHEDULE[2048]
+        return cls.ROTATION_SCHEDULE[4096]
+
     def __init__(self, domain: str):
         self.domain = domain
         self.keys_analyzed = []
@@ -94,10 +117,7 @@ class DKIMKeyAgeAnalyzer:
         estimated_age, confidence = self._estimate_age_from_selector(selector)
         
         # Get rotation recommendation
-        rotation_rec = self.ROTATION_SCHEDULE.get(
-            key_size,
-            self.ROTATION_SCHEDULE[2048]  # Default to 2048
-        )
+        rotation_rec = self._rotation_schedule_for(key_size)
         
         # Determine rotation status
         rotation_status = self._determine_rotation_status(
