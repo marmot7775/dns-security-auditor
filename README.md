@@ -178,7 +178,7 @@ static/
 GET /api/audit?domain=example.com              JSON response
 GET /api/audit/stream?domain=example.com       SSE streaming
 GET /api/audit/pdf?domain=example.com          PDF download
-GET /api/health                                Health check
+GET /api/health                                Health check (verifies DNS resolution)
 GET /docs                                      Swagger UI
 ```
 

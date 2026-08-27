@@ -18,7 +18,7 @@ def test_health_failure_does_not_leak_resolver_detail(monkeypatch):
 
     monkeypatch.setattr(server_module.dns.resolver, "resolve", _boom)
 
-    response = client.get("/health")
+    response = client.get("/api/health")
 
     assert response.status_code == 500
     body = response.json()

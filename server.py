@@ -4,7 +4,7 @@ DNS Security Auditor - FastAPI Server
 GET  /api/audit?domain=example.com   -- run full audit (JSON)
 GET  /api/audit/stream?domain=...    -- audit progress (SSE)
 GET  /api/audit/{domain}/pdf         -- download PDF report
-GET  /api/health                     -- health check
+GET  /api/health                     -- health check (verifies DNS resolution)
 GET  /                               -- serve frontend
 GET  /static/*                       -- serve static assets
 
@@ -762,8 +762,19 @@ async def audit_pdf(
 
 @app.get("/api/health", tags=["System"])
 async def health():
-    """Health check endpoint for monitoring."""
-    return {"status": "ok"}
+    """
+    Health check endpoint for monitoring and load balancers.
+    Returns 200 if the application and DNS resolution are functional.
+    """
+    try:
+        dns.resolver.resolve("example.com", "A", lifetime=2)
+        return {"status": "ok", "dns_resolution": "working"}
+    except Exception as e:
+        log.error("Health check DNS resolution failed: %s", str(e)[:200])
+        return JSONResponse(
+            content={"status": "error"},
+            status_code=500,
+        )
 
 
 # ============================================================
@@ -873,23 +884,6 @@ else:
     @app.get("/")
     async def index():
         return {"message": "DNS Security Auditor API. Put static files in ./static/"}
-
-
-@app.get("/health")
-async def health():
-    """
-    Health check endpoint for monitoring and load balancers.
-    Returns 200 if the application and DNS resolution are functional.
-    """
-    try:
-        dns.resolver.resolve("example.com", "A", lifetime=2)
-        return {"status": "ok", "dns_resolution": "working"}
-    except Exception as e:
-        log.error("Health check DNS resolution failed: %s", str(e)[:200])
-        return JSONResponse(
-            content={"status": "error"},
-            status_code=500,
-        )
 
 
 @app.get("/sitemap.xml")
