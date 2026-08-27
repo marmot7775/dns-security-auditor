@@ -434,20 +434,40 @@ def build_remediation_plan(
 # ============================================================
 
 def _has_weak_dkim_keys(found_selectors) -> bool:
-    """Return True if any selector has a key size <= 1024 bits.
+    """Return True if any selector serves an RSA key of 1024 bits or fewer.
 
-    found_selectors is a list of dicts, each with key_size, key_bits, or
-    key_analysis.key_bits fields.
+    found_selectors is a list of dicts carrying key_type and key_bits, or the
+    older key_size / key_analysis.key_bits shapes.
     """
     if not found_selectors or not isinstance(found_selectors, list):
         return False
     for sel in found_selectors:
         if not isinstance(sel, dict):
             continue
+        key_analysis = sel.get("key_analysis")
+        if not isinstance(key_analysis, dict):
+            key_analysis = {}
+
+        # 1024 is an RSA modulus threshold. Ed25519 keys are 256 bits and
+        # strong, so comparing them against it reads every one as weak and
+        # tells the user to rotate a key the card rates green.
+        if _is_ed25519(sel, key_analysis):
+            continue
+
         bits = sel.get("key_size") or sel.get("key_bits")
         if bits is None:
-            key_analysis = sel.get("key_analysis") or {}
             bits = key_analysis.get("key_bits")
-        if bits is not None and isinstance(bits, (int, float)) and bits <= 1024:
+        if isinstance(bits, bool) or not isinstance(bits, (int, float)):
+            continue
+        if bits <= 1024:
             return True
     return False
+
+
+def _is_ed25519(sel: dict, key_analysis: dict) -> bool:
+    """Key type from the normalized field, falling back to the k= tag."""
+    key_type = sel.get("key_type") or key_analysis.get("key_type") or ""
+    if "ed25519" in str(key_type).lower():
+        return True
+    # Selector dicts assembled elsewhere may carry only the raw record.
+    return "k=ed25519" in str(sel.get("record") or "").lower().replace(" ", "")
