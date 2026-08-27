@@ -504,27 +504,34 @@ def _classify_change(record_type: str, old_value: str, new_value: str) -> Dict:
             else:
                 change["description"] = f"Policy changed from p={old_p} to p={new_p}"
 
+        # A policy-rank verdict (upgrade/downgrade) is the dominant signal
+        # for DMARC posture. Once set, the checks below must not overwrite
+        # it -- e.g. adding rua= alongside a p=reject -> p=none downgrade
+        # is still a regression, not an improvement.
+        policy_decided = change["is_improvement"] is not None
+
         # Check sp change
         old_sp = old_tags.get("sp", "")
         new_sp = new_tags.get("sp", "")
-        if old_sp != new_sp and old_p == new_p:
+        if not policy_decided and old_sp != new_sp and old_p == new_p:
             change["description"] = f"Subdomain policy changed from sp={old_sp or '(absent)'} to sp={new_sp or '(absent)'}"
             sp_old_rank = policy_rank.get(old_sp.lower(), -1) if old_sp else -1
             sp_new_rank = policy_rank.get(new_sp.lower(), -1) if new_sp else -1
             change["is_improvement"] = sp_new_rank > sp_old_rank
 
         # Check np added
-        if "np" not in old_tags and "np" in new_tags:
+        if not policy_decided and "np" not in old_tags and "np" in new_tags:
             change["description"] = f"Added np={new_tags['np']} (DMARCbis tag)"
             change["is_improvement"] = True
 
         # Check rua added/removed
-        if "rua" not in old_tags and "rua" in new_tags:
-            change["description"] = "Added aggregate reporting (rua=)"
-            change["is_improvement"] = True
-        elif "rua" in old_tags and "rua" not in new_tags:
-            change["description"] = "Removed aggregate reporting (rua=)"
-            change["is_improvement"] = False
+        if not policy_decided:
+            if "rua" not in old_tags and "rua" in new_tags:
+                change["description"] = "Added aggregate reporting (rua=)"
+                change["is_improvement"] = True
+            elif "rua" in old_tags and "rua" not in new_tags:
+                change["description"] = "Removed aggregate reporting (rua=)"
+                change["is_improvement"] = False
 
     elif record_type == "spf":
         # Check for all-mechanism changes
