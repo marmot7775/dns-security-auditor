@@ -303,7 +303,7 @@ def _cover_page(data, S):
 
     metrics = Table([
         [_metric_cell(f"Spoofing Protection\n{sp_detail}", sp_val, sp.get("color", "red")),
-         _metric_cell("DMARCbis Readiness", dr_val, dr.get("color", "red")),
+         _metric_cell("RFC 9989 Readiness", dr_val, dr.get("color", "red")),
          _metric_cell("Protocol Coverage", f"{pc_conf}/{pc_total}", pc.get("color", "red"))],
     ], colWidths=[2.17*inch]*3)
     metrics.setStyle(TableStyle([
@@ -678,12 +678,12 @@ def _dmarc_deep_dive(data, S):
         els.append(Paragraph("Current Record", S["subheading"]))
         els.extend(_record_block(record, S))
 
-    # DMARCbis Health Verdict
+    # RFC 9989 Health Verdict
     tb = dmarc.get("tag_breakdown") or {}
     health = tb.get("health")
     if health:
         els.append(Spacer(1, 8))
-        els.append(Paragraph("DMARCbis Health Verdict", S["heading2"]))
+        els.append(Paragraph("RFC 9989 Health Verdict", S["heading2"]))
         h_clr = _clr(health.get("color", "red"))
         h_label = health.get("label", "")
         h_summary = health.get("summary", "")
@@ -710,7 +710,7 @@ def _dmarc_deep_dive(data, S):
     sv = dmarc.get("strict_validation")
     if sv:
         els.append(Spacer(1, 10))
-        els.append(Paragraph("DMARCbis Strict Validation", S["heading2"]))
+        els.append(Paragraph("RFC 9989 Strict Validation", S["heading2"]))
         p_count = sv.get("pass_count", 0)
         f_count = sv.get("fail_count", 0)
         w_count = sv.get("warn_count", 0)
@@ -741,7 +741,7 @@ def _dmarc_deep_dive(data, S):
         header = [
             Paragraph("<b>Tag</b>", S["body_small"]),
             Paragraph("<b>Value</b>", S["body_small"]),
-            Paragraph("<b>DMARCbis</b>", S["body_small"]),
+            Paragraph("<b>RFC 9989</b>", S["body_small"]),
             Paragraph("<b>Explanation</b>", S["body_small"]),
         ]
         rows = [header]
@@ -1394,12 +1394,12 @@ def _migration_page(data, S):
         return []
 
     els = [CondPageBreak(4*inch)]
-    els.extend(_section_header("6", "Migration Path to DMARCbis Ready", S))
+    els.extend(_section_header("6", "Migration Path to RFC 9989 Ready", S))
 
     status = migration.get("status", "")
     if status == "ready":
         els.append(Paragraph(
-            "\u2713  Your DMARC record is already DMARCbis Ready. No migration needed.",
+            "\u2713  Your DMARC record is already RFC 9989 Ready. No migration needed.",
             S["body_large"]
         ))
         return els
@@ -1409,7 +1409,7 @@ def _migration_page(data, S):
         return els
 
     total_steps = migration.get("total_steps", len(steps))
-    els.append(Paragraph(f"{total_steps} steps to reach DMARCbis Ready status:", S["body"]))
+    els.append(Paragraph(f"{total_steps} steps to reach RFC 9989 Ready status:", S["body"]))
     els.append(Spacer(1, 8))
 
     for step in steps:
@@ -1453,7 +1453,7 @@ def _migration_page(data, S):
     target = migration.get("target_record", "")
     if target:
         els.append(Spacer(1, 8))
-        els.append(Paragraph("Target DMARCbis-Ready Record", S["heading2"]))
+        els.append(Paragraph("Target RFC 9989-Ready Record", S["heading2"]))
         els.extend(_record_block(target, S))
 
     return els
@@ -1479,7 +1479,7 @@ def _about_page(data, S):
         ),
         Spacer(1, 4),
         Paragraph(
-            '<font size="10" color="#2dd4bf">The first DMARCbis-aware DNS security audit tool</font>',
+            '<font size="10" color="#2dd4bf">DMARC audited against RFC 9989, 9990, and 9991</font>',
             ParagraphStyle("BR2", alignment=TA_CENTER, leading=14)
         ),
     ]
@@ -1510,7 +1510,7 @@ def _about_page(data, S):
     els.append(Paragraph(
         "This report was generated using live DNS queries against published DNS records. "
         "All checks use RFC-compliant evaluation logic. DMARC policy discovery implements "
-        "the DNS Tree Walk algorithm per DMARCbis (draft-ietf-dmarc-dmarcbis, Section 4.10). "
+        "the DNS Tree Walk algorithm per RFC 9989, Section 4.10. "
         "SPF evaluation tracks lookup counts against the RFC 7208 10-lookup limit including "
         "void lookup detection. DANE validation checks TLSA records per RFC 7672 with DNSSEC "
         "dependency verification.", S["body_small"]
@@ -1690,7 +1690,7 @@ if __name__ == "__main__":
                       "warnings": [{"level": "warning", "text": "p=none is monitoring only"}]},
                      {"tag": "np", "value": None, "is_default": True, "is_absent": True,
                       "label": "Non-existent subdomain policy", "explanation": "Policy for non-existent subdomains",
-                      "dmarcbis": "new", "dmarcbis_note": "New in DMARCbis",
+                      "dmarcbis": "new", "dmarcbis_note": "New in RFC 9989",
                       "warnings": [{"level": "warning", "text": "Missing np= tag"}]},
                      {"tag": "rua", "value": "mailto:dmarc@example.com", "is_default": False,
                       "is_absent": False, "label": "Aggregate report URI",
@@ -1716,8 +1716,8 @@ if __name__ == "__main__":
                           "why": "Full protection. Mail failing authentication is blocked.",
                           "record_after": "v=DMARC1; p=reject; rua=mailto:dmarc@example.com",
                           "tags_changed": ["t"]},
-                         {"step": 4, "action": "Add DMARCbis tags: np=reject, sp=reject, psd=n",
-                          "why": "These tags close gaps in the old standard and prepare for DMARCbis.",
+                         {"step": 4, "action": "Add RFC 9989 tags: np=reject, sp=reject, psd=n",
+                          "why": "These tags close gaps in the old standard and prepare for RFC 9989.",
                           "tags_changed": ["np", "sp", "psd"]},
                      ],
                      "total_steps": 4,
@@ -1733,7 +1733,7 @@ if __name__ == "__main__":
                          {"tag": "sp", "action": "added", "value": "reject",
                           "reason": "Closes subdomain policy gap."},
                          {"tag": "np", "action": "added", "value": "reject",
-                          "reason": "Protects non-existent subdomains from spoofing (new in DMARCbis)."},
+                          "reason": "Protects non-existent subdomains from spoofing (new in RFC 9989)."},
                      ],
                  },
                  "comparison_intelligence": {
@@ -1744,7 +1744,7 @@ if __name__ == "__main__":
                          {"label": "p=reject adoption", "adoption_pct": 52},
                          {"label": "np= tag adoption", "adoption_pct": 8},
                      ],
-                     "adoption_tagline": "The top 1,000 are moving toward DMARCbis. Your domain should too.",
+                     "adoption_tagline": "Almost none of the top 1,000 have adopted the RFC 9989 tags yet.",
                  },
              },
              "strict_validation": {
@@ -1761,7 +1761,7 @@ if __name__ == "__main__":
                           {"category": "tag_values", "name": "p= value", "status": "warn",
                            "message": "p=none provides monitoring only, no enforcement"},
                           {"category": "tag_values", "name": "np= tag", "status": "fail",
-                           "message": "np= tag is missing (required by DMARCbis)"},
+                           "message": "np= tag is missing (optional in RFC 9989, closes the non-existent subdomain gap)"},
                       ]},
                  ],
                  "pass_count": 2, "fail_count": 1, "warn_count": 1, "total_count": 4,

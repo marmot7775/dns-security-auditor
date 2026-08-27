@@ -161,7 +161,7 @@ def build_executive_summary(checks: List[Dict], roadmap: Dict) -> Dict:
         "detail": f"{protected_count}/4 vectors protected",
     }
 
-    # Metric 2: DMARCbis Readiness
+    # Metric 2: RFC 9989 Readiness
     readiness_map = {
         "ready": ("Ready", "green"),
         "compatible": ("Compatible", "blue"),
@@ -321,13 +321,13 @@ def build_security_roadmap(checks: List[Dict], is_no_mail: bool = False) -> Dict
                 break
 
     # ── High ────────────────────────────────────────────────
-    # Missing p= with rua: interop hazard between RFC 7489 and dmarcbis
+    # Missing p= with rua: interop hazard between RFC 7489 and RFC 9989
     if tb:
         for w in cw:
             if w.get("title") == "Missing p= tag (interop hazard)":
                 items.append({"priority": "high", "protocol": "DMARC",
                               "action": "Add explicit p= tag to the DMARC record",
-                              "impact": "RFC 7489 receivers ignore this record entirely; dmarcbis receivers treat as p=none. Receiver behavior is split."})
+                              "impact": "RFC 7489 receivers ignore this record entirely; RFC 9989 receivers treat as p=none. Receiver behavior is split."})
                 break
 
     # p=none with rua (monitoring)
@@ -367,12 +367,12 @@ def build_security_roadmap(checks: List[Dict], is_no_mail: bool = False) -> Dict
                       "action": "Consider DANE TLSA records",
                       "impact": "DANE provides CA-independent certificate verification."})
 
-    # DMARCbis readiness gaps
+    # RFC 9989 readiness gaps
     if health.get("status") in ("compatible", "attention"):
         for reason in health.get("reasons", []):
             items.append({"priority": "medium", "protocol": "DMARC",
                           "action": f"Address: {reason}",
-                          "impact": "Record is not fully DMARCbis-ready."})
+                          "impact": "Record is not fully RFC 9989-ready."})
 
     # ── Low ─────────────────────────────────────────────────
     bimi = check_map.get("BIMI", {})
@@ -527,7 +527,7 @@ def _classify_change(record_type: str, old_value: str, new_value: str) -> Dict:
 
         # Check np added
         if not policy_decided and "np" not in old_tags and "np" in new_tags:
-            change["description"] = f"Added np={new_tags['np']} (DMARCbis tag)"
+            change["description"] = f"Added np={new_tags['np']} (RFC 9989 tag)"
             change["is_improvement"] = True
 
         # Check rua added/removed
@@ -1050,7 +1050,7 @@ def _build_dmarcbis_card_data(readiness: Optional[Dict], record: Optional[str]) 
         "label": "Valid DMARC record found",
         "status": "pass" if record_valid else "fail",
         "detail": None if record_valid else (
-            "The DMARC record has syntax errors; DMARCbis readiness cannot "
+            "The DMARC record has syntax errors; RFC 9989 readiness cannot "
             "be assessed until those are fixed."
         ),
     })
@@ -1113,7 +1113,7 @@ def _build_dmarcbis_card_data(readiness: Optional[Dict], record: Optional[str]) 
         fallback_val = sp_val if sp_val else p_val
         checklist.append({
             "label": "NP policy defined (non-existent domains)",
-            # np absence is editorial: dmarcbis-41 §4.7 does not require
+            # np absence is editorial: RFC 9989 §4.7 does not require
             # an explicit np tag. Render as info so the user sees this
             # as advice rather than a spec violation.
             "status": "info",
@@ -1160,13 +1160,13 @@ def _build_dmarcbis_card_data(readiness: Optional[Dict], record: Optional[str]) 
             spec_ref = dep.get("spec_reference")
             if tag_name == "pct":
                 if val == "100":
-                    reason = "Removed pct (dmarcbis-41 §C.5.2 / §A.6); value was already 100 (default)."
+                    reason = "Removed pct (RFC 9989 §C.5.2 / §A.6); value was already 100 (default)."
                 else:
-                    reason = f"Removed pct (dmarcbis-41 §C.5.2 / §A.6); was {val}%. Use t=y for testing instead."
+                    reason = f"Removed pct (RFC 9989 §C.5.2 / §A.6); was {val}%. Use t=y for testing instead."
             elif tag_name == "rf":
-                reason = "Removed rf (dmarcbis-41 §C.5.2); only afrf was ever defined and dmarcbis receivers will ignore the tag."
+                reason = "Removed rf (RFC 9989 §C.5.2); only afrf was ever defined and RFC 9989 receivers will ignore the tag."
             elif tag_name == "ri":
-                reason = "Removed ri (dmarcbis-41 §C.5.2); receivers send aggregate reports on their own schedule and dmarcbis receivers will ignore the tag."
+                reason = "Removed ri (RFC 9989 §C.5.2); receivers send aggregate reports on their own schedule and RFC 9989 receivers will ignore the tag."
             else:
                 reason = f"Removed {tag_name}."
             changes.append({
@@ -1187,7 +1187,7 @@ def _build_dmarcbis_card_data(readiness: Optional[Dict], record: Optional[str]) 
             "reason": (
                 f"Editorial suggestion (not spec-required): added np from "
                 f"{np_src_tag} value to make non-existent subdomain policy "
-                f"explicit. dmarcbis-41 §4.7 does not require this."
+                f"explicit. RFC 9989 §4.7 does not require this."
             ),
             "source": np_info.get("source", "editorial"),
             "spec_reference": np_info.get("spec_reference"),
@@ -1288,14 +1288,14 @@ def transform_dmarc(raw: Dict, tree_walk: Optional[Dict] = None, is_no_mail: boo
         if has_syntax_errors or has_engine_errors:
             status = "fail"
 
-    # dmarcbis-41 §4.10.1 policy recovery: invalid p/sp/np with valid
-    # rua= is treated as p=none by dmarcbis receivers but may be
+    # RFC 9989 §4.10.1 policy recovery: invalid p/sp/np with valid
+    # rua= is treated as p=none by RFC 9989 receivers but may be
     # ignored by RFC 7489 receivers. Surface this distinctly so the
     # user sees it as a spec-recovery state, not as a clean p=none.
     if record and not inherited and raw.get("policy_recovery_applied"):
         pill_label = "Recovery"
         verdict = (
-            "Spec recovery applied (dmarcbis-41 §4.10.1): invalid value "
+            "Spec recovery applied (RFC 9989 §4.10.1): invalid value "
             "masked by rua fallback, treated as p=none."
         )
         if status != "fail":
@@ -1437,7 +1437,7 @@ def transform_dmarc(raw: Dict, tree_walk: Optional[Dict] = None, is_no_mail: boo
                 "type": "warning",
                 "text": (
                     "Spec recovery applied: invalid value masked by rua fallback. "
-                    "dmarcbis-41 §4.10.1 receivers will treat as p=none; older "
+                    "RFC 9989 §4.10.1 receivers will treat as p=none; older "
                     "RFC 7489 receivers may ignore the record. Fix the offending tag."
                 ),
             })
@@ -1490,7 +1490,7 @@ def transform_dmarc(raw: Dict, tree_walk: Optional[Dict] = None, is_no_mail: boo
 
         pct = raw.get("pct")
         if pct is not None and pct < 100:
-            details.append({"type": "warning", "text": f"pct={pct}: policy applied to only {pct}% of failing messages (pct is removed in DMARCbis)"})
+            details.append({"type": "warning", "text": f"pct={pct}: policy applied to only {pct}% of failing messages (pct is removed in RFC 9989)"})
 
         # Append all issues from the audit engine (syntax_errors already merged into issues)
         for issue in raw.get("issues", []):
@@ -1666,7 +1666,7 @@ def transform_dmarc(raw: Dict, tree_walk: Optional[Dict] = None, is_no_mail: boo
 
 
 # ============================================================
-# DMARCbis Strict Validation
+# RFC 9989 Strict Validation
 # ============================================================
 
 _SV_CATEGORY_LABELS = {
@@ -1723,9 +1723,9 @@ def _build_strict_validation(sv: Optional[Dict]) -> Optional[Dict]:
 
 
 def _build_spec_comparison(strict: Optional[Dict], legacy: Optional[Dict]) -> Optional[Dict]:
-    """Compare strict (DMARCbis) and legacy (RFC 7489) validation results.
+    """Compare strict (RFC 9989) and legacy (RFC 7489) validation results.
 
-    Returns the delta: which issues are DMARCbis-only, which are in both,
+    Returns the delta: which issues are RFC 9989-only, which are in both,
     and summary stats for the toggle UI.
     """
     if not strict or not legacy:
@@ -1746,7 +1746,7 @@ def _build_spec_comparison(strict: Optional[Dict], legacy: Optional[Dict]) -> Op
     dmarcbis_only = strict_issues - legacy_issues
     both = strict_issues & legacy_issues
 
-    # Build human-readable list of DMARCbis-only findings
+    # Build human-readable list of RFC 9989-only findings
     dmarcbis_only_items = []
     for c in strict_checks:
         key = c["code"] + ":" + c["message"][:60]
@@ -1895,7 +1895,7 @@ def _build_attack_surface(raw: Dict, record: Optional[str], is_no_mail: bool = F
     if np_effective == "reject":
         note = ""
         if np_fallback:
-            note = " Protected by fallback, but not explicitly. DMARCbis recommends setting np= directly."
+            note = " Protected by fallback, but not explicitly. RFC 9989 recommends setting np= directly."
         v3 = {
             "name": "Non-Existent Subdomain Spoofing",
             "status": "protected" if not np_fallback else "partial",
@@ -2063,7 +2063,7 @@ def _build_dmarc_tag_breakdown(record: str, raw: Dict) -> Optional[List[Dict]]:
 
 
 def _build_tag_entry(tag: str, value: str, present: bool, tags: Dict, policy: str) -> Optional[Dict]:
-    """Build a single tag entry with explanation, warnings, and DMARCbis notes."""
+    """Build a single tag entry with explanation, warnings, and RFC 9989 notes."""
 
     # ── v= ──────────────────────────────────────────────────
     if tag == "v":
@@ -2073,8 +2073,8 @@ def _build_tag_entry(tag: str, value: str, present: bool, tags: Dict, policy: st
                       "Valid DMARC version identifier. Required as the first tag.",
                       "current",
                       dmarcbis_note=(
-                          "DMARCbis tightens parsing. This MUST be the first tag. Records that place "
-                          "it elsewhere will be rejected by DMARCbis-compliant receivers, even though some "
+                          "RFC 9989 tightens parsing. This MUST be the first tag. Records that place "
+                          "it elsewhere will be rejected by RFC 9989-compliant receivers, even though some "
                           "legacy receivers were lenient about tag ordering."
                       ))
 
@@ -2085,7 +2085,7 @@ def _build_tag_entry(tag: str, value: str, present: bool, tags: Dict, policy: st
         e = _entry(tag, value, False, False, "Policy",
                    _explain_policy_value(value), "current",
                    dmarcbis_note=(
-                       "DMARCbis clarifies policy semantics and removes ambiguities in how receivers "
+                       "RFC 9989 clarifies policy semantics and removes ambiguities in how receivers "
                        "interpret these values. The biggest change is replacing pct with the binary t=y "
                        "test mode for safer policy rollout."
                    ))
@@ -2099,7 +2099,7 @@ def _build_tag_entry(tag: str, value: str, present: bool, tags: Dict, policy: st
     # ── sp= ─────────────────────────────────────────────────
     if tag == "sp":
         note = (
-            "DMARCbis clarifies inheritance behavior. The new np= tag extends subdomain protection "
+            "RFC 9989 clarifies inheritance behavior. The new np= tag extends subdomain protection "
             "to cover non-existent subdomains, something RFC 7489 had no concept of."
         )
         if present:
@@ -2121,10 +2121,10 @@ def _build_tag_entry(tag: str, value: str, present: bool, tags: Dict, policy: st
                           f"Setting sp= explicitly removes ambiguity.",
                           "current", dmarcbis_note=note)
 
-    # ── np= (DMARCbis) ─────────────────────────────────────
+    # ── np= (RFC 9989) ─────────────────────────────────────
     if tag == "np":
         note = (
-            "This tag is NEW in DMARCbis. RFC 7489 had no way to set policy for subdomains that "
+            "This tag is NEW in RFC 9989. RFC 7489 had no way to set policy for subdomains that "
             "don't exist in DNS. Attackers exploit this by inventing subdomains. np= closes that gap. "
             "Currently 0% of the top 1000 domains have adopted this tag."
         )
@@ -2172,7 +2172,7 @@ def _build_tag_entry(tag: str, value: str, present: bool, tags: Dict, policy: st
     # ── adkim= ──────────────────────────────────────────────
     if tag == "adkim":
         note = (
-            "DMARCbis clarifies alignment edge cases, especially around subdomains and how "
+            "RFC 9989 clarifies alignment edge cases, especially around subdomains and how "
             "organizational domain is determined (now via tree walk instead of PSL)."
         )
         if present:
@@ -2198,7 +2198,7 @@ def _build_tag_entry(tag: str, value: str, present: bool, tags: Dict, policy: st
     # ── aspf= ───────────────────────────────────────────────
     if tag == "aspf":
         note = (
-            "DMARCbis explicitly states that DMARC evaluates SPF against the MAIL FROM identity "
+            "RFC 9989 explicitly states that DMARC evaluates SPF against the MAIL FROM identity "
             "only, not HELO. RFC 7489 was ambiguous about this."
         )
         if present:
@@ -2217,6 +2217,11 @@ def _build_tag_entry(tag: str, value: str, present: bool, tags: Dict, policy: st
 
     # ── fo= ─────────────────────────────────────────────────
     if tag == "fo":
+        note = (
+            "The fo tag is defined in RFC 9989 Section 4.7, but the reports it "
+            "governs are specified in RFC 9991. Most large receivers, Google and "
+            "Microsoft among them, no longer send failure reports at all."
+        )
         if present:
             explanation = {
                 "0": (
@@ -2228,17 +2233,18 @@ def _build_tag_entry(tag: str, value: str, present: bool, tags: Dict, policy: st
                 "s": "Reports on SPF failure regardless of alignment.",
             }.get(value, f"Failure reporting option: {value}.")
             return _entry(tag, value, False, False, "Failure Reporting Options",
-                          explanation, "current")
+                          explanation, "current", dmarcbis_note=note)
         else:
             return _entry(tag, "0", True, True, "Failure Reporting Options",
                           "Defaults to fo=0. Reports only on complete failure of both mechanisms.",
-                          "current")
+                          "current", dmarcbis_note=note)
 
     # ── rua= ────────────────────────────────────────────────
     if tag == "rua":
         note = (
-            "DMARCbis splits reporting into separate RFCs and tightens URI validation. The mailto: "
-            "prefix is now strictly required. Bare email addresses are rejected. DMARCbis also "
+            "Reporting moved into its own documents: RFC 9990 for aggregate reports, RFC 9991 for "
+            "failure reports. URI validation is tighter. The mailto: "
+            "prefix is now strictly required. Bare email addresses are rejected. RFC 9989 also "
             "strengthens external reporting authorization checks."
         )
         if present:
@@ -2280,7 +2286,7 @@ def _build_tag_entry(tag: str, value: str, present: bool, tags: Dict, policy: st
     # ── ruf= ────────────────────────────────────────────────
     if tag == "ruf":
         note = (
-            "Failure reporting is now defined in its own separate RFC under DMARCbis, reflecting "
+            "Failure reporting is now defined in its own document, RFC 9991, reflecting "
             "that it's increasingly uncommon in practice."
         )
         if present:
@@ -2299,33 +2305,33 @@ def _build_tag_entry(tag: str, value: str, present: bool, tags: Dict, policy: st
         if present:
             e = _entry(tag, value, False, False, "Percentage",
                        f"Policy applies to {value}% of failing messages. "
-                       "The pct tag is deprecated in DMARCbis. Only values of 0 and 100 were reliably "
-                       "honored. DMARCbis replaces this with t=y/t=n for predictable testing. Current "
+                       "RFC 9989 removes the pct tag. Only values of 0 and 100 were reliably "
+                       "honored. RFC 9989 replaces this with t=y/t=n for predictable testing. "
                        "Receivers that have not moved off RFC 7489 still honor pct, but RFC 9989 "
                        "receivers ignore it. To migrate: "
                        "use t=y for testing or remove pct for full enforcement.",
                        "deprecated")
             e["warnings"].append({
                 "level": "info",
-                "text": "Deprecated in DMARCbis. Use t=y for testing or remove pct for full enforcement.",
+                "text": "Removed in RFC 9989. Use t=y for testing, or drop pct for full enforcement.",
             })
             return e
         else:
             return _entry(tag, "100", True, True, "Percentage",
-                          "Defaults to 100. The pct tag is deprecated in DMARCbis.",
+                          "RFC 7489 defaulted to 100. RFC 9989 removes the pct tag.",
                           "deprecated")
 
     # ── rf= (deprecated) ───────────────────────────────────
     if tag == "rf":
         if present:
             e = _entry(tag, value, False, False, "Report Format",
-                       "Only afrf was ever implemented. Removed in DMARCbis. Safe to remove.",
+                       "Only afrf was ever implemented. Removed in RFC 9989. Safe to remove.",
                        "deprecated")
-            e["warnings"].append({"level": "info", "text": "Deprecated in DMARCbis. Safe to remove."})
+            e["warnings"].append({"level": "info", "text": "Removed in RFC 9989. Safe to remove."})
             return e
         else:
             return _entry(tag, "afrf", True, True, "Report Format",
-                          "Defaults to afrf. Deprecated in DMARCbis.",
+                          "RFC 7489 defaulted to afrf. RFC 9989 removes the rf tag.",
                           "deprecated")
 
     # ── ri= (deprecated) ───────────────────────────────────
@@ -2334,20 +2340,21 @@ def _build_tag_entry(tag: str, value: str, present: bool, tags: Dict, policy: st
             suffix = f" ({int(value)//3600}h)" if value.isdigit() else ""
             e = _entry(tag, value, False, False, "Report Interval",
                        f"Requested interval: {value} seconds{suffix}. "
-                       "Report intervals were rarely respected. DMARCbis standardizes daily reports. "
+                       "Report intervals were rarely respected. RFC 9990 describes daily or more frequent "
+                       "reports and gives the Domain Owner no way to request an interval. "
                        "Safe to remove.",
                        "deprecated")
-            e["warnings"].append({"level": "info", "text": "Deprecated in DMARCbis. Safe to remove."})
+            e["warnings"].append({"level": "info", "text": "Removed in RFC 9989. Safe to remove."})
             return e
         else:
             return _entry(tag, "86400", True, True, "Report Interval",
-                          "Defaults to 86400s (24h). Deprecated in DMARCbis.",
+                          "RFC 7489 defaulted to 86400s (24h). RFC 9989 removes the ri tag.",
                           "deprecated")
 
-    # ── psd= (DMARCbis) ────────────────────────────────────
+    # ── psd= (RFC 9989) ────────────────────────────────────
     if tag == "psd":
         note = (
-            "This tag is NEW in DMARCbis. It replaces reliance on the Public Suffix List (PSL) "
+            "This tag is NEW in RFC 9989. It replaces reliance on the Public Suffix List (PSL) "
             "for determining organizational domain boundaries. The PSL was maintained manually and "
             "often outdated. psd= lets domain owners declare their own status directly in DNS. "
             "Only 1 domain in the top 1000 has adopted this tag."
@@ -2388,12 +2395,12 @@ def _build_tag_entry(tag: str, value: str, present: bool, tags: Dict, policy: st
                           "implementation. Behavior varies. Consider adding psd=n.",
                           "new", dmarcbis_note=note)
 
-    # ── t= (DMARCbis) ──────────────────────────────────────
+    # ── t= (RFC 9989) ──────────────────────────────────────
     if tag == "t":
         note = (
-            "This tag is NEW in DMARCbis, replacing the unreliable pct tag. Under RFC 7489, "
+            "This tag is NEW in RFC 9989, replacing the unreliable pct tag. Under RFC 7489, "
             "pct=50 meant 'apply to 50% of failing mail' but receivers implemented this "
-            "inconsistently. Only pct=0 and pct=100 were reliable. DMARCbis replaces this with a "
+            "inconsistently. Only pct=0 and pct=100 were reliable. RFC 9989 replaces this with a "
             "clean binary flag: t=y (testing, drop policy one level) or t=n (enforce fully). This "
             "gives domain owners a safe, predictable way to test stricter policies before committing. "
             "0% of the top 1000 domains use this tag yet."
@@ -2426,7 +2433,7 @@ def _build_tag_entry(tag: str, value: str, present: bool, tags: Dict, policy: st
     # ── Unknown tag ─────────────────────────────────────────
     if present:
         e = _entry(tag, value, False, False, f"Unknown Tag ({tag})",
-                   "This tag is not defined in RFC 7489 or DMARCbis. It may be ignored by receivers.",
+                   "This tag is not defined in RFC 7489 or RFC 9989. It may be ignored by receivers.",
                    "current")
         e["warnings"].append({
             "level": "warning",
@@ -2480,14 +2487,14 @@ def _detect_dangerous_combinations(tags: Dict[str, str], policy: str, is_no_mail
 
     # ── RED: Critical ───────────────────────────────────────
 
-    # 0. Missing p= but rua= present. dmarcbis S4.10.1 MUSTs treat-as-p=none;
+    # 0. Missing p= but rua= present. RFC 9989 §4.10.1 MUSTs treat-as-p=none;
     # RFC 7489 ignores the record. Same record, two behaviors.
     if not tags.get("p") and rua:
         warnings.append({
             "level": "critical",
             "title": "Missing p= tag (interop hazard)",
             "text": (
-                "No explicit p= tag. dmarcbis-compliant receivers treat this as p=none; RFC 7489 "
+                "No explicit p= tag. RFC 9989-compliant receivers treat this as p=none; RFC 7489 "
                 "receivers ignore the record entirely. Behavior depends on which spec the receiver "
                 "implements. Add an explicit p=none, p=quarantine, or p=reject."
             ),
@@ -2655,7 +2662,7 @@ def _detect_dangerous_combinations(tags: Dict[str, str], policy: str, is_no_mail
             "level": "advisory",
             "title": "Deprecated tags present",
             "text": (
-                f"Deprecated tags found that will be ignored by DMARCbis-compliant receivers. "
+                f"Deprecated tags found that will be ignored by RFC 9989-compliant receivers. "
                 f"Consider removing: {', '.join(deprecated_present)}."
             ),
             "tags": deprecated_present,
@@ -2702,11 +2709,11 @@ def _detect_dangerous_combinations(tags: Dict[str, str], policy: str, is_no_mail
 
     # ── BLUE: Informational ────────────────────────────────
 
-    # 18. SPF evaluates MAIL FROM only under DMARCbis
+    # 18. SPF evaluates MAIL FROM only under RFC 9989
     warnings.append({
         "level": "info",
-        "title": "SPF alignment under DMARCbis",
-        "text": "Under DMARCbis, SPF alignment is evaluated against the MAIL FROM (envelope sender) identity only, not HELO.",
+        "title": "SPF alignment under RFC 9989",
+        "text": "Under RFC 9989, SPF alignment is evaluated against the MAIL FROM (envelope sender) identity only, not HELO.",
         "tags": [],
     })
 
@@ -2722,11 +2729,11 @@ def _detect_dangerous_combinations(tags: Dict[str, str], policy: str, is_no_mail
             "tags": ["p"],
         })
 
-    # 20. DMARCbis reporting split
+    # 20. RFC 9989 reporting split
     warnings.append({
         "level": "info",
-        "title": "DMARCbis reporting restructured",
-        "text": "DMARCbis splits the specification into three separate RFCs: core mechanism, aggregate reporting, and failure reporting.",
+        "title": "RFC 9989 reporting restructured",
+        "text": "RFC 9989 splits the specification into three separate RFCs: core mechanism, aggregate reporting, and failure reporting.",
         "tags": [],
     })
 
@@ -2752,7 +2759,7 @@ def _detect_dangerous_combinations(tags: Dict[str, str], policy: str, is_no_mail
 
 
 # ============================================================
-# DMARCbis Health Verdict (Prompt 3)
+# RFC 9989 Health Verdict (Prompt 3)
 # ============================================================
 
 def _calculate_dmarcbis_health(tags: Dict[str, str], policy: str, config_warnings: List[Dict]) -> Dict:
@@ -2826,7 +2833,7 @@ def _calculate_dmarcbis_health(tags: Dict[str, str], policy: str, config_warning
             "reasons": attention_triggers,
         }
 
-    # ── DMARCbis Ready (green) ──────────────────────────────
+    # ── RFC 9989 Ready (green) ──────────────────────────────
     # Clean record, fully compliant
     if (policy in ("reject", "quarantine")
             and not deprecated_present
@@ -2837,13 +2844,13 @@ def _calculate_dmarcbis_health(tags: Dict[str, str], policy: str, config_warning
             and not critical):
         return {
             "status": "ready",
-            "label": "DMARCbis Ready",
+            "label": "RFC 9989 Ready",
             "color": "green",
-            "summary": "This record is fully DMARCbis-compliant with no issues detected.",
+            "summary": "This record is fully RFC 9989-compliant with no issues detected.",
             "reasons": [],
         }
 
-    # ── DMARCbis Compatible (blue) ──────────────────────────
+    # ── RFC 9989 Compatible (blue) ──────────────────────────
     # Valid with minor gaps
     reasons = []
     if deprecated_present:
@@ -2859,9 +2866,9 @@ def _calculate_dmarcbis_health(tags: Dict[str, str], policy: str, config_warning
 
     return {
         "status": "compatible",
-        "label": "DMARCbis Compatible",
+        "label": "RFC 9989 Compatible",
         "color": "blue",
-        "summary": f"This record works under DMARCbis but has room for improvement. {improvements}.",
+        "summary": f"This record works under RFC 9989 but has room for improvement. {improvements}.",
         "reasons": reasons,
     }
 
@@ -2896,7 +2903,7 @@ def _build_comparison_intelligence(
       position_statement - single punchy sentence
       position_pct       - 0-100 numeric position (higher = better)
       position_label     - e.g. "Ahead of 99.9%"
-      adoption_stats     - mini-stat block for DMARCbis adoption
+      adoption_stats     - mini-stat block for RFC 9989 adoption
     """
 
     has_dmarcbis_tags = any(t in tags for t in ("np", "psd", "t"))
@@ -2934,7 +2941,7 @@ def _build_comparison_intelligence(
 
     elif policy == "reject" and has_dmarcbis_tags:
         statement = (
-            "Ahead of 99.9% of the top 1000 domains in DMARCbis readiness."
+            "Ahead of 99.9% of the top 1000 domains in RFC 9989 readiness."
         )
         position_pct = 99
         position_label = "Top 0.1%"
@@ -2954,7 +2961,7 @@ def _build_comparison_intelligence(
         position_pct = 35
         position_label = "Ahead of ~26%"
 
-    # --- DMARCbis adoption mini-stats ---
+    # --- RFC 9989 adoption mini-stats ---
     adoption_stats = [
         {"tag": "np=", "adoption_pct": _TOP1K["np_adoption_pct"], "label": "np= adoption"},
         {"tag": "t=", "adoption_pct": _TOP1K["t_adoption_pct"], "label": "t= adoption"},
@@ -2980,11 +2987,11 @@ def _build_comparison_intelligence(
 # ============================================================
 
 def _build_why_dmarcbis(tags: Dict[str, str], policy: str, health_status: str, domain: str = "") -> Dict:
-    """Build the 'Why DMARCbis?' education section, personalized to this domain's record."""
+    """Build the 'Why RFC 9989?' education section, personalized to this domain's record."""
 
     sections = []
 
-    # Section 1: What is DMARCbis (always shown)
+    # Section 1: What is RFC 9989 (always shown)
     sections.append({
         "title": "What is RFC 9989 (DMARCbis)?",
         "content": (
@@ -3003,21 +3010,21 @@ def _build_why_dmarcbis(tags: Dict[str, str], policy: str, health_status: str, d
 
     if "pct" in tags:
         whats_new.append(
-            "Your record uses the pct tag. DMARCbis deprecates pct because only values of 0 "
+            "Your record uses the pct tag. RFC 9989 removes pct because only values of 0 "
             "and 100 were reliably enforced by receivers. It's replaced by t=y/t=n, a clean binary "
             "test mode that predictably drops your policy one level for safe rollout."
         )
 
     if "np" not in tags:
         whats_new.append(
-            f"Your record doesn't have an np= tag. This is a new DMARCbis tag that sets policy for "
+            f"Your record doesn't have an np= tag. This is a new RFC 9989 tag that sets policy for "
             f"non-existent subdomains, domains like secure-login.{domain or 'yourdomain.com'} that "
             f"don't exist but can be spoofed. Under RFC 7489, there was no way to control this."
         )
 
     if "psd" not in tags:
         whats_new.append(
-            "Your record doesn't declare psd=. DMARCbis introduces this tag to replace the Public "
+            "Your record doesn't declare psd=. RFC 9989 introduces this tag to replace the Public "
             "Suffix List for determining organizational domain boundaries. The PSL was a manually-maintained "
             "list that was often outdated. psd= lets you declare your own domain's status directly in DNS."
         )
@@ -3026,24 +3033,24 @@ def _build_why_dmarcbis(tags: Dict[str, str], policy: str, health_status: str, d
     if dep_in_record:
         tag_list = " and ".join(dep_in_record)
         whats_new.append(
-            f"Your record uses {tag_list} which {'is' if len(dep_in_record) == 1 else 'are'} deprecated in DMARCbis. "
+            f"Your record uses {tag_list} which {'is' if len(dep_in_record) == 1 else 'are'} deprecated in RFC 9989. "
             f"rf was redundant (only afrf was ever implemented) and ri was rarely respected by receivers."
         )
 
     # Always-show items
     whats_new.append(
-        "DMARCbis tightens record parsing significantly. Records with missing mailto: prefixes, "
+        "RFC 9989 tightens record parsing significantly. Records with missing mailto: prefixes, "
         "duplicate tags, empty values, or malformed URIs that older tools silently accepted will "
-        "be rejected by DMARCbis-compliant receivers."
+        "be rejected by RFC 9989-compliant receivers."
     )
 
     whats_new.append(
-        "DMARCbis replaces the DNS tree walk's dependence on the Public Suffix List with the psd= "
+        "RFC 9989 replaces the DNS tree walk's dependence on the Public Suffix List with the psd= "
         "tag and an 8-query safety limit, making organizational domain resolution more reliable and DNS-native."
     )
 
     whats_new.append(
-        "DMARCbis splits the specification into three separate RFCs: the core mechanism, aggregate "
+        "RFC 9989 splits the specification into three separate RFCs: the core mechanism, aggregate "
         "reporting, and failure reporting, reflecting that these are distinct operational concerns."
     )
 
@@ -3058,7 +3065,7 @@ def _build_why_dmarcbis(tags: Dict[str, str], policy: str, health_status: str, d
         {"status": "monitoring", "label": "Monitoring", "color": "amber"},
         {"status": "attention", "label": "Needs Attention", "color": "amber"},
         {"status": "compatible", "label": "Compatible", "color": "blue"},
-        {"status": "ready", "label": "DMARCbis Ready", "color": "green"},
+        {"status": "ready", "label": "RFC 9989 Ready", "color": "green"},
     ]
 
     sections.append({
@@ -3066,9 +3073,9 @@ def _build_why_dmarcbis(tags: Dict[str, str], policy: str, health_status: str, d
         "content": (
             "Based on analysis of the top 1000 internet domains: 26% have no DMARC at all, "
             "~55% are at p=reject, ~12% at p=quarantine, and ~7% at p=none. "
-            "0% have adopted DMARCbis-specific tags (np=, t=), only 0.1% use psd=, "
+            "0% have adopted RFC 9989-specific tags (np=, t=), only 0.1% use psd=, "
             "and 30.6% still use deprecated tags (pct, rf, ri). "
-            f"Your record is currently rated '{health_status}'. Adopting DMARCbis tags now puts you "
+            f"Your record is currently rated '{health_status}'. Adopting RFC 9989 tags now puts you "
             "ahead of the vast majority of the internet."
         ),
         "verdict_scale": verdict_scale,
@@ -3096,7 +3103,7 @@ def _build_why_dmarcbis(tags: Dict[str, str], policy: str, health_status: str, d
             "email that carries your name. This damages your domain's sending reputation (causing "
             "legitimate email to bounce or land in spam), erodes trust with the people you do business "
             "with, and in the worst case can lead to ransomware, data breaches, or financial fraud "
-            "traced back to your brand. DMARCbis closes gaps that RFC 7489 left open, especially "
+            "traced back to your brand. RFC 9989 closes gaps that RFC 7489 left open, especially "
             "around non-existent subdomain spoofing and inconsistent receiver behavior, making "
             "enforcement more reliable and complete."
         ),
@@ -3105,19 +3112,19 @@ def _build_why_dmarcbis(tags: Dict[str, str], policy: str, health_status: str, d
     # Section 5: What should I do
     sections.append({
         "title": "What should I do?",
-        "content": "See your personalized migration path above for step-by-step instructions to reach DMARCbis Ready status.",
+        "content": "See your personalized migration path above for step-by-step instructions to reach RFC 9989 Ready status.",
     })
 
     return {"sections": sections}
 
 
 def _build_migration_path(tags: Dict[str, str], policy: str, health_status: str, domain: str = "") -> Optional[Dict]:
-    """Generate a personalized step-by-step migration path to DMARCbis Ready.
+    """Generate a personalized step-by-step migration path to RFC 9989 Ready.
 
-    Returns None if already DMARCbis Ready.
+    Returns None if already RFC 9989 Ready.
     """
     if health_status == "ready":
-        return {"status": "ready", "steps": [], "message": "No migration needed. This record is DMARCbis Ready."}
+        return {"status": "ready", "steps": [], "message": "No migration needed. This record is RFC 9989 Ready."}
 
     steps = []
     step_num = 0
@@ -3218,7 +3225,7 @@ def _build_migration_path(tags: Dict[str, str], policy: str, health_status: str,
             "tags_changed": ["fo"],
         })
 
-    # Step: Add DMARCbis tags
+    # Step: Add RFC 9989 tags
     dmarcbis_needed = []
     if not np_val:
         dmarcbis_needed.append("np=reject")
@@ -3231,8 +3238,8 @@ def _build_migration_path(tags: Dict[str, str], policy: str, health_status: str,
         step_num += 1
         steps.append({
             "step": step_num,
-            "action": f"Add DMARCbis tags: {', '.join(dmarcbis_needed)}",
-            "why": "These tags close gaps in the old standard and prepare for DMARCbis.",
+            "action": f"Add RFC 9989 tags: {', '.join(dmarcbis_needed)}",
+            "why": "These tags close gaps in the old standard and prepare for RFC 9989.",
             "tags_changed": [t.split("=")[0] for t in dmarcbis_needed],
         })
 
@@ -3242,7 +3249,7 @@ def _build_migration_path(tags: Dict[str, str], policy: str, health_status: str,
         steps.append({
             "step": step_num,
             "action": f"Remove deprecated tags: {', '.join(deprecated)}",
-            "why": "These tags are ignored by DMARCbis receivers. Removing them cleans up the record.",
+            "why": "These tags are ignored by RFC 9989 receivers. Removing them cleans up the record.",
             "tags_changed": deprecated,
         })
 
@@ -3301,7 +3308,7 @@ def _build_record_builder(
             "deploy": _deploy_instructions(domain, record),
         }
 
-    # ── Already DMARCbis Ready ─────────────────────────────────
+    # ── Already RFC 9989 Ready ─────────────────────────────────
     if health_status == "ready":
         suggestions = _ready_suggestions(tags)
         return {
@@ -3323,7 +3330,7 @@ def _build_record_builder(
 
     changes: list = []
 
-    # 1. Fix policy progression — target is p=reject for DMARCbis Ready
+    # 1. Fix policy progression — target is p=reject for RFC 9989 Ready
     cur_p = rec_tags.get("p", "none").lower()
     if cur_p != "reject":
         rec_tags["p"] = "reject"
@@ -3354,7 +3361,7 @@ def _build_record_builder(
         rec_tags["np"] = target_p
         changes.append({
             "tag": "np", "action": "added", "value": target_p,
-            "reason": "Protects non-existent subdomains from spoofing (new in DMARCbis).",
+            "reason": "Protects non-existent subdomains from spoofing (new in RFC 9989).",
         })
     elif rec_tags.get("np", "").lower() == "none" and target_p == "reject":
         rec_tags["np"] = "reject"
@@ -3388,9 +3395,9 @@ def _build_record_builder(
     for dep in ("pct", "rf", "ri"):
         if dep in rec_tags:
             dep_reasons = {
-                "pct": "Deprecated in DMARCbis. Replaced by t= tag.",
-                "rf": "Deprecated in DMARCbis. Only afrf was ever implemented.",
-                "ri": "Deprecated in DMARCbis. Receivers standardize on daily reports.",
+                "pct": "Removed in RFC 9989. Replaced by the t= tag.",
+                "rf": "Deprecated in RFC 9989. Only afrf was ever implemented.",
+                "ri": "Deprecated in RFC 9989. Receivers standardize on daily reports.",
             }
             changes.append({
                 "tag": dep, "action": "removed",
@@ -3968,7 +3975,7 @@ def _build_spf_deep_analysis(raw: Dict) -> Optional[Dict]:
         "misconfigs": misconfigs,
         "optimizations": optimizations,
         "dmarcbis_note": (
-            "Under DMARCbis, SPF alignment is evaluated against the MAIL FROM (envelope sender) "
+            "Under RFC 9989, SPF alignment is evaluated against the MAIL FROM (envelope sender) "
             "identity only, not HELO. SPF pass alone does not guarantee DMARC pass. The MAIL FROM "
             "domain must also align with the From header domain."
         ),

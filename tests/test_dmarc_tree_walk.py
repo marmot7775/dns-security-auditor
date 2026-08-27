@@ -1,4 +1,4 @@
-"""Tests for dmarcbis-41 §4.10 tree-walk conformance.
+"""Tests for RFC 9989 §4.10 tree-walk conformance.
 
 Covers behavior changes from the spec audit:
   - First-walk-query stop on psd=y (§4.10 step 2 + §4.10.2 rule 2/3).

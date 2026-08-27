@@ -1,12 +1,12 @@
 # dns-audit.com
 
-**The first DMARCbis-aware DNS and email security audit tool**
+**DNS and email security auditing, with DMARC validated against RFC 9989**
 
 **Built by [Neil Anuskiewicz](https://www.linkedin.com/in/neilanuskiewicz/)** | **Live at [dns-audit.com](https://dns-audit.com)**
 
-DNS and email security analysis for any domain. Enter a domain and get a scored assessment with technical findings, plain-language explanations, and copy-paste DNS fix records. The first tool to validate against the upcoming DMARCbis standard, showing domain owners what changes before their records break.
+DNS and email security analysis for any domain. Enter a domain and get technical findings, plain-language explanations, and copy-paste DNS fix records. DMARC records are checked against RFC 9989, the current DMARC standard, and against RFC 7489 behavior, which most receivers still implement while tree walk support rolls out.
 
-Our analysis of the top 1000 internet domains found 0% adoption of DMARCbis-specific tags (`np=`, `psd=`, `t=`), 30.6% still using deprecated tags (`pct`, `rf`, `ri`), and 26% with no DMARC record at all.
+Our analysis of the top 1000 internet domains found 0% adoption of RFC 9989-specific tags (`np=`, `psd=`, `t=`), 30.6% still using deprecated tags (`pct`, `rf`, `ri`), and 26% with no DMARC record at all.
 
 Built for engineers, email administrators, and security consultants who need to evaluate a domain's authentication posture quickly and accurately.
 
@@ -18,7 +18,7 @@ Built for engineers, email administrators, and security consultants who need to 
 
 | Check | What It Does |
 |-------|-------------|
-| **DMARC + DMARCbis** | DMARCbis-strict record validation (16 layered checks), tag-by-tag decoder with DMARCbis education notes, dangerous combination detection (21 checks across 3 severity levels), 5-state DMARCbis health verdict, personalized migration wizard, attack surface visualization (4 spoofing vectors), RFC 7489 vs DMARCbis spec mode toggle with delta view, "Why DMARCbis?" education section. Implements the DMARCbis DNS Tree Walk ([draft-ietf-dmarc-dmarcbis](https://datatracker.ietf.org/doc/draft-ietf-dmarc-dmarcbis/), Section 4.10) for hierarchical policy discovery with animated visualization. |
+| **DMARC + RFC 9989** | RFC 9989-strict record validation (16 layered checks), tag-by-tag decoder with RFC 9989 education notes, dangerous combination detection (21 checks across 3 severity levels), 5-state RFC 9989 health verdict, personalized migration wizard, attack surface visualization (4 spoofing vectors), RFC 7489 vs RFC 9989 spec mode toggle with delta view, "Why RFC 9989?" education section. Implements the RFC 9989 DNS Tree Walk ([RFC 9989](https://www.rfc-editor.org/rfc/rfc9989.html), Section 4.10) for hierarchical policy discovery with animated visualization. |
 | **SPF** | Syntax validation, mechanism analysis, recursive evaluation with full lookup chain tracing, void lookup detection, and vendor-labeled include tree visualization. Flags `+all`, `?all`, missing `all`, `redirect`+`all` conflicts, deprecated `ptr`, overly broad CIDRs, and invalid IPs. |
 | **DKIM** | Selector discovery across 1,100+ common patterns using SPF-based vendor fingerprinting. Key strength analysis for RSA (1024/2048/4096) and Ed25519. Key rotation age estimation. Direct lookup of user-supplied selectors. Wildcard DNS detection prevents false positives. |
 
@@ -49,25 +49,19 @@ Built for engineers, email administrators, and security consultants who need to 
 
 ---
 
-## Scoring
+## How Results Are Presented
 
-Six categories sum to 100 points with a letter grade:
+There are no letter grades and no numeric score. Results open with three summary metrics:
 
-| Category | Points | What It Measures |
-|----------|--------|-----------------|
-| DMARC | 25 | Policy strength, alignment mode, reporting, subdomain policy |
-| SPF | 20 | Record presence, `all` mechanism, lookup count, `include` complexity |
-| DKIM | 15 | Key discovery, key type, cryptographic strength |
-| Best Practices | 20 | MTA-STS, TLS-RPT, DNSSEC, DANE, CAA, nameserver diversity |
-| Key Security | 10 | DKIM key strength, rotation hygiene, algorithm modernity |
-| Vendor Intelligence | 10 | Email service provider detection confidence |
-*Note: DKIM selectors cannot be enumerated via DNS. For best results, provide your selector directly.*
+| Metric | What It Shows |
+|--------|---------------|
+| Spoofing Protection | How many of four spoofing vectors the domain's records close |
+| RFC 9989 Readiness | Ready, Compatible, In Progress, or Action Needed |
+| Protocol Coverage | How many of nine protocols (DMARC, SPF, DKIM, MTA-STS, TLS-RPT, DANE, DNSSEC, BIMI, CAA) are configured |
 
-DMARC, SPF, and DKIM account for 60% of the score. Infrastructure checks (DNSSEC, CAA, DANE, Nameservers, Certificate Transparency, Blocklist) are evaluated and displayed but do not contribute to the numeric score, since their absence is often intentional.
+Below the summary, each check reports pass, warning, or fail with the specific finding and a copy-paste fix where one applies. A prioritized roadmap orders the fixes by impact.
 
-Domains receive a letter grade (A+ through F) based on a 100-point scoring system. See the [Methodology](https://dns-audit.com/methodology) page for detailed scoring criteria and grade thresholds.
-
-Domains where DKIM selectors could not be detected receive full DKIM credit, since selectors are private and cannot be verified from outside.
+*Note: DKIM selectors cannot be enumerated via DNS. For best results, provide your selector directly.* Domains where selectors could not be detected are not marked down for it, since selectors are private and cannot be verified from outside.
 
 ---
 
@@ -79,19 +73,19 @@ When evaluating an inbound message, the receiver queries DNS for a `TXT` record 
 
 If a valid record (beginning with `v=DMARC1`) is found at either level, its policy is applied. Otherwise, DMARC does not apply to the message.
 
-### DMARCbis DNS Tree Walk
+### RFC 9989 DNS Tree Walk
 
-Starting from the Author Domain (RFC 5322.From), the tool queries for a DMARC Policy Record. If none is found, it initiates a DNS Tree Walk as described in DMARCbis (draft-ietf-dmarc-dmarcbis-41, Section 4.10), walking up the DNS hierarchy one label at a time to discover both an applicable policy and the Organizational Domain used for identifier alignment. The walk is capped at eight DNS queries to prevent abuse.
+Starting from the Author Domain (RFC 5322.From), the tool queries for a DMARC Policy Record. If none is found, it initiates a DNS Tree Walk as described in RFC 9989, Section 4.10, walking up the DNS hierarchy one label at a time to discover both an applicable policy and the Organizational Domain used for identifier alignment. The walk is capped at eight DNS queries to prevent abuse.
 
-Because DMARCbis is on the Standards Track and expected to be published as a Proposed Standard, these results are displayed alongside traditional RFC 7489 lookups. This lets domain owners compare how policy discovery, inheritance via `sp` and `np`, and new tags like `psd` and `t` will behave once receivers adopt the updated specification.
+Tree walk results are displayed alongside RFC 7489 lookups, because publication is not deployment. Most receivers still evaluate DMARC using RFC 7489 behavior. Showing both lets domain owners compare how policy discovery, inheritance via `sp` and `np`, and the `psd` and `t` tags behave under each, and see what changes as receivers adopt the tree walk.
 
-### Why DMARCbis Matters
+### Why RFC 9989 Matters
 
-DMARCbis addresses several architectural limitations in RFC 7489 that carry real security and sustainability implications for email authentication. The original spec was published in 2015 as an Informational RFC, not a formal Internet standard, and carried no conformance requirements. Receivers were free to interpret it however they chose, and they did. A decade of deployment exposed problems that could not be patched within the original framework.
+RFC 9989 addresses several architectural limitations in RFC 7489 that carry real security and sustainability implications for email authentication. The original spec was published in 2015 as an Informational RFC, not a formal Internet standard, and carried no conformance requirements. Receivers were free to interpret it however they chose, and they did. A decade of deployment exposed problems that could not be patched within the original framework.
 
-The most significant change is replacing the Public Suffix List, a community-maintained external dependency, with the DNS Tree Walk, a DNS-native mechanism that lets domain owners control their own domain boundaries. RFC 7489 also only performs two lookups (the exact Author Domain and the Organizational Domain), leaving no way for intermediate subdomains to govern their own branch of the tree. For a domain like `notifications.app.services.example.com`, the only two lookups are at that exact subdomain and at `example.com`. There is no way for `services.example.com` to independently govern its own branch. The tree walk queries each level of the hierarchy, enabling decentralized policy management. DMARCbis also introduces the `np` tag to set separate policies for non-existent subdomains, closing a gap that allowed attackers to spoof fabricated subdomains like `ceo.example.com`, and replaces the widely misunderstood `pct` tag with `t`, a cleaner binary signal for testing mode.
+The most significant change is replacing the Public Suffix List, a community-maintained external dependency, with the DNS Tree Walk, a DNS-native mechanism that lets domain owners control their own domain boundaries. RFC 7489 also only performs two lookups (the exact Author Domain and the Organizational Domain), leaving no way for intermediate subdomains to govern their own branch of the tree. For a domain like `notifications.app.services.example.com`, the only two lookups are at that exact subdomain and at `example.com`. There is no way for `services.example.com` to independently govern its own branch. The tree walk queries each level of the hierarchy, enabling decentralized policy management. RFC 9989 also introduces the `np` tag to set separate policies for non-existent subdomains, closing a gap that allowed attackers to spoof fabricated subdomains like `ceo.example.com`, and replaces the widely misunderstood `pct` tag with `t`, a cleaner binary signal for testing mode.
 
-The DMARCbis specification (draft-ietf-dmarc-dmarcbis-41) is currently in the RFC Editor Queue and is expected to be published as a Proposed Standard. This tool analyzes DMARCbis alongside RFC 7489 so that domain owners can evaluate the impact on their domains now and begin preparing their records before receivers adopt the updated specification.
+DMARC is now three documents, all published 19 May 2026 as Proposed Standards. RFC 9989 is the core protocol, RFC 9990 is aggregate reporting, RFC 9991 is failure reporting. All three obsolete RFC 7489. RFC 9989 also obsoletes RFC 9091 (PSD DMARC), and RFC 9991 updates RFC 6591. Receiver deployment is gradual, so this tool analyzes the current specification alongside RFC 7489 behavior and shows domain owners where their records stand under each.
 
 ### SPF Evaluation Trace
 
@@ -99,7 +93,7 @@ Full recursive SPF evaluation that traces the path through every `include` and `
 
 ### Defensive DNS Detection
 
-Domains configured to not send or receive email (null MX, `v=spf1 -all`, `p=reject`) are identified as defensive DNS configurations and scored appropriately rather than penalized for intentionally absent email infrastructure.
+Domains configured to not send or receive email (null MX, `v=spf1 -all`, `p=reject`) are identified as defensive DNS configurations rather than flagged for intentionally absent email infrastructure.
 
 ### Authentication Resilience
 
@@ -111,7 +105,7 @@ Cross-check analysis that catches issues no single check reveals: DMARC enforcem
 
 ### PDF Report
 
-One-click branded PDF with executive summary (grade, score breakdown, priority fixes, detected vendors) and detailed check cards.
+One-click branded PDF with executive summary (summary metrics, priority fixes, detected vendors) and detailed check cards.
 
 ### Scoped Audits
 
@@ -128,16 +122,16 @@ One-click branded PDF with executive summary (grade, score breakdown, priority f
 
 Identifies email service providers using multiple signals: MX hostnames, SPF `include` chains, DMARC `rua` reporting URIs, and DKIM selectors. Multi-signal detection with confidence scoring.
 
-### DMARCbis Checker
+### RFC 9989 Checker
 
-The first tool to validate DMARC records against the upcoming DMARCbis standard (draft-ietf-dmarc-dmarcbis). Features that no other tool provides:
+Validates DMARC records against RFC 9989:
 
 - **Strict Record Validator**: 16 layered checks across tokenization, grammar, and semantics. Catches missing `mailto:` prefixes, duplicate tags, invalid URIs, and other issues that legacy tools silently accept.
-- **Spec Mode Toggle**: Switch between RFC 7489 (legacy) and DMARCbis (strict) validation to see exactly what changes. The "See the Future" view shows domain owners which issues will break when receivers adopt DMARCbis.
-- **Tag Decoder with DMARCbis Education**: Every tag explained with security consequences and a DMARCbis note explaining what changed from RFC 7489 and why.
+- **Spec Mode Toggle**: Switch between RFC 7489 (legacy) and RFC 9989 (strict) validation to see exactly what changes. The delta view shows which issues RFC 9989 flags that RFC 7489 accepted.
+- **Tag Decoder with RFC 9989 Education**: Every tag explained with security consequences and a RFC 9989 note explaining what changed from RFC 7489 and why.
 - **Dangerous Combination Detection**: 21 checks for dangerous tag interactions (`sp=none` + `p=reject` policy gaps, contradictory policies, test mode weakening enforcement).
-- **Health Verdict**: 5-state classification (DMARCbis Ready, Compatible, Monitoring, Needs Attention, Misconfigured) with specific findings.
-- **Migration Wizard**: Personalized step-by-step path from current state to DMARCbis Ready, with before/after DNS records at every step and a copy-to-clipboard target record.
+- **Health Verdict**: 5-state classification (RFC 9989 Ready, Compatible, Monitoring, Needs Attention, Misconfigured) with specific findings.
+- **Migration Wizard**: Personalized step-by-step path from current state to RFC 9989 Ready, with before/after DNS records at every step and a copy-to-clipboard target record.
 - **Attack Surface View**: 4-vector spoofing risk map (direct domain, subdomain, non-existent subdomain, reporting leakage) with concrete attack scenarios.
 - **Email Security Roadmap**: Cross-protocol prioritized action plan synthesizing findings across all 13 checks.
 
@@ -157,7 +151,7 @@ audit_engine.py            Check orchestration, parallel execution with timeouts
 result_transformer.py      Raw results to frontend card format
 security_scoring.py        Weighted scoring and letter grading
 pdf_report.py              reportlab-based PDF generation
-dmarc_tree_walk.py         DMARCbis Section 4.10 tree walk
+dmarc_tree_walk.py         RFC 9989 Section 4.10 tree walk
 spf_recursive.py           Recursive SPF lookup counter
 spf_execution_engine.py    SPF evaluation trace, DMARC roadmap
 checks_extra.py            MTA-STS, TLS-RPT, BIMI checks

@@ -1,10 +1,10 @@
 """Tests for the dmarcbis readiness recommendation source classification.
 
 The audit must distinguish:
-  - spec_required: explicitly mandated in dmarcbis-41 (e.g. removal
+  - spec_required: explicitly mandated in RFC 9989 (e.g. removal
     of pct, rf, and ri per §C.5.2; pct also covered in §A.6).
   - editorial: our own guidance not mandated by spec (e.g. np value
-    relative to p, since dmarcbis-41 §4.7 is silent on this).
+    relative to p, since RFC 9989 §4.7 is silent on this).
 
 This file pins those classifications so silent regressions in either
 direction (treating spec mandates as editorial, or editorial advice
@@ -37,7 +37,7 @@ def _run(record, **overrides):
 
 
 def test_pct_tag_recommendation_is_spec_required_with_citation():
-    """dmarcbis-41 §C.5.2 (Tags Removed) and §A.6 explicitly remove pct.
+    """RFC 9989 §C.5.2 (Tags Removed) and §A.6 explicitly remove pct.
     The audit must mark this as spec_required and provide the section
     reference so the user can verify."""
     out = _run("v=DMARC1; p=reject; pct=50")
@@ -46,14 +46,14 @@ def test_pct_tag_recommendation_is_spec_required_with_citation():
     assert pct_recs, f"pct should be flagged: {out['deprecated_tags']}"
     pct = pct_recs[0]
     assert pct["source"] == "spec_required", (
-        f"pct removal IS in dmarcbis-41 §C.5.2 -> spec_required, got {pct['source']}"
+        f"pct removal IS in RFC 9989 §C.5.2 -> spec_required, got {pct['source']}"
     )
     assert pct["spec_reference"] is not None
     assert "C.5.2" in pct["spec_reference"] or "A.6" in pct["spec_reference"]
 
 
 def test_np_recommendation_for_p_reject_is_editorial():
-    """dmarcbis-41 §4.7 defines np but does NOT prescribe a value
+    """RFC 9989 §4.7 defines np but does NOT prescribe a value
     relative to p. Recommending np=reject for a p=reject record is
     best-practice advice, not a spec requirement -> editorial."""
     out = _run("v=DMARC1; p=reject")
@@ -61,7 +61,7 @@ def test_np_recommendation_for_p_reject_is_editorial():
     np = out["new_tags"]["np"]
     assert np["present"] is False
     assert np["source"] == "editorial", (
-        f"dmarcbis-41 §4.7 is silent on np vs p -> editorial, got {np['source']}"
+        f"RFC 9989 §4.7 is silent on np vs p -> editorial, got {np['source']}"
     )
     assert np["spec_reference"] is None
     assert np["recommendation"] is not None
@@ -82,17 +82,17 @@ def test_np_recommendation_for_p_none_is_editorial():
 
 
 def test_rf_and_ri_recommendations_are_spec_required():
-    """dmarcbis-41 §C.5.2 (Tags Removed) explicitly lists pct, rf,
+    """RFC 9989 §C.5.2 (Tags Removed) explicitly lists pct, rf,
     and ri as removed from the protocol. All three removals are
     spec_required, with §C.5.2 as the citation."""
     out = _run("v=DMARC1; p=reject; rf=afrf; ri=86400")
 
     by_tag = {d["tag"]: d for d in out["deprecated_tags"]}
     assert by_tag["rf"]["source"] == "spec_required", (
-        f"dmarcbis-41 §C.5.2 removes rf -> spec_required, got {by_tag['rf']['source']}"
+        f"RFC 9989 §C.5.2 removes rf -> spec_required, got {by_tag['rf']['source']}"
     )
     assert by_tag["ri"]["source"] == "spec_required", (
-        f"dmarcbis-41 §C.5.2 removes ri -> spec_required, got {by_tag['ri']['source']}"
+        f"RFC 9989 §C.5.2 removes ri -> spec_required, got {by_tag['ri']['source']}"
     )
     assert "C.5.2" in (by_tag["rf"]["spec_reference"] or "")
     assert "C.5.2" in (by_tag["ri"]["spec_reference"] or "")

@@ -19,7 +19,7 @@
     <link rel="icon" type="image/svg+xml" href="/static/favicon.svg">
     <link rel="apple-touch-icon" sizes="180x180" href="/static/apple-touch-icon.png">
     <link rel="icon" type="image/png" sizes="32x32" href="/static/favicon-32.png">
-    <link rel="stylesheet" href="/static/style.css?v=b2752f9">
+    <link rel="stylesheet" href="/static/style.css?v=a1a03f4">
     <script type="application/ld+json">
     {
         "@context": "https://schema.org",
@@ -63,7 +63,7 @@
         <p>I built dns-audit.com because the tools I wanted didn't exist.</p>
         <p>Most DNS tools show you what records you have. They leave you to figure out whether those records are correct, whether the tag combination is dangerous, whether the RFC you're reading is the one that's actually current. I wanted something that did the analysis, showed the work, referenced the specific RFC section it was checking against, and gave me the exact records I needed to fix what was wrong.</p>
         <p>So I built it.</p>
-        <p>It checks your DNS and email security configuration against current standards, flags misconfigurations, and gives you copy-paste fixes. DMARC validation runs against RFC 7489, the standard receivers use today. SPF, DKIM, DNSSEC, MTA-STS, TLS-RPT, DANE, CAA, BIMI, and nameserver configuration are all covered. The tool also looks ahead to DMARCbis and shows you what will need to change when the new spec lands.</p>
+        <p>It checks your DNS and email security configuration against current standards, flags misconfigurations, and gives you copy-paste fixes. DMARC validation runs against the current standard, published 19 May 2026 in three parts: RFC 9989 for the protocol, RFC 9990 for aggregate reporting, RFC 9991 for failure reporting. It also runs against RFC 7489 behavior, which most receivers still implement while tree walk support rolls out. You see both, and what changes between them. SPF, DKIM, DNSSEC, MTA-STS, TLS-RPT, DANE, CAA, BIMI, and nameserver configuration are all covered.</p>
         <p>If you manage DNS for a domain someone depends on, this tool was built for you.</p>
         <p>It's free. No accounts, no cookies, no tracking. The code is open source under the MIT License. You can <a href="https://github.com/marmot7775/dns-security-auditor" target="_blank" rel="noopener">read it, run it locally, or fork it</a>.</p>
         <div class="about-closing">

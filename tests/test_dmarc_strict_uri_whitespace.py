@@ -1,7 +1,7 @@
-"""Pin: dmarcbis-41 §4.8 ABNF allows *WSP around the comma in
+"""Pin: RFC 9989 §4.8 ABNF allows *WSP around the comma in
 dmarc-urilist, so the strict validator must not flag whitespace.
 
-Verbatim ABNF (line 1274 of draft-ietf-dmarc-dmarcbis-41):
+Verbatim ABNF (RFC 9989 §4.8, Formal Definition):
 
     dmarc-urilist = (dmarc-uri / obs-dmarc-uri)
                     *(*WSP "," *WSP (dmarc-uri / obs-dmarc-uri))

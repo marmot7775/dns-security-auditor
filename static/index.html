@@ -20,7 +20,7 @@
     <link rel="icon" type="image/svg+xml" href="/static/favicon.svg">
     <link rel="apple-touch-icon" sizes="180x180" href="/static/apple-touch-icon.png">
     <link rel="icon" type="image/png" sizes="32x32" href="/static/favicon-32.png">
-    <link rel="stylesheet" href="/static/style.css?v=b2752f9">
+    <link rel="stylesheet" href="/static/style.css?v=a1a03f4">
     <script type="application/ld+json">
     {
         "@context": "https://schema.org",
@@ -52,10 +52,10 @@
             },
             {
                 "@type": "Question",
-                "name": "What is RFC 9989 (DMARCbis)?",
+                "name": "What is RFC 9989, and is it the same thing as DMARCbis?",
                 "acceptedAnswer": {
                     "@type": "Answer",
-                    "text": "RFC 9989 is the current DMARC standard, published in May 2026 on the IETF Standards Track. It obsoletes RFC 7489 and RFC 9091. It introduces the DNS tree walk, the np= and psd= tags, and deprecates the pct tag. It is still widely called DMARCbis. This tool assesses your record against it."
+                    "text": "RFC 9989 is the core DMARC protocol, published 19 May 2026 on the IETF Standards Track. It does not stand alone: RFC 9990 covers aggregate reporting and RFC 9991 covers failure reporting. All three obsolete RFC 7489, RFC 9989 also obsoletes RFC 9091, and RFC 9991 updates RFC 6591. RFC 9989 introduces the DNS tree walk and the np=, psd=, and t= tags, and removes the pct, rf, and ri tags. DMARCbis was the IETF working group's name for the revision effort, so the two names refer to the same work. Now that it is published, the standard is RFC 9989. This tool assesses your record against it."
                 }
             },
             {
@@ -132,7 +132,7 @@
         <section class="audit-input-section">
             <div class="audit-input-card">
                 <h1 class="audit-title">DNS &amp; Email Security Audit</h1>
-                <p class="audit-subtitle">Analysis of your email authentication and DNS security configuration. Includes <a href="/articles/dmarcbis" class="audit-subtitle-link">RFC 9989 (DMARCbis) readiness</a>, DNSSEC validation, and more.</p>
+                <p class="audit-subtitle">Analysis of your email authentication and DNS security configuration. Includes <a href="/articles/dmarcbis" class="audit-subtitle-link">RFC 9989 readiness</a>, DNSSEC validation, and more.</p>
                 <div class="scope-selector" id="scope-selector" role="radiogroup" aria-label="Audit scope selection">
                     <div class="scope-label">Audit Scope</div>
                     <div class="scope-options">
@@ -327,6 +327,6 @@
             </div>
         </div>
     </footer>
-    <script defer src="/static/app.js?v=b2752f9"></script>
+    <script defer src="/static/app.js?v=a1a03f4"></script>
 </body>
 </html>

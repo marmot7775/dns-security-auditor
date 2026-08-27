@@ -1120,7 +1120,7 @@ function renderCheckBody(check) {
         html += renderSpecToggle(check.spec_comparison);
     }
 
-    // DMARCbis Strict Validation (shown in DMARCbis mode)
+    // RFC 9989 Strict Validation (shown in RFC 9989 mode)
     if (check.strict_validation) {
         html += `<div class="spec-dmarcbis">`;
         html += renderStrictValidation(check.strict_validation);
@@ -1149,7 +1149,7 @@ function renderCheckBody(check) {
         html += renderSubdomainAudit(check._subdomain_audit);
     }
 
-    // DMARC Record Breakdown (DMARCbis mode only — has DMARCbis notes, health verdict, migration, etc.)
+    // DMARC Record Breakdown (RFC 9989 mode only — has RFC 9989 notes, health verdict, migration, etc.)
     if (check.tag_breakdown) {
         html += `<div class="spec-dmarcbis">`;
         html += renderDmarcTagBreakdown(check.tag_breakdown);
@@ -1180,7 +1180,7 @@ function renderCheckBody(check) {
         html += `</div>`;
     }
 
-    // DMARCbis readiness (after tree walk, before evaluation) — DMARCbis mode only
+    // RFC 9989 readiness (after tree walk, before evaluation) — RFC 9989 mode only
     if (check.dmarcbis_readiness) {
         html += `<div class="spec-dmarcbis">`;
         html += renderDmarcbisReadiness(check.dmarcbis_readiness);
@@ -1407,7 +1407,7 @@ function renderConsistencyFindings(findings) {
 }
 
 // ============================================================
-// Spec Mode Toggle (RFC 7489 vs DMARCbis)
+// Spec Mode Toggle (RFC 7489 vs RFC 9989)
 // ============================================================
 
 let _specMode = 'dmarcbis'; // session-persistent toggle state
@@ -1415,7 +1415,7 @@ let _specMode = 'dmarcbis'; // session-persistent toggle state
 function renderSpecToggle(comparison) {
     if (!comparison) return '';
 
-    // "See the Future" callout
+    // Strict-validation delta callout
     let futureHtml = '';
     if (comparison.legacy_only_pass && comparison.dmarcbis_only_items.length > 0) {
         let itemsHtml = comparison.dmarcbis_only_items.map(item =>
@@ -1427,7 +1427,7 @@ function renderSpecToggle(comparison) {
         futureHtml = `
             <div class="st-future spec-dmarcbis">
                 <div class="st-future-title">This record passes under the obsolete RFC 7489 but has issues under RFC 9989</div>
-                <div class="st-future-subtitle">${comparison.dmarcbis_only_count} problem${comparison.dmarcbis_only_count !== 1 ? 's' : ''} found that only appear under strict DMARCbis validation. RFC 9989 replaced RFC 7489 in May 2026, so these are problems with the record today, not problems it will have later.</div>
+                <div class="st-future-subtitle">${comparison.dmarcbis_only_count} problem${comparison.dmarcbis_only_count !== 1 ? 's' : ''} found that only appear under strict RFC 9989 validation. RFC 9989 replaced RFC 7489 in May 2026, so these are problems with the record today, not problems it will have later.</div>
                 ${itemsHtml}
             </div>`;
     }
@@ -1435,7 +1435,7 @@ function renderSpecToggle(comparison) {
     // Delta banner (switches with toggle)
     let deltaDmarcbis = '';
     if (comparison.dmarcbis_only_count > 0) {
-        deltaDmarcbis = `<div class="st-delta spec-dmarcbis">DMARCbis strict validation found ${comparison.dmarcbis_only_count} additional issue${comparison.dmarcbis_only_count !== 1 ? 's' : ''} that legacy validation missed.</div>`;
+        deltaDmarcbis = `<div class="st-delta spec-dmarcbis">RFC 9989 strict validation found ${comparison.dmarcbis_only_count} additional issue${comparison.dmarcbis_only_count !== 1 ? 's' : ''} that legacy validation missed.</div>`;
     }
     let deltaLegacy = '';
     if (comparison.dmarcbis_only_count > 0) {
@@ -1628,10 +1628,10 @@ document.addEventListener('click', function(e) {
 });
 
 // ============================================================
-// DMARCbis Strict Validation
+// RFC 9989 Strict Validation
 // ============================================================
 
-function renderStrictValidation(sv, specLabel = 'DMARCbis') {
+function renderStrictValidation(sv, specLabel = 'RFC 9989') {
     if (!sv || !sv.categories || sv.categories.length === 0) return '';
 
     const statusIcon = {
@@ -1696,7 +1696,7 @@ function renderStrictValidation(sv, specLabel = 'DMARCbis') {
 function renderDmarcTagBreakdown(bd) {
     if (!bd || !bd.tags || bd.tags.length === 0) return '';
 
-    // DMARCbis status badge classes
+    // RFC 9989 status badge classes
     const dmarcbisClasses = {
         'current': 'rb-bis-current',
         'deprecated': 'rb-bis-deprecated',
@@ -1704,8 +1704,8 @@ function renderDmarcTagBreakdown(bd) {
     };
     const dmarcbisLabels = {
         'current': 'Current',
-        'deprecated': 'Deprecated',
-        'new': 'New in DMARCbis'
+        'deprecated': 'Removed in RFC 9989',
+        'new': 'New in RFC 9989'
     };
 
     // Health verdict colors (5 states)
@@ -1777,10 +1777,10 @@ function renderDmarcTagBreakdown(bd) {
             chainHtml = `<div class="rb-fallback-chain">${links}</div>`;
         }
 
-        // DMARCbis note callout
+        // RFC 9989 note callout
         let noteHtml = '';
         if (tag.dmarcbis_note) {
-            noteHtml = `<div class="rb-bis-note"><span class="rb-bis-note-label">DMARCbis</span> ${escapeHtml(tag.dmarcbis_note)}</div>`;
+            noteHtml = `<div class="rb-bis-note"><span class="rb-bis-note-label">RFC 9989</span> ${escapeHtml(tag.dmarcbis_note)}</div>`;
         }
 
         tagsHtml += `
@@ -1852,12 +1852,12 @@ function renderDmarcTagBreakdown(bd) {
         migrationHtml = `
             <div class="mw-block">
                 <div class="mw-header">
-                    <span class="mw-title">Migration Path to DMARCbis Ready</span>
+                    <span class="mw-title">Migration Path to RFC 9989 Ready</span>
                     <span class="mw-progress">${bd.migration.total_steps} steps</span>
                 </div>
                 <div class="mw-steps">${stepsHtml}</div>
                 <div class="mw-target">
-                    <div class="mw-target-label">Target DMARCbis-Ready Record</div>
+                    <div class="mw-target-label">Target RFC 9989-Ready Record</div>
                     <div class="record-block" style="margin: 0.4rem 0;">
                         <span class="record-text">${escapeHtml(bd.migration.target_record)}</span>
                         <button class="copy-btn" aria-label="Copy to clipboard">Copy</button>
@@ -1868,11 +1868,11 @@ function renderDmarcTagBreakdown(bd) {
         migrationHtml = `
             <div class="mw-block mw-ready">
                 <span class="mw-ready-check">&#10003;</span>
-                <span class="mw-ready-text">No migration needed. This record is DMARCbis Ready.</span>
+                <span class="mw-ready-text">No migration needed. This record is RFC 9989 Ready.</span>
             </div>`;
     }
 
-    // --- Why DMARCbis? Education Section (Prompt 4) ---
+    // --- Why RFC 9989? Education Section (Prompt 4) ---
     let whyHtml = '';
     if (bd.why_dmarcbis && bd.why_dmarcbis.sections) {
         let sectionsHtml = '';
@@ -1894,10 +1894,10 @@ function renderDmarcTagBreakdown(bd) {
                 });
                 body += '</div>';
             }
-            // DMARCbis Adoption mini-stat block
+            // RFC 9989 Adoption mini-stat block
             if (sec.adoption_stats) {
                 body += '<div class="ci-adoption-block">';
-                body += '<div class="ci-adoption-title">DMARCbis Adoption Among Top 1000</div>';
+                body += '<div class="ci-adoption-title">RFC 9989 Adoption Among Top 1000</div>';
                 sec.adoption_stats.forEach(stat => {
                     const barWidth = Math.max(stat.pct, 0.5);
                     body += `
@@ -1926,7 +1926,7 @@ function renderDmarcTagBreakdown(bd) {
                 <details>
                     <summary class="wd-summary">
                         <span class="wd-summary-icon">&#128218;</span>
-                        <span class="wd-summary-text">Why DMARCbis?</span>
+                        <span class="wd-summary-text">Why RFC 9989?</span>
                     </summary>
                     <div class="wd-body">${sectionsHtml}</div>
                 </details>
@@ -1982,7 +1982,7 @@ function renderRecordBuilder(rb) {
                     <span class="rcb-title">Record Builder</span>
                     <span class="rcb-badge rcb-badge-ready">No changes needed</span>
                 </div>
-                <p class="rcb-ready-msg">Your DMARC record is DMARCbis Ready. No modifications required.</p>
+                <p class="rcb-ready-msg">Your DMARC record is RFC 9989 Ready. No modifications required.</p>
                 ${suggestionsHtml}
             </div>`;
     }
@@ -2080,7 +2080,7 @@ function renderRecordBuilder(rb) {
             ${diffHtml}
             ${changesHtml}
             <div class="rcb-result">
-                <div class="rcb-result-label">${isFirst ? 'Recommended starting record' : 'Recommended DMARCbis-Ready record'}</div>
+                <div class="rcb-result-label">${isFirst ? 'Recommended starting record' : 'Recommended RFC 9989-Ready record'}</div>
                 <div class="rcb-result-record record-block" style="margin: 0.4rem 0;">
                     <span class="record-text">${escapeHtml(rb.recommended_record)}</span>
                     <button class="copy-btn" aria-label="Copy to clipboard">Copy</button>
@@ -2147,8 +2147,8 @@ function renderTreeWalkSimple(tw) {
         <div class="tree-walk tree-walk-simple tw-animated">
             <div class="tw-header-row">
                 <div class="tree-walk-header">DMARC Policy Discovery (Tree Walk)</div>
-                <a class="tw-spec-badge" href="https://datatracker.ietf.org/doc/draft-ietf-dmarc-dmarcbis/"
-                   target="_blank" rel="noopener">DMARCbis</a>
+                <a class="tw-spec-badge" href="https://www.rfc-editor.org/rfc/rfc9989.html"
+                   target="_blank" rel="noopener">RFC 9989</a>
             </div>
             <div class="tw-simple-body">
                 <span class="tw-simple-check">&#10003;</span>
@@ -2158,7 +2158,7 @@ function renderTreeWalkSimple(tw) {
                 Policy: <span class="tw-pill ${policyClass}">${policy}</span>
             </div>
             <div class="tw-footnote">
-                Under <a href="https://datatracker.ietf.org/doc/draft-ietf-dmarc-dmarcbis/" target="_blank" rel="noopener">DMARCbis</a>,
+                Under <a href="https://www.rfc-editor.org/rfc/rfc9989.html" target="_blank" rel="noopener">RFC 9989</a>,
                 receivers walk up the DNS hierarchy to find an applicable DMARC policy when a domain lacks its own record.
                 This domain has a direct record, so the walk is not needed.
             </div>
@@ -2166,7 +2166,7 @@ function renderTreeWalkSimple(tw) {
 }
 
 function renderTreeWalkFull(tw) {
-    const specUrl = 'https://datatracker.ietf.org/doc/draft-ietf-dmarc-dmarcbis/';
+    const specUrl = 'https://www.rfc-editor.org/rfc/rfc9989.html';
     const stepCount = tw.steps.length;
     // Each step lands 150ms after the previous; metadata appears after the last step
     const stepInterval = 0.15;            // seconds between steps
@@ -2177,18 +2177,18 @@ function renderTreeWalkFull(tw) {
         <div class="tree-walk tw-animated">
             <div class="tw-header-row">
                 <div class="tree-walk-header">DMARC Policy Discovery (Tree Walk)</div>
-                <a class="tw-spec-badge" href="${specUrl}" target="_blank" rel="noopener">DMARCbis</a>
+                <a class="tw-spec-badge" href="${specUrl}" target="_blank" rel="noopener">RFC 9989</a>
             </div>`;
 
     // Educational intro
     if (!tw.policy_source) {
         html += `<div class="tw-intro">This domain does not have its own DMARC record.
-            Under <a href="${specUrl}" target="_blank" rel="noopener">DMARCbis</a>,
+            Under <a href="${specUrl}" target="_blank" rel="noopener">RFC 9989</a>,
             receivers walk up the DNS hierarchy looking for an applicable policy.
             <strong>No policy was found.</strong></div>`;
     } else if (tw.is_subdomain) {
         html += `<div class="tw-intro">This domain does not have its own DMARC record.
-            Under <a href="${specUrl}" target="_blank" rel="noopener">DMARCbis</a>,
+            Under <a href="${specUrl}" target="_blank" rel="noopener">RFC 9989</a>,
             receivers walk up the DNS hierarchy to find an applicable policy.</div>`;
     }
 
@@ -2295,15 +2295,15 @@ function getTagExplanation(tag, tw) {
 }
 
 // ============================================================
-// DMARCbis Readiness
+// RFC 9989 Readiness
 // ============================================================
 
 function renderDmarcbisReadiness(readiness) {
     if (!readiness || readiness.status === 'no_record') return '';
 
     const statusLabels = {
-        'compliant': 'DMARCbis Ready',
-        'compatible': 'DMARCbis Compatible',
+        'compliant': 'RFC 9989 Ready',
+        'compatible': 'RFC 9989 Compatible',
         'non_compliant': 'Needs Update'
     };
     const statusColors = {
@@ -2330,7 +2330,7 @@ function renderDmarcbisReadiness(readiness) {
 
         // Per-tag deprecation details (expanded under the checklist item).
         // Each row shows a source badge so the reader can tell whether the
-        // change is mandated by dmarcbis-41 or our editorial suggestion.
+        // change is mandated by RFC 9989 or our editorial suggestion.
         let subDetailsHtml = '';
         if (item.deprecated_details && item.deprecated_details.length > 0) {
             let depItems = '';
@@ -2363,7 +2363,7 @@ function renderDmarcbisReadiness(readiness) {
             let fallbackNote = item.np_fallback_note
                 ? `<div class="dbis-chain-note">${escapeHtml(item.np_fallback_note)}</div>`
                 : '';
-            // dmarcbis-41 §4.7 does not require np to be present, so any
+            // RFC 9989 §4.7 does not require np to be present, so any
             // suggestion to add it is editorial. Render a badge + the
             // full editorial recommendation text when one is available.
             let editorialBlock = '';
@@ -2408,7 +2408,7 @@ function renderDmarcbisReadiness(readiness) {
 
         suggestedHtml = `
             <div class="dbis-suggested">
-                <div class="dbis-suggested-label">Suggested DMARCbis Record</div>
+                <div class="dbis-suggested-label">Suggested RFC 9989 Record</div>
                 <div class="record-block" style="margin: 0.5rem 0;">
                     <span class="record-text">${escapeHtml(readiness.suggested_record)}</span>
                 </div>
@@ -2420,8 +2420,8 @@ function renderDmarcbisReadiness(readiness) {
         <div class="dbis-readiness-block">
             <div class="dbis-header">
                 <div class="dbis-header-left">
-                    <span class="dbis-badge">DMARCbis</span>
-                    <span class="dbis-title">DMARCbis Readiness</span>
+                    <span class="dbis-badge">RFC 9989</span>
+                    <span class="dbis-title">RFC 9989 Readiness</span>
                 </div>
                 <div class="dbis-header-right">
                     <span class="dbis-status dbis-status-${statusClass}">${escapeHtml(statusLabel)}</span>
@@ -2462,7 +2462,7 @@ function renderComparisonIntelligence(ci) {
 
         adoptionHtml = `
             <details class="ci-adoption-details">
-                <summary class="ci-adoption-summary">DMARCbis Adoption Among Top 1000</summary>
+                <summary class="ci-adoption-summary">RFC 9989 Adoption Among Top 1000</summary>
                 <div class="ci-adoption-block">
                     ${rows}
                     <div class="ci-adoption-tagline">${escapeHtml(ci.adoption_tagline)}</div>
@@ -2480,7 +2480,7 @@ function renderComparisonIntelligence(ci) {
                 <div class="ci-bar-labels">
                     <span class="ci-bar-label-left">No DMARC</span>
                     <span class="ci-bar-label-mid">${escapeHtml(ci.position_label)}</span>
-                    <span class="ci-bar-label-right">DMARCbis Ready</span>
+                    <span class="ci-bar-label-right">RFC 9989 Ready</span>
                 </div>
             </div>
             ${adoptionHtml}
@@ -2533,7 +2533,7 @@ function renderExecutiveSummary(es) {
             </div>
             <div class="es-metric">
                 <div class="es-metric-value es-color-${safeClass(dr.color)}">${escapeHtml(dr.label)}</div>
-                <div class="es-metric-label">DMARCbis Readiness</div>
+                <div class="es-metric-label">RFC 9989 Readiness</div>
             </div>
             <div class="es-metric">
                 <div class="es-metric-ring">${ringSvg}<span class="es-ring-text">${pc.configured}/${pc.total}</span></div>
@@ -2659,8 +2659,8 @@ function renderDkimKeyAnalysis(dk) {
 function renderSpfDeepAnalysis(spf) {
     if (!spf) return '';
 
-    // DMARCbis context note
-    let noteHtml = `<div class="rb-bis-note" style="margin-bottom:0.6rem;"><span class="rb-bis-note-label">DMARCbis</span> ${escapeHtml(spf.dmarcbis_note)}</div>`;
+    // RFC 9989 context note
+    let noteHtml = `<div class="rb-bis-note" style="margin-bottom:0.6rem;"><span class="rb-bis-note-label">RFC 9989</span> ${escapeHtml(spf.dmarcbis_note)}</div>`;
 
     // Mechanism table
     let mechHtml = '';
@@ -2842,7 +2842,7 @@ function renderDmarcEvaluation(ev) {
                 : escapeHtml(ev.disposition);
 
     const mailingListNote = ev.policy === 'reject'
-        ? `<div class="de-mailing-list-note">DMARCbis notes that p=reject can cause delivery failures for messages sent through mailing lists or forwarding services. Consider this if your domain participates in mailing lists.</div>`
+        ? `<div class="de-mailing-list-note">RFC 9989 notes that p=reject can cause delivery failures for messages sent through mailing lists or forwarding services. Consider this if your domain participates in mailing lists.</div>`
         : '';
 
     return `
@@ -2859,7 +2859,7 @@ function renderDmarcEvaluation(ev) {
                     <span class="de-pill ${spfPillClass}">${escapeHtml(ev.spf_result)}</span>
                     <span class="de-align-mode">${escapeHtml(ev.spf_alignment_mode)}</span>
                     <span class="de-align-result ${spfAlignClass}">${spfAlignIcon}</span>
-                    <span class="de-note">DMARCbis evaluates SPF alignment against MAIL FROM only (not HELO)</span>
+                    <span class="de-note">RFC 9989 evaluates SPF alignment against MAIL FROM only (not HELO)</span>
                 </div>
                 <div class="de-row">
                     <span class="de-protocol">DKIM</span>

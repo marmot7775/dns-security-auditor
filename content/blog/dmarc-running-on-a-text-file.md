@@ -1,15 +1,15 @@
 ---
-title: "DMARCbis: DMARC Ran on a Text File. DMARCbis Brings It Home to DNS."
-description: "DMARC has leaned on a volunteer-maintained Public Suffix List for a decade. DMARCbis replaces it with a DNS tree walk. Here is what changed, and why you are not behind."
+title: "DMARCbis Is Now RFC 9989. DMARC Ran on a Text File. The New Standard Brings It Home to DNS."
+description: "DMARC has leaned on a volunteer-maintained Public Suffix List for a decade. RFC 9989 replaces it with a DNS tree walk. Here is what changed, and why you are not behind."
 author: "Neil Anuskiewicz"
 date: 2026-04-27
-tags: [dmarc, dmarcbis, email-security, deliverability, infrastructure]
+tags: [dmarc, rfc9989, dmarcbis, email-security, deliverability, infrastructure]
 canonical_url: "https://dns-audit.com/blog/dmarc-running-on-a-text-file"
 ---
 
-# DMARCbis
+# DMARCbis is now RFC 9989
 
-**DMARC ran on a text file. DMARCbis brings it home to DNS.**
+**DMARC ran on a text file. RFC 9989 brings it home to DNS.**
 
 Your DMARC record has been depending on a list maintained by volunteers on GitHub. You did fine. Here is what changed, and why you are not behind.
 
@@ -51,7 +51,7 @@ You are part of that, whether you set the record yourself or inherited it.
 
 ## The fix is here. It is simple.
 
-DMARCbis removes the Public Suffix List from the critical path.
+RFC 9989 removes the Public Suffix List from the critical path.
 
 In its place is the DNS tree walk.
 
@@ -63,13 +63,13 @@ A DNS-based protocol now uses DNS to answer its own question.
 
 This did not come out of theory. It reflects ten years of production experience. The working group incorporated what operators learned in practice, including inconsistencies in PSL handling, unreliable behavior of deprecated tags like `pct=`, and gaps such as non-existent subdomain spoofing, which the `np=` tag addresses.
 
-The main specification, draft-ietf-dmarc-dmarcbis-41, has been approved by the IESG. Final RFC publication is held pending the companion failure-reporting document, expected in 2026 and possibly into 2027. Adoption will be gradual. The Public Suffix List is not disappearing overnight. The record you have today continues to work.
+The IETF published the specification in May 2026 as RFC 9989, alongside RFC 9990 (aggregate reporting) and RFC 9991 (failure reporting). Together they obsolete RFC 7489 and RFC 9091. Adoption will be gradual. The Public Suffix List is not disappearing overnight. The record you have today continues to work.
 
 ## What you actually need to do
 
 If you want to be ready, the work is small.
 
-- **Remove deprecated tags.** `pct=`, `rf=`, and `ri=` are going away. Most were never handled consistently.
+- **Remove the retired tags.** RFC 9989 removes `pct=`, `rf=`, and `ri=`. Most were never handled consistently.
 - **Fix reporting URIs.** Make sure they begin with `mailto:`. The new parser is stricter.
 - **Declare `psd=n`.** You are not a public suffix unless you run a registry.
 - **Consider `np=reject`.** If you are already at `p=reject`, this closes the non-existent subdomain spoofing gap. Audit third-party senders first.
@@ -77,7 +77,7 @@ If you want to be ready, the work is small.
 
 That is the list. A handful of edits. Minutes, not days.
 
-If you want to see exactly which apply to your record, run [dns-audit.com](https://dns-audit.com) on your domain. The audit shows the current state, the DMARCbis-ready state, and the path between them.
+If you want to see exactly which apply to your record, run [dns-audit.com](https://dns-audit.com) on your domain. The audit shows the current state, the RFC 9989-ready state, and the path between them.
 
 ## What to take from this
 
@@ -85,7 +85,7 @@ For ten years, you have been running production email security on a protocol tha
 
 And it worked.
 
-DMARCbis does not replace that work. It captures it.
+RFC 9989 does not replace that work. It captures it.
 
 The new specification folds a decade of operational reality into a Standards Track RFC. The DNS tree walk replaces the Public Suffix List. Deprecated edges are removed. Real gaps are closed. Parsing becomes stricter.
 

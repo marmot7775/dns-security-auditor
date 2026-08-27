@@ -1,4 +1,4 @@
-"""Tests for dmarcbis-41 §4.10.1 ¶3 / §4.10.2 Org Domain determination
+"""Tests for RFC 9989 §4.10.1 ¶3 / §4.10.2 Org Domain determination
 when a DMARC record is found at the Author Domain.
 
 Spec text (verbatim, §4.10.1 paragraph 3):
