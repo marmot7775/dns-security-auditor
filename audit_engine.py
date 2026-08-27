@@ -4214,12 +4214,33 @@ def run_full_audit(domain: str, dkim_selector: Optional[str] = None,
         _notify("Tree Walk")
 
     # --- 1. DMARC ---
+    report_auth = None
     if needs_dmarc:
         try:
             raw_dmarc = _run_with_timeout(_raw_check_dmarc, domain)
             # Enrich with inherited policy (tree walk first, PSL fallback)
             _enrich_dmarc_inheritance(raw_dmarc, domain, tree_walk_result)
             raw_results["dmarc"] = raw_dmarc
+
+            # --- DMARC Report Authorization (RFC 7489 S7.1) ---
+            # Must run BEFORE transform_dmarc: the card is built from a
+            # snapshot of raw_dmarc, so report_destinations and
+            # report_auth_issues have to be attached first or the card
+            # never sees them.
+            if raw_dmarc.get("record") and (raw_dmarc.get("rua") or raw_dmarc.get("ruf")):
+                try:
+                    report_auth = _run_with_timeout(
+                        _check_report_authorization, domain, raw_dmarc,
+                        tree_walk_result, timeout=10,
+                    )
+                    if report_auth:
+                        raw_dmarc["report_destinations"] = report_auth["report_destinations"]
+                        raw_dmarc["report_auth_issues"] = report_auth.get("report_auth_issues", [])
+                        raw_dmarc["ruf_provider_note"] = report_auth.get("ruf_provider_note", False)
+                        raw_dmarc["issues"].extend(report_auth.get("report_auth_issues", []))
+                except Exception:
+                    log.debug("Report auth enrichment failed", exc_info=True)
+
             if _should_include("dmarc", scope_set):
                 checks.append(transform_dmarc(raw_dmarc, tree_walk=tree_walk_result, is_no_mail=is_defensive))
         except FuturesTimeoutError:
@@ -4232,23 +4253,6 @@ def run_full_audit(domain: str, dkim_selector: Optional[str] = None,
             if _should_include("dmarc", scope_set):
                 checks.append(_error_card("DMARC", e))
         _notify("DMARC")
-
-    # --- DMARC Report Authorization (RFC 7489 S7.1) ---
-    report_auth = None
-    raw_dmarc = raw_results.get("dmarc")
-    if raw_dmarc and raw_dmarc.get("record") and (raw_dmarc.get("rua") or raw_dmarc.get("ruf")):
-        try:
-            report_auth = _run_with_timeout(
-                _check_report_authorization, domain, raw_dmarc,
-                tree_walk_result, timeout=10,
-            )
-            if report_auth:
-                raw_dmarc["report_destinations"] = report_auth["report_destinations"]
-                raw_dmarc["report_auth_issues"] = report_auth.get("report_auth_issues", [])
-                raw_dmarc["ruf_provider_note"] = report_auth.get("ruf_provider_note", False)
-                raw_dmarc["issues"].extend(report_auth.get("report_auth_issues", []))
-        except Exception:
-            log.debug("Report auth enrichment failed", exc_info=True)
 
     # --- 2. MX Records (run before SPF so we know if domain sends mail) ---
     if needs_mx:
