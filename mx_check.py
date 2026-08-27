@@ -160,8 +160,7 @@ def _check_starttls(hostname: str, port: int = 25, timeout: float = 10.0) -> Dic
     }
     server = None
     try:
-        server = smtplib.SMTP(timeout=timeout)
-        server.connect(hostname, port)
+        server = smtplib.SMTP(hostname, port, timeout=timeout)
         server.ehlo()
         if server.has_extn("starttls"):
             result["supports_starttls"] = True
