@@ -12,7 +12,13 @@ install.
 Tests always run with requirements-dev.txt installed too, so importing
 reportlab here would pass either way. The declaration itself is what has to be
 asserted: what a requirements.txt-only install would get.
+
+D2: the same file pinned fpdf2==2.8.7, which nothing imports. The PDF code
+moved to reportlab and the old pin was never dropped. The check below is tied
+to what the sources actually import rather than to a hardcoded name, so
+switching PDF libraries again moves the requirement instead of failing.
 """
+import glob
 import os
 import re
 import sys
@@ -49,6 +55,29 @@ def test_reportlab_is_not_duplicated_as_a_dev_requirement():
         "reportlab is a runtime dependency now, so listing it in both files "
         "lets the two drift apart on version"
     )
+
+
+def _imported_anywhere(module):
+    """True if any Python source in the repo imports the named module."""
+    pattern = re.compile(r"^\s*(?:import|from)\s+%s\b" % re.escape(module), re.M)
+    for path in glob.glob(os.path.join(_ROOT, "*.py")) + glob.glob(
+        os.path.join(_ROOT, "tests", "*.py")
+    ):
+        with open(path, encoding="utf-8") as fh:
+            if pattern.search(fh.read()):
+                return True
+    return False
+
+
+def test_pdf_library_declared_matches_the_one_actually_imported():
+    declared = _declared("requirements.txt")
+    for module, distribution in (("reportlab", "reportlab"), ("fpdf", "fpdf2")):
+        if _imported_anywhere(module):
+            assert distribution in declared, f"{module} is imported but unpinned"
+        else:
+            assert distribution not in declared, (
+                f"{distribution} is pinned but nothing imports {module}"
+            )
 
 
 def test_pdf_generation_is_wired_up_not_silently_disabled():

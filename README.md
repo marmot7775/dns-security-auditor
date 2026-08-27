@@ -156,7 +156,7 @@ server.py                  FastAPI, SSE streaming, rate limiting, caching, PDF e
 audit_engine.py            Check orchestration, parallel execution with timeouts
 result_transformer.py      Raw results to frontend card format
 security_scoring.py        Weighted scoring and letter grading
-pdf_report.py              FPDF2-based PDF generation
+pdf_report.py              reportlab-based PDF generation
 dmarc_tree_walk.py         DMARCbis Section 4.10 tree walk
 spf_recursive.py           Recursive SPF lookup counter
 spf_execution_engine.py    SPF evaluation trace, DMARC roadmap
@@ -199,7 +199,7 @@ All DNS resolution via dnspython. No API keys needed.
 
 ## Tech Stack
 
-- **Backend**: Python, FastAPI, dnspython, FPDF2
+- **Backend**: Python, FastAPI, dnspython, reportlab
 - **Frontend**: Vanilla JavaScript, CSS custom properties, no frameworks
 - **Fonts**: DM Sans, JetBrains Mono
 - **Hosting**: DigitalOcean, Cloudflare
