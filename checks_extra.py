@@ -718,12 +718,12 @@ def _validate_bimi_record(record: str) -> Tuple[Dict[str, str], List[Dict]]:
         issues.append(_make_issue("error", f"Invalid version: v={tags['v']}",
             "Must be 'BIMI1'.", "", "Change to 'v=BIMI1'."))
 
-    if "l" not in tags:
-        issues.append(_make_issue("warning", "Missing 'l' (logo) tag",
-            "The l= tag specifies your SVG logo URL.", "",
-            "Add l=https://yourdomain.com/logo.svg"))
-    elif not tags["l"]:
-        issues.append(_make_issue("info", "Empty 'l' (logo) tag",
+    if not tags.get("l"):
+        # "l" absent and "l=" (present but empty) are the same assertion:
+        # the domain declines to publish a logo indicator at this selector.
+        # Both must get the same status, not a warning for one spelling
+        # and an info note for the other.
+        issues.append(_make_issue("info", "No logo published ('l' tag absent or empty)",
             "No logo at this selector.", "", ""))
     else:
         logo_url = tags["l"]
