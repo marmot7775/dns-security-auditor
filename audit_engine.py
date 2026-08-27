@@ -4080,6 +4080,11 @@ _SUBDOMAIN_PREFIXES = [
 
 _SUBDOMAIN_TIMEOUT = 2.0  # seconds per DNS query
 
+# Budget for the whole probe batch. Deliberately below CHECK_TIMEOUT so the
+# batch gives up and returns partial results before the caller's hard timeout
+# kills the thread and discards them.
+_SUBDOMAIN_BATCH_TIMEOUT = CHECK_TIMEOUT - 3
+
 
 def _probe_subdomain(subdomain: str) -> Dict[str, Any]:
     """Probe a single subdomain for DNS existence, DMARC, SPF, and MX records.
@@ -4163,12 +4168,21 @@ def _audit_subdomains(domain: str) -> Dict[str, Any]:
         futures[future] = sub
 
     results = []
-    for future in as_completed(futures, timeout=CHECK_TIMEOUT):
-        try:
-            results.append(future.result(timeout=_SUBDOMAIN_TIMEOUT + 1))
-        except Exception:
-            # Skip subdomains that time out or error
-            pass
+    try:
+        for future in as_completed(futures, timeout=_SUBDOMAIN_BATCH_TIMEOUT):
+            try:
+                results.append(future.result(timeout=_SUBDOMAIN_TIMEOUT + 1))
+            except Exception:
+                # Skip subdomains that time out or error
+                pass
+    except FuturesTimeoutError:
+        # as_completed raises from the for statement itself. Without this the
+        # exception escapes to the caller, which treats it as "no data" and
+        # drops the whole subdomain section instead of showing what completed.
+        log.warning(
+            "Subdomain batch for %s hit the %ss budget; returning %d of %d probes",
+            domain, _SUBDOMAIN_BATCH_TIMEOUT, len(results), len(futures),
+        )
 
     return {
         "domain": domain,
