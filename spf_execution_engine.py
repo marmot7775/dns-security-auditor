@@ -598,8 +598,14 @@ def build_dmarc_roadmap(raw_dmarc: Dict, raw_spf: Dict, raw_dkim: Dict,
     })
 
     # Step 6: p=quarantine pct=100
-    step6_complete = (policy == "quarantine" and pct >= 100) or policy == "reject"
-    if current_stage in ("partial_reject", "full_reject"):
+    # t=y drops the effective policy one level, so a record still publishing
+    # it behaves as p=none no matter what p= says. Step 6 is precisely
+    # "remove t=y", so it cannot be complete while the tag is there.
+    step6_complete = (
+        not _has_test_mode
+        and ((policy == "quarantine" and pct >= 100) or policy == "reject")
+    )
+    if current_stage in ("partial_reject", "full_reject") and not _has_test_mode:
         step6_complete = True
     step6_status = (
         "complete" if step6_complete
@@ -618,7 +624,9 @@ def build_dmarc_roadmap(raw_dmarc: Dict, raw_spf: Dict, raw_dkim: Dict,
     })
 
     # Step 7: p=reject
-    step7_complete = current_stage == "full_reject"
+    # Same as step 6: t=y makes p=reject behave as p=none, and leaving this
+    # complete above a step 6 that is only "current" contradicts itself.
+    step7_complete = current_stage == "full_reject" and not _has_test_mode
     step7_status = (
         "complete" if step7_complete
         else "current" if step6_complete and not step7_complete
