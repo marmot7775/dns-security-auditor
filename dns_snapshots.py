@@ -74,7 +74,7 @@ def store_snapshot(domain: str, record_type: str, record_value: str):
         row = conn.execute(
             "SELECT record_hash FROM dns_snapshots "
             "WHERE domain = ? AND record_type = ? "
-            "ORDER BY timestamp DESC LIMIT 1",
+            "ORDER BY timestamp DESC, id DESC LIMIT 1",
             (domain, record_type),
         ).fetchone()
 
@@ -185,7 +185,7 @@ def get_history(domain: str, record_type: str, limit: int = 10) -> List[Dict]:
             "SELECT record_value, record_hash, timestamp "
             "FROM dns_snapshots "
             "WHERE domain = ? AND record_type = ? "
-            "ORDER BY timestamp DESC LIMIT ?",
+            "ORDER BY timestamp DESC, id DESC LIMIT ?",
             (domain, record_type, limit),
         ).fetchall()
         return [dict(r) for r in rows]
@@ -206,7 +206,7 @@ def get_all_history(domain: str, limit_per_type: int = 5) -> Dict[str, List[Dict
             "SELECT record_type, record_value, record_hash, timestamp "
             "FROM dns_snapshots "
             "WHERE domain = ? "
-            "ORDER BY record_type, timestamp DESC",
+            "ORDER BY record_type, timestamp DESC, id DESC",
             (domain,),
         ).fetchall()
 
