@@ -2,3 +2,8 @@
 # alongside requirements.txt.
 pytest>=8.0.0
 httpx2>=2.12.0
+
+# pdf_report.py imports reportlab. server.py guards that import and returns
+# 503 when it is missing, so it is not a hard runtime requirement, but the
+# PDF tests need it.
+reportlab>=4.0.0

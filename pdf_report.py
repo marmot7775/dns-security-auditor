@@ -1307,7 +1307,7 @@ def _dkim_deep_section(dkim_deep, S):
                 Paragraph(f"<font name='Courier' size='8'>{_safe(k.get('selector', ''))}</font>", S["body_small"]),
                 Paragraph(_safe(k.get("vendor") or "-"), S["body_small"]),
                 Paragraph(_safe(k.get("key_type", "")), S["body_small"]),
-                Paragraph(str(k.get("key_bits", "")), S["body_small"]),
+                Paragraph(str(k.get("bits", "") or ""), S["body_small"]),
                 Paragraph(f'<font color="{r_clr.hexval()}">{_safe(k.get("rating_label", ""))}</font>', S["body_small"]),
                 Paragraph(_safe(k.get("rotation_status", "")), S["body_small"]),
             ])
@@ -1324,14 +1324,11 @@ def _dkim_deep_section(dkim_deep, S):
         kt.setStyle(TableStyle(cmds))
         els.append(kt)
 
-    # Rotation guidance
-    for k in keys:
-        guidance = k.get("rotation_guidance", "")
-        if guidance:
-            els.append(Paragraph(
-                f"\u2022  <b>{_safe(k.get('selector', ''))}</b>: {_safe(guidance)}",
-                S["body_small"]
-            ))
+    # Rotation guidance. _build_dkim_key_analysis emits one shared string at
+    # the top level, not one per key.
+    guidance = dkim_deep.get("rotation_guidance", "")
+    if guidance:
+        els.append(Paragraph(f"\u2022  {_safe(guidance)}", S["body_small"]))
 
     # Summary + recommendations
     summary = dkim_deep.get("summary", "")
@@ -1801,9 +1798,10 @@ if __name__ == "__main__":
              "dkim_deep": {
                  "keys": [
                      {"selector": "google", "vendor": "Google Workspace", "key_type": "RSA",
-                      "key_bits": 2048, "rating": "green", "rating_label": "Strong",
-                      "rotation_status": "CURRENT", "rotation_guidance": "Key is current, no rotation needed."},
+                      "bits": 2048, "rating": "green", "rating_label": "Strong",
+                      "rotation_status": "Current", "revoked": False},
                  ],
+                 "rotation_guidance": "Keys meet standards. Best practice: rotate annually.",
                  "has_weak": False, "has_revoked": False, "all_strong": True,
                  "summary": "All DKIM keys meet current strength requirements.",
                  "recommendations": [],

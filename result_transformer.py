@@ -4291,6 +4291,7 @@ def _build_dkim_key_analysis(raw: Dict) -> Optional[Dict]:
 
         # Parse DKIM record tags
         dkim_tags = []
+        key_revoked = False
         for part in sel_record.split(";"):
             part = part.strip()
             if "=" in part:
@@ -4308,6 +4309,7 @@ def _build_dkim_key_analysis(raw: Dict) -> Optional[Dict]:
                         tag_info["label"] = "Public key (REVOKED)"
                         tag_info["revoked"] = True
                         has_revoked = True
+                        key_revoked = True
                     else:
                         tag_info["label"] = "Public key"
                         tag_info["truncated"] = v[:40] + "..." if len(v) > 40 else v
@@ -4330,12 +4332,23 @@ def _build_dkim_key_analysis(raw: Dict) -> Optional[Dict]:
         # Provider from selector name
         provider = vendor or _DKIM_SELECTOR_PROVIDERS.get(selector.lower())
 
+        # Per-key rotation status, derived from the same signals that drive
+        # the shared rotation_guidance text below.
+        if key_revoked:
+            rotation_status = "Revoked"
+        elif rating in ("red", "amber"):
+            rotation_status = "Rotate"
+        else:
+            rotation_status = "Current"
+
         keys.append({
             "selector": selector,
             "bits": bits,
             "key_type": key_type,
             "rating": rating,
             "rating_label": rating_label,
+            "rotation_status": rotation_status,
+            "revoked": key_revoked,
             "provider": provider,
             "tags": dkim_tags,
         })
