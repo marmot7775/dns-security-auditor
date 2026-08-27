@@ -2005,7 +2005,7 @@ def _assess_dmarcbis_readiness(dmarc_result: Dict) -> Dict:
             "recommendation": (
                 "Remove the rf tag. RFC 9989 §C.5.2 lists rf as "
                 "removed from the protocol. Receivers implementing "
-                "RFC 9989 receivers will ignore this tag."
+                "RFC 9989 will ignore this tag."
             ),
         })
 
@@ -2018,7 +2018,7 @@ def _assess_dmarcbis_readiness(dmarc_result: Dict) -> Dict:
             "recommendation": (
                 "Remove the ri tag. RFC 9989 §C.5.2 lists ri as "
                 "removed from the protocol. Receivers implementing "
-                "RFC 9989 receivers will ignore this tag."
+                "RFC 9989 will ignore this tag."
             ),
         })
 

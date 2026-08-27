@@ -2029,7 +2029,7 @@ def _build_dmarc_tag_breakdown(record: str, raw: Dict) -> Optional[List[Dict]]:
     """Parse every tag in a DMARC record and return a structured breakdown.
 
     Each entry:
-      tag, value, is_default, is_absent, label, explanation, RFC 9989, warnings
+      tag, value, is_default, is_absent, label, explanation, dmarcbis, warnings
     """
     if not record:
         return None
@@ -2306,7 +2306,7 @@ def _build_tag_entry(tag: str, value: str, present: bool, tags: Dict, policy: st
             e = _entry(tag, value, False, False, "Percentage",
                        f"Policy applies to {value}% of failing messages. "
                        "RFC 9989 removes the pct tag. Only values of 0 and 100 were reliably "
-                       "honored. RFC 9989 replaces this with t=y/t=n for predictable testing. Current "
+                       "honored. RFC 9989 replaces this with t=y/t=n for predictable testing. "
                        "Receivers that have not moved off RFC 7489 still honor pct, but RFC 9989 "
                        "receivers ignore it. To migrate: "
                        "use t=y for testing or remove pct for full enforcement.",
@@ -2993,11 +2993,11 @@ def _build_why_dmarcbis(tags: Dict[str, str], policy: str, health_status: str, d
 
     # Section 1: What is RFC 9989 (always shown)
     sections.append({
-        "title": "What is RFC 9989 (RFC 9989)?",
+        "title": "What is RFC 9989 (DMARCbis)?",
         "content": (
             "RFC 9989 is the DMARC standard. Published in May 2026 on the IETF Standards Track, it "
             "obsoletes RFC 7489 and RFC 9091, the documents that defined DMARC until then. It is "
-            "still widely called RFC 9989, the name it carried through the working group. It "
+            "still widely called DMARCbis, the name it carried through the working group. It "
             "addresses real-world problems "
             "discovered over a decade of DMARC deployment: inconsistent parsing across receivers, "
             "unreliable percentage-based rollout, no protection for non-existent subdomains, and "
