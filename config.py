@@ -73,7 +73,7 @@ API_BASE_URL = os.getenv("API_BASE_URL", "/api")
 # ============================================================
 
 DOMAIN_PATTERN = re.compile(
-    r"^(?!-)[A-Za-z0-9-]{1,63}(?<!-)(\.(?!-)[A-Za-z0-9-]{1,63}(?<!-))*\.[A-Za-z][A-Za-z0-9-]{1,62}$"
+    r"^(?!-)[A-Za-z0-9-]{1,63}(?<!-)(\.(?!-)[A-Za-z0-9-]{1,63}(?<!-))*\.[A-Za-z][A-Za-z0-9-]{1,62}(?<!-)$"
 )
 
 # RFC 6376: DKIM selectors are DNS labels -- alphanumeric and hyphens only

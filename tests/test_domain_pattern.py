@@ -33,3 +33,11 @@ def test_pattern_rejects_short_or_empty_tld():
     assert not DOMAIN_PATTERN.match("example.c")
     assert not DOMAIN_PATTERN.match("example.")
     assert not DOMAIN_PATTERN.match("example")
+
+
+def test_pattern_rejects_trailing_hyphen_tld():
+    # The TLD label lacked the (?<!-) guard the other labels have.
+    assert not DOMAIN_PATTERN.match("example.co-")
+    assert not DOMAIN_PATTERN.match("foo.bar-")
+    # Leading-hyphen rejection (already worked) must still hold.
+    assert not DOMAIN_PATTERN.match("-example.com")
