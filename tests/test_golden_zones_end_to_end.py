@@ -359,7 +359,7 @@ def test_every_card_renders_a_body(golden):
     name, result = golden
     for card_name, card in _cards(result).items():
         where = f"{name}/{card_name}"
-        assert card.get("status") in {"pass", "warn", "fail", "info"}, where
+        assert card.get("status") in {"pass", "warn", "fail", "info", "unavailable"}, where
         assert (card.get("verdict") or "").strip(), f"{where}: empty verdict"
         assert (card.get("explanation") or "").strip(), f"{where}: empty explanation"
 

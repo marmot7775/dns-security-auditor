@@ -865,6 +865,16 @@ function renderResults(data) {
 // Result card  --  auto-collapse passing, expand fail/warn
 // ============================================================
 
+// A check can also come back "unavailable": it did not run, so it is neither
+// passing nor failing. Anything unrecognised still reads as Failed, which is
+// the safe direction for a status this file does not know about.
+const STATUS_TITLES = {
+    pass: 'Passing',
+    warn: 'Warning',
+    fail: 'Failed',
+    unavailable: 'Not checked',
+};
+
 function createResultCard(check, index) {
     const card = document.createElement('div');
     // Auto-collapse: pass = collapsed, fail/warn = expanded
@@ -888,7 +898,7 @@ function createResultCard(check, index) {
     const bodyId = `body-${(check.name || '').toLowerCase().replace(/[^a-z0-9]/g, '-')}`;
     card.innerHTML = `
         <div class="result-header">
-            <div class="status-dot ${check.status}" title="${check.status === 'pass' ? 'Passing' : check.status === 'warn' ? 'Warning' : 'Failed'}" aria-hidden="true"></div>
+            <div class="status-dot ${check.status}" title="${STATUS_TITLES[check.status] || 'Failed'}" aria-hidden="true"></div>
             ${titleHtml}
             <span class="status-pill ${check.status}">${escapeHtml(statusLabel)}</span>
             <div class="result-verdict">${escapeHtml(check.verdict || '')}</div>

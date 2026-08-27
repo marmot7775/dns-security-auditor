@@ -5660,16 +5660,25 @@ def transform_ct(raw: Dict, domain: str) -> Dict:
             )
             detail_text = "CT log response too large to analyze automatically"
         else:
-            verdict = "CT data unavailable (tool limitation)"
+            verdict = "Not checked by this audit"
             explanation = (
-                "The external Certificate Transparency log service (crt.sh) could not be reached. "
-                "This is a limitation of this audit tool, not an issue with your domain."
+                "Certificate Transparency was not assessed for this domain. This audit reads CT "
+                "data from the public crt.sh service, which is frequently unavailable, and no "
+                "result was returned in time. Nothing here reflects your domain's certificates "
+                "one way or the other. To review them yourself, search this domain on "
+                "<a href=\"https://crt.sh\" target=\"_blank\" rel=\"noopener\">crt.sh</a>."
             )
-            detail_text = "External CT log query timed out. This does not reflect your domain's configuration."
+            detail_text = (
+                "This check depends on an external service that did not respond. It is a gap in "
+                "the audit, not a finding about your domain."
+            )
         return {
             "name": "Certificate Transparency",
-            "status": "pass",
-            "pill_label": "Skipped",
+            # Not "pass". Nothing about the domain was assessed, and a green
+            # card for a check that never ran is the most misleading state
+            # this card can be in.
+            "status": "unavailable",
+            "pill_label": "Not checked",
             "verdict": verdict,
             "record": None,
             "explanation": explanation,
@@ -5850,8 +5859,12 @@ def transform_blacklist(raw: Dict, domain: str) -> Dict:
         status = "fail"
         pill_label = "Listed"
     elif has_errors:
-        status = "warn"
-        pill_label = "Unavailable"
+        # Spamhaus refuses queries from public and cloud resolvers outright,
+        # so this is a standing limitation of where the auditor runs, not
+        # something about the domain. "warn" read as a finding against the
+        # domain. See _UNAVAILABLE.
+        status = "unavailable"
+        pill_label = "Not checked"
     else:
         status = "pass"
         pill_label = "Clean"
@@ -5863,7 +5876,7 @@ def transform_blacklist(raw: Dict, domain: str) -> Dict:
     if total_listings > 0:
         verdict = f"Listed on {total_listings} domain blocklist{'s' if total_listings != 1 else ''}"
     elif has_errors:
-        verdict = "Blocklist check could not be completed"
+        verdict = "Not checked by this audit"
     else:
         verdict = f"Clean on {total_lists} domain blocklist{'s' if total_lists != 1 else ''}"
 
@@ -5878,9 +5891,12 @@ def transform_blacklist(raw: Dict, domain: str) -> Dict:
         )
     elif has_errors:
         explanation = (
-            "One or more blocklist queries were blocked, likely due to rate limiting "
-            "on the public Spamhaus DNS mirror. This does not mean the domain is listed "
-            "or clean. You can verify manually at https://check.spamhaus.org/."
+            "Blocklist status was not assessed for this domain. Spamhaus refuses DNSBL "
+            "queries from public and cloud resolvers, which is where this audit runs, so "
+            "this check cannot complete here. It does not mean the domain is listed, and it "
+            "does not mean it is clean. Check it directly at "
+            "<a href=\"https://check.spamhaus.org/\" target=\"_blank\" rel=\"noopener\">"
+            "check.spamhaus.org</a>."
         )
     else:
         explanation = (

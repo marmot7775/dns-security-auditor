@@ -66,7 +66,10 @@ LIGHT_BLUE_BG = colors.HexColor("#eff6ff")
 
 STATUS_CLR = {"pass": PASS_CLR, "warn": WARN_CLR, "fail": FAIL_CLR}
 STATUS_BG  = {"pass": PASS_BG,  "warn": WARN_BG,  "fail": FAIL_BG}
-STATUS_LBL = {"pass": "PASS",   "warn": "WARNING", "fail": "FAIL"}
+STATUS_LBL = {"pass": "PASS",   "warn": "WARNING", "fail": "FAIL",
+              "unavailable": "NOT CHECKED"}
+# Colours deliberately not mapped for "unavailable": every lookup falls
+# back to TEXT_SEC, which is the neutral grey this state should carry.
 DETAIL_ICON = {"good": "\u2713", "error": "\u2717", "warning": "\u26A0", "info": "\u2022"}
 
 PRIORITY_CLR = {

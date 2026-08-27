@@ -1196,6 +1196,12 @@ main {
     border-left-color: var(--fail);
 }
 
+/* A check that did not run. Deliberately neutral: it is not a finding
+   about the domain, so it must not read as pass, warn or fail. */
+.result-card:has(.status-dot.unavailable) {
+    border-left-color: var(--border-strong);
+}
+
 .result-card:nth-child(1) { animation-delay: 0ms; }
 .result-card:nth-child(2) { animation-delay: 60ms; }
 .result-card:nth-child(3) { animation-delay: 120ms; }
@@ -1262,6 +1268,10 @@ main {
     box-shadow: 0 0 0 3px var(--fail-bg);
 }
 
+.status-dot.unavailable {
+    background: var(--text-secondary);
+}
+
 /* Check name */
 h3.result-title,
 .result-title {
@@ -1305,6 +1315,12 @@ h3.result-title,
     background: var(--fail-bg);
     color: var(--fail);
     border: 1px solid var(--fail-border);
+}
+
+.status-pill.unavailable {
+    background: var(--border-light);
+    color: var(--text-secondary);
+    border: 1px solid var(--border);
 }
 
 /* One-line verdict */

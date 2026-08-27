@@ -223,7 +223,13 @@ class FakeHttpResponse:
 
 
 def _blocked_http(*args, **kwargs):
-    raise OSError("network disabled in tests")
+    # requests.RequestException, not OSError. The checks catch the former and
+    # degrade to their "could not reach the service" path, which is what
+    # production sees when crt.sh is down. Raising a bare OSError escapes
+    # that handling and lands in run_full_audit's generic error path instead,
+    # so the test would exercise a state production never reaches.
+    import requests
+    raise requests.exceptions.ConnectionError("network disabled in tests")
 
 
 @contextmanager
@@ -253,17 +259,17 @@ def fake_dns(zone, mta_sts_policy=None, ct_certs=None, bimi_logo=None):
         target = str(url)
         if "mta-sts" in target or target.endswith("mta-sts.txt"):
             if mta_sts_policy is None:
-                raise OSError("network disabled in tests")
+                _blocked_http()
             return FakeHttpResponse(mta_sts_policy)
         if bimi_logo is not None:
             return FakeHttpResponse(bimi_logo, content_type="image/svg+xml")
-        raise OSError("network disabled in tests")
+        return _blocked_http()
 
     def _requests_get(url, *args, **kwargs):
         target = str(url)
         if "crt.sh" in target:
             if ct_certs is None:
-                raise OSError("network disabled in tests")
+                _blocked_http()
             import json as _json
             return FakeHttpResponse(
                 _json.dumps(ct_certs), content_type="application/json",
@@ -271,7 +277,7 @@ def fake_dns(zone, mta_sts_policy=None, ct_certs=None, bimi_logo=None):
             )
         if bimi_logo is not None:
             return FakeHttpResponse(bimi_logo, content_type="image/svg+xml")
-        raise OSError("network disabled in tests")
+        return _blocked_http()
 
     with patch("dns.resolver.Resolver.resolve", _method), \
          patch("dns.resolver.resolve", zone.resolve), \
