@@ -274,14 +274,18 @@ def build_dmarc_evaluation(raw_dmarc: Dict, raw_spf: Dict,
     # This is a DNS-only assessment, not a live mail test
     if dmarc_pass:
         configured_methods = []
+        alignment_modes = []
         if spf_aligned:
             configured_methods.append("SPF")
+            alignment_modes.append(spf_alignment_mode)
         if dkim_aligned:
             configured_methods.append("DKIM")
+            alignment_modes.append(dkim_alignment_mode)
         methods_str = " and ".join(configured_methods)
+        modes_str = " and ".join(dict.fromkeys(alignment_modes))
         explanation = (
             f"{methods_str} {'are' if len(configured_methods) > 1 else 'is'} configured "
-            f"with {spf_alignment_mode} alignment, providing "
+            f"with {modes_str} alignment, providing "
             f"{'redundant paths' if len(configured_methods) > 1 else 'a path'} to DMARC pass. "
             f"Based on DNS records only, not live mail testing."
         )
