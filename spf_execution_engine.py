@@ -336,9 +336,10 @@ def _build_tree_node(node: Dict, depth: int, total_lookups: int) -> Optional[Dic
     for mech in mechanisms:
         if mech["type"] == "no_lookup":
             raw = mech.get("raw", "")
-            if raw.startswith(("ip4:", "ip6:", "+ip4:", "+ip6:")):
-                # Strip qualifier
-                clean = raw.lstrip("+-~?")
+            # SPF terms are case-insensitive (RFC 7208 section 4.6.1) and any
+            # qualifier may precede them, so normalize before matching.
+            clean = raw.lstrip("+-~?")
+            if clean.lower().startswith(("ip4:", "ip6:")):
                 ips.append(clean)
 
     # Terminal mechanism
