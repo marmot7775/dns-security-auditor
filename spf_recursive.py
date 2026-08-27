@@ -170,10 +170,22 @@ def _count_recursive(domain: str, visited: Set[str], depth: int = 0,
     mechanisms = _parse_spf_mechanisms(spf_record)
     node["mechanisms"] = mechanisms
 
+    # RFC 7208 §6.1: a redirect modifier MUST be ignored if an 'all'
+    # mechanism appears anywhere in the record, since 'all' always
+    # matches and redirect is only reached when nothing else matched.
+    has_all = any(
+        m["type"] == "no_lookup" and m["value"].lower() == "all"
+        for m in mechanisms
+    )
+
     local_lookups = 0
 
     for mech in mechanisms:
         mtype = mech["type"]
+
+        # RFC 7208 §5.1: terms after 'all' are never evaluated.
+        if mtype == "no_lookup" and mech["value"].lower() == "all":
+            break
 
         if mtype in ("a", "mx", "ptr", "exists"):
             local_lookups += 1
@@ -184,6 +196,8 @@ def _count_recursive(domain: str, visited: Set[str], depth: int = 0,
             node["children"].append(child)
 
         elif mtype == "redirect":
+            if has_all:
+                continue
             local_lookups += 1
             child = _count_recursive(mech["value"], set(visited), depth + 1, max_depth)
             node["children"].append(child)
