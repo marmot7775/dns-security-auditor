@@ -736,7 +736,7 @@ def build_consistency_findings(
     mta_sts_mx = mta_sts_raw.get("policy_mx") or []
     actual_mx = []
     for detail in mx_raw.get("mx_details", []):
-        host = detail.get("host", "").rstrip(".")
+        host = detail.get("hostname", "").rstrip(".")
         if host:
             actual_mx.append(host.lower())
     if mta_sts_mx and actual_mx:
