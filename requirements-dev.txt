@@ -1,0 +1,4 @@
+# Test-only dependencies. CI and local runs must install this
+# alongside requirements.txt.
+pytest>=8.0.0
+httpx2>=2.12.0

@@ -46,6 +46,8 @@ done
 The older pattern `grep -oP 'v=\K[a-f0-9]+'` is broken: it only matches hex characters, so version strings containing non-hex letters (e.g. `ds17`, `sec9`) produce a partial or empty match and sed silently no-ops. Do not use the old pattern.
 
 ## Testing
+Any module a test imports that is not in requirements.txt goes in requirements-dev.txt, never in the workflow file.
+
 python3 -m pytest tests/ -v
 python3 -c "import ast; ast.parse(open('server.py').read()); print('OK')"
 curl -s https://dns-audit.com/api/health | python3 -m json.tool
