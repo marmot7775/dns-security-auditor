@@ -5758,6 +5758,19 @@ def transform_ct(raw: Dict, domain: str) -> Dict:
             "text": f"Expiring in {exp['days_left']} days: {exp['common_name']}",
         })
 
+    # Recently expired. The CT check has always collected these; nothing
+    # displayed them.
+    for exp in expired[:3]:
+        details.append({
+            "type": "info",
+            "text": f"Expired in the last 90 days: {exp['common_name']}",
+        })
+    if len(expired) > 3:
+        details.append({
+            "type": "info",
+            "text": f"{len(expired) - 3} further certificates expired in the last 90 days",
+        })
+
     # Certificate sprawl
     if len(issuers) > 5:
         details.append({"type": "info", "text": f"Certificates from {len(issuers)} different CAs. Consider consolidating"})
