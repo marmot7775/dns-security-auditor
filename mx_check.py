@@ -15,7 +15,10 @@ import ssl
 import smtplib
 import ipaddress
 from typing import Any, Dict, Optional
-from datetime import datetime
+from datetime import datetime, timezone
+
+from cryptography import x509
+from cryptography.x509.oid import NameOID
 
 try:
     import dns.resolver
@@ -170,33 +173,31 @@ def _check_starttls(hostname: str, port: int = 25, timeout: float = 10.0) -> Dic
             server.starttls(context=context)
             server.ehlo()
             result["tls_version"] = server.sock.version()
-            cert = server.sock.getpeercert(binary_form=False)
-            if cert:
+            # With CERT_NONE, getpeercert(binary_form=False) always returns
+            # {}: the dict form is only populated when OpenSSL actually
+            # validated the chain. The DER bytes are returned regardless of
+            # verification (a client always receives the server's
+            # certificate), so parse those directly. This is a posture
+            # scan, not a trust decision, and self-signed MX certs are
+            # common.
+            der = server.sock.getpeercert(binary_form=True)
+            if der:
                 try:
-                    subj = cert.get("subject", ())
-                    for rdn in subj:
-                        for attr_type, attr_val in rdn:
-                            if attr_type == "commonName":
-                                result["cert_subject"] = attr_val
-                    issuer = cert.get("issuer", ())
-                    for rdn in issuer:
-                        for attr_type, attr_val in rdn:
-                            if attr_type in ("organizationName", "commonName"):
-                                result["cert_issuer"] = attr_val
-                                break
-                        if result.get("cert_issuer"):
-                            break
+                    peer_cert = x509.load_der_x509_certificate(der)
+                    cn = peer_cert.subject.get_attributes_for_oid(NameOID.COMMON_NAME)
+                    if cn:
+                        result["cert_subject"] = cn[0].value
+                    issuer_attrs = peer_cert.issuer.get_attributes_for_oid(NameOID.ORGANIZATION_NAME) \
+                        or peer_cert.issuer.get_attributes_for_oid(NameOID.COMMON_NAME)
+                    if issuer_attrs:
+                        result["cert_issuer"] = issuer_attrs[0].value
+                    expiry = getattr(peer_cert, "not_valid_after_utc", None)
+                    if expiry is None:
+                        expiry = peer_cert.not_valid_after.replace(tzinfo=timezone.utc)
+                    result["cert_expiry"] = expiry.isoformat()
+                    result["cert_valid"] = expiry > datetime.now(timezone.utc)
                 except (ValueError, TypeError):
                     pass
-                not_after = cert.get("notAfter")
-                if not_after:
-                    from email.utils import parsedate_to_datetime
-                    try:
-                        expiry = parsedate_to_datetime(not_after)
-                        result["cert_expiry"] = expiry.isoformat()
-                        result["cert_valid"] = expiry > datetime.now(expiry.tzinfo)
-                    except (ValueError, TypeError, OverflowError):
-                        result["cert_expiry"] = not_after
     except smtplib.SMTPServerDisconnected:
         result["error"] = "Server disconnected"
     except socket.timeout:
