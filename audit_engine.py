@@ -4476,7 +4476,8 @@ def run_full_audit(domain: str, dkim_selector: Optional[str] = None,
                         key_analysis = analyze_dkim_key_strength(txt)
                         _raw["found_selectors"].append({
                             "selector": _dkim_sel, "record": txt,
-                            "key_size": key_analysis.get("key_bits"),
+                            "key_type": key_analysis.get("key_type"),
+                            "key_bits": key_analysis.get("key_bits"),
                         })
                 except dns.exception.DNSException:
                     _raw["selector_not_found"] = _dkim_sel

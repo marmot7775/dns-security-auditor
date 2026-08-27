@@ -13,6 +13,8 @@ import dns.exception
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from typing import List, Dict, Optional, Callable
 
+from dkim_formatter import analyze_dkim_key_strength
+
 # Hard limits for DKIM selector discovery
 DKIM_DISCOVERY_TIMEOUT = 30   # seconds for entire discovery
 DKIM_MAX_FOUND = 15           # stop after finding this many selectors
@@ -305,17 +307,11 @@ def smart_dkim_check(domain: str, spf_record: Optional[str] = None, max_selector
             if "p=" not in dkim_record or dkim_record.strip().startswith("v=spf1"):
                 return None
 
-            key_type = 'Unknown'
-            if 'k=rsa' in dkim_record or 'p=' in dkim_record:
-                key_match = re.search(r'p=([A-Za-z0-9+/=]+)', dkim_record)
-                if key_match:
-                    key_data = key_match.group(1)
-                    if len(key_data) > 300:
-                        key_type = 'RSA 2048-bit'
-                    elif len(key_data) > 150:
-                        key_type = 'RSA 1024-bit'
-                    else:
-                        key_type = 'RSA (size unknown)'
+            # Key type and size come from the same analyzer the manual
+            # selector path uses, so both discovery paths hand downstream
+            # consumers an identical selector shape. Guessing the size from
+            # base64 length cannot tell 2048 from 3072 or 4096 apart.
+            key_analysis = analyze_dkim_key_strength(dkim_record)
 
             matched_vendor = None
             for vendor in vendors_detected:
@@ -328,7 +324,8 @@ def smart_dkim_check(domain: str, spf_record: Optional[str] = None, max_selector
                 'fqdn': fqdn,
                 'record': dkim_record,
                 'record_display': dkim_record[:100] + '...' if len(dkim_record) > 100 else dkim_record,
-                'key_type': key_type,
+                'key_type': key_analysis['key_type'],
+                'key_bits': key_analysis['key_bits'],
                 'vendor': matched_vendor,
                 'discovery_priority': 'HIGH' if matched_vendor else 'LOW',
             }
