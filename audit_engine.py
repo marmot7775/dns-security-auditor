@@ -619,7 +619,7 @@ def _enrich_dmarc_inheritance(
     if raw_dmarc.get("record"):
         return  # Has its own record, no inheritance needed
 
-    # -- Try tree walk first (DMARCbis) --
+    # -- Try tree walk first (RFC 9989) --
     if (tree_walk_result
         and tree_walk_result.get("policy_source")
         and tree_walk_result.get("is_subdomain")):
@@ -675,7 +675,7 @@ _RUA_EMAIL_RE = re.compile(r'^[^@\s]+@[^@\s]+\.[^@\s]+$')
 
 def _is_rua_syntactically_valid(rua_value: str) -> bool:
     """Return True if rua_value contains at least one syntactically
-    valid reporting URI, per dmarcbis-41 §4.10.1.
+    valid reporting URI, per RFC 9989 §4.10.1.
 
     A URI counts as syntactically valid if it starts with mailto:
     (case-insensitive) and the email part matches local@domain.tld.
@@ -696,7 +696,7 @@ def _is_rua_syntactically_valid(rua_value: str) -> bool:
 
 def _emit_size_modifier_info(result: Dict[str, Any], tag_name: str, addr: str) -> None:
     """Append a spec-required info issue for a rua/ruf URI carrying an
-    obsolete !size modifier (dmarcbis-41 §C.4 / §4.8).
+    obsolete !size modifier (RFC 9989 §C.4 / §4.8).
 
     Caller has already verified addr starts with 'mailto:' and contains
     '!' in the payload after 'mailto:'. Modifier is everything after the
@@ -706,11 +706,11 @@ def _emit_size_modifier_info(result: Dict[str, Any], tag_name: str, addr: str) -
     modifier = addr[7:].split("!", 1)[1]
     result["issues"].append({
         "severity": "info",
-        "issue": "rua/ruf size modifier (!N) is obsolete in dmarcbis",
+        "issue": "rua/ruf size modifier (!N) is obsolete in RFC 9989",
         "plain_english": (
             f"Your DMARC record uses the legacy size modifier "
-            f"(e.g., {addr} has !{modifier}). dmarcbis-41 §C.4 removed "
-            "this syntax. Receivers implementing dmarcbis will ignore "
+            f"(e.g., {addr} has !{modifier}). RFC 9989 §C.4 removed "
+            "this syntax. Receivers implementing RFC 9989 will ignore "
             "the size limit; receivers following RFC 7489 still honor it. "
             "Remove the modifier to be forward-compatible."
         ),
@@ -721,7 +721,7 @@ def _emit_size_modifier_info(result: Dict[str, Any], tag_name: str, addr: str) -
             f"{tag_name}=mailto:reports@example.com."
         ),
         "source": "spec_required",
-        "spec_reference": "dmarcbis-41 §C.4 / §4.8",
+        "spec_reference": "RFC 9989 §C.4 / §4.8",
     })
 
 
@@ -740,10 +740,10 @@ def _raw_check_dmarc(domain: str) -> Dict[str, Any]:
     VALID_ADKIM_ASPF = {"r", "s"}
     VALID_FO = {"0", "1", "d", "s"}
     VALID_RF = {"afrf"}
-    # Tags defined in DMARCbis (draft-ietf-dmarc-dmarcbis, Section 4.7)
-    # np, psd, t are new; pct, rf, ri are removed from DMARCbis
+    # Tags defined in RFC 9989 Section 4.7
+    # np, psd, t are new; pct, rf, ri are removed from RFC 9989
     KNOWN_TAGS = {"v", "p", "sp", "np", "rua", "ruf", "adkim", "aspf", "fo", "psd", "t"}
-    # Tags from RFC 7489 that DMARCbis removes — recognize but flag
+    # Tags from RFC 7489 that RFC 9989 removes — recognize but flag
     DEPRECATED_TAGS = {"pct", "rf", "ri"}
 
     result = {
@@ -1026,27 +1026,27 @@ def _raw_check_dmarc(domain: str) -> Dict[str, Any]:
                     f"Check spelling. Valid DMARC tags are: {', '.join(sorted(KNOWN_TAGS))}.",
                 )
             elif key_clean in DEPRECATED_TAGS:
-                # Tag-specific deprecation guidance per DMARCbis
+                # Tag-specific deprecation guidance per RFC 9989
                 if key_clean == "pct":
                     _add_issue(
                         "warning",
-                        "Deprecated tag: 'pct' (removed in dmarcbis-41 §C.5.2)",
-                        "dmarcbis-41 §C.5.2 (Tags Removed) and §A.6 explicitly "
-                        "remove the pct tag. The dmarcbis testing mechanism is "
+                        "Deprecated tag: 'pct' (removed in RFC 9989 §C.5.2)",
+                        "RFC 9989 §C.5.2 (Tags Removed) and §A.6 explicitly "
+                        "remove the pct tag. The RFC 9989 testing mechanism is "
                         "the t tag (§4.7): t=y signals receivers to apply the "
                         "policy one level below the published p value. Current "
-                        "RFC 7489 receivers still honor pct, but dmarcbis-"
+                        "RFC 7489 receivers still honor pct, but RFC 9989-"
                         "compliant receivers will ignore it.",
                         "Remove the pct tag. If you were using pct<100 to test enforcement, set t=y instead.",
                     )
                 elif key_clean == "ri":
                     _add_issue(
                         "info",
-                        "Deprecated tag: 'ri' (removed in dmarcbis-41 §C.5.2)",
-                        "dmarcbis-41 §C.5.2 (Tags Removed) explicitly lists "
+                        "Deprecated tag: 'ri' (removed in RFC 9989 §C.5.2)",
+                        "RFC 9989 §C.5.2 (Tags Removed) explicitly lists "
                         "ri among the tags removed from the protocol, so it "
                         "is also absent from the §4.7 tag registry. Current "
-                        "RFC 7489 receivers may still honor ri, but dmarcbis-"
+                        "RFC 7489 receivers may still honor ri, but RFC 9989-"
                         "compliant receivers will ignore it; in practice "
                         "receivers send aggregate reports on their own "
                         "schedule regardless of ri.",
@@ -1055,12 +1055,12 @@ def _raw_check_dmarc(domain: str) -> Dict[str, Any]:
                 elif key_clean == "rf":
                     _add_issue(
                         "info",
-                        "Deprecated tag: 'rf' (removed in dmarcbis-41 §C.5.2)",
-                        "dmarcbis-41 §C.5.2 (Tags Removed) explicitly lists "
+                        "Deprecated tag: 'rf' (removed in RFC 9989 §C.5.2)",
+                        "RFC 9989 §C.5.2 (Tags Removed) explicitly lists "
                         "rf among the tags removed from the protocol, so it "
                         "is also absent from the §4.7 tag registry. The only "
                         "value ever defined was 'afrf', so the tag never "
-                        "carried useful information; dmarcbis-compliant "
+                        "carried useful information; RFC 9989-compliant "
                         "receivers will ignore it.",
                         "Remove the rf tag.",
                     )
@@ -1104,7 +1104,7 @@ def _raw_check_dmarc(domain: str) -> Dict[str, Any]:
     # ── Step 6: Extract and validate individual tag values ──────
 
     # 6a. Policy (p=) — required tag. Syntax errors are emitted here;
-    #     receiver-side recovery (dmarcbis §4.10.1) is decided after
+    #     receiver-side recovery (RFC 9989 §4.10.1) is decided after
     #     sp= and np= have also been validated.
     raw_policy = tags.get("p", "")
     policy = raw_policy.lower()
@@ -1148,7 +1148,7 @@ def _raw_check_dmarc(domain: str) -> Dict[str, Any]:
             "Change to sp=none, sp=quarantine, or sp=reject.",
         )
 
-    # 6b2. Non-existent subdomain policy (np=) — DMARCbis §4.7
+    # 6b2. Non-existent subdomain policy (np=) — RFC 9989 §4.7
     raw_np = tags.get("np", "")
     np_val = raw_np.lower() if raw_np else None
     result["np"] = np_val
@@ -1161,7 +1161,7 @@ def _raw_check_dmarc(domain: str) -> Dict[str, Any]:
             "Change to np=none, np=quarantine, or np=reject.",
         )
 
-    # 6b-recovery. dmarcbis-41 §4.10.1 receiver behavior.
+    # 6b-recovery. RFC 9989 §4.10.1 receiver behavior.
     #
     # Verbatim from §4.10.1:
     #   "If a retrieved DMARC Policy Record does not contain a valid 'p'
@@ -1174,7 +1174,7 @@ def _raw_check_dmarc(domain: str) -> Dict[str, Any]:
     #       this message."
     #
     # The trigger covers all four cases: missing p, invalid p, invalid
-    # sp, invalid np. Recovery is dmarcbis-only; RFC 7489 has no such
+    # sp, invalid np. Recovery is RFC 9989-only; RFC 7489 has no such
     # fallback. We surface the interop split so users don't assume the
     # broken record is universally honored. Per-tag _add_syntax above
     # is preserved — recovery is a separate, receiver-side concern.
@@ -1199,12 +1199,12 @@ def _raw_check_dmarc(domain: str) -> Dict[str, Any]:
             if rec_kind == "missing":
                 _add_issue(
                     "warning",
-                    "Missing p= tag. Spec recovery: dmarcbis treats "
+                    "Missing p= tag. Spec recovery: RFC 9989 treats "
                     "record as p=none, RFC 7489 receivers ignore.",
                     "This record has no explicit policy tag. Per "
-                    "dmarcbis-41 §4.10.1, because rua= contains at "
+                    "RFC 9989 §4.10.1, because rua= contains at "
                     "least one syntactically valid reporting URI, "
-                    "dmarcbis-compliant receivers MUST act as if a "
+                    "RFC 9989-compliant receivers MUST act as if a "
                     "record containing p=none was retrieved and "
                     "continue processing. RFC 7489 has no such "
                     "fallback; older receivers (still common) will "
@@ -1218,11 +1218,11 @@ def _raw_check_dmarc(domain: str) -> Dict[str, Any]:
                 _add_issue(
                     "warning",
                     f"Invalid {rec_tag_name}= value: {rec_tag_name}="
-                    f"{rec_tag_value}. Spec recovery: dmarcbis treats "
+                    f"{rec_tag_value}. Spec recovery: RFC 9989 treats "
                     f"record as p=none, RFC 7489 receivers may ignore.",
-                    "Per dmarcbis-41 §4.10.1, because rua= contains "
+                    "Per RFC 9989 §4.10.1, because rua= contains "
                     "at least one syntactically valid reporting URI, "
-                    "dmarcbis-compliant receivers MUST act as if a "
+                    "RFC 9989-compliant receivers MUST act as if a "
                     "record containing p=none was retrieved and "
                     "continue processing. RFC 7489 has no such "
                     "recovery rule; older receivers may instead "
@@ -1230,14 +1230,14 @@ def _raw_check_dmarc(domain: str) -> Dict[str, Any]:
                     "fix the value rather than relying on this "
                     "fallback.",
                     f"Set {rec_tag_name}= to one of: none, quarantine, "
-                    f"reject. Do not rely on the dmarcbis recovery "
+                    f"reject. Do not rely on the RFC 9989 recovery "
                     f"fallback to mask the invalid value.",
                 )
         else:
             if rec_kind == "missing":
                 _add_syntax(
                     "Missing required policy tag (p=) and no valid rua= URI",
-                    "Per dmarcbis-41 §4.10.1, a record without a valid "
+                    "Per RFC 9989 §4.10.1, a record without a valid "
                     "p= tag is recoverable only when rua= contains at "
                     "least one syntactically valid mailto: URI. This "
                     "record has neither, so receivers apply no DMARC "
@@ -1251,9 +1251,9 @@ def _raw_check_dmarc(domain: str) -> Dict[str, Any]:
                 _add_issue(
                     "error",
                     f"Invalid {rec_tag_name}= value AND no valid rua= URI. "
-                    f"Per dmarcbis-41 §4.10.1, this record yields no "
+                    f"Per RFC 9989 §4.10.1, this record yields no "
                     f"DMARC processing.",
-                    f"dmarcbis-41 §4.10.1 specifies that receivers "
+                    f"RFC 9989 §4.10.1 specifies that receivers "
                     f"apply no DMARC processing when an invalid "
                     f"{rec_tag_name}= is published without a "
                     f"syntactically valid rua= URI. Effectively, this "
@@ -1265,7 +1265,7 @@ def _raw_check_dmarc(domain: str) -> Dict[str, Any]:
                     business_risk_key="DMARC_PARSE_FAILURE",
                 )
 
-    # 6b3. Test mode (t=) — DMARCbis §4.5
+    # 6b3. Test mode (t=) — RFC 9989 §4.7
     raw_t = tags.get("t", "")
     if raw_t and raw_t.lower() not in ("y", "n"):
         _add_syntax(
@@ -1275,7 +1275,7 @@ def _raw_check_dmarc(domain: str) -> Dict[str, Any]:
             "Use t=y to test (policy drops one level) or t=n / omit the tag to enforce.",
         )
 
-    # 6b4. PSD flag (psd=) — DMARCbis §4.7
+    # 6b4. PSD flag (psd=) — RFC 9989 §4.7
     raw_psd = tags.get("psd", "")
     if raw_psd and raw_psd.lower() not in ("y", "n", "u"):
         _add_syntax(
@@ -1346,7 +1346,7 @@ def _raw_check_dmarc(domain: str) -> Dict[str, Any]:
             "Change to aspf=r (relaxed, recommended) or aspf=s (strict).",
         )
 
-    # 6g. pct (percentage) — removed in DMARCbis
+    # 6g. pct (percentage) — removed in RFC 9989
     # Still validate if present since current receivers still honor it
     raw_pct = tags.get("pct", "")
     if raw_pct:
@@ -1452,7 +1452,7 @@ def _raw_check_dmarc(domain: str) -> Dict[str, Any]:
                 business_risk_key="DMARC_PCT_LOW",
             )
 
-    # DMARCbis t=y test mode (drops policy one level for cautious deployment)
+    # RFC 9989 t=y test mode (drops policy one level for cautious deployment)
     raw_t_val = tags.get("t", "")
     result["t"] = raw_t_val.lower() if raw_t_val else None
     if raw_t_val and raw_t_val.lower() == "y" and policy in ("quarantine", "reject"):
@@ -1460,7 +1460,7 @@ def _raw_check_dmarc(domain: str) -> Dict[str, Any]:
         _add_issue(
             "warning",
             f"DMARC test mode active (t=y). Policy effectively {effective}",
-            f"The t=y tag (DMARCbis Section 4.5) signals receivers to apply the policy "
+            f"The t=y tag (RFC 9989 Section 4.7) signals receivers to apply the policy "
             f"one level below {policy}. Receivers treat this as p={effective}. "
             f"This is useful for cautious deployment of a new enforcement policy.",
             f"Remove t=y (or set t=n) once you're confident in your authentication "
@@ -1504,7 +1504,7 @@ def _raw_check_dmarc(domain: str) -> Dict[str, Any]:
     elif "warning" in severities:
         result["status"] = "warning"
 
-    # ── DMARCbis Readiness Assessment (informational only) ─────
+    # ── RFC 9989 Readiness Assessment (informational only) ─────
     if result["record"]:
         result["dmarcbis_readiness"] = _assess_dmarcbis_readiness(result)
         result["strict_validation"] = _validate_dmarc_strict(
@@ -1518,7 +1518,7 @@ def _raw_check_dmarc(domain: str) -> Dict[str, Any]:
 
 
 def _validate_dmarc_strict(record: str, dmarc_records_count: int = 1) -> Dict:
-    """DMARCbis-strict layered validation.
+    """RFC 9989-strict layered validation.
 
     Returns structured results with pass/fail/warn per check, grouped by
     category: record_structure, uri_validation, external_auth, tag_values,
@@ -1568,7 +1568,7 @@ def _validate_dmarc_strict(record: str, dmarc_records_count: int = 1) -> Dict:
     # Check 1: Single record
     if dmarc_records_count > 1:
         _add("record_structure", "MULTIPLE_RECORDS", "fail",
-             f"{dmarc_records_count} DMARC records found. DMARCbis requires exactly one. "
+             f"{dmarc_records_count} DMARC records found. RFC 9989 requires exactly one. "
              "Receivers return PermError, meaning DMARC fails entirely.")
     elif dmarc_records_count == 1:
         _add("record_structure", "SINGLE_RECORD", "pass", "Exactly one DMARC record found.")
@@ -1607,7 +1607,7 @@ def _validate_dmarc_strict(record: str, dmarc_records_count: int = 1) -> Dict:
         if count > 1:
             dup_found = True
             _add("record_structure", "DUPLICATE_TAG", "fail",
-                 f"'{tag_name}' appears {count} times. DMARCbis requires each tag at most once.")
+                 f"'{tag_name}' appears {count} times. RFC 9989 requires each tag at most once.")
     if not dup_found and p_count <= 1:
         _add("record_structure", "NO_DUPLICATES", "pass", "No duplicate tags found.")
 
@@ -1625,7 +1625,7 @@ def _validate_dmarc_strict(record: str, dmarc_records_count: int = 1) -> Dict:
     for k, v, _ in parsed_tags:
         if k not in KNOWN_TAGS:
             _add("record_structure", "UNKNOWN_TAG", "warn",
-                 f"'{k}={v}' is not defined in DMARC or DMARCbis and will be ignored by receivers. "
+                 f"'{k}={v}' is not defined in DMARC or RFC 9989 and will be ignored by receivers. "
                  "Verify this is not a typo.")
 
     # Check 8: Trailing content
@@ -1686,13 +1686,13 @@ def _validate_dmarc_strict(record: str, dmarc_records_count: int = 1) -> Dict:
                 _add("uri_validation", "URI_NO_MAILTO", "fail",
                      f"{tag_name}={uri_stripped} is not a valid URI. Must start with mailto:. "
                      f"Correct format: mailto:{uri_stripped}. This is the most common DMARC error "
-                     "and older tools silently accept it. DMARCbis requires valid URI format.")
+                     "and older tools silently accept it. RFC 9989 requires valid URI format.")
                 all_valid = False
             else:
                 # Split mailto:<addr>!<size>. The email part is validated even
                 # when a size modifier is present; the modifier is reported as
                 # a separate, non-fatal warn (it's obsolete, not forbidden —
-                # dmarcbis-41 §4.8 keeps obs-dmarc-uri in the ABNF for parsing
+                # RFC 9989 §4.8 keeps obs-dmarc-uri in the ABNF for parsing
                 # legacy records).
                 payload_parts = uri_stripped[7:].split("!", 1)
                 email_part = payload_parts[0]
@@ -1706,8 +1706,8 @@ def _validate_dmarc_strict(record: str, dmarc_records_count: int = 1) -> Dict:
                 if size_modifier:
                     _add("uri_validation", "URI_SIZE_MODIFIER_OBSOLETE", "warn",
                          f"{tag_name}={uri_stripped} contains a size modifier (!{size_modifier}). "
-                         "dmarcbis-41 §C.4 removes the ability to specify a maximum report size; "
-                         "§4.8 marks the syntax as obsolete. Reporters following dmarcbis will "
+                         "RFC 9989 §C.4 removes the ability to specify a maximum report size; "
+                         "§4.8 marks the syntax as obsolete. Reporters following RFC 9989 will "
                          "ignore the size suffix. RFC 7489 receivers may still honor it. "
                          "Remove the modifier.")
 
@@ -1728,7 +1728,7 @@ def _validate_dmarc_strict(record: str, dmarc_records_count: int = 1) -> Dict:
         else:
             _add("tag_values", "FO_VALID", "pass", f"fo={fo_val} is valid.")
 
-    # Check 15: DMARCbis-specific tag values
+    # Check 15: RFC 9989-specific tag values
     psd_val = tag_dict.get("psd")
     if psd_val is not None and psd_val.lower() not in ("y", "n", "u"):
         _add("tag_values", "PSD_INVALID", "fail",
@@ -1757,11 +1757,11 @@ def _validate_dmarc_strict(record: str, dmarc_records_count: int = 1) -> Dict:
     warn_count = sum(1 for c in checks if c["status"] == "warn")
 
     if fail_count > 0:
-        summary = "This record has errors that DMARCbis-compliant receivers will reject."
+        summary = "This record has errors that RFC 9989-compliant receivers will reject."
     elif warn_count > 0:
         summary = "This record passes strict validation with warnings."
     else:
-        summary = "This record passes DMARCbis strict validation."
+        summary = "This record passes RFC 9989 strict validation."
 
     return {
         "checks": checks,
@@ -1938,21 +1938,21 @@ def _validate_dmarc_legacy(record: str, dmarc_records_count: int = 1) -> Dict:
 
 
 def _assess_dmarcbis_readiness(dmarc_result: Dict) -> Dict:
-    """Assess readiness for DMARCbis (draft-ietf-dmarc-dmarcbis-41).
+    """Assess readiness for RFC 9989.
 
     Purely informational. Does NOT affect scoring or status.
 
     Each recommendation carries a "source" field so the user can
     distinguish spec-mandated changes from our own editorial guidance:
 
-      - spec_required:    explicitly mandated by dmarcbis-41 (with
+      - spec_required:    explicitly mandated by RFC 9989 (with
                           spec_reference pointing to the section).
       - spec_recommended: SHOULD-level guidance from the draft. Reserved;
                           we do not use it when the spec is silent.
       - editorial:        our own recommendation, derived from
                           best-practice rather than spec text.
 
-    Rationale: dmarcbis-41 §C.5.2 (Tags Removed) explicitly lists
+    Rationale: RFC 9989 §C.5.2 (Tags Removed) explicitly lists
     pct, rf, and ri as removed from the protocol, so all three are
     spec_required removals. The spec is still silent on
     np-value-relative-to-p and on progression from p=none to
@@ -1978,21 +1978,21 @@ def _assess_dmarcbis_readiness(dmarc_result: Dict) -> Dict:
         t_present = "t" in tags_in_record
         if t_present:
             action = (
-                "Remove pct. dmarcbis removes the tag (§C.5.2 / §A.6) and "
-                "you already have t= set, which is the dmarcbis replacement "
+                "Remove pct. RFC 9989 removes the tag (§C.5.2 / §A.6) and "
+                "you already have t= set, which is the RFC 9989 replacement "
                 "for the testing role pct used to play."
             )
         else:
             action = (
-                "Remove pct. dmarcbis removes the tag (§C.5.2 / §A.6); "
+                "Remove pct. RFC 9989 removes the tag (§C.5.2 / §A.6); "
                 "if you were using pct<100 to test enforcement, set t=y "
-                "instead, which is the dmarcbis-defined test mode."
+                "instead, which is the RFC 9989-defined test mode."
             )
         deprecated_tags.append({
             "tag": "pct",
             "value": pct_val,
             "source": "spec_required",
-            "spec_reference": "dmarcbis-41 §C.5.2 / §A.6",
+            "spec_reference": "RFC 9989 §C.5.2 / §A.6",
             "recommendation": action,
         })
 
@@ -2001,11 +2001,11 @@ def _assess_dmarcbis_readiness(dmarc_result: Dict) -> Dict:
             "tag": "rf",
             "value": tags_in_record["rf"],
             "source": "spec_required",
-            "spec_reference": "dmarcbis-41 §C.5.2",
+            "spec_reference": "RFC 9989 §C.5.2",
             "recommendation": (
-                "Remove the rf tag. dmarcbis-41 §C.5.2 lists rf as "
+                "Remove the rf tag. RFC 9989 §C.5.2 lists rf as "
                 "removed from the protocol. Receivers implementing "
-                "dmarcbis will ignore this tag."
+                "RFC 9989 receivers will ignore this tag."
             ),
         })
 
@@ -2014,15 +2014,15 @@ def _assess_dmarcbis_readiness(dmarc_result: Dict) -> Dict:
             "tag": "ri",
             "value": tags_in_record["ri"],
             "source": "spec_required",
-            "spec_reference": "dmarcbis-41 §C.5.2",
+            "spec_reference": "RFC 9989 §C.5.2",
             "recommendation": (
-                "Remove the ri tag. dmarcbis-41 §C.5.2 lists ri as "
+                "Remove the ri tag. RFC 9989 §C.5.2 lists ri as "
                 "removed from the protocol. Receivers implementing "
-                "dmarcbis will ignore this tag."
+                "RFC 9989 receivers will ignore this tag."
             ),
         })
 
-    # New DMARCbis tags
+    # New RFC 9989 tags
     np_val = dmarc_result.get("np")
     t_val = dmarc_result.get("t")
     psd_val = dmarc_result.get("psd")
@@ -2035,7 +2035,7 @@ def _assess_dmarcbis_readiness(dmarc_result: Dict) -> Dict:
         "recommendation": None,
     }
     if not np_val:
-        # dmarcbis-41 §4.7 defines np but does NOT prescribe a value
+        # RFC 9989 §4.7 defines np but does NOT prescribe a value
         # relative to p. The recommendations below are editorial: they
         # reflect the email-security convention of treating mail from
         # non-existent subdomains at least as strictly as mail from
@@ -2046,7 +2046,7 @@ def _assess_dmarcbis_readiness(dmarc_result: Dict) -> Dict:
             np_info["recommendation"] = (
                 "Editorial recommendation (not spec-required): consider "
                 "np=reject so mail from non-existent subdomains is rejected "
-                "the same as mail at p=reject. dmarcbis-41 §4.7 does not "
+                "the same as mail at p=reject. RFC 9989 §4.7 does not "
                 "prescribe an np value relative to p; if np is absent, the "
                 "fallback is sp then p."
             )
@@ -2054,7 +2054,7 @@ def _assess_dmarcbis_readiness(dmarc_result: Dict) -> Dict:
             np_info["recommendation"] = (
                 "Editorial recommendation (not spec-required): consider "
                 "np=reject so mail from non-existent subdomains is treated "
-                "more strictly than the apex p=quarantine. dmarcbis-41 §4.7 "
+                "more strictly than the apex p=quarantine. RFC 9989 §4.7 "
                 "does not prescribe an np value; if np is absent, the "
                 "fallback is sp then p."
             )
@@ -2062,7 +2062,7 @@ def _assess_dmarcbis_readiness(dmarc_result: Dict) -> Dict:
             np_info["recommendation"] = (
                 "Editorial recommendation (not spec-required): consider "
                 "np=quarantine to flag mail from non-existent subdomains "
-                "even while you keep p=none for monitoring. dmarcbis-41 "
+                "even while you keep p=none for monitoring. RFC 9989 "
                 "§4.7 does not prescribe an np value; if np is absent, "
                 "the fallback is sp then p."
             )
@@ -2070,7 +2070,7 @@ def _assess_dmarcbis_readiness(dmarc_result: Dict) -> Dict:
             np_info["recommendation"] = (
                 "Editorial recommendation (not spec-required): set np "
                 "explicitly once you have an enforcement policy in place. "
-                "dmarcbis-41 §4.7 leaves the value to the domain owner."
+                "RFC 9989 §4.7 leaves the value to the domain owner."
             )
 
     t_info = {"present": bool(t_val), "value": t_val}
@@ -2115,20 +2115,20 @@ def _assess_dmarcbis_readiness(dmarc_result: Dict) -> Dict:
     if not record_valid:
         parts = [
             "Your DMARC record has syntax errors under RFC 7489. Fix those "
-            "before DMARCbis readiness can be assessed."
+            "before RFC 9989 readiness can be assessed."
         ]
     else:
-        parts = ["Your DMARC record is valid and works under both RFC 7489 and DMARCbis."]
+        parts = ["Your DMARC record is valid and works under both RFC 7489 and RFC 9989."]
         spec_required_tags = [r["tag"] for r in recommendations if r["source"] == "spec_required"]
         editorial_tags = [r["tag"] for r in recommendations if r["source"] == "editorial"]
         if spec_required_tags:
             names = ", ".join(spec_required_tags)
-            parts.append(f"Spec-required: remove {names} (dmarcbis-41).")
+            parts.append(f"Spec-required: remove {names} (RFC 9989).")
         if editorial_tags:
             names = ", ".join(editorial_tags)
             parts.append(f"Editorial suggestion: review {names} (not spec-required).")
         if not has_deprecated and has_np:
-            parts.append("No changes needed for DMARCbis compliance.")
+            parts.append("No changes needed for RFC 9989 compliance.")
 
     return {
         "status": status,
@@ -4283,7 +4283,7 @@ def run_full_audit(domain: str, dkim_selector: Optional[str] = None,
     needs_mx = scope_set is None or bool(scope_set & (_MX_DEPENDENTS | {"mx"}))
     needs_spf = scope_set is None or bool(scope_set & (_SPF_DEPENDENTS | {"spf"}))
 
-    # --- DMARC Tree Walk (DMARCbis Section 4.10) ---
+    # --- DMARC Tree Walk (RFC 9989 Section 4.10) ---
     # Run before DMARC card so inherited policy can inform the card
     tree_walk_result = None
     if needs_dmarc:
@@ -5058,7 +5058,7 @@ def _build_resilience_analysis(
         _inh_tag = raw_dmarc.get("applied_tag", "p")
         _tag_label = {"sp": "sp=", "np": "np=", "p": "p="}.get(_inh_tag, f"{_inh_tag}=")
         _inh_method = raw_dmarc.get("inheritance_method", "psl")
-        _method_label = "DMARCbis tree walk" if _inh_method == "tree_walk" else "RFC 7489 organizational domain fallback (Public Suffix List)"
+        _method_label = "RFC 9989 tree walk" if _inh_method == "tree_walk" else "RFC 7489 organizational domain fallback (Public Suffix List)"
         dmarc_policy = _inh_policy
     else:
         dmarc_policy = (raw_dmarc.get("policy") or "").lower().strip()

@@ -1,4 +1,4 @@
-"""Tests for dmarcbis-41 §4.10.1 policy recovery.
+"""Tests for RFC 9989 §4.10.1 policy recovery.
 
 Verbatim from §4.10.1 (the rule under test):
 

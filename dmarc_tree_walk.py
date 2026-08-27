@@ -1,13 +1,13 @@
 """
 DMARC DNS Tree Walk
 ====================
-Implements draft-ietf-dmarc-dmarcbis-41 §4.10 (read 2026-04-25).
+Implements RFC 9989 §4.10 (read 2026-08-27).
 
 Walks the DNS hierarchy to find the DMARC Policy Record that applies to
 a given domain, and computes the Organizational Domain. The full step
 list returned lets the frontend visualize each query.
 
-Reference: https://datatracker.ietf.org/doc/html/draft-ietf-dmarc-dmarcbis-41
+Reference: https://www.rfc-editor.org/rfc/rfc9989.html
 
 Spec rules implemented (per §4.10 numbered steps and §4.10.1 / §4.10.2):
 
@@ -73,7 +73,7 @@ except ImportError:
     tldextract = None
     _tld_extract = None
 
-# dmarcbis-41 §4.10-5: total query cap is 8, including the Author Domain
+# RFC 9989 §4.10-5: total query cap is 8, including the Author Domain
 # query. The walk loop therefore allows at most 7 queries (1 already
 # consumed by the Author Domain lookup).
 MAX_TREE_WALK_QUERIES = 7
@@ -136,7 +136,7 @@ def _query_dmarc(domain: str) -> Optional[str]:
     """
     Query for a DMARC TXT record at _dmarc.<domain>.
 
-    dmarcbis-41 §4.10 steps 2 and 6: records that do not start with a
+    RFC 9989 §4.10 steps 2 and 6: records that do not start with a
     "v" tag identifying the current version of DMARC are discarded; if
     multiple DMARC Policy Records are returned for a single target,
     they are all discarded.
@@ -194,7 +194,7 @@ def _domain_exists(domain: str) -> bool:
 
 def dmarc_tree_walk(domain: str) -> Dict[str, Any]:
     """
-    Perform the DMARC DNS Tree Walk per dmarcbis-41 Section 4.10.
+    Perform the DMARC DNS Tree Walk per RFC 9989 Section 4.10.
 
     Returns a dict with:
       - domain: the input domain
@@ -216,7 +216,7 @@ def dmarc_tree_walk(domain: str) -> Dict[str, Any]:
     labels = domain.rstrip(".").split(".")
 
     # ------------------------------------------------------------------
-    # dmarcbis-41 §4.10.1: "Policy discovery starts first with a query
+    # RFC 9989 §4.10.1: "Policy discovery starts first with a query
     # for a valid DMARC Policy Record at the name created by prepending
     # the label '_dmarc' to the Author Domain". This query is one of
     # the 8 in the §4.10-5 total budget; the walk loop below allows

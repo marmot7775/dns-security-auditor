@@ -1,4 +1,4 @@
-"""Pin: dmarcbis-41 §C.4 removes the rua/ruf !size modifier.
+"""Pin: RFC 9989 §C.4 removes the rua/ruf !size modifier.
 
 Verbatim spec text the warning is grounded in:
 
@@ -14,7 +14,7 @@ Verbatim spec text the warning is grounded in:
 
 The strict validator emits URI_SIZE_MODIFIER_OBSOLETE (warn) per
 modifier-bearing URI; _raw_check_dmarc emits an info-level issue
-with source="spec_required" and spec_reference="dmarcbis-41 §C.4 / §4.8".
+with source="spec_required" and spec_reference="RFC 9989 §C.4 / §4.8".
 
 Warn (not fail), because §4.8 keeps obs-dmarc-uri in the ABNF — the
 modifier is obsolete, not forbidden.
@@ -110,7 +110,7 @@ class TestRawCheckEmitsSpecRequiredInfo(unittest.TestCase):
         self.assertEqual(len(infos), 1)
         info = infos[0]
         self.assertEqual(info["source"], "spec_required")
-        self.assertEqual(info["spec_reference"], "dmarcbis-41 §C.4 / §4.8")
+        self.assertEqual(info["spec_reference"], "RFC 9989 §C.4 / §4.8")
         self.assertIn("!10m", info["plain_english"])
         self.assertIn("rua=", info["fix"])
 
@@ -137,7 +137,7 @@ class TestRawCheckEmitsSpecRequiredInfo(unittest.TestCase):
         self.assertEqual(len(infos), 1)
         info = infos[0]
         self.assertEqual(info["source"], "spec_required")
-        self.assertEqual(info["spec_reference"], "dmarcbis-41 §C.4 / §4.8")
+        self.assertEqual(info["spec_reference"], "RFC 9989 §C.4 / §4.8")
         self.assertIn("ruf=", info["fix"])
 
     def test_modifier_does_not_escalate_status(self):

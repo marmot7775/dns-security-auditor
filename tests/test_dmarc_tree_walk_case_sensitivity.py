@@ -1,4 +1,4 @@
-"""Tests for dmarcbis-41 §4.7 case-sensitive v=DMARC1 in tree walk.
+"""Tests for RFC 9989 §4.7 case-sensitive v=DMARC1 in tree walk.
 
 §4.7 (v tag): "The tag value is case sensitive, and the only possible
 value is 'DMARC1'. ... if the value is not 'DMARC1', then the entire
