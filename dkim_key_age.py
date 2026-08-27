@@ -70,9 +70,13 @@ class DKIMKeyAgeAnalyzer:
         """Return the rotation schedule for the band key_size falls into.
 
         ROTATION_SCHEDULE is keyed by 1024, 2048 and 4096, so an exact match
-        lookup sent every other size to the 2048 default. A 512-bit or 768-bit
-        key, weaker than the 1024-bit key rated CRITICAL, was given the
+        lookup sent 512, 768, 1536 and 3072 to the 2048 default while 1024
+        mapped correctly. A 512-bit key, factorable in hours, was given the
         STANDARD schedule and told to rotate within 12 months.
+
+        The keys are band lower bounds, so a size takes the schedule of the
+        largest bound it reaches, and anything below the smallest bound takes
+        that smallest band.
         """
         if isinstance(key_size, bool) or not isinstance(key_size, (int, float)):
             return cls.ROTATION_SCHEDULE[2048]
@@ -80,11 +84,12 @@ class DKIMKeyAgeAnalyzer:
             # Revoked or undecodable. Nothing is known about the key itself,
             # so fall back to the standard period rather than call it weak.
             return cls.ROTATION_SCHEDULE[2048]
-        if key_size <= 1024:
-            return cls.ROTATION_SCHEDULE[1024]
-        if key_size < 4096:
-            return cls.ROTATION_SCHEDULE[2048]
-        return cls.ROTATION_SCHEDULE[4096]
+        for bound in sorted(cls.ROTATION_SCHEDULE, reverse=True):
+            if key_size >= bound:
+                return cls.ROTATION_SCHEDULE[bound]
+        # Below every band, so weaker than the weakest key the table knows
+        # about. It takes the most urgent schedule, not the default one.
+        return cls.ROTATION_SCHEDULE[min(cls.ROTATION_SCHEDULE)]
 
     def __init__(self, domain: str):
         self.domain = domain

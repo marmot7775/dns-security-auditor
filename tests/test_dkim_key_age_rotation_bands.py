@@ -30,17 +30,19 @@ def _analyze(key_size, selector="sel"):
     return analyzer.analyze_key(selector, RECORD, key_size)
 
 
-@pytest.mark.parametrize("bits", [256, 512, 768, 1024])
-def test_keys_at_or_below_1024_get_the_critical_schedule(bits):
+@pytest.mark.parametrize("bits", [256, 512, 768, 1024, 1536])
+def test_keys_below_2048_get_the_critical_schedule(bits):
+    """The ledger names 512, 768, 1536 and 3072 as falling through. Everything
+    that does not reach the 2048 band belongs in the 1024 one."""
     result = _analyze(bits)
     assert result["urgency"] == "CRITICAL", (
-        f"{bits}-bit is weaker than 1024 and must not be filed as STANDARD"
+        f"{bits}-bit does not reach 2048 and must not be filed as STANDARD"
     )
     assert DKIMKeyAgeAnalyzer._rotation_schedule_for(bits)["max_age_months"] == 3
 
 
 @pytest.mark.parametrize("bits", [2048, 3072])
-def test_keys_between_1024_and_4096_get_the_standard_schedule(bits):
+def test_keys_between_2048_and_4096_get_the_standard_schedule(bits):
     assert _analyze(bits)["urgency"] == "STANDARD"
 
 
