@@ -1927,6 +1927,7 @@ def _assess_dmarcbis_readiness(dmarc_result: Dict) -> Dict:
     deprecated_tags = []
     record = dmarc_result.get("record", "")
     policy = (dmarc_result.get("policy") or "").lower()
+    record_valid = dmarc_result.get("status") != "error"
 
     tags_in_record = {}
     for part in record.split(";"):
@@ -2042,10 +2043,12 @@ def _assess_dmarcbis_readiness(dmarc_result: Dict) -> Dict:
     has_deprecated = len(deprecated_tags) > 0
     has_np = bool(np_val)
 
-    if not has_deprecated and has_np:
-        status = "ready"
-    elif has_deprecated and not has_np:
+    if not record_valid:
+        status = "invalid"
+    elif has_deprecated:
         status = "needs_update"
+    elif has_np:
+        status = "ready"
     else:
         status = "compatible"
 
@@ -2072,20 +2075,27 @@ def _assess_dmarcbis_readiness(dmarc_result: Dict) -> Dict:
 
     # Build summary, separating spec-required from editorial points so
     # readers can tell at a glance which changes the spec mandates.
-    parts = ["Your DMARC record is valid and works under both RFC 7489 and DMARCbis."]
-    spec_required_tags = [r["tag"] for r in recommendations if r["source"] == "spec_required"]
-    editorial_tags = [r["tag"] for r in recommendations if r["source"] == "editorial"]
-    if spec_required_tags:
-        names = ", ".join(spec_required_tags)
-        parts.append(f"Spec-required: remove {names} (dmarcbis-41).")
-    if editorial_tags:
-        names = ", ".join(editorial_tags)
-        parts.append(f"Editorial suggestion: review {names} (not spec-required).")
-    if not has_deprecated and has_np:
-        parts.append("No changes needed for DMARCbis compliance.")
+    if not record_valid:
+        parts = [
+            "Your DMARC record has syntax errors under RFC 7489. Fix those "
+            "before DMARCbis readiness can be assessed."
+        ]
+    else:
+        parts = ["Your DMARC record is valid and works under both RFC 7489 and DMARCbis."]
+        spec_required_tags = [r["tag"] for r in recommendations if r["source"] == "spec_required"]
+        editorial_tags = [r["tag"] for r in recommendations if r["source"] == "editorial"]
+        if spec_required_tags:
+            names = ", ".join(spec_required_tags)
+            parts.append(f"Spec-required: remove {names} (dmarcbis-41).")
+        if editorial_tags:
+            names = ", ".join(editorial_tags)
+            parts.append(f"Editorial suggestion: review {names} (not spec-required).")
+        if not has_deprecated and has_np:
+            parts.append("No changes needed for DMARCbis compliance.")
 
     return {
         "status": status,
+        "record_valid": record_valid,
         "deprecated_tags": deprecated_tags,
         "new_tags": {
             "np": np_info,

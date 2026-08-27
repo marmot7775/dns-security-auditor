@@ -1039,10 +1039,14 @@ def _build_dmarcbis_card_data(readiness: Optional[Dict], record: Optional[str]) 
     checklist = []
 
     # 1. Valid DMARC record
+    record_valid = readiness.get("record_valid", True)
     checklist.append({
         "label": "Valid DMARC record found",
-        "status": "pass",
-        "detail": None,
+        "status": "pass" if record_valid else "fail",
+        "detail": None if record_valid else (
+            "The DMARC record has syntax errors; DMARCbis readiness cannot "
+            "be assessed until those are fixed."
+        ),
     })
 
     # 2. No deprecated tags (pct, rf, ri). Each entry passes through its
@@ -1135,7 +1139,7 @@ def _build_dmarcbis_card_data(readiness: Optional[Dict], record: Optional[str]) 
 
     # Overall status
     raw_status = readiness.get("status", "compatible")
-    status_map = {"ready": "compliant", "needs_update": "non_compliant"}
+    status_map = {"ready": "compliant", "needs_update": "non_compliant", "invalid": "non_compliant"}
     status = status_map.get(raw_status, "compatible")
 
     # Build suggested record + changes list
