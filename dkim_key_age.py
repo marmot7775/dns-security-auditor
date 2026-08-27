@@ -25,6 +25,7 @@ class DKIMKeyAgeAnalyzer:
     # Common selector naming patterns that indicate age
     SELECTOR_PATTERNS = {
         'date_based': [
+            r'^(\d{4})(\d{2})(\d{2})$',  # YYYYMMDD (e.g., 20230601) - Google Workspace
             r'^(\d{4})(\d{2})$',  # YYYYMM (e.g., 202401) - full match only
             r'^(\d{4})-(\d{2})$',  # YYYY-MM
             r'^(\d{2})(\d{2})$',   # YYMM (e.g., 2401) - full match only
@@ -167,10 +168,14 @@ class DKIMKeyAgeAnalyzer:
             match = re.search(pattern, selector)
             if match:
                 try:
-                    if len(match.groups()) == 2:
-                        year = int(match.group(1))
-                        month = int(match.group(2))
-                        
+                    groups = match.groups()
+                    if len(groups) in (2, 3):
+                        year = int(groups[0])
+                        month = int(groups[1])
+                        # YYYYMMDD carries a day; the month-only formats start
+                        # the key's life on the first.
+                        day = int(groups[2]) if len(groups) == 3 else 1
+
                         # Validate month
                         if month < 1 or month > 12:
                             continue
@@ -179,8 +184,12 @@ class DKIMKeyAgeAnalyzer:
                         if year < 100:
                             year = 2000 + year if year < 50 else 1900 + year
 
-                        # Create date
-                        key_date = datetime(year, month, 1)
+                        # Create date. An impossible day (20230230) falls
+                        # through to the next pattern rather than the except.
+                        try:
+                            key_date = datetime(year, month, day)
+                        except ValueError:
+                            continue
                         age_months = (datetime.now() - key_date).days // 30
                         
                         if age_months < 0:
@@ -337,7 +346,10 @@ class DKIMKeyAgeAnalyzer:
             elif key['rotation_status'] == 'OVERDUE':
                 total_score += 30
             elif key['rotation_status'] == 'UNKNOWN':
-                total_score += 50  # Neutral score for unknown
+                # Not a neutral score. A key whose age cannot be read may be
+                # years old, so scoring it above OVERDUE let an unparsed
+                # selector lift the grade above a correctly identified one.
+                total_score += 30
         
         final_score = int(total_score / max_score * 100)
         
