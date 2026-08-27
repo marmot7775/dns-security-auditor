@@ -263,11 +263,14 @@ class DKIMKeyAgeAnalyzer:
         lines.append(f"\nDomain: {self.domain}")
         lines.append(f"Keys Analyzed: {len(self.keys_analyzed)}\n")
         
-        # Sort by urgency
+        # Sort by urgency, then overdue first within each band. The bare
+        # equality test sorted them last: False is 0 and True is 1, so an
+        # ascending sort put every key that was not overdue ahead of the ones
+        # that were.
         urgency_order = {'CRITICAL': 0, 'STANDARD': 1, 'LOW': 2}
-        sorted_keys = sorted(self.keys_analyzed, 
+        sorted_keys = sorted(self.keys_analyzed,
                            key=lambda x: (urgency_order.get(x['urgency'], 3),
-                                        x['rotation_status'] == 'OVERDUE'))
+                                        0 if x['rotation_status'] == 'OVERDUE' else 1))
         
         for i, key in enumerate(sorted_keys, 1):
             status_icon = {
