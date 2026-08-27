@@ -459,7 +459,11 @@ def _has_weak_dkim_keys(found_selectors) -> bool:
             bits = key_analysis.get("key_bits")
         if isinstance(bits, bool) or not isinstance(bits, (int, float)):
             continue
-        if bits <= 1024:
+        # 0 means revoked (empty p=) or a key that could not be decoded, not a
+        # short key. The card already reports those as errors, and the step
+        # below claims the selectors "use 1024-bit RSA keys", which would be
+        # untrue for them.
+        if 0 < bits <= 1024:
             return True
     return False
 
