@@ -187,9 +187,9 @@ def build_executive_summary(checks: List[Dict], roadmap: Dict) -> Dict:
         st = c.get("status", "")
         pill = c.get("pill_label", "")
         # Consider configured if not missing/not-configured/fail-with-missing
-        if st == "pass" or st == "warn":
+        if st == "pass":
             configured += 1
-        elif st == "fail" and pill not in ("Missing", "Not configured", ""):
+        elif st in ("warn", "fail") and pill not in ("Missing", "Not configured", ""):
             configured += 1
 
     total_protocols = len(protocol_names)
