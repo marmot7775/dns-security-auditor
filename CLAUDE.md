@@ -32,7 +32,12 @@
 - Audit log: audit.log (JSON-lines, GDPR-safe)
 
 ## Deploy
-git push && ssh marmot7@159.223.201.90 "cd dns-security-auditor && git pull && sudo systemctl restart dns-auditor"
+git push && ssh marmot7@159.223.201.90 "cd dns-security-auditor && git pull && ~/.venv/bin/pip install -r requirements.txt && sudo systemctl restart dns-auditor"
+
+The pip install step matters: the server's venv is not kept in sync with
+requirements.txt automatically, so a new or bumped dependency (e.g.
+cryptography, added for DNSSEC/RSA key generation) installs fine in a
+fresh CI venv but crash-loops the live service if this step is skipped.
 
 ## Cache-busting
 After any change to `static/style.css` or `static/app.js`, run this command before committing, OR include it as the final step of your commit. It handles any alphanumeric version string and rewrites both CSS and JS references across every static HTML page:
