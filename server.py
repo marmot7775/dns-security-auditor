@@ -44,6 +44,7 @@ from config import (
     RATE_LIMIT_MAX, RATE_LIMIT_WINDOW, RATE_LIMIT_MAX_IPS,
     MAX_CONCURRENT_AUDITS, CORS_ORIGINS,
     DOMAIN_PATTERN, SELECTOR_PATTERN,
+    TRUSTED_PROXY_IPS,
 )
 from dns_tools import normalize_domain
 try:
@@ -207,17 +208,20 @@ def _get_client_ip(request: Request) -> str:
 
     Trust chain: Client -> Cloudflare -> nginx -> uvicorn
     nginx sets X-Real-IP from the connecting Cloudflare edge IP's
-    CF-Connecting-IP header. We only trust X-Real-IP because nginx
-    is the only thing that can reach uvicorn (bound to 127.0.0.1).
+    CF-Connecting-IP header. That's trustworthy when nginx (a configured
+    TRUSTED_PROXY_IPS peer) is the direct TCP peer -- but uvicorn can also
+    be reached directly (Procfile: --host 0.0.0.0), where the header
+    comes straight from whoever connects and rotating it would bypass the
+    rate limit entirely. Only honor X-Real-IP when the direct peer is a
+    trusted proxy; otherwise use the peer address itself.
     Client-sent headers like CF-Connecting-IP and X-Forwarded-For
     are NOT trusted directly (trivially spoofable for rate limit bypass).
     """
-    # X-Real-IP is set by nginx from the trusted upstream connection
+    peer_ip = request.client.host if request.client else None
     real_ip = request.headers.get("X-Real-IP")
-    if real_ip:
+    if real_ip and peer_ip in TRUSTED_PROXY_IPS:
         return real_ip.strip()
-    # Fallback: direct connection IP (should be 127.0.0.1 in production)
-    return request.client.host if request.client else "unknown"
+    return peer_ip or "unknown"
 
 
 def _check_rate_limit(client_ip: str) -> bool:
