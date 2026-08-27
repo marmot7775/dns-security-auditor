@@ -4063,6 +4063,7 @@ def transform_dkim(raw: Dict, domain: str, has_mx: bool = True) -> Dict:
     details = []
     vendor_names = set()
     weak_keys = []
+    revoked_keys = []
     for sel in found:
         selector = sel.get("selector", "unknown")
         sel_record = sel.get("record", "")
@@ -4078,7 +4079,18 @@ def transform_dkim(raw: Dict, domain: str, has_mx: bool = True) -> Dict:
         if vendor:
             vendor_names.add(vendor)
 
-        if strength == "weak":
+        if strength == "invalid":
+            revoked_detail = {
+                "type": "error",
+                "text": f"{selector}: {key_analysis.get('warning') or 'invalid key'}{vendor_str}",
+            }
+            # Only attach business_risk to the first revoked-key detail to
+            # avoid repeating the same callout once per selector.
+            if not revoked_keys:
+                revoked_detail["business_risk"] = BUSINESS_RISK.get("DKIM_REVOKED_KEY")
+            details.append(revoked_detail)
+            revoked_keys.append(selector)
+        elif strength == "weak":
             weak_detail = {
                 "type": "warning",
                 "text": f"{selector}: {bits}-bit {key_analysis.get('key_type', 'RSA')} key{vendor_str} - upgrade recommended",
@@ -4119,6 +4131,8 @@ def transform_dkim(raw: Dict, domain: str, has_mx: bool = True) -> Dict:
     status = "pass"
     if weak_keys:
         status = "warn"
+    if revoked_keys:
+        status = "fail"
     # Downgrade status if audit engine found errors or warnings
     if raw.get("syntax_errors") or any(i.get("severity") == "error" for i in raw.get("issues", [])):
         status = "fail"

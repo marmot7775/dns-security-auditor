@@ -27,21 +27,29 @@ def analyze_dkim_key_strength(dkim_record: str) -> Dict:
         'warning': None
     }
     
-    # Check Ed25519 FIRST (before RSA, since all records have p=)
-    if 'k=ed25519' in dkim_record.lower():
-        result['key_type'] = 'Ed25519'
-        result['key_bits'] = 256
-        result['status'] = 'strong'
-        return result
-
-    # Extract public key
-    key_match = re.search(r'p=([A-Za-z0-9+/=]+)', dkim_record)
+    # Extract public key data first (may be empty). Per RFC 6376 §3.6.1, an
+    # empty p= means the key is REVOKED -- this must be checked before the
+    # Ed25519 shortcut below, which otherwise returns 'strong' without ever
+    # looking at whether the key was revoked.
+    key_match = re.search(r'p=([A-Za-z0-9+/=]*)', dkim_record)
     if not key_match:
         result['status'] = 'invalid'
         result['warning'] = 'No public key found'
         return result
 
     key_data = key_match.group(1)
+
+    if not key_data:
+        result['status'] = 'invalid'
+        result['warning'] = 'Empty public key (p=): this key is revoked'
+        return result
+
+    # Check Ed25519 (all records have a non-empty p= at this point)
+    if 'k=ed25519' in dkim_record.lower():
+        result['key_type'] = 'Ed25519'
+        result['key_bits'] = 256
+        result['status'] = 'strong'
+        return result
 
     # RSA (default key type per RFC 6376)
     result['key_type'] = 'RSA'

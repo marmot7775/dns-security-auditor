@@ -227,6 +227,10 @@ BUSINESS_RISK = {
         "A 1024-bit DKIM key can be cracked with current resources, allowing "
         "attackers to forge signed mail that appears genuinely from your domain."
     ),
+    "DKIM_REVOKED_KEY": (
+        "An empty p= tag means the key is revoked per RFC 6376. Every message "
+        "signed with this selector fails DKIM verification at receivers."
+    ),
 }
 
 
