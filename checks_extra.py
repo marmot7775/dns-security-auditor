@@ -765,7 +765,8 @@ def _parse_dmarc_tag(record: str, tag: str) -> Optional[str]:
     return None
 
 
-def check_bimi(domain: str, dmarc_enforcing_override: bool = None, dmarc_found_override: bool = None) -> Dict[str, Any]:
+def check_bimi(domain: str, dmarc_enforcing_override: bool = None, dmarc_found_override: bool = None,
+                dmarc_pct_override: int = None) -> Dict[str, Any]:
     result = {
         "check": "BIMI", "domain": domain,
         "record": None, "records_found": 0, "tags": {},
@@ -817,14 +818,22 @@ def check_bimi(domain: str, dmarc_enforcing_override: bool = None, dmarc_found_o
     if dmarc_found_override is not None:
         dmarc_found = dmarc_found_override
         dmarc_enforcing = bool(dmarc_enforcing_override)
+        dmarc_pct = dmarc_pct_override if dmarc_pct_override is not None else 100
     else:
         dmarc_records = _lookup_txt(f"_dmarc.{domain}")
         dmarc_found = False
         dmarc_enforcing = False
+        dmarc_pct = 100
         for rec in dmarc_records:
             if rec.strip().lower().startswith("v=dmarc1"):
                 dmarc_found = True
                 dmarc_enforcing = _parse_dmarc_tag(rec, "p") in ("quarantine", "reject")
+                pct_raw = _parse_dmarc_tag(rec, "pct")
+                if pct_raw is not None:
+                    try:
+                        dmarc_pct = int(pct_raw)
+                    except (ValueError, TypeError):
+                        dmarc_pct = 100
                 break
 
     if not dmarc_found:
@@ -840,6 +849,13 @@ def check_bimi(domain: str, dmarc_enforcing_override: bool = None, dmarc_found_o
             "Your DMARC policy is likely 'none' (monitoring only).",
             "Most clients won't display BIMI logos.",
             "Move DMARC to p=quarantine or p=reject.",
+        ))
+    elif dmarc_pct is not None and dmarc_pct < 100:
+        result["issues"].append(_make_issue(
+            "warning", f"DMARC pct={dmarc_pct} disqualifies BIMI",
+            "BIMI requires the DMARC policy at full enforcement: pct absent or pct=100.",
+            "Most mailbox providers won't display your logo while pct is below 100.",
+            "Remove the pct tag or set pct=100.",
         ))
 
     # Logo accessibility and SVG validation

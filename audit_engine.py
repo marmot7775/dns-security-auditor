@@ -4394,9 +4394,11 @@ def run_full_audit(domain: str, dkim_selector: Optional[str] = None,
     if _should_include("bimi", scope_set):
         _bimi_enforcing = _bimi_dmarc_enforcing  # capture for closure
         _bimi_found = _bimi_dmarc_found  # capture for closure
+        _bimi_pct = _bimi_dmarc.get("pct")  # capture for closure
         _parallel_checks.append(("bimi",
             lambda: check_bimi(domain, dmarc_enforcing_override=_bimi_enforcing,
-                                dmarc_found_override=_bimi_found),
+                                dmarc_found_override=_bimi_found,
+                                dmarc_pct_override=_bimi_pct),
             lambda raw: transform_bimi(raw, domain, has_mx=has_mx),
             "BIMI"))
 
