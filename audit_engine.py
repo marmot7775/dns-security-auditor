@@ -2122,6 +2122,9 @@ def _raw_check_spf(domain: str) -> Dict[str, Any]:
     # Known mechanisms/modifiers (anything else is likely a typo)
     KNOWN_MECHANISMS = {"all", "include", "a", "mx", "ptr", "ip4", "ip6", "exists"}
     KNOWN_MODIFIERS = {"redirect", "exp"}
+    # RFC 7208 §5.3: bare 'a'/'mx' may carry a dual-cidr-length suffix,
+    # e.g. a/24, mx//64, a/24//64.
+    DUAL_CIDR_MECHANISM_RE = re.compile(r"^(a|mx)(/\d{1,3})?(//\d{1,3})?$")
 
     result = {
         "check": "SPF",
@@ -2381,10 +2384,10 @@ def _raw_check_spf(domain: str) -> Dict[str, Any]:
                 )
                 seen_mechanisms.append(part)
 
-            elif mech_lower in KNOWN_MECHANISMS:
+            elif mech_lower in KNOWN_MECHANISMS or DUAL_CIDR_MECHANISM_RE.match(mech_lower):
                 seen_mechanisms.append(part)
 
-            elif mech_lower not in KNOWN_MECHANISMS:
+            else:
                 # Unknown bare token
                 _add_syntax(
                     f"Unknown mechanism: '{raw}'",
