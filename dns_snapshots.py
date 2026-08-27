@@ -116,7 +116,7 @@ def store_audit_snapshots(domain: str, raw_results: Dict[str, Any]):
         mx_str = "; ".join(sorted(mx_records))
         store_snapshot(domain, "mx", mx_str)
     elif mx_details:
-        mx_str = "; ".join(sorted(d.get("host", "") for d in mx_details if d.get("host")))
+        mx_str = "; ".join(sorted(d.get("hostname", "") for d in mx_details if d.get("hostname")))
         if mx_str:
             store_snapshot(domain, "mx", mx_str)
 
