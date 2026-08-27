@@ -2406,6 +2406,37 @@ def _raw_check_spf(domain: str) -> Dict[str, Any]:
     result["spf_chain"] = spf_recursive_result.get("chain", [])
     result["spf_recursive"] = spf_recursive_result
 
+    # Merge in findings from the recursive resolution (e.g. broken includes /
+    # void lookups) that would otherwise be silently discarded.
+    for _rec_issue in spf_recursive_result.get("issues", []):
+        _add_issue(
+            _rec_issue.get("severity", "warning"),
+            _rec_issue.get("issue", ""),
+            _rec_issue.get("plain_english", ""),
+            _rec_issue.get("fix", ""),
+        )
+
+    # RFC 7208 §4.6.4: no more than two "void lookups" (lookups that return
+    # no usable data) are permitted. A third causes a PermError, so SPF must
+    # be treated as failed, not merely warned about.
+    void_lookup_count = sum(
+        1 for entry in spf_recursive_result.get("chain", [])
+        if entry.get("error") and "No SPF record" in entry["error"]
+    )
+    result["void_lookup_count"] = void_lookup_count
+    if void_lookup_count > 2:
+        _add_issue(
+            "error",
+            f"SPF exceeds the 2 void lookup limit ({void_lookup_count} void lookups)",
+            f"RFC 7208 section 4.6.4 limits SPF evaluation to 2 void lookups "
+            f"(lookups that return no usable data, such as an include: pointing "
+            f"to a domain with no SPF record). This record triggers "
+            f"{void_lookup_count} void lookups. Receivers enforcing this limit "
+            f"will return a PermError, treating your SPF as if it doesn't exist.",
+            "Remove includes that point to domains with no SPF record.",
+            business_risk_key="SPF_PERMERROR",
+        )
+
     # ── Step 6: Lookup limit checks ─────────────────────────────
     if lookup_count > 10:
         _add_issue(
