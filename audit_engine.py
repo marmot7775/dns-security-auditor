@@ -2459,6 +2459,10 @@ def _raw_check_spf(domain: str) -> Dict[str, Any]:
     result["has_redirect"] = has_redirect
     result["spf_chain"] = spf_recursive_result.get("chain", [])
     result["spf_recursive"] = spf_recursive_result
+    # True when some lookup in the chain never answered (SERVFAIL, timeout).
+    # The lookup count is then a floor, not a total, so the card must not
+    # certify the record as clean.
+    result["spf_indeterminate"] = bool(spf_recursive_result.get("indeterminate"))
 
     # Merge in findings from the recursive resolution (e.g. broken includes /
     # void lookups) that would otherwise be silently discarded.
@@ -2473,10 +2477,11 @@ def _raw_check_spf(domain: str) -> Dict[str, Any]:
     # RFC 7208 §4.6.4: no more than two "void lookups" (lookups that return
     # no usable data) are permitted. A third causes a PermError, so SPF must
     # be treated as failed, not merely warned about.
-    void_lookup_count = sum(
-        1 for entry in spf_recursive_result.get("chain", [])
-        if entry.get("error") and "No SPF record" in entry["error"]
-    )
+    # Counted by spf_recursive, which actually resolves a:/mx:/exists:
+    # targets and include/redirect targets. An include target that resolves
+    # but publishes no SPF record is NOT a void lookup: RFC 7208 section 5.2
+    # makes it an immediate PermError, reported separately at error severity.
+    void_lookup_count = spf_recursive_result.get("void_lookups", 0)
     result["void_lookup_count"] = void_lookup_count
     if void_lookup_count > 2:
         _add_issue(
@@ -3051,6 +3056,34 @@ def _raw_check_dnssec(domain: str) -> Dict[str, Any]:
     return result
 
 
+def _caa_tree(domain: str) -> List[str]:
+    """The names a CA queries for CAA, nearest first.
+
+    RFC 8659 section 3: a CA looks up CAA on the name itself and then on each
+    parent, climbing the tree. The climb stops at the Organizational Domain
+    (one label below the public suffix): nothing above a registrable domain
+    can usefully publish CAA for a name inside it, and RFC 8659 stops short
+    of the root in any case.
+    """
+    name = (domain or "").lower().rstrip(".")
+    if not name:
+        return []
+    org = _get_org_domain(name)
+    labels = name.split(".")
+    names = [name]
+    while len(labels) > 2:
+        labels = labels[1:]
+        candidate = ".".join(labels)
+        if org and len(candidate) < len(org):
+            break
+        names.append(candidate)
+        if org and candidate == org:
+            break
+    if org and org not in names and len(org) < len(name):
+        names.append(org)
+    return names
+
+
 def _raw_check_caa(domain: str) -> Dict[str, Any]:
     """Check CAA (Certification Authority Authorization) records.
 
@@ -3070,6 +3103,8 @@ def _raw_check_caa(domain: str) -> Dict[str, Any]:
         "authorized_cas": [],
         "wildcard_cas": [],
         "iodef_destinations": [],
+        "caa_source": None,
+        "inherited": False,
         "issues": [],
         "status": "ok",
     }
@@ -3083,9 +3118,41 @@ def _raw_check_caa(domain: str) -> Dict[str, Any]:
         })
 
     resolver = _get_resolver()
+    _queried = (domain or "").lower().rstrip(".")
 
-    try:
-        answers = resolver.resolve(domain, "CAA")
+    # RFC 8659 section 3: CAA is looked up on the name itself and then on each
+    # parent. mail.example.com with no CAA of its own inherits example.com's
+    # policy, so reporting "any CA in the world can issue" for the subdomain
+    # is a false alarm.
+    answers = None
+    caa_source = None
+    for _candidate in _caa_tree(domain):
+        try:
+            answers = resolver.resolve(_candidate, "CAA")
+            caa_source = _candidate
+            break
+        except dns.resolver.NoAnswer:
+            answers = None
+            continue
+        except dns.resolver.NXDOMAIN:
+            answers = None
+            if _candidate == _queried:
+                _add_issue(
+                    "error",
+                    "Domain does not exist (NXDOMAIN)",
+                    "The domain returned NXDOMAIN when querying for CAA records.",
+                    "Verify the domain name is correct.",
+                )
+                break
+            continue
+        except dns.exception.DNSException:
+            answers = None
+            continue
+
+    result["caa_source"] = caa_source
+    result["inherited"] = bool(caa_source) and caa_source != _queried
+
+    if answers is not None:
         raw_records = []
         for rdata in answers:
             flags = rdata.flags
@@ -3159,25 +3226,25 @@ def _raw_check_caa(domain: str) -> Dict[str, Any]:
                 f'Add a CAA record: 0 iodef "mailto:security@{domain}" to receive violation reports.',
             )
 
-    except dns.resolver.NoAnswer:
-        # No CAA records -- check parent domain
-        pass
-    except dns.resolver.NXDOMAIN:
+    if result["inherited"] and result["record_count"] > 0:
         _add_issue(
-            "error",
-            "Domain does not exist (NXDOMAIN)",
-            "The domain returned NXDOMAIN when querying for CAA records.",
-            "Verify the domain name is correct.",
+            "info",
+            f"CAA policy inherited from {caa_source}",
+            f"{domain} publishes no CAA records of its own. RFC 8659 section 3 "
+            f"has the CA climb the name tree, so the CAA record set at "
+            f"{caa_source} is the policy that governs certificate issuance for "
+            f"{domain}.",
+            f"Publish CAA at {domain} only if it needs a policy different from "
+            f"the one at {caa_source}.",
         )
-    except dns.exception.DNSException:
-        pass
 
     # No CAA records found at all
     if result["record_count"] == 0:
         _add_issue(
             "warning",
             "No CAA records published",
-            "Without CAA records, any Certificate Authority in the world can issue "
+            "Neither this domain nor any parent up to the registrable domain publishes "
+            "CAA records, so any Certificate Authority in the world can issue "
             "SSL/TLS certificates for your domain. CAA lets you restrict issuance to "
             "only the CAs you actually use, reducing the risk of unauthorized certificates.",
             f'Add a CAA record: 0 issue "letsencrypt.org" (replace with your CA). '
@@ -3193,7 +3260,7 @@ def _raw_check_caa(domain: str) -> Dict[str, Any]:
     elif result["record_count"] > 0 and result["has_issue"]:
         result["status"] = "ok"
 
-    result["ttl"] = _lookup_ttl(domain, "CAA")
+    result["ttl"] = _lookup_ttl(caa_source or domain, "CAA")
     return result
 
 
@@ -4555,8 +4622,10 @@ def run_full_audit(domain: str, dkim_selector: Optional[str] = None,
         _raw_dmarc = raw_results["dmarc"]
 
         _mx_records = _raw_mx.get("records", []) or []
-        _has_null_mx = any("0 ." in r for r in _mx_records) if _mx_records else False
-        _has_no_mx = not _mx_records
+        # RFC 7505 null MX, reported as a boolean by mx_check.check_mx.
+        # Never infer "non-mail" from merely-absent MX: an ordinary
+        # send-only subdomain has no MX and still sends real mail.
+        _has_null_mx = bool(_raw_mx.get("has_null_mx"))
 
         _spf_record = (_raw_spf.get("record") or "").strip().lower()
         _has_null_spf = _spf_record == "v=spf1 -all"
@@ -4567,14 +4636,20 @@ def run_full_audit(domain: str, dkim_selector: Optional[str] = None,
         _dmarc_policy = (_raw_dmarc.get("policy") or "").lower()
         _has_dmarc_reject = _dmarc_policy == "reject"
 
-        if _has_null_mx or _has_no_mx:
+        if _has_null_mx:
             defensive_signals.append("null_mx")
         if _has_null_spf:
             defensive_signals.append("null_spf")
         if _has_dmarc_reject:
             defensive_signals.append("dmarc_reject")
 
-        is_defensive = len(defensive_signals) >= 2
+        # A positive declaration of non-mail intent (RFC 7505 null MX, or a
+        # null SPF record) is required. DMARC p=reject on its own is normal
+        # hygiene for a sending domain, not evidence that it never sends.
+        _has_positive_non_mail_signal = _has_null_mx or _has_null_spf
+        is_defensive = (
+            _has_positive_non_mail_signal and len(defensive_signals) >= 2
+        )
 
     # --- Override email-specific cards for defensive DNS domains ---
     # Defensive domains intentionally do not send/receive email. Email-specific
@@ -4652,7 +4727,7 @@ def run_full_audit(domain: str, dkim_selector: Optional[str] = None,
         # Skip for non-mail / defensive DNS (null SPF + no DKIM = intentional)
         _xc_spf_rec = (_xc_spf.get("record") or "").strip().lower()
         _xc_is_defensive = (
-            (not has_mx)
+            bool(raw_results.get("mx", {}).get("has_null_mx"))
             or (_xc_spf_rec == "v=spf1 -all" and not _xc_has_dkim)
         )
 

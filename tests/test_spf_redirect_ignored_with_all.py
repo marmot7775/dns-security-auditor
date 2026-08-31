@@ -20,10 +20,28 @@ import spf_recursive
 import result_transformer
 
 
+def _fake_lookup_spf(records):
+    """Stub for spf_recursive._lookup_spf.
+
+    _lookup_spf classifies the DNS outcome, not just the record, so a stub has
+    to say which kind of "no record" it means. Anything not in `records` is
+    NXDOMAIN, the way an undeclared name would be.
+    """
+    def _inner(domain):
+        record = records.get(domain)
+        if record:
+            return {"record": record, "status": spf_recursive.SPF_FOUND,
+                    "error": None}
+        return {"record": None, "status": spf_recursive.SPF_NXDOMAIN,
+                "error": f"{domain} does not exist (NXDOMAIN)"}
+    return _inner
+
+
 def _build_card(domain, records):
     with patch.object(audit_engine, "_lookup_txt", return_value=[records[domain]]), \
          patch.object(audit_engine, "_lookup_ttl", return_value=None), \
-         patch.object(spf_recursive, "_get_spf_record", side_effect=lambda d: records.get(d)):
+         patch.object(spf_recursive, "_lookup_spf",
+                      side_effect=_fake_lookup_spf(records)):
         raw = audit_engine._raw_check_spf(domain)
     return raw, result_transformer.transform_spf(raw, has_mx=True)
 

@@ -224,7 +224,7 @@ def check_mx(domain: str, deep_scan: bool = False) -> Dict[str, Any]:
         "check": "MX Records", "domain": domain,
         "records": [], "record_count": 0, "providers": [],
         "status": "ok", "issues": [], "warnings": [],
-        "recommendations": [], "mx_details": [],
+        "recommendations": [], "mx_details": [], "has_null_mx": False,
     }
 
     if not DNS_AVAILABLE:
@@ -275,6 +275,7 @@ def check_mx(domain: str, deep_scan: bool = False) -> Dict[str, Any]:
 
     # Null MX check (RFC 7505)
     if len(raw_mx) == 1 and raw_mx[0][0] == 0 and raw_mx[0][1] in (".", ""):
+        result["has_null_mx"] = True
         result["status"] = "info"
         result["issues"].append(_make_issue(
             "info", "Null MX record (RFC 7505)",

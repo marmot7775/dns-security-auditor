@@ -3662,6 +3662,10 @@ def transform_spf(raw: Dict, has_mx: bool = True) -> Dict:
             status = "fail"
         elif has_engine_errors:
             status = "fail"
+        elif raw.get("spf_indeterminate"):
+            # At least one lookup in the chain never answered, so the lookup
+            # count is a floor rather than a total. Do not certify the record.
+            status = "warn"
         elif all_mech in ("-all", "~all") and lookups <= 10 and not has_engine_errors:
             # Lenient parser recovered a valid record with a proper all mechanism
             # and within lookup limits.  Syntax warnings (e.g. missing spaces)
