@@ -1173,13 +1173,6 @@ function renderCheckBody(check) {
         html += `</div>`;
     }
 
-    // Comparison intelligence for "no record" case (top-level, not in tag_breakdown)
-    if (check.comparison_intelligence) {
-        html += `<div class="spec-dmarcbis">`;
-        html += renderComparisonIntelligence(check.comparison_intelligence);
-        html += `</div>`;
-    }
-
     // RFC 9989 readiness (after tree walk, before evaluation) — RFC 9989 mode only
     if (check.dmarcbis_readiness) {
         html += `<div class="spec-dmarcbis">`;
@@ -1734,11 +1727,6 @@ function renderDmarcTagBreakdown(bd) {
                 </div>
                 ${reasonsHtml ? `<div class="rb-verdict-reasons">${reasonsHtml}</div>` : ''}
             </div>`;
-
-        // Comparison intelligence callout inside verdict
-        if (bd.comparison_intelligence) {
-            verdictHtml += renderComparisonIntelligence(bd.comparison_intelligence);
-        }
     }
 
     // --- Tag rows ---
@@ -1892,26 +1880,6 @@ function renderDmarcTagBreakdown(bd) {
                     const active = v.status === sec.current_verdict ? ' wd-scale-active' : '';
                     body += `<span class="wd-scale-item wd-scale-${safeClass(v.color)}${active}">${escapeHtml(v.label)}</span>`;
                 });
-                body += '</div>';
-            }
-            // RFC 9989 Adoption mini-stat block
-            if (sec.adoption_stats) {
-                body += '<div class="ci-adoption-block">';
-                body += '<div class="ci-adoption-title">RFC 9989 Adoption Among Top 1000</div>';
-                sec.adoption_stats.forEach(stat => {
-                    const barWidth = Math.max(stat.pct, 0.5);
-                    body += `
-                        <div class="ci-adoption-row">
-                            <span class="ci-adoption-label">${escapeHtml(stat.tag)}</span>
-                            <div class="ci-adoption-bar-track">
-                                <div class="ci-adoption-bar-fill" style="width: ${barWidth}%"></div>
-                            </div>
-                            <span class="ci-adoption-pct">${stat.pct}%</span>
-                        </div>`;
-                });
-                if (sec.adoption_tagline) {
-                    body += `<div class="ci-adoption-tagline">${escapeHtml(sec.adoption_tagline)}</div>`;
-                }
                 body += '</div>';
             }
             sectionsHtml += `
@@ -2430,60 +2398,6 @@ function renderDmarcbisReadiness(readiness) {
             </div>
             <div class="dbis-checklist">${checklistHtml}</div>
             ${suggestedHtml}
-        </div>`;
-}
-
-// ============================================================
-// Domain Comparison Intelligence (Prompt 14)
-// ============================================================
-
-function renderComparisonIntelligence(ci) {
-    if (!ci) return '';
-
-    // Position bar: a thin indicator showing where this domain sits (0-100)
-    const pct = ci.position_pct;
-    const barColor = pct >= 75 ? 'var(--pass)' : pct >= 40 ? 'var(--warn)' : 'var(--fail)';
-
-    // Adoption mini-stats
-    let adoptionHtml = '';
-    if (ci.adoption_stats && ci.adoption_stats.length > 0) {
-        let rows = '';
-        ci.adoption_stats.forEach(stat => {
-            const w = Math.max(stat.adoption_pct, 0.5);
-            rows += `
-                <div class="ci-adoption-row">
-                    <span class="ci-adoption-label">${escapeHtml(stat.label)}</span>
-                    <div class="ci-adoption-bar-track">
-                        <div class="ci-adoption-bar-fill" style="width: ${w}%"></div>
-                    </div>
-                    <span class="ci-adoption-pct">${stat.adoption_pct}%</span>
-                </div>`;
-        });
-
-        adoptionHtml = `
-            <details class="ci-adoption-details">
-                <summary class="ci-adoption-summary">RFC 9989 Adoption Among Top 1000</summary>
-                <div class="ci-adoption-block">
-                    ${rows}
-                    <div class="ci-adoption-tagline">${escapeHtml(ci.adoption_tagline)}</div>
-                </div>
-            </details>`;
-    }
-
-    return `
-        <div class="ci-block">
-            <div class="ci-statement">${escapeHtml(ci.position_statement)}</div>
-            <div class="ci-position">
-                <div class="ci-bar-track">
-                    <div class="ci-bar-marker" style="left: ${pct}%; background: ${barColor};"></div>
-                </div>
-                <div class="ci-bar-labels">
-                    <span class="ci-bar-label-left">No DMARC</span>
-                    <span class="ci-bar-label-mid">${escapeHtml(ci.position_label)}</span>
-                    <span class="ci-bar-label-right">RFC 9989 Ready</span>
-                </div>
-            </div>
-            ${adoptionHtml}
         </div>`;
 }
 

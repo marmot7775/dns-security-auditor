@@ -477,62 +477,6 @@ def _executive_summary_page(data, S):
             els.append(vt)
         els.append(Spacer(1, 14))
 
-    # Comparison intelligence
-    tb = dmarc.get("tag_breakdown", {})
-    ci = (tb or {}).get("comparison_intelligence") or dmarc.get("comparison_intelligence")
-    if ci:
-        els.append(Paragraph("Your Domain vs. the Top 1,000", S["heading2"]))
-        pos_stmt = ci.get("position_statement", "")
-        if pos_stmt:
-            els.append(Paragraph(_safe(pos_stmt), S["body"]))
-        pct = ci.get("position_pct", 0)
-        els.append(Paragraph(f"Adoption position: top {pct}%", S["body"]))
-
-        # Adoption stats
-        stats = ci.get("adoption_stats", [])
-        if isinstance(stats, list) and stats:
-            stat_rows = []
-            for stat in stats:
-                if isinstance(stat, dict):
-                    stat_rows.append([
-                        Paragraph(_safe(stat.get("label", "")), S["body_small"]),
-                        Paragraph(f"{stat.get('adoption_pct', 0)}%", S["body_small"]),
-                    ])
-            if stat_rows:
-                st = Table(stat_rows, colWidths=[3.5*inch, 1.5*inch])
-                st.setStyle(TableStyle([
-                    ("VALIGN", (0,0), (-1,-1), "MIDDLE"),
-                    ("TOPPADDING", (0,0), (-1,-1), 3),
-                    ("BOTTOMPADDING", (0,0), (-1,-1), 3),
-                    ("LINEBELOW", (0,0), (-1,-2), 0.3, BORDER),
-                    ("ALIGN", (1,0), (1,-1), "RIGHT"),
-                ]))
-                els.append(Spacer(1, 4))
-                els.append(st)
-        elif isinstance(stats, dict):
-            stat_rows = []
-            for k, v in stats.items():
-                stat_rows.append([
-                    Paragraph(_safe(k.replace("_", " ").title()), S["body_small"]),
-                    Paragraph(f"{v}%", S["body_small"]),
-                ])
-            if stat_rows:
-                st = Table(stat_rows, colWidths=[3.5*inch, 1.5*inch])
-                st.setStyle(TableStyle([
-                    ("VALIGN", (0,0), (-1,-1), "MIDDLE"),
-                    ("TOPPADDING", (0,0), (-1,-1), 3),
-                    ("BOTTOMPADDING", (0,0), (-1,-1), 3),
-                    ("LINEBELOW", (0,0), (-1,-2), 0.3, BORDER),
-                    ("ALIGN", (1,0), (1,-1), "RIGHT"),
-                ]))
-                els.append(Spacer(1, 4))
-                els.append(st)
-
-        tagline = ci.get("adoption_tagline", "")
-        if tagline:
-            els.append(Spacer(1, 4))
-            els.append(Paragraph(f"<i>{_safe(tagline)}</i>", S["body_small"]))
-
     return els
 
 
@@ -1735,16 +1679,6 @@ if __name__ == "__main__":
                          {"tag": "np", "action": "added", "value": "reject",
                           "reason": "Protects non-existent subdomains from spoofing (new in RFC 9989)."},
                      ],
-                 },
-                 "comparison_intelligence": {
-                     "position_statement": "Your domain is behind 68% of the top 1,000 domains in DMARC adoption.",
-                     "position_pct": 32,
-                     "position_label": "Bottom third",
-                     "adoption_stats": [
-                         {"label": "p=reject adoption", "adoption_pct": 52},
-                         {"label": "np= tag adoption", "adoption_pct": 8},
-                     ],
-                     "adoption_tagline": "Almost none of the top 1,000 have adopted the RFC 9989 tags yet.",
                  },
              },
              "strict_validation": {

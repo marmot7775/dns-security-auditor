@@ -1580,7 +1580,6 @@ def transform_dmarc(raw: Dict, tree_walk: Optional[Dict] = None, is_no_mail: boo
             _parsed, _pol, health["status"], breakdown_record,
             config_warnings, domain=_domain,
         )
-        comparison = _build_comparison_intelligence(_parsed, _pol, health["status"], has_record=True)
         tag_breakdown = {
             "health": health,
             "tags": tags_list,
@@ -1588,17 +1587,14 @@ def transform_dmarc(raw: Dict, tree_walk: Optional[Dict] = None, is_no_mail: boo
             "migration": migration,
             "record_builder": record_builder,
             "why_dmarcbis": why_dmarcbis,
-            "comparison_intelligence": comparison,
         }
 
     # Record builder for "no record" case (tag_breakdown is None)
     _domain = raw.get("domain", "")
     if not tag_breakdown:
         no_record_builder = _build_record_builder({}, "", "", None, [], domain=_domain)
-        no_record_comparison = _build_comparison_intelligence({}, "", "", has_record=False)
     else:
         no_record_builder = None
-        no_record_comparison = None
 
     # Deliverability context
     if not record and not inherited:
@@ -1656,7 +1652,6 @@ def transform_dmarc(raw: Dict, tree_walk: Optional[Dict] = None, is_no_mail: boo
         "attack_surface": _build_attack_surface(raw, display_record or record, is_no_mail=is_no_mail),
         "tag_breakdown": tag_breakdown,
         "record_builder": no_record_builder,
-        "comparison_intelligence": no_record_comparison,
         "dmarcbis_readiness": _build_dmarcbis_card_data(
             raw.get("dmarcbis_readiness"), raw.get("record")
         ),
@@ -2125,8 +2120,7 @@ def _build_tag_entry(tag: str, value: str, present: bool, tags: Dict, policy: st
     if tag == "np":
         note = (
             "This tag is NEW in RFC 9989. RFC 7489 had no way to set policy for subdomains that "
-            "don't exist in DNS. Attackers exploit this by inventing subdomains. np= closes that gap. "
-            "Currently 0% of the top 1000 domains have adopted this tag."
+            "don't exist in DNS. Attackers exploit this by inventing subdomains. np= closes that gap."
         )
         if present:
             e = _entry(tag, value, False, False, "Non-Existent Subdomain Policy",
@@ -2356,8 +2350,7 @@ def _build_tag_entry(tag: str, value: str, present: bool, tags: Dict, policy: st
         note = (
             "This tag is NEW in RFC 9989. It replaces reliance on the Public Suffix List (PSL) "
             "for determining organizational domain boundaries. The PSL was maintained manually and "
-            "often outdated. psd= lets domain owners declare their own status directly in DNS. "
-            "Only 1 domain in the top 1000 has adopted this tag."
+            "often outdated. psd= lets domain owners declare their own status directly in DNS."
         )
         if present:
             explanation = {
@@ -2402,8 +2395,7 @@ def _build_tag_entry(tag: str, value: str, present: bool, tags: Dict, policy: st
             "pct=50 meant 'apply to 50% of failing mail' but receivers implemented this "
             "inconsistently. Only pct=0 and pct=100 were reliable. RFC 9989 replaces this with a "
             "clean binary flag: t=y (testing, drop policy one level) or t=n (enforce fully). This "
-            "gives domain owners a safe, predictable way to test stricter policies before committing. "
-            "0% of the top 1000 domains use this tag yet."
+            "gives domain owners a safe, predictable way to test stricter policies before committing."
         )
         if present:
             if value == "y":
@@ -2874,115 +2866,6 @@ def _calculate_dmarcbis_health(tags: Dict[str, str], policy: str, config_warning
 
 
 # ============================================================
-# Domain Comparison Intelligence (Prompt 14)
-# ============================================================
-
-# Static stats from top 1000 domain scan
-_TOP1K = {
-    "no_dmarc_pct": 26.0,
-    "p_reject_pct": 55.0,
-    "p_quarantine_pct": 12.0,
-    "p_none_pct": 7.0,
-    "np_adoption_pct": 0.0,
-    "t_adoption_pct": 0.0,
-    "psd_adoption_pct": 0.1,
-    "deprecated_still_used_pct": 30.6,
-}
-
-
-def _build_comparison_intelligence(
-    tags: Dict[str, str],
-    policy: str,
-    health_status: str,
-    has_record: bool,
-) -> Dict:
-    """Build a contextual comparison showing where this domain stands
-    relative to the top 1000 internet domains.
-
-    Returns:
-      position_statement - single punchy sentence
-      position_pct       - 0-100 numeric position (higher = better)
-      position_label     - e.g. "Ahead of 99.9%"
-      adoption_stats     - mini-stat block for RFC 9989 adoption
-    """
-
-    has_dmarcbis_tags = any(t in tags for t in ("np", "psd", "t"))
-
-    # --- Position statement (one punchy line) ---
-    if not has_record:
-        statement = (
-            "Among the 26% of top 1000 domains with no DMARC protection."
-        )
-        position_pct = 0
-        position_label = "Bottom 26%"
-
-    elif policy == "none" and tags.get("rua"):
-        statement = (
-            "Monitoring mode. 26% of the top 1000 have no DMARC at all, "
-            "so you are ahead of them, but enforcement is the goal."
-        )
-        position_pct = 30
-        position_label = "Ahead of ~26%"
-
-    elif policy == "none" and not tags.get("rua"):
-        statement = (
-            "This record provides less protection than having no DMARC at all "
-            "(which 26% of top domains have) because it creates a false sense of security."
-        )
-        position_pct = 5
-        position_label = "Below baseline"
-
-    elif policy == "quarantine":
-        statement = (
-            "Stronger enforcement than ~33% of the top 1000."
-        )
-        position_pct = 55
-        position_label = "Ahead of ~33%"
-
-    elif policy == "reject" and has_dmarcbis_tags:
-        statement = (
-            "Ahead of 99.9% of the top 1000 domains in RFC 9989 readiness."
-        )
-        position_pct = 99
-        position_label = "Top 0.1%"
-
-    elif policy == "reject":
-        statement = (
-            "Stronger than 45% of the top 1000 in enforcement, "
-            "but among the 99.9% not yet aligned with RFC 9989."
-        )
-        position_pct = 75
-        position_label = "Ahead of ~45%"
-
-    else:
-        statement = (
-            "This domain has DMARC configured. 26% of the top 1000 have none at all."
-        )
-        position_pct = 35
-        position_label = "Ahead of ~26%"
-
-    # --- RFC 9989 adoption mini-stats ---
-    adoption_stats = [
-        {"tag": "np=", "adoption_pct": _TOP1K["np_adoption_pct"], "label": "np= adoption"},
-        {"tag": "t=", "adoption_pct": _TOP1K["t_adoption_pct"], "label": "t= adoption"},
-        {"tag": "psd=", "adoption_pct": _TOP1K["psd_adoption_pct"], "label": "psd= adoption"},
-        {"tag": "deprecated", "adoption_pct": _TOP1K["deprecated_still_used_pct"], "label": "Still using deprecated tags"},
-    ]
-
-    return {
-        "position_statement": statement,
-        "position_pct": position_pct,
-        "position_label": position_label,
-        "adoption_stats": adoption_stats,
-        "adoption_tagline": (
-            "Uptake of the RFC 9989 tags is still close to zero across the top 1000, "
-            "even though the RFC is published and obsoletes RFC 7489. Adopting them now "
-            "puts a domain ahead of its industry."
-        ),
-    }
-
-
-# ============================================================
 # Migration Wizard
 # ============================================================
 
@@ -3059,7 +2942,7 @@ def _build_why_dmarcbis(tags: Dict[str, str], policy: str, health_status: str, d
         "items": whats_new,
     })
 
-    # Section 3: How does this domain compare
+    # Section 3: Where this record stands on the readiness scale
     verdict_scale = [
         {"status": "misconfigured", "label": "Misconfigured", "color": "red"},
         {"status": "monitoring", "label": "Monitoring", "color": "amber"},
@@ -3069,28 +2952,15 @@ def _build_why_dmarcbis(tags: Dict[str, str], policy: str, health_status: str, d
     ]
 
     sections.append({
-        "title": f"How does {domain or 'this domain'} compare?",
+        "title": "Where does this record stand?",
         "content": (
-            "Based on analysis of the top 1000 internet domains: 26% have no DMARC at all, "
-            "~55% are at p=reject, ~12% at p=quarantine, and ~7% at p=none. "
-            "0% have adopted RFC 9989-specific tags (np=, t=), only 0.1% use psd=, "
-            "and 30.6% still use deprecated tags (pct, rf, ri). "
-            f"Your record is currently rated '{health_status}'. Adopting RFC 9989 tags now puts you "
-            "ahead of the vast majority of the internet."
+            "This scale reflects how completely the record matches RFC 9989, the current DMARC "
+            "standard. Ready means it uses the current tags and needs no changes. Compatible means "
+            "it works but leaves protection unused. Anything below that has gaps worth closing. "
+            f"This record is currently rated '{health_status}'."
         ),
         "verdict_scale": verdict_scale,
         "current_verdict": health_status,
-        "adoption_stats": [
-            {"tag": "np=", "pct": 0.0},
-            {"tag": "t=", "pct": 0.0},
-            {"tag": "psd=", "pct": 0.1},
-            {"tag": "Deprecated tags still in use", "pct": 30.6},
-        ],
-        "adoption_tagline": (
-            "Uptake of the RFC 9989 tags is still close to zero across the top 1000, "
-            "even though the RFC is published and obsoletes RFC 7489. Adopting them now "
-            "puts a domain ahead of its industry."
-        ),
     })
 
     # Section 4: Why does this matter

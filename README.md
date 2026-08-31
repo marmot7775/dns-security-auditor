@@ -6,8 +6,6 @@
 
 DNS and email security analysis for any domain. Enter a domain and get technical findings, plain-language explanations, and copy-paste DNS fix records. DMARC records are checked against RFC 9989, the current DMARC standard, and against RFC 7489 behavior, which most receivers still implement while tree walk support rolls out.
 
-Our analysis of the top 1000 internet domains found 0% adoption of RFC 9989-specific tags (`np=`, `psd=`, `t=`), 30.6% still using deprecated tags (`pct`, `rf`, `ri`), and 26% with no DMARC record at all.
-
 Built for engineers, email administrators, and security consultants who need to evaluate a domain's authentication posture quickly and accurately.
 
 ---
