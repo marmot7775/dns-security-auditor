@@ -98,15 +98,22 @@ def test_every_mechanism_produces_exactly_one_step():
         _mech("unknown", "exp=explain.example.com"),
         _mech("no_lookup", "-all"),
     ]
-    trace = _trace(
-        _tree(
-            mechanisms,
-            children=[_tree([_mech("no_lookup", "-all")], total=0)],
-            total=4,
-        ),
-        4,
+    child = _tree([_mech("no_lookup", "-all")], total=0)
+    trace = _trace(_tree(mechanisms, children=[child], total=4), 4)
+
+    # Every mechanism in the tree, the include's subtree included. _walk_tree
+    # used to hand the recursion a throwaway list, so nested mechanisms never
+    # reached flat_steps at all and this count was len(mechanisms).
+    assert len(trace["flat_steps"]) == len(mechanisms) + len(child["mechanisms"])
+
+    nested = [s for s in trace["flat_steps"] if s["depth"] == 1]
+    assert len(nested) == 1 and nested[0]["mechanism"] == "-all", (
+        f"the include's own mechanisms must appear at depth 1; got "
+        f"{trace['flat_steps']!r}"
     )
-    assert len(trace["flat_steps"]) == len(mechanisms)
+    assert trace["flat_steps"][0]["type"] == "include", (
+        "a parent step must precede the subtree it opens"
+    )
 
 
 def test_lookup_accounting_is_unchanged_by_the_new_branch():

@@ -320,7 +320,15 @@ def _lookup_txt(name: str, raise_on_failure: bool = False) -> List[str]:
         for rdata in answers:
             parts = []
             for s in rdata.strings:
-                parts.append(s.decode("utf-8") if isinstance(s, bytes) else str(s))
+                # errors="replace": a TXT record is bytes, not UTF-8 by
+                # contract. UnicodeDecodeError is not a DNSException, so an
+                # un-decodable byte anywhere at the apex escaped every
+                # handler below and turned a valid SPF record into
+                # "SPF: check failed". spf_recursive does the same.
+                parts.append(
+                    s.decode("utf-8", errors="replace")
+                    if isinstance(s, bytes) else str(s)
+                )
             # Concatenate WITHOUT spaces -- RFC-correct for all record types.
             txt = "".join(parts)
             # Some resolvers escape semicolons in TXT records (\;).
