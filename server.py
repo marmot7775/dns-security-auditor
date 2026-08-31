@@ -988,6 +988,10 @@ if STATIC_DIR.exists():
     async def about():
         return FileResponse(str(STATIC_DIR / "about.html"))
 
+    @app.get("/privacy", tags=["Pages"])
+    async def privacy():
+        return FileResponse(str(STATIC_DIR / "privacy.html"))
+
     @app.get("/security", response_class=PlainTextResponse, tags=["Pages"])
     async def security_policy():
         security_path = Path(__file__).parent / "SECURITY.md"
@@ -1012,6 +1016,7 @@ async def sitemap():
         {"loc": "/articles/dnssec", "changefreq": "monthly", "priority": "0.8"},
         {"loc": "/articles/dane", "changefreq": "monthly", "priority": "0.8"},
         {"loc": "/about", "changefreq": "monthly", "priority": "0.5"},
+        {"loc": "/privacy", "changefreq": "yearly", "priority": "0.3"},
     ]
     xml = '<?xml version="1.0" encoding="UTF-8"?>\n'
     xml += '<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">\n'
