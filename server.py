@@ -50,6 +50,7 @@ from config import (
     TRUSTED_PROXY_IPS,
 )
 from dns_tools import normalize_domain
+from ua_classify import is_bot, ua_summary
 try:
     from pdf_report import generate_pdf
 except ImportError:
@@ -177,24 +178,33 @@ def _log_audit(request: Request, domain: str, scope: str,
 
     Logged: domain, timestamp, scope, duration, check count, outcome
             (status, plus an error code when the outcome is not "ok"),
-            user-agent (browser/OS only), source (web/sse/pdf), a
-            daily-rotating visitor hash, and the referring host if one
-            was sent.
-    NOT logged: IP address, geolocation, cookies, referring URL path,
-            personal data.
+            browser and OS family, whether the caller is a bot, source
+            (web/sse/pdf), a daily-rotating visitor hash, and the
+            referring host if one was sent.
+    NOT logged: the raw user-agent string, IP address, geolocation,
+            cookies, referring URL path, personal data.
+
+    The bot flag is derived from the full user agent before ua_summary()
+    reduces it to coarse labels. That order is load-bearing: the labels do
+    not carry enough to tell a crawler from a person, so deriving the flag
+    afterwards would classify every future audit as a bot.
 
     Fields are only ever added, never renamed or removed: the existing log
-    holds entries with none of status/error/vid/ref, so no reader may
-    assume any of them is present.
+    holds entries with none of status/error/vid/ref/bot, so no reader may
+    assume any of them is present. The ua field is an exception in value
+    only, not in name: entries written before this change hold a truncated
+    raw string, entries written after hold "<browser> / <OS>".
     """
-    ua = request.headers.get("User-Agent", "unknown")
+    ua_raw = request.headers.get("User-Agent", "")
+    bot = is_bot(ua_raw)
     entry = {
         "ts": datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"),
         "domain": domain,
         "scope": scope or "complete",
         "duration_s": duration,
         "checks": checks,
-        "ua": ua[:200],
+        "ua": ua_summary(ua_raw),
+        "bot": bot,
         "source": source,
         "status": status,
         "vid": _visitor_id(request),
