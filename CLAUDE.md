@@ -29,7 +29,22 @@
 - 6 audit scopes: complete, email_full, dmarc, transport, dns_infra, security_scan
 - Server-side scope filtering skips unneeded checks
 - Cache key format: "domain:selector:scope" (5 min TTL)
-- Audit log: audit.log (JSON-lines, GDPR-safe)
+- Audit log: audit.log (JSON-lines, GDPR-safe). Fields: ts, domain, scope,
+  duration_s, checks, ua, bot, source, status, vid, plus error when status is
+  not "ok" and ref when a Referer was sent. Fields are added, never renamed or
+  removed, so older entries carry fewer of them.
+  - `ua` is coarse labels only, "<browser family> / <OS family>", never a raw
+    user-agent string and never a version number. Browser families: Chrome,
+    Firefox, Safari, Edge, other, bot/tool, unknown. OS families: Windows,
+    macOS, Linux, iOS, Android, other, unknown.
+  - `bot` is a boolean derived in `ua_classify.is_bot()` from the full user
+    agent, and it has to be computed before `ua_summary()` reduces the string.
+    The labels do not carry enough to tell a crawler from a person, so any
+    reader that tries to re-derive bot status from `ua` gets nothing. Read the
+    `bot` field.
+  - `rewrite_audit_log_ua.py` applies the same transformation to stored history
+    (audit.log and audit.log.N). It backs up originals, leaves entries that
+    already have a bot flag alone, and prints before and after line counts.
 
 ## Deploy
 git push && ssh marmot7@159.223.201.90 "cd dns-security-auditor && git pull && ~/.venv/bin/pip install -r requirements.txt && sudo systemctl restart dns-auditor"

@@ -14,11 +14,13 @@ Usage:
 
 import asyncio
 import functools
+import hashlib
 import json
 import logging
 import logging.handlers
 import queue
 import re
+import secrets
 import threading
 import time
 import uuid
@@ -28,6 +30,7 @@ from collections import defaultdict
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Dict, Optional
+from urllib.parse import urlsplit
 
 from fastapi import FastAPI, Query, HTTPException, Request
 from fastapi.staticfiles import StaticFiles
@@ -47,6 +50,7 @@ from config import (
     TRUSTED_PROXY_IPS,
 )
 from dns_tools import normalize_domain
+from ua_classify import is_bot, ua_summary
 try:
     from pdf_report import generate_pdf
 except ImportError:
@@ -67,7 +71,7 @@ log = logging.getLogger("dns-auditor")
 # Rotating error log -- directory is configurable via LOG_DIR env var
 _log_dir = Path(LOG_DIR)
 
-# Audit logger (GDPR-safe -- no IP, no geolocation). Configured below once
+# Audit logger (GDPR-safe -- no raw IP, no geolocation). Configured below once
 # the log directory is known to exist.
 audit_logger = logging.getLogger("dns-auditor.audit")
 audit_logger.propagate = False  # don't double-log to root
@@ -103,27 +107,113 @@ except PermissionError:
 
 
 # ============================================================
-# Audit log (GDPR-safe -- no IP, no geolocation)
+# Audit log (GDPR-safe -- no raw IP, no geolocation)
 # ============================================================
 
+# Per-process salt for the visitor id. Generated fresh at start-up and never
+# written anywhere, so nobody holding the log can brute-force a hash back to
+# an IP -- the salt does not outlive the process.
+_VID_SALT = secrets.token_bytes(32)
+
+
+def _vid_day() -> str:
+    """UTC date the visitor id is bucketed into."""
+    return datetime.now(timezone.utc).strftime("%Y-%m-%d")
+
+
+def _visitor_id(request: Request, day: Optional[str] = None) -> str:
+    """Daily-rotating, salted, non-reversible visitor id.
+
+    sha256(process salt | UTC date | client IP | user agent), truncated to
+    12 hex chars. The IP is read here, hashed, and dropped: it is never
+    written to the log and never held anywhere else. The date in the hashed
+    material means the same visitor hashes to something different tomorrow,
+    so the log can tell one heavy user from twenty light ones within a day
+    without following anyone across days.
+    """
+    ip = _get_client_ip(request)
+    ua = request.headers.get("User-Agent", "")
+    material = b"|".join([
+        _VID_SALT,
+        (day or _vid_day()).encode("utf-8"),
+        ip.encode("utf-8", "replace"),
+        ua.encode("utf-8", "replace"),
+    ])
+    return hashlib.sha256(material).hexdigest()[:12]
+
+
+def _referer_host(request: Request) -> Optional[str]:
+    """Host of the Referer header, or None if there is not one.
+
+    Only the host is kept: a full referer URL can carry private path and
+    query data. Absent header means the field is omitted entirely rather
+    than written as null.
+    """
+    ref = request.headers.get("Referer")
+    if not ref:
+        return None
+    try:
+        host = urlsplit(ref.strip()).hostname
+    except ValueError:
+        return None
+    return host[:100] if host else None
+
+
+# Result error codes that mean something other than "the audit broke".
+_STATUS_BY_ERROR = {"timeout": "timeout", "cancelled": "abandoned"}
+
+
+def _audit_status(result):
+    """Map an audit result onto its (status, error code) pair."""
+    err = result.get("error") if isinstance(result, dict) else None
+    if not err:
+        return "ok", None
+    return _STATUS_BY_ERROR.get(err, "error"), err
+
+
 def _log_audit(request: Request, domain: str, scope: str,
-               duration: float, checks: int, source: str = "web"):
+               duration: float, checks: int, source: str = "web",
+               status: str = "ok", error: Optional[str] = None):
     """Write a GDPR-safe JSON-lines audit log entry.
 
-    Logged: domain, timestamp, scope, duration, check count,
-            user-agent (browser/OS only), source (web/sse/pdf).
-    NOT logged: IP address, geolocation, cookies, personal data.
+    Logged: domain, timestamp, scope, duration, check count, outcome
+            (status, plus an error code when the outcome is not "ok"),
+            browser and OS family, whether the caller is a bot, source
+            (web/sse/pdf), a daily-rotating visitor hash, and the
+            referring host if one was sent.
+    NOT logged: the raw user-agent string, IP address, geolocation,
+            cookies, referring URL path, personal data.
+
+    The bot flag is derived from the full user agent before ua_summary()
+    reduces it to coarse labels. That order is load-bearing: the labels do
+    not carry enough to tell a crawler from a person, so deriving the flag
+    afterwards would classify every future audit as a bot.
+
+    Fields are only ever added, never renamed or removed: the existing log
+    holds entries with none of status/error/vid/ref/bot, so no reader may
+    assume any of them is present. The ua field is an exception in value
+    only, not in name: entries written before this change hold a truncated
+    raw string, entries written after hold "<browser> / <OS>".
     """
-    ua = request.headers.get("User-Agent", "unknown")
+    ua_raw = request.headers.get("User-Agent", "")
+    bot = is_bot(ua_raw)
     entry = {
         "ts": datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"),
         "domain": domain,
         "scope": scope or "complete",
         "duration_s": duration,
         "checks": checks,
-        "ua": ua[:200],
+        "ua": ua_summary(ua_raw),
+        "bot": bot,
         "source": source,
+        "status": status,
+        "vid": _visitor_id(request),
     }
+    if status != "ok" and error:
+        entry["error"] = error
+    ref = _referer_host(request)
+    if ref:
+        entry["ref"] = ref
     try:
         audit_logger.info(json.dumps(entry))
     except Exception as e:
@@ -483,9 +573,12 @@ async def audit_domain(
     elapsed = round(time.time() - start, 2)
     log.info("Audit complete: %s -- %.2fs (rid=%s)", domain, elapsed, request_id)
 
-    # Audit log (GDPR-safe)
+    # Audit log (GDPR-safe). A failed audit must not read as ordinary
+    # healthy usage: the outcome is carried on the entry itself.
+    log_status, log_error = _audit_status(result)
     _log_audit(request, domain, scope,
-               elapsed, len(result.get("checks", [])), source="web")
+               elapsed, len(result.get("checks", [])), source="web",
+               status=log_status, error=log_error)
 
     # Cache result (skip caching errors -- they may be transient)
     if "error" not in result:
@@ -613,6 +706,7 @@ async def audit_stream(
     async def _event_stream():
         global _active_audits
         loop = asyncio.get_running_loop()
+        outcome_logged = False
         try:
             while True:
                 if time.time() - sse_start_time > 120:
@@ -627,7 +721,9 @@ async def audit_stream(
                         "error": "timeout",
                         "error_message": "Audit exceeded the 120 second time limit. Please try again.",
                     }
-                    _log_audit(request, domain, scope, 120.0, 0, source="sse")
+                    _log_audit(request, domain, scope, 120.0, 0, source="sse",
+                               status="timeout", error="timeout")
+                    outcome_logged = True
                     yield f"data: {json.dumps({'done': True, 'result': timeout_result})}\n\n"
                     return
                 try:
@@ -637,6 +733,13 @@ async def audit_stream(
                     if await request.is_disconnected():
                         log.info("SSE client disconnected: %s", domain)
                         cancel_event.set()  # Signal audit thread to stop
+                        # Log the abandonment. Without an entry here, a user
+                        # who starts an audit and gives up looks exactly like
+                        # a user who never visited at all.
+                        _log_audit(request, domain, scope,
+                                   round(time.time() - sse_start_time, 2), 0,
+                                   source="sse", status="abandoned")
+                        outcome_logged = True
                         return
                     continue
 
@@ -649,8 +752,11 @@ async def audit_stream(
                     log.info("SSE audit complete: %s -- %.2fs",
                              domain, elapsed)
                     # Audit log (GDPR-safe)
+                    log_status, log_error = _audit_status(result)
                     _log_audit(request, domain, scope,
-                               elapsed, len(result.get("checks", [])), source="sse")
+                               elapsed, len(result.get("checks", [])), source="sse",
+                               status=log_status, error=log_error)
+                    outcome_logged = True
                     result["request_id"] = request_id
                     yield f"data: {json.dumps({'done': True, 'result': result, 'request_id': request_id})}\n\n"
                     return
@@ -658,6 +764,15 @@ async def audit_stream(
                     yield f"data: {json.dumps(msg)}\n\n"
         finally:
             cancel_event.set()  # Ensure thread stops if generator exits for any reason
+            if not outcome_logged:
+                # The disconnect poll above is not the only way a stream ends
+                # early: uvicorn cancels the response task the moment the
+                # client goes away, which closes this generator without that
+                # poll ever running again. Logging the abandonment here too is
+                # what makes "user gave up" countable rather than invisible.
+                _log_audit(request, domain, scope,
+                           round(time.time() - sse_start_time, 2), 0,
+                           source="sse", status="abandoned")
             # Release the concurrency slot here, not when the background
             # thread finishes -- the stream ending (disconnect, completion,
             # or timeout) is what should free capacity for new clients.
@@ -873,6 +988,10 @@ if STATIC_DIR.exists():
     async def about():
         return FileResponse(str(STATIC_DIR / "about.html"))
 
+    @app.get("/privacy", tags=["Pages"])
+    async def privacy():
+        return FileResponse(str(STATIC_DIR / "privacy.html"))
+
     @app.get("/security", response_class=PlainTextResponse, tags=["Pages"])
     async def security_policy():
         security_path = Path(__file__).parent / "SECURITY.md"
@@ -897,6 +1016,7 @@ async def sitemap():
         {"loc": "/articles/dnssec", "changefreq": "monthly", "priority": "0.8"},
         {"loc": "/articles/dane", "changefreq": "monthly", "priority": "0.8"},
         {"loc": "/about", "changefreq": "monthly", "priority": "0.5"},
+        {"loc": "/privacy", "changefreq": "yearly", "priority": "0.3"},
     ]
     xml = '<?xml version="1.0" encoding="UTF-8"?>\n'
     xml += '<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">\n'
