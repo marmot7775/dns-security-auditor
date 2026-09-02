@@ -4,10 +4,14 @@ DNS Security Auditor
 """
 
 import ipaddress
+import re
 import socket
 import defusedxml.ElementTree as ET
 from typing import Any, Dict, List, Optional, Tuple
 from urllib.parse import urlparse
+
+# RFC 8461 section 3.1: sts-id = %s"id=" 1*32(ALPHA / DIGIT)
+_STS_ID_RE = re.compile(r"[A-Za-z0-9]{1,32}")
 
 try:
     import requests
@@ -250,6 +254,17 @@ def _validate_mta_sts_txt(record: str) -> Tuple[Dict[str, str], List[Dict]]:
             "Senders cannot track policy changes.",
             "Set id to a unique value like a timestamp: id=20240101T120000",
         ))
+    elif not _STS_ID_RE.fullmatch(tags["id"]):
+        _bad_id = tags["id"]
+        issues.append(_make_issue(
+            "error", f"Invalid 'id' value in MTA-STS TXT record: '{_bad_id}'",
+            "RFC 8461 section 3.1 defines sts-id as 1*32(ALPHA / DIGIT): between "
+            "1 and 32 letters and digits and nothing else. Punctuation such as "
+            "the hyphens in id=2024-01-01, or a value longer than 32 characters, "
+            "is outside the grammar.",
+            "Senders that validate the record will not apply the policy.",
+            "Use letters and digits only, e.g., id=20240101120000",
+        ))
 
     valid_tags = {"v", "id"}
     for key in tags:
@@ -339,11 +354,13 @@ def _validate_mta_sts_policy(policy_text: str, domain: str) -> Tuple[Dict[str, A
                     ))
                 elif max_age_val > 31557600:
                     issues.append(_make_issue(
-                        "info",
-                        f"max_age is very long: {max_age_val} seconds",
-                        "Senders cache the policy for a long time.",
-                        "Policy changes take a long time to propagate.",
-                        "Consider max_age of 604800 (1 week) to 2592000 (30 days).",
+                        "error",
+                        f"max_age exceeds the RFC 8461 maximum: {max_age_val} seconds",
+                        "RFC 8461 section 3.2 gives max_age a maximum of 31557600 "
+                        "seconds (one year). This value is out of range, not merely "
+                        "long.",
+                        "The policy is invalid and senders may refuse to apply it.",
+                        "Set max_age to 31557600 or less. Recommended: 604800 (1 week).",
                     ))
             except ValueError:
                 policy["max_age"] = -1

@@ -27,7 +27,12 @@ DOMAIN = "dualcidr.example.com"
 def _build_card(record):
     with patch.object(audit_engine, "_lookup_txt", return_value=[record]), \
          patch.object(audit_engine, "_lookup_ttl", return_value=None), \
-         patch.object(spf_recursive, "_get_spf_record", return_value=record):
+         patch.object(spf_recursive, "_lookup_spf",
+                      return_value={"record": record,
+                                    "status": spf_recursive.SPF_FOUND,
+                                    "error": None}), \
+         patch.object(spf_recursive, "_mechanism_lookup_status",
+                      return_value="ok"):
         raw = audit_engine._raw_check_spf(DOMAIN)
     return result_transformer.transform_spf(raw, has_mx=True)
 

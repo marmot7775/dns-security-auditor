@@ -66,19 +66,99 @@ def _get_resolver(timeout: float = 5.0):
     return resolver
 
 
-def _get_spf_record(domain: str) -> Optional[str]:
-    """Fetch SPF TXT record for a domain."""
+# Outcome of a single SPF TXT lookup.
+SPF_FOUND = "found"
+# The name resolves but publishes no SPF record. RFC 7208 section 5.2: a
+# recursive check_host() that returns "none" makes the include a permerror.
+SPF_NO_RECORD = "no_record"
+# The name does not exist. RFC 7208 section 4.6.4 counts this as a void lookup.
+SPF_NXDOMAIN = "nxdomain"
+# SERVFAIL, timeout, no reachable nameserver. We do not know what is
+# published, so we must neither advise on it nor call the record clean.
+SPF_INDETERMINATE = "indeterminate"
+
+
+def _lookup_spf(domain: str) -> Dict[str, Any]:
+    """Fetch a domain's SPF TXT record and classify the DNS outcome.
+
+    Returns {"record": Optional[str], "status": SPF_*, "error": Optional[str]}.
+
+    A transient failure is not the same answer as "no record": collapsing the
+    two makes the tool advise removing a live include on the strength of one
+    SERVFAIL, and silently drops that subtree's lookups from the count.
+    """
     try:
         resolver = _get_resolver()
         answers = resolver.resolve(domain, "TXT")
-        for rdata in answers:
-            txt = b"".join(rdata.strings).decode("utf-8", errors="replace")
-            if txt.strip().lower().startswith("v=spf1"):
-                repaired, _ = repair_spf_missing_spaces(txt.strip())
-                return repaired
+    except dns.resolver.NXDOMAIN:
+        return {"record": None, "status": SPF_NXDOMAIN,
+                "error": f"{domain} does not exist (NXDOMAIN)"}
+    except dns.resolver.NoAnswer:
+        return {"record": None, "status": SPF_NO_RECORD, "error": None}
+    except (dns.resolver.NoNameservers, dns.exception.Timeout) as e:
+        return {"record": None, "status": SPF_INDETERMINATE,
+                "error": (f"DNS lookup for {domain} did not complete "
+                          f"({type(e).__name__})")}
+    except Exception as e:
+        return {"record": None, "status": SPF_INDETERMINATE,
+                "error": (f"DNS lookup for {domain} did not complete "
+                          f"({type(e).__name__})")}
+
+    for rdata in answers:
+        txt = b"".join(rdata.strings).decode("utf-8", errors="replace")
+        if txt.strip().lower().startswith("v=spf1"):
+            repaired, _ = repair_spf_missing_spaces(txt.strip())
+            return {"record": repaired, "status": SPF_FOUND, "error": None}
+
+    return {"record": None, "status": SPF_NO_RECORD, "error": None}
+
+
+def _get_spf_record(domain: str) -> Optional[str]:
+    """Fetch SPF TXT record for a domain (record only)."""
+    return _lookup_spf(domain)["record"]
+
+
+def _query_answer_status(domain: str, rdtype: str) -> str:
+    """Resolve one name and report "ok", "void" or "error".
+
+    RFC 7208 section 4.6.4 defines a void lookup as a query that returns
+    NXDOMAIN or zero answer records.
+    """
+    try:
+        resolver = _get_resolver()
+        answers = resolver.resolve(domain, rdtype)
+        return "ok" if len(answers) > 0 else "void"
+    except (dns.resolver.NXDOMAIN, dns.resolver.NoAnswer):
+        return "void"
     except Exception:
-        pass
-    return None
+        return "error"
+
+
+def _mechanism_target(mech: Dict[str, str], current_domain: str) -> str:
+    """The name a lookup mechanism queries, with any dual-cidr suffix removed."""
+    value = (mech.get("value") or "").strip()
+    if value:
+        value = value.split("/", 1)[0]
+    return value or current_domain
+
+
+def _mechanism_lookup_status(mtype: str, target: str) -> str:
+    """Resolve an a:/mx:/exists: target. Returns "ok", "void" or "error"."""
+    if not target or "%" in target:
+        # A macro-expanded target depends on the connecting client, so it
+        # cannot be evaluated from the record alone.
+        return "ok"
+    if mtype == "mx":
+        return _query_answer_status(target, "MX")
+    if mtype == "exists":
+        # RFC 7208 section 5.7: exists: always issues an A query.
+        return _query_answer_status(target, "A")
+    # "a": an AAAA-only host is not a void lookup, so check both.
+    status = _query_answer_status(target, "A")
+    if status == "void":
+        status6 = _query_answer_status(target, "AAAA")
+        return "ok" if status6 == "ok" else status6
+    return status
 
 
 # Mechanisms that consume a DNS lookup per RFC 7208
@@ -149,6 +229,9 @@ def _count_recursive(domain: str, visited: Set[str], depth: int = 0,
         "total": 0,
         "error": None,
         "depth": depth,
+        "lookup_status": None,
+        "void_lookups": 0,
+        "indeterminate": False,
     }
 
     domain_lower = domain.lower().rstrip(".")
@@ -161,9 +244,21 @@ def _count_recursive(domain: str, visited: Set[str], depth: int = 0,
         node["error"] = f"Max recursion depth ({max_depth}) exceeded"
         return node
 
-    spf_record = _get_spf_record(domain)
+    lookup = _lookup_spf(domain)
+    spf_record = lookup.get("record")
+    node["lookup_status"] = lookup.get("status") or (
+        SPF_FOUND if spf_record else SPF_NO_RECORD
+    )
     if not spf_record:
-        node["error"] = f"No SPF record found for {domain}"
+        if node["lookup_status"] == SPF_INDETERMINATE:
+            node["indeterminate"] = True
+            node["error"] = lookup.get("error") or (
+                f"DNS lookup for {domain} did not complete"
+            )
+        elif node["lookup_status"] == SPF_NXDOMAIN:
+            node["error"] = f"{domain} does not exist (NXDOMAIN)"
+        else:
+            node["error"] = f"No SPF record found for {domain}"
         return node
 
     node["record"] = spf_record
@@ -179,6 +274,7 @@ def _count_recursive(domain: str, visited: Set[str], depth: int = 0,
     )
 
     local_lookups = 0
+    local_voids = 0
 
     for mech in mechanisms:
         mtype = mech["type"]
@@ -189,11 +285,31 @@ def _count_recursive(domain: str, visited: Set[str], depth: int = 0,
 
         if mtype in ("a", "mx", "ptr", "exists"):
             local_lookups += 1
+            # RFC 7208 section 4.6.4: a void lookup is a query that returns
+            # NXDOMAIN or an empty answer, so the target has to actually be
+            # resolved. Counting the mechanism without querying it reports a
+            # record full of dead a:/mx:/exists: targets as clean while
+            # enforcing receivers return a PermError.
+            #
+            # ptr: is deliberately excluded: its query is a PTR of the
+            # connecting client's IP, which cannot be evaluated from the
+            # record alone.
+            if mtype != "ptr":
+                mech_status = _mechanism_lookup_status(
+                    mtype, _mechanism_target(mech, domain)
+                )
+                if mech_status == "void":
+                    local_voids += 1
+                    mech["void"] = True
+                elif mech_status == "error":
+                    node["indeterminate"] = True
 
         elif mtype == "include":
             local_lookups += 1
             child = _count_recursive(mech["value"], set(visited), depth + 1, max_depth)
             node["children"].append(child)
+            if child.get("lookup_status") == SPF_NXDOMAIN:
+                local_voids += 1
 
         elif mtype == "redirect":
             if has_all:
@@ -201,8 +317,11 @@ def _count_recursive(domain: str, visited: Set[str], depth: int = 0,
             local_lookups += 1
             child = _count_recursive(mech["value"], set(visited), depth + 1, max_depth)
             node["children"].append(child)
+            if child.get("lookup_status") == SPF_NXDOMAIN:
+                local_voids += 1
 
     node["lookups_here"] = local_lookups
+    node["void_lookups"] = local_voids
     child_total = sum(c["total"] for c in node["children"])
     node["total"] = local_lookups + child_total
 
@@ -220,13 +339,19 @@ def _flatten_chain(node: Dict, chain: List[Dict] = None, indent: int = 0) -> Lis
         "lookups": node["lookups_here"],
         "depth": indent,
         "error": node.get("error"),
+        "lookup_status": node.get("lookup_status"),
+        "void_lookups": node.get("void_lookups", 0),
+        "indeterminate": bool(node.get("indeterminate")),
     }
 
     lookup_details = []
+    lookup_types = []
     for mech in node.get("mechanisms", []):
         if mech["type"] in LOOKUP_MECHANISMS:
             lookup_details.append(mech["raw"])
+            lookup_types.append(mech["type"])
     entry["lookup_mechanisms"] = lookup_details
+    entry["lookup_mechanism_types"] = lookup_types
 
     chain.append(entry)
 
@@ -261,6 +386,20 @@ def count_spf_lookups(domain: str) -> Dict[str, Any]:
     total = tree["total"]
     limit = 10
 
+    # RFC 7208 section 4.6.4 void lookups: NXDOMAIN or empty-answer results
+    # from a:, mx:, exists: targets and from include/redirect targets that do
+    # not exist. Counted where they happen, in _count_recursive.
+    void_lookups = sum(e.get("void_lookups", 0) for e in chain)
+    indeterminate_domains = [e["domain"] for e in chain if e.get("indeterminate")]
+    # chain[0] is the audited domain itself: it having no SPF record is
+    # "no SPF", not an include permerror.
+    permerror_domains = [
+        e["domain"] for e in chain[1:] if e.get("lookup_status") == SPF_NO_RECORD
+    ]
+    nxdomain_domains = [
+        e["domain"] for e in chain[1:] if e.get("lookup_status") == SPF_NXDOMAIN
+    ]
+
     result = {
         "domain": domain,
         "total_lookups": total,
@@ -273,6 +412,10 @@ def count_spf_lookups(domain: str) -> Dict[str, Any]:
         "tree": tree,
         "summary": "",
         "issues": [],
+        "void_lookups": void_lookups,
+        "indeterminate": bool(indeterminate_domains),
+        "indeterminate_domains": indeterminate_domains,
+        "permerror_domains": permerror_domains,
     }
 
     if total > limit:
@@ -333,25 +476,74 @@ def count_spf_lookups(domain: str) -> Dict[str, Any]:
             f"{total} DNS lookups (well within the 10-lookup limit)."
         )
 
-    # Check for void lookups (broken includes)
-    for entry in chain:
-        if entry.get("error") and "No SPF record" in entry["error"]:
-            result["issues"].append({
-                "severity": "warning",
-                "issue": f"Broken include: {entry['domain']} has no SPF record",
-                "plain_english": (
-                    f"Your SPF chain includes {entry['domain']} but that domain "
-                    f"has no SPF record. This is a 'void lookup' and "
-                    f"RFC 7208 limits void lookups to 2. A third may trigger a PermError."
-                ),
-                "impact": "Wasted lookup slot and potential PermError.",
-                "fix": f"Remove the include for {entry['domain']} if no longer used.",
-            })
+    # A DNS failure we could not resolve one way or the other. Say so, and do
+    # not hand out removal advice or a clean bill of health on the strength of
+    # a SERVFAIL or a timeout.
+    if indeterminate_domains:
+        if result["status"] == "pass":
+            result["status"] = "warn"
+        result["summary"] += (
+            " Some lookups did not complete, so this count may be incomplete."
+        )
+    for target in indeterminate_domains:
+        result["issues"].append({
+            "severity": "warning",
+            "issue": f"SPF lookup for {target} did not complete",
+            "plain_english": (
+                f"The DNS query for {target} failed to answer (SERVFAIL, "
+                f"timeout, or no reachable nameserver) rather than telling us "
+                f"there is no record. This audit cannot say whether {target} "
+                f"is healthy, and cannot count the lookups inside it, so the "
+                f"totals above may be under-counted."
+            ),
+            "impact": "Lookup count and include health for this branch are unknown.",
+            "fix": (
+                f"Re-run the audit. If {target} keeps failing to answer, raise "
+                f"it with whoever operates that domain. Do not remove the "
+                f"include on the strength of a transient DNS failure."
+            ),
+        })
+
+    # RFC 7208 section 5.2: when the recursive check_host() of an include
+    # target returns "none" -- the name resolves and publishes no SPF record
+    # -- the include produces a permerror. That is immediate and has nothing
+    # to do with the two-void-lookup budget.
+    for target in permerror_domains:
+        result["issues"].append({
+            "severity": "error",
+            "issue": f"Broken include: {target} publishes no SPF record",
+            "plain_english": (
+                f"Your SPF chain includes {target}, but {target} resolves and "
+                f"publishes no SPF record. RFC 7208 section 5.2 makes that an "
+                f"immediate PermError for the including record, not a 'void "
+                f"lookup' you are allowed two of. SPF fails entirely."
+            ),
+            "impact": "SPF returns PermError. Authentication fails for every message.",
+            "fix": (
+                f"Remove the include for {target}, or have {target} publish an "
+                f"SPF record."
+            ),
+        })
+
+    for target in nxdomain_domains:
+        result["issues"].append({
+            "severity": "warning",
+            "issue": f"Broken include: {target} does not exist",
+            "plain_english": (
+                f"Your SPF chain includes {target}, but that name does not "
+                f"exist (NXDOMAIN). RFC 7208 section 4.6.4 counts this as a "
+                f"void lookup and allows only two."
+            ),
+            "impact": "Wasted lookup slot and potential PermError.",
+            "fix": f"Remove the include for {target}.",
+        })
 
     # Check for deprecated ptr mechanism
     for entry in chain:
-        for mech in entry.get("lookup_mechanisms", []):
-            if "ptr" in mech.lower():
+        # Match the parsed mechanism type, not the raw text: a substring test
+        # flags include:spf.mailptr.com as a ptr mechanism.
+        for mech_type in entry.get("lookup_mechanism_types", []):
+            if mech_type == "ptr":
                 result["issues"].append({
                     "severity": "warning",
                     "issue": "Deprecated 'ptr' mechanism found",

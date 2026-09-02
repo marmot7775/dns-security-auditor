@@ -1140,7 +1140,8 @@ def _build_dmarcbis_card_data(readiness: Optional[Dict], record: Optional[str]) 
             "label": "PSD indicator declared",
             "status": "info",
             "detail": f"psd={psd_val}" if psd_val else "u (default)",
-            "note": "Most domains should use psd=n (not a public suffix)",
+            "note": ("Optional. RFC 9989 4.7 defaults psd= to 'u'. Publish it "
+                     "only if this domain is a public suffix."),
         })
 
     # Overall status
@@ -2366,9 +2367,9 @@ def _build_tag_entry(tag: str, value: str, present: bool, tags: Dict, policy: st
                     "This is the correct value for most domains."
                 ),
                 "u": (
-                    "Undeclared. Different receivers may handle the DNS tree walk differently: "
-                    "some continue walking, others stop. This creates inconsistent enforcement across "
-                    "Gmail, Microsoft, Yahoo, and others. Set psd=n explicitly."
+                    "Undeclared, which is the RFC 9989 default and the right value for "
+                    "almost every domain. Receivers fall back to the Public Suffix List. "
+                    "Declare psd=y only if this domain really is a public suffix."
                 ),
             }.get(value, f"Unknown psd value '{value}'.")
             e = _entry(tag, value, False, False, "Public Suffix Domain", explanation, "new",
@@ -2384,8 +2385,9 @@ def _build_tag_entry(tag: str, value: str, present: bool, tags: Dict, policy: st
             return e
         else:
             return _entry(tag, "u", True, True, "Public Suffix Domain",
-                          "Not declared. Receivers fall back to the Public Suffix List or their own "
-                          "implementation. Behavior varies. Consider adding psd=n.",
+                          "Not declared, which is the RFC 9989 default ('u') and correct for "
+                          "almost every domain. Receivers fall back to the Public Suffix List. "
+                          "Publish psd= only if this domain is a public suffix.",
                           "new", dmarcbis_note=note)
 
     # ── t= (RFC 9989) ──────────────────────────────────────
@@ -2624,17 +2626,10 @@ def _detect_dangerous_combinations(tags: Dict[str, str], policy: str, is_no_mail
             "tags": ["t", "p"],
         })
 
-    # 12. psd=u or absent
-    if psd == "u" or "psd" not in tags:
-        warnings.append({
-            "level": "advisory",
-            "title": "Undeclared PSD status",
-            "text": (
-                "Undeclared PSD status. Different receivers handle the DNS tree walk differently, "
-                "creating inconsistent enforcement. Declare psd=n explicitly."
-            ),
-            "tags": ["psd"],
-        })
+    # 12. (removed) An absent psd= tag is not a defect. RFC 9989 section 4.7
+    # makes the tag OPTIONAL with a default of "u", and psd=n published on a
+    # name that is not the Organizational Domain terminates the tree walk
+    # there, changing alignment scope and external rua authorization.
 
     # 13. fo=0 + ruf configured
     if fo == "0" and ruf:
@@ -2770,8 +2765,10 @@ def _calculate_dmarcbis_health(tags: Dict[str, str], policy: str, config_warning
 
     deprecated_present = [t for t in ("pct", "rf", "ri") if t in tags]
     np_present = "np" in tags
-    psd_val = tags.get("psd")
-    psd_declared = psd_val in ("y", "n")
+    # RFC 9989 section 4.7 makes psd= OPTIONAL with a default of "u", and
+    # publishing psd=n on a name that is not the Organizational Domain
+    # actively changes relaxed-alignment scope and external rua
+    # authorization. It is not a readiness criterion.
     t_val = tags.get("t")
     rua = tags.get("rua")
     sp = tags.get("sp")
@@ -2810,7 +2807,7 @@ def _calculate_dmarcbis_health(tags: Dict[str, str], policy: str, config_warning
     # These are the advisory warnings that actually weaken protection:
     _attention_titles = {
         "Test mode weakens reject", "Test mode weakens np=reject",
-        "Test mode on p=none", "Undeclared PSD status",
+        "Test mode on p=none",
         "Underutilized failure reporting",
     }
     attention_triggers = [w["title"] for w in advisory if w["title"] in _attention_titles]
@@ -2830,7 +2827,6 @@ def _calculate_dmarcbis_health(tags: Dict[str, str], policy: str, config_warning
     if (policy in ("reject", "quarantine")
             and not deprecated_present
             and np_present
-            and psd_declared
             and t_val != "y"
             and rua
             and not critical):
@@ -2849,8 +2845,6 @@ def _calculate_dmarcbis_health(tags: Dict[str, str], policy: str, config_warning
         reasons.append(f"Deprecated tags: {', '.join(deprecated_present)}")
     if not np_present:
         reasons.append("np= not set")
-    if not psd_declared:
-        reasons.append("psd= not declared")
     if sp is None and policy in ("reject", "quarantine"):
         reasons.append("sp= not set (inherits correctly)")
 
@@ -2903,13 +2897,6 @@ def _build_why_dmarcbis(tags: Dict[str, str], policy: str, health_status: str, d
             f"Your record doesn't have an np= tag. This is a new RFC 9989 tag that sets policy for "
             f"non-existent subdomains, domains like secure-login.{domain or 'yourdomain.com'} that "
             f"don't exist but can be spoofed. Under RFC 7489, there was no way to control this."
-        )
-
-    if "psd" not in tags:
-        whats_new.append(
-            "Your record doesn't declare psd=. RFC 9989 introduces this tag to replace the Public "
-            "Suffix List for determining organizational domain boundaries. The PSL was a manually-maintained "
-            "list that was often outdated. psd= lets you declare your own domain's status directly in DNS."
         )
 
     dep_in_record = [t for t in ("rf", "ri") if t in tags]
@@ -3001,7 +2988,6 @@ def _build_migration_path(tags: Dict[str, str], policy: str, health_status: str,
     rua = tags.get("rua")
     sp = tags.get("sp")
     np_val = tags.get("np")
-    psd = tags.get("psd")
     fo = tags.get("fo", "0")
     deprecated = [t for t in ("pct", "rf", "ri") if t in tags]
 
@@ -3101,8 +3087,6 @@ def _build_migration_path(tags: Dict[str, str], policy: str, health_status: str,
         dmarcbis_needed.append("np=reject")
     if not sp or sp == "none":
         dmarcbis_needed.append("sp=reject")
-    if not psd or psd not in ("y", "n"):
-        dmarcbis_needed.append("psd=n")
 
     if dmarcbis_needed:
         step_num += 1
@@ -3124,7 +3108,7 @@ def _build_migration_path(tags: Dict[str, str], policy: str, health_status: str,
         })
 
     # Final target record
-    target = f"v=DMARC1; p=reject; sp=reject; np=reject; psd=n; fo=1; rua={rua_placeholder}"
+    target = f"v=DMARC1; p=reject; sp=reject; np=reject; fo=1; rua={rua_placeholder}"
 
     return {
         "status": "migration",
@@ -3252,14 +3236,11 @@ def _build_record_builder(
             "reason": "Captures all authentication failures, not just complete failures.",
         })
 
-    # 5. Add psd=n if missing
-    cur_psd = rec_tags.get("psd", "")
-    if cur_psd not in ("y", "n"):
-        rec_tags["psd"] = "n"
-        changes.append({
-            "tag": "psd", "action": "added", "value": "n",
-            "reason": "Explicitly declares non-public-suffix status for the DNS tree walk.",
-        })
+    # 5. (removed) psd= is not injected. RFC 9989 section 4.7 makes it
+    # OPTIONAL with a default of "u", and psd=n declares this exact name the
+    # Organizational Domain: published on a subdomain it terminates the tree
+    # walk there, changing relaxed-alignment scope and external rua
+    # authorization.
 
     # 6. Remove deprecated tags
     for dep in ("pct", "rf", "ri"):
@@ -3285,16 +3266,9 @@ def _build_record_builder(
             "reason": "Test mode is no longer needed at full reject enforcement.",
         })
 
-    # 8. Fix psd=y if not actually a public suffix
-    if rec_tags.get("psd") == "y":
-        rec_tags["psd"] = "n"
-        # Only add change if not already in the list
-        if not any(c["tag"] == "psd" for c in changes):
-            changes.append({
-                "tag": "psd", "action": "changed",
-                "old": "y", "value": "n",
-                "reason": "Most domains are not public suffixes. Set psd=n unless you operate a TLD.",
-            })
+    # 8. (removed) The old rule rewrote every psd=y to psd=n without ever
+    # testing whether the domain is a public suffix, so it told a registry
+    # operator with a correct record to break it.
 
     # Assemble recommended record in canonical order
     rec_parts = []
@@ -3532,6 +3506,10 @@ def transform_spf(raw: Dict, has_mx: bool = True) -> Dict:
             status = "fail"
         elif has_engine_errors:
             status = "fail"
+        elif raw.get("spf_indeterminate"):
+            # At least one lookup in the chain never answered, so the lookup
+            # count is a floor rather than a total. Do not certify the record.
+            status = "warn"
         elif all_mech in ("-all", "~all") and lookups <= 10 and not has_engine_errors:
             # Lenient parser recovered a valid record with a proper all mechanism
             # and within lookup limits.  Syntax warnings (e.g. missing spaces)
@@ -3615,8 +3593,8 @@ def transform_spf(raw: Dict, has_mx: bool = True) -> Dict:
                 f"Your SPF record requires {_lookups} DNS lookups, exceeding the 10-lookup limit. "
                 f"This means SPF fails completely for all your email, which can cause messages "
                 f"to bounce or go to spam. Every email platform you add (Mailchimp, Salesforce, "
-                f"HubSpot, SendGrid) consumes lookups. Remove services you no longer use or "
-                f"consider an SPF flattening service."
+                f"HubSpot, SendGrid) consumes lookups. Audit your includes: remove "
+                f"services you no longer use and consolidate senders where possible."
             )
         elif _lookups and _lookups > 8:
             _deliverability = (
@@ -3832,8 +3810,8 @@ def _build_spf_deep_analysis(raw: Dict) -> Optional[Dict]:
     optimizations = []
     if lookups >= 8:
         optimizations.append(
-            f"Your SPF record uses {lookups} of 10 allowed lookups. Consider SPF flattening "
-            f"where the included domain resolves to static IPs."
+            f"Your SPF record uses {lookups} of 10 allowed lookups. Audit your includes: "
+            f"remove services you no longer use and consolidate senders where possible."
         )
 
     return {
@@ -3856,7 +3834,8 @@ def _build_spf_deep_analysis(raw: Dict) -> Optional[Dict]:
 # DKIM
 # ============================================================
 
-def transform_dkim(raw: Dict, domain: str, has_mx: bool = True) -> Dict:
+def transform_dkim(raw: Dict, domain: str, has_mx: bool = True, non_mail: bool = False) -> Dict:
+    """Only a positive non-mail declaration (RFC 7505 null MX, or a null ``v=spf1 -all`` SPF record) waives this check. Absent MX alone does not: send-only subdomains have no MX and still send real mail."""
     # Lazy import avoids the audit_engine ↔ result_transformer cycle.
     from audit_engine import BUSINESS_RISK
 
@@ -3864,21 +3843,21 @@ def transform_dkim(raw: Dict, domain: str, has_mx: bool = True) -> Dict:
     tested = raw.get("tested_count", 0)
 
     if not found:
-        # No DKIM keys found. If the domain has no MX records it doesn't send email,
-        # so the absence of DKIM keys is expected and not actionable.
-        if not has_mx:
+        # No DKIM keys found. Only a positive non-mail declaration (null MX
+        # or null SPF) makes that expected. Absent MX alone is not one.
+        if non_mail:
             return {
                 "name": "DKIM",
                 "status": "pass",
                 "pill_label": "N/A",
-                "verdict": "No mail domain",
+                "verdict": "Not applicable (non-mail domain)",
                 "record": None,
                 "explanation": (
-                    "This domain has no MX records, so it does not send or receive email. "
-                    "DKIM signing is not applicable."
+                    "This domain declares that it does not send email (RFC 7505 null MX "
+                    "or a null SPF record). DKIM signing is not applicable."
                 ),
                 "details": [
-                    {"type": "info", "text": "No MX records - domain does not handle email"},
+                    {"type": "info", "text": "Null MX or null SPF published - domain declares it does not handle email"},
                     {"type": "info", "text": "DKIM is only relevant for domains that send email"},
                 ],
                 "fix": None,
@@ -4425,7 +4404,8 @@ def transform_mx(raw: Dict) -> Dict:
 # MTA-STS
 # ============================================================
 
-def transform_mta_sts(raw: Dict, domain: str, has_mx: bool = True) -> Dict:
+def transform_mta_sts(raw: Dict, domain: str, has_mx: bool = True, non_mail: bool = False) -> Dict:
+    """Only a positive non-mail declaration (RFC 7505 null MX, or a null ``v=spf1 -all`` SPF record) waives this check. Absent MX alone does not: send-only subdomains have no MX and still send real mail."""
     raw_status = raw.get("status", "warning")
     status = _map_status(raw_status)
     txt_record = raw.get("txt_record")
@@ -4436,21 +4416,22 @@ def transform_mta_sts(raw: Dict, domain: str, has_mx: bool = True) -> Dict:
         status = "pass"
 
     if not txt_record:
-        # MTA-STS protects inbound delivery, so it is only relevant for domains with MX records.
-        if not has_mx:
+        # MTA-STS protects inbound delivery. Waive it only on a positive
+        # non-mail declaration (null MX or null SPF), never on absent MX alone.
+        if non_mail:
             return {
                 "name": "MTA-STS",
                 "status": "pass",
                 "pill_label": "N/A",
-                "verdict": "No mail domain",
+                "verdict": "Not applicable (non-mail domain)",
                 "record": None,
                 "explanation": (
                     "MTA-STS protects inbound email delivery by requiring TLS encryption. "
-                    "This domain has no MX records, so it does not receive email and "
-                    "MTA-STS is not applicable."
+                    "This domain declares that it does not handle email (RFC 7505 null MX "
+                    "or a null SPF record), so MTA-STS is not applicable."
                 ),
                 "details": [
-                    {"type": "info", "text": "No MX records - domain does not receive email"},
+                    {"type": "info", "text": "Null MX or null SPF published - domain declares it does not handle email"},
                     {"type": "info", "text": "MTA-STS is only relevant for domains with MX records"},
                 ],
                 "fix": None,
@@ -4585,27 +4566,29 @@ def _build_mta_sts_deep(raw: Dict, domain: str) -> Optional[Dict]:
 # TLS-RPT
 # ============================================================
 
-def transform_tls_rpt(raw: Dict, domain: str, has_mx: bool = True) -> Dict:
+def transform_tls_rpt(raw: Dict, domain: str, has_mx: bool = True, non_mail: bool = False) -> Dict:
+    """Only a positive non-mail declaration (RFC 7505 null MX, or a null ``v=spf1 -all`` SPF record) waives this check. Absent MX alone does not: send-only subdomains have no MX and still send real mail."""
     status = _map_status(raw.get("status", "warning"))
     record = raw.get("record")
 
     if not record:
-        # TLS-RPT reports on inbound TLS delivery issues, so it only makes sense for
-        # domains that receive email (i.e. have MX records).
-        if not has_mx:
+        # TLS-RPT reports on inbound TLS delivery issues. Waive it only on a
+        # positive non-mail declaration (null MX or null SPF), never on
+        # absent MX alone.
+        if non_mail:
             return {
                 "name": "TLS-RPT",
                 "status": "pass",
                 "pill_label": "N/A",
-                "verdict": "No mail domain",
+                "verdict": "Not applicable (non-mail domain)",
                 "record": None,
                 "explanation": (
                     "TLS-RPT reports on TLS encryption failures during inbound email delivery. "
-                    "This domain has no MX records, so it does not receive email and "
-                    "TLS-RPT is not applicable."
+                    "This domain declares that it does not handle email (RFC 7505 null MX "
+                    "or a null SPF record), so TLS-RPT is not applicable."
                 ),
                 "details": [
-                    {"type": "info", "text": "No MX records - domain does not receive email"},
+                    {"type": "info", "text": "Null MX or null SPF published - domain declares it does not handle email"},
                     {"type": "info", "text": "TLS-RPT is only relevant for domains with MX records"},
                 ],
                 "fix": None,
@@ -4696,28 +4679,30 @@ def _build_tls_rpt_deep(raw: Dict) -> Optional[Dict]:
 # BIMI
 # ============================================================
 
-def transform_bimi(raw: Dict, domain: str, has_mx: bool = True) -> Dict:
+def transform_bimi(raw: Dict, domain: str, has_mx: bool = True, non_mail: bool = False) -> Dict:
+    """Only a positive non-mail declaration (RFC 7505 null MX, or a null ``v=spf1 -all`` SPF record) waives this check. Absent MX alone does not: send-only subdomains have no MX and still send real mail."""
     status = _map_status(raw.get("status", "info"))
     record = raw.get("record")
     records_found = raw.get("records_found", 0)
 
     if not record and records_found == 0:
-        # BIMI is an email branding feature, so it only applies to domains that send email.
-        if not has_mx:
+        # BIMI is an email branding feature. Waive it only on a positive
+        # non-mail declaration (null MX or null SPF), never on absent MX alone.
+        if non_mail:
             return {
                 "name": "BIMI",
                 "status": "pass",
                 "pill_label": "N/A",
-                "verdict": "No mail domain",
+                "verdict": "Not applicable (non-mail domain)",
                 "record": None,
                 "records_found": 0,
                 "explanation": (
                     "BIMI displays a brand logo next to emails in supporting mail clients. "
-                    "This domain has no MX records, so it does not handle email and "
-                    "BIMI is not applicable."
+                    "This domain declares that it does not handle email (RFC 7505 null MX "
+                    "or a null SPF record), so BIMI is not applicable."
                 ),
                 "details": [
-                    {"type": "info", "text": "No MX records - domain does not handle email"},
+                    {"type": "info", "text": "Null MX or null SPF published - domain declares it does not handle email"},
                     {"type": "info", "text": "BIMI is only relevant for domains that send email"},
                 ],
                 "fix": None,

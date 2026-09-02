@@ -74,10 +74,27 @@ def _walk_tree(node: Dict, flat_steps: List[Dict], running_total: int,
 
             status = "ok"
 
-            # Process children recursively to get accurate running_total
+            # The step is placed before its children so the timeline reads in
+            # evaluation order, then filled in once the subtree is walked and
+            # the totals are known.
+            step = {
+                "mechanism": raw or f"{mtype}:{mech.get('value', '')}",
+                "type": mtype,
+                "qualifier": qualifier,
+                "vendor": vendor,
+                "vendor_category": vendor_category,
+                "depth": depth,
+            }
+            flat_steps.append(step)
+
+            # Process children recursively to get accurate running_total.
+            # flat_steps is passed through, not replaced with a throwaway
+            # list: discarding it left every nested mechanism out of the
+            # timeline, so depth was always 0 and nothing below the top
+            # level was ever rendered.
             old_total = running_total
             if child_node:
-                running_total = _walk_tree(child_node, [], running_total, depth + 1, limit, exceeded_flagged)
+                running_total = _walk_tree(child_node, flat_steps, running_total, depth + 1, limit, exceeded_flagged)
 
             lookup_range = str(mechanism_start) if running_total == mechanism_start else f"{mechanism_start}-{running_total}"
 
@@ -87,17 +104,11 @@ def _walk_tree(node: Dict, flat_steps: List[Dict], running_total: int,
             elif exceeded_flagged[0]:
                 status = "exceeded"
 
-            flat_steps.append({
-                "mechanism": raw or f"{mtype}:{mech.get('value', '')}",
-                "type": mtype,
-                "qualifier": qualifier,
-                "vendor": vendor,
-                "vendor_category": vendor_category,
+            step.update({
                 "lookup_cost": running_total - old_total + 1,
                 "lookup_range": lookup_range,
                 "running_total": running_total,
                 "status": status,
-                "depth": depth,
             })
 
         elif mtype in ("a", "mx", "ptr", "exists"):

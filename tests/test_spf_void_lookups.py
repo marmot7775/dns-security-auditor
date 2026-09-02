@@ -10,6 +10,12 @@ an error.
 
 Test asserts on the transformed SPF card (transform_spf output), not on
 the raw check dict.
+
+The broken includes here are NXDOMAIN, which is what RFC 7208 section 4.6.4
+actually calls a void lookup. An include target that resolves and publishes
+no SPF record is a different thing -- RFC 7208 section 5.2 makes it an
+immediate PermError -- and is covered by
+tests/test_spf_include_none_is_permerror.py.
 """
 import os
 import sys
@@ -26,18 +32,30 @@ RECORD = (
     "include:gone4.com ip4:1.2.3.4 -all"
 )
 
-# Only the four "gone" includes have no SPF record; everything else does.
+# Only the four "gone" includes are broken; they do not exist at all.
 SPF_RECORDS = {DOMAIN: RECORD}
 
 
-def _fake_get_spf_record(domain):
-    return SPF_RECORDS.get(domain)
+def _fake_lookup_spf(records):
+    """Stub for spf_recursive._lookup_spf, which classifies the DNS outcome.
+
+    Anything not declared is NXDOMAIN, the way an undeclared name would be.
+    """
+    def _inner(domain):
+        record = records.get(domain)
+        if record:
+            return {"record": record, "status": spf_recursive.SPF_FOUND,
+                    "error": None}
+        return {"record": None, "status": spf_recursive.SPF_NXDOMAIN,
+                "error": f"{domain} does not exist (NXDOMAIN)"}
+    return _inner
 
 
 def _run_spf_check():
     with patch.object(audit_engine, "_lookup_txt", return_value=[RECORD]), \
          patch.object(audit_engine, "_lookup_ttl", return_value=None), \
-         patch.object(spf_recursive, "_get_spf_record", side_effect=_fake_get_spf_record):
+         patch.object(spf_recursive, "_lookup_spf",
+                      side_effect=_fake_lookup_spf(SPF_RECORDS)):
         raw = audit_engine._raw_check_spf(DOMAIN)
     return result_transformer.transform_spf(raw, has_mx=True)
 
@@ -65,7 +83,8 @@ def test_void_lookup_count_at_limit_does_not_fail():
 
     with patch.object(audit_engine, "_lookup_txt", return_value=[record]), \
          patch.object(audit_engine, "_lookup_ttl", return_value=None), \
-         patch.object(spf_recursive, "_get_spf_record", side_effect=lambda d: records.get(d)):
+         patch.object(spf_recursive, "_lookup_spf",
+                      side_effect=_fake_lookup_spf(records)):
         raw = audit_engine._raw_check_spf(DOMAIN)
 
     assert raw["void_lookup_count"] == 2

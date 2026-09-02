@@ -542,8 +542,8 @@ async def audit_stream(
             yield f"data: {json.dumps({'done': True, 'result': cached_result, 'cached': True, 'request_id': request_id})}\n\n"
         return StreamingResponse(_cached_stream(), media_type="text/event-stream")
 
-    # Pre-flight DNS check
-    preflight_err = _preflight_dns_check(domain)
+    # Pre-flight DNS check (offloaded -- this does blocking socket I/O)
+    preflight_err = await anyio.to_thread.run_sync(_preflight_dns_check, domain)
     if preflight_err:
         log.info("SSE preflight failed for %s: %s", domain, preflight_err.get("error"))
         async def _preflight_error():
