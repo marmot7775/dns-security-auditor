@@ -4158,6 +4158,14 @@ def _raw_check_blacklist(domain: str, raw_results: Dict[str, Any]) -> Dict[str, 
 
 _shared_executor = ThreadPoolExecutor(max_workers=20)
 
+# Subdomain probing gets its own pool. _audit_subdomains is itself submitted to
+# _shared_executor and then blocks waiting on the probes it submits, so running
+# both on one pool makes a task wait on a queue it is holding a worker in. At
+# the 8 audit concurrency cap that leaves 8 of 20 workers held by blocked
+# parents and 160 probes queued behind them, and at 20 parents no probe runs at
+# all. No task may submit into the pool it is running on.
+_probe_executor = ThreadPoolExecutor(max_workers=20)
+
 
 # ============================================================
 # Subdomain Discovery & Audit
@@ -4268,7 +4276,7 @@ def _audit_subdomains(domain: str) -> Dict[str, Any]:
 
     futures = {}
     for sub in subdomains:
-        future = _shared_executor.submit(_probe_subdomain, sub)
+        future = _probe_executor.submit(_probe_subdomain, sub)
         futures[future] = sub
 
     results = []
@@ -4297,7 +4305,14 @@ def _audit_subdomains(domain: str) -> Dict[str, Any]:
 def _run_with_timeout(func, *args, timeout=CHECK_TIMEOUT, **kwargs):
     """Run a check function with a timeout. Raises TimeoutError on expiry."""
     future = _shared_executor.submit(func, *args, **kwargs)
-    return future.result(timeout=timeout)
+    try:
+        return future.result(timeout=timeout)
+    except FuturesTimeoutError:
+        # Future.result counts queue wait, so a check can time out having
+        # issued no DNS query at all. Cancelling stops a still-queued task
+        # from running later and burning a worker on a result nobody wants.
+        future.cancel()
+        raise
 
 
 def _count_checks_for_scope(scope_set) -> int:
@@ -4613,22 +4628,44 @@ def run_full_audit(domain: str, dkim_selector: Optional[str] = None,
                     "nameservers", "dane", "ct", "blacklist"]
     _p2_cards = {}  # key -> card
 
-    for future in as_completed(_p2_futures):
-        key, transform_fn, label = _p2_futures[future]
-        try:
-            raw = future.result(timeout=CHECK_TIMEOUT + 5)
-            raw_results[key] = raw
-            _p2_cards[key] = transform_fn(raw)
-        except FuturesTimeoutError:
-            errors.append(f"{label}: timed out")
-            if key == "dkim":
-                raw_results["dkim"] = {"found_selectors": [], "tested_count": 0, "timed_out": True}
-            _p2_cards[key] = _timeout_card(label)
-        except Exception as e:
-            log.warning("%s check failed: %s", label, e, exc_info=True)
-            errors.append(f"{label}: {str(e)}")
-            _p2_cards[key] = _error_card(label, e)
-        _notify(label)
+    # The budget belongs on as_completed, not on future.result. as_completed
+    # only ever yields futures that are already done, so a timeout on result()
+    # below can never fire and the batch would block until the slowest check
+    # finishes. That matters because the DNSSEC retry resolver runs with a 60
+    # second lifetime, and one stalled DNSKEY query would hold a concurrency
+    # slot for a minute with nothing above it capping the wall clock.
+    try:
+        for future in as_completed(_p2_futures, timeout=CHECK_TIMEOUT + 5):
+            key, transform_fn, label = _p2_futures[future]
+            try:
+                raw = future.result(timeout=CHECK_TIMEOUT + 5)
+                raw_results[key] = raw
+                _p2_cards[key] = transform_fn(raw)
+            except FuturesTimeoutError:
+                errors.append(f"{label}: timed out")
+                if key == "dkim":
+                    raw_results["dkim"] = {"found_selectors": [], "tested_count": 0, "timed_out": True}
+                _p2_cards[key] = _timeout_card(label)
+            except Exception as e:
+                log.warning("%s check failed: %s", label, e, exc_info=True)
+                errors.append(f"{label}: {str(e)}")
+                _p2_cards[key] = _error_card(label, e)
+            _notify(label)
+    except FuturesTimeoutError:
+        # The batch budget expired. Everything still unfinished gets the same
+        # timeout card the per-future handler would have given it.
+        log.warning(
+            "Phase 2 batch for %s hit the %ss budget; %d of %d checks finished",
+            domain, CHECK_TIMEOUT + 5, len(_p2_cards), len(_p2_futures),
+        )
+        for future, (key, transform_fn, label) in _p2_futures.items():
+            if key not in _p2_cards:
+                future.cancel()
+                errors.append(f"{label}: timed out")
+                if key == "dkim":
+                    raw_results["dkim"] = {"found_selectors": [], "tested_count": 0, "timed_out": True}
+                _p2_cards[key] = _timeout_card(label)
+                _notify(label)
 
     # Insert DKIM card at position 2 (after DMARC+SPF), others in order
     if "dkim" in _p2_cards:

@@ -651,142 +651,160 @@ async def audit_stream(
             return StreamingResponse(_busy_error(), media_type="text/event-stream")
         _active_audits += 1
 
-    # Run audit in a background thread, streaming progress via a queue
-    progress_q: queue.Queue = queue.Queue()
-    cancel_event = threading.Event()
+    # Everything from here to the StreamingResponse return has to release the
+    # slot on failure. The normal release lives in _event_stream's finally,
+    # which only runs once the generator is actually consumed, so any failure
+    # before that point leaks the slot permanently. Thread.start raising
+    # RuntimeError under thread exhaustion is the case that actually happens,
+    # and eight of those leave every user with "Server is busy" until the
+    # service is restarted.
+    try:
 
-    def _progress_callback(step_name, completed, total):
-        if cancel_event.is_set():
-            raise InterruptedError("Audit cancelled: client disconnected")
-        progress_pct = int((completed / total) * 100) if total else 0
-        msg = {
-            "step": step_name,
-            "progress": progress_pct,
-            "total_checks": total,
-            "completed": completed,
-        }
-        # DKIM sub-progress: step_name like "DKIM:5" means 5 selectors found
-        if ":" in str(step_name) and step_name.startswith("DKIM:"):
-            count = step_name.split(":", 1)[1]
-            msg["step"] = "DKIM"
-            msg["detail"] = f"{count} found so far"
-        progress_q.put(msg)
+        # Run audit in a background thread, streaming progress via a queue
+        progress_q: queue.Queue = queue.Queue()
+        cancel_event = threading.Event()
 
-    def _run_audit():
-        # Note: the concurrency slot reserved above is released in
-        # _event_stream's finally, not here. This thread can keep running
-        # after the client disconnects (e.g. stuck in one slow blocking DNS
-        # call with no progress_callback checkpoint in between), so tying
-        # the release to this thread's completion would hold the slot open
-        # long after the stream itself has closed.
-        try:
-            result = run_full_audit(domain, dkim_selector=selector, scope=scope,
-                                    progress_callback=_progress_callback)
-            progress_q.put({"_done": True, "_result": result})
-        except InterruptedError:
-            log.info("SSE audit cancelled (client disconnect): %s", domain)
-            progress_q.put({"_done": True, "_result": {"error": "cancelled"}})
-        except Exception as e:
-            log.error("SSE audit failed for %s: %s", domain, str(e)[:200], exc_info=True)
-            error_result = {
-                "domain": domain,
-                "timestamp": datetime.now(timezone.utc).isoformat(),
-                "checks": [],
-                "priority_fixes": [],
-                "vendors": [],
-                "error": "server_error",
-                "error_message": "Audit could not complete. Please try again.",
+        def _progress_callback(step_name, completed, total):
+            if cancel_event.is_set():
+                raise InterruptedError("Audit cancelled: client disconnected")
+            progress_pct = int((completed / total) * 100) if total else 0
+            msg = {
+                "step": step_name,
+                "progress": progress_pct,
+                "total_checks": total,
+                "completed": completed,
             }
-            progress_q.put({"_done": True, "_result": error_result})
+            # DKIM sub-progress: step_name like "DKIM:5" means 5 selectors found
+            if ":" in str(step_name) and step_name.startswith("DKIM:"):
+                count = step_name.split(":", 1)[1]
+                msg["step"] = "DKIM"
+                msg["detail"] = f"{count} found so far"
+            progress_q.put(msg)
 
-    sse_start_time = time.time()
-    audit_thread = threading.Thread(target=_run_audit, daemon=True)
-    audit_thread.start()
+        def _run_audit():
+            # Note: the concurrency slot reserved above is released in
+            # _event_stream's finally, not here. This thread can keep running
+            # after the client disconnects (e.g. stuck in one slow blocking DNS
+            # call with no progress_callback checkpoint in between), so tying
+            # the release to this thread's completion would hold the slot open
+            # long after the stream itself has closed.
+            try:
+                result = run_full_audit(domain, dkim_selector=selector, scope=scope,
+                                        progress_callback=_progress_callback)
+                progress_q.put({"_done": True, "_result": result})
+            except InterruptedError:
+                log.info("SSE audit cancelled (client disconnect): %s", domain)
+                progress_q.put({"_done": True, "_result": {"error": "cancelled"}})
+            except Exception as e:
+                log.error("SSE audit failed for %s: %s", domain, str(e)[:200], exc_info=True)
+                error_result = {
+                    "domain": domain,
+                    "timestamp": datetime.now(timezone.utc).isoformat(),
+                    "checks": [],
+                    "priority_fixes": [],
+                    "vendors": [],
+                    "error": "server_error",
+                    "error_message": "Audit could not complete. Please try again.",
+                }
+                progress_q.put({"_done": True, "_result": error_result})
 
-    async def _event_stream():
-        global _active_audits
-        loop = asyncio.get_running_loop()
-        outcome_logged = False
-        try:
-            while True:
-                if time.time() - sse_start_time > 120:
-                    log.warning("SSE stream exceeded 120s limit: %s", domain)
-                    cancel_event.set()
-                    timeout_result = {
-                        "domain": domain,
-                        "timestamp": datetime.now(timezone.utc).isoformat(),
-                        "checks": [],
-                        "priority_fixes": [],
-                        "vendors": [],
-                        "error": "timeout",
-                        "error_message": "Audit exceeded the 120 second time limit. Please try again.",
-                    }
-                    _log_audit(request, domain, scope, 120.0, 0, source="sse",
-                               status="timeout", error="timeout")
-                    outcome_logged = True
-                    yield f"data: {json.dumps({'done': True, 'result': timeout_result})}\n\n"
-                    return
-                try:
-                    msg = await loop.run_in_executor(None, lambda: progress_q.get(timeout=0.2))
-                except queue.Empty:
-                    # Check if client disconnected
-                    if await request.is_disconnected():
-                        log.info("SSE client disconnected: %s", domain)
-                        cancel_event.set()  # Signal audit thread to stop
-                        # Log the abandonment. Without an entry here, a user
-                        # who starts an audit and gives up looks exactly like
-                        # a user who never visited at all.
-                        _log_audit(request, domain, scope,
-                                   round(time.time() - sse_start_time, 2), 0,
-                                   source="sse", status="abandoned")
+        sse_start_time = time.time()
+        audit_thread = threading.Thread(target=_run_audit, daemon=True)
+        audit_thread.start()
+
+        async def _event_stream():
+            global _active_audits
+            loop = asyncio.get_running_loop()
+            outcome_logged = False
+            try:
+                while True:
+                    if time.time() - sse_start_time > 120:
+                        log.warning("SSE stream exceeded 120s limit: %s", domain)
+                        cancel_event.set()
+                        timeout_result = {
+                            "domain": domain,
+                            "timestamp": datetime.now(timezone.utc).isoformat(),
+                            "checks": [],
+                            "priority_fixes": [],
+                            "vendors": [],
+                            "error": "timeout",
+                            "error_message": "Audit exceeded the 120 second time limit. Please try again.",
+                        }
+                        _log_audit(request, domain, scope, 120.0, 0, source="sse",
+                                   status="timeout", error="timeout")
                         outcome_logged = True
+                        yield f"data: {json.dumps({'done': True, 'result': timeout_result})}\n\n"
                         return
-                    continue
+                    try:
+                        msg = await loop.run_in_executor(None, lambda: progress_q.get(timeout=0.2))
+                    except queue.Empty:
+                        # Check if client disconnected
+                        if await request.is_disconnected():
+                            log.info("SSE client disconnected: %s", domain)
+                            cancel_event.set()  # Signal audit thread to stop
+                            # Log the abandonment. Without an entry here, a user
+                            # who starts an audit and gives up looks exactly like
+                            # a user who never visited at all.
+                            _log_audit(request, domain, scope,
+                                       round(time.time() - sse_start_time, 2), 0,
+                                       source="sse", status="abandoned")
+                            outcome_logged = True
+                            return
+                        continue
 
-                if "_done" in msg:
-                    result = msg["_result"]
-                    # Skip caching errors -- they may be transient
-                    if "error" not in result:
-                        _set_cached(cache_key, result)
-                    elapsed = round(time.time() - sse_start_time, 2)
-                    log.info("SSE audit complete: %s -- %.2fs",
-                             domain, elapsed)
-                    # Audit log (GDPR-safe)
-                    log_status, log_error = _audit_status(result)
+                    if "_done" in msg:
+                        result = msg["_result"]
+                        # Skip caching errors -- they may be transient
+                        if "error" not in result:
+                            _set_cached(cache_key, result)
+                        elapsed = round(time.time() - sse_start_time, 2)
+                        log.info("SSE audit complete: %s -- %.2fs",
+                                 domain, elapsed)
+                        # Audit log (GDPR-safe)
+                        log_status, log_error = _audit_status(result)
+                        _log_audit(request, domain, scope,
+                                   elapsed, len(result.get("checks", [])), source="sse",
+                                   status=log_status, error=log_error)
+                        outcome_logged = True
+                        result["request_id"] = request_id
+                        yield f"data: {json.dumps({'done': True, 'result': result, 'request_id': request_id})}\n\n"
+                        return
+                    else:
+                        yield f"data: {json.dumps(msg)}\n\n"
+            finally:
+                cancel_event.set()  # Ensure thread stops if generator exits for any reason
+                if not outcome_logged:
+                    # The disconnect poll above is not the only way a stream ends
+                    # early: uvicorn cancels the response task the moment the
+                    # client goes away, which closes this generator without that
+                    # poll ever running again. Logging the abandonment here too is
+                    # what makes "user gave up" countable rather than invisible.
                     _log_audit(request, domain, scope,
-                               elapsed, len(result.get("checks", [])), source="sse",
-                               status=log_status, error=log_error)
-                    outcome_logged = True
-                    result["request_id"] = request_id
-                    yield f"data: {json.dumps({'done': True, 'result': result, 'request_id': request_id})}\n\n"
-                    return
-                else:
-                    yield f"data: {json.dumps(msg)}\n\n"
-        finally:
-            cancel_event.set()  # Ensure thread stops if generator exits for any reason
-            if not outcome_logged:
-                # The disconnect poll above is not the only way a stream ends
-                # early: uvicorn cancels the response task the moment the
-                # client goes away, which closes this generator without that
-                # poll ever running again. Logging the abandonment here too is
-                # what makes "user gave up" countable rather than invisible.
-                _log_audit(request, domain, scope,
-                           round(time.time() - sse_start_time, 2), 0,
-                           source="sse", status="abandoned")
-            # Release the concurrency slot here, not when the background
-            # thread finishes -- the stream ending (disconnect, completion,
-            # or timeout) is what should free capacity for new clients.
-            with _active_audits_lock:
-                _active_audits -= 1
+                               round(time.time() - sse_start_time, 2), 0,
+                               source="sse", status="abandoned")
+                # Release the concurrency slot here, not when the background
+                # thread finishes -- the stream ending (disconnect, completion,
+                # or timeout) is what should free capacity for new clients.
+                with _active_audits_lock:
+                    _active_audits -= 1
 
-    return StreamingResponse(
-        _event_stream(),
-        media_type="text/event-stream",
-        headers={
-            "Cache-Control": "no-cache",
-            "X-Accel-Buffering": "no",
-        },
-    )
+        return StreamingResponse(
+            _event_stream(),
+            media_type="text/event-stream",
+            headers={
+                "Cache-Control": "no-cache",
+                "X-Accel-Buffering": "no",
+            },
+        )
+    except Exception as e:
+        with _active_audits_lock:
+            _active_audits -= 1
+        log.error("SSE audit setup failed for %s: %s", domain, str(e)[:200], exc_info=True)
+
+        async def _setup_error():
+            yield f"data: {json.dumps({'error': 'Audit could not start. Please try again in a moment.'})}\n\n"
+
+        return StreamingResponse(_setup_error(), media_type="text/event-stream")
 
 
 # ============================================================
@@ -825,38 +843,61 @@ async def audit_pdf(
 
     cache_key = f"{domain}:{selector or ''}:{scope or 'complete'}"
 
-    # Reuse cached audit data if available
-    cached = _get_cached(cache_key)
-    if cached:
-        data = cached
-        log.info("PDF using cached data: %s", domain)
-    else:
-        start = time.time()
-        try:
-            data = await anyio.to_thread.run_sync(
-                functools.partial(run_full_audit, domain, dkim_selector=selector, scope=scope)
+    # Reserve a concurrent-audit slot atomically, the same budget /api/audit
+    # and /api/audit/stream draw from. Without this the endpoint was bounded
+    # only by the per-IP rate limit, and both the audit and the PDF render run
+    # on anyio's default thread limiter (40 tokens) that Starlette also uses
+    # for FileResponse. A handful of IPs, or one crawler following PDF links,
+    # could exhaust that limiter and leave /, /about, /privacy and the article
+    # pages queued behind full DNS audits with no audit at the cap at all.
+    # The render is reserved too, not just the audit: a cached PDF still burns
+    # a limiter token for CPU-bound rendering.
+    global _active_audits
+    with _active_audits_lock:
+        if _active_audits >= _MAX_CONCURRENT_AUDITS:
+            return JSONResponse(
+                status_code=503,
+                content={"detail": "Server is busy. Please try again in a moment."},
+                headers={"Retry-After": "5"},
             )
-        except Exception as e:
-            log.error("PDF audit failed for %s: %s", domain, str(e)[:200], exc_info=True)
-            raise HTTPException(status_code=500, detail="Audit failed: cannot generate PDF")
-        elapsed = round(time.time() - start, 2)
-        log.info("PDF audit complete: %s -- %.2fs", domain, elapsed)
-        _set_cached(cache_key, data)
+        _active_audits += 1
 
-    # Check for audit errors
-    if data.get("error"):
-        return Response(
-            content=data.get("error_message", "Audit failed"),
-            status_code=400,
-            media_type="text/plain",
-        )
-
-    # Generate PDF (offloaded -- rendering is CPU-bound synchronous work)
     try:
-        pdf_bytes = await anyio.to_thread.run_sync(generate_pdf, data)
-    except Exception as e:
-        log.error("PDF generation failed for %s: %s", domain, str(e)[:200], exc_info=True)
-        raise HTTPException(status_code=500, detail="PDF generation failed")
+        # Reuse cached audit data if available
+        cached = _get_cached(cache_key)
+        if cached:
+            data = cached
+            log.info("PDF using cached data: %s", domain)
+        else:
+            start = time.time()
+            try:
+                data = await anyio.to_thread.run_sync(
+                    functools.partial(run_full_audit, domain, dkim_selector=selector, scope=scope)
+                )
+            except Exception as e:
+                log.error("PDF audit failed for %s: %s", domain, str(e)[:200], exc_info=True)
+                raise HTTPException(status_code=500, detail="Audit failed: cannot generate PDF")
+            elapsed = round(time.time() - start, 2)
+            log.info("PDF audit complete: %s -- %.2fs", domain, elapsed)
+            _set_cached(cache_key, data)
+
+        # Check for audit errors
+        if data.get("error"):
+            return Response(
+                content=data.get("error_message", "Audit failed"),
+                status_code=400,
+                media_type="text/plain",
+            )
+
+        # Generate PDF (offloaded -- rendering is CPU-bound synchronous work)
+        try:
+            pdf_bytes = await anyio.to_thread.run_sync(generate_pdf, data)
+        except Exception as e:
+            log.error("PDF generation failed for %s: %s", domain, str(e)[:200], exc_info=True)
+            raise HTTPException(status_code=500, detail="PDF generation failed")
+    finally:
+        with _active_audits_lock:
+            _active_audits -= 1
 
     safe_domain = re.sub(r'[^a-zA-Z0-9._-]', '', domain)
     filename = f"dns-audit-{safe_domain}.pdf"
