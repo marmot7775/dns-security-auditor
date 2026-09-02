@@ -1,14 +1,11 @@
 """
-Clean DKIM Output Formatter
-Produces actionable, security-focused DKIM summaries
+DKIM key strength analysis.
 
-Shows:
-- Found selectors with key strength
-- Security warnings (weak keys, missing signatures)
-- Actionable recommendations
+analyze_dkim_key_strength() is the only public function; audit_engine,
+result_transformer and spf_intelligence use it to grade a selector's key.
 """
 
-from typing import List, Dict
+from typing import Dict
 import re
 
 from dkim_tag_analyzer import _decode_rsa_key_bits
@@ -71,133 +68,3 @@ def analyze_dkim_key_strength(dkim_record: str) -> Dict:
         result['status'] = 'strong'
 
     return result
-
-def generate_dkim_recommendations(dkim_results: Dict, domain: str) -> List[str]:
-    """Generate actionable DKIM recommendations"""
-    recommendations = []
-    found = dkim_results.get('found_selectors', [])
-    
-    if not found:
-        recommendations.append(f"Enable DKIM signing for {domain}")
-        recommendations.append("Contact your email provider for DKIM setup instructions")
-        return recommendations
-    
-    # Check for weak keys
-    weak_selectors = []
-    for selector_info in found:
-        key_analysis = analyze_dkim_key_strength(selector_info.get('record', ''))
-        if key_analysis['status'] == 'weak':
-            weak_selectors.append(selector_info['selector'])
-    
-    if weak_selectors:
-        for selector in weak_selectors:
-            recommendations.append(f"Rotate '{selector}' to use 2048-bit or stronger key")
-    
-    # Check DMARC alignment
-    recommendations.append("Verify DKIM domain (d=) aligns with From domain for DMARC to pass")
-    
-    # Vendor-specific recommendations
-    vendors = dkim_results.get('vendors_detected', [])
-    if vendors:
-        for vendor in vendors:
-            # Check if we found selectors for this vendor
-            vendor_name = vendor['vendor']
-            expected_selectors = vendor['dkim_selectors']
-            found_selectors = [s['selector'] for s in found]
-            
-            missing = [s for s in expected_selectors if s not in found_selectors]
-            if missing and len(missing) <= 2:  # Don't spam if many missing
-                recommendations.append(f"Check if {vendor_name} has additional selectors: {', '.join(missing[:2])}")
-    
-    # Generic best practice
-    if len(found) == 1:
-        recommendations.append("Consider implementing DKIM key rotation strategy")
-    
-    return recommendations[:3]  # Top 3 recommendations
-
-def format_dkim_detailed(domain: str, dkim_results: Dict) -> str:
-    """
-    Detailed DKIM output showing full records (for technical users)
-    """
-    output = []
-    
-    output.append(f"Detailed DKIM Analysis for {domain}")
-    output.append("=" * 60)
-    output.append("")
-    
-    found = dkim_results.get('found_selectors', [])
-    
-    for i, selector_info in enumerate(found, 1):
-        output.append(f"Selector #{i}: {selector_info['selector']}")
-        output.append(f"FQDN: {selector_info['fqdn']}")
-        
-        # Key analysis
-        key_analysis = analyze_dkim_key_strength(selector_info.get('record', ''))
-        output.append(f"Key Type: {key_analysis['key_type']} {key_analysis['key_bits']}-bit")
-        output.append(f"Status: {key_analysis['status'].upper()}")
-        
-        if key_analysis['warning']:
-            output.append(f"Warning: {key_analysis['warning']}")
-        
-        if selector_info.get('vendor'):
-            output.append(f"Vendor: {selector_info['vendor']}")
-        
-        # Full record
-        output.append(f"Record: {selector_info.get('record', '')[:200]}...")
-        output.append("")
-    
-    return "\n".join(output)
-
-# Example usage
-if __name__ == "__main__":
-    # Simulate results from smart_dkim_check
-    sample_results = {
-        'domain': 'example.com',
-        'vendors_detected': [
-            {
-                'vendor': 'Google Workspace',
-                'dkim_selectors': ['google', 'googlemail'],
-                'spf_include': '_spf.google.com'
-            },
-            {
-                'vendor': 'Microsoft 365',
-                'dkim_selectors': ['selector1', 'selector2'],
-                'spf_include': 'spf.protection.outlook.com'
-            }
-        ],
-        'found_selectors': [
-            {
-                'selector': 'google',
-                'fqdn': 'google._domainkey.example.com',
-                'record': 'v=DKIM1; k=rsa; p=MIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEA1234567890abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ1234567890abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ1234567890abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ1234567890abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ',
-                'vendor': 'Google Workspace',
-                'key_type': 'RSA 2048-bit'
-            },
-            {
-                'selector': 'selector1',
-                'fqdn': 'selector1._domainkey.example.com',
-                'record': 'v=DKIM1; k=rsa; p=MIGfMA0GCSqGSIb3DQEBAQUAA4GNADCBiQKBgQC1234567890abcdefghijklmnopqrstuvwxyz',
-                'vendor': 'Microsoft 365',
-                'key_type': 'RSA 1024-bit'
-            },
-        ],
-        'tested_count': 8,
-        'discovery_method': 'spf_intelligent',
-        'intelligence_report': '''🔍 INTELLIGENT DISCOVERY (from SPF analysis):
-
-📧 Email Provider:
-  • Google Workspace
-    SPF: include:_spf.google.com
-    Testing selectors: google, googlemail
-
-  • Microsoft 365
-    SPF: include:spf.protection.outlook.com
-    Testing selectors: selector1, selector2'''
-    }
-    
-    # Print clean summary
-    print(format_dkim_summary('example.com', sample_results, show_intelligence=True))
-    print("\n" + "=" * 70 + "\n")
-    
-    # Print detailed view
-    print(format_dkim_detailed('example.com', sample_results))
