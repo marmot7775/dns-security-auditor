@@ -47,8 +47,15 @@ def repair_spf_missing_spaces(record: str) -> Tuple[str, bool]:
         r'ip4:',
         r'ip6:',
         r'exp=',
-        # Qualified all (e.g. ~all, -all, ?all, +all) jammed onto prior text
-        r'[~?+\-]all(?=\s|$)',
+        # Qualified all (e.g. ~all, ?all, +all) jammed onto prior text.
+        # None of those three qualifiers can appear inside a domain name or
+        # an IP address, so finding one mid token is unambiguous.
+        r'[~?+]all(?=\s|$)',
+        # '-all' is the ambiguous case: '-' is a legal hostname character, so
+        # "include:mail-all" is an ordinary target and not a jammed record.
+        # Only split when the character before the qualifier could not be the
+        # end of a label, which is what makes it a real token boundary.
+        r'(?<![A-Za-z0-9])-all(?=\s|$)',
     ]
 
     pattern = r'(?<=\S)(' + '|'.join(SPLIT_BEFORE) + ')'
@@ -78,6 +85,9 @@ SPF_NXDOMAIN = "nxdomain"
 # SERVFAIL, timeout, no reachable nameserver. We do not know what is
 # published, so we must neither advise on it nor call the record clean.
 SPF_INDETERMINATE = "indeterminate"
+# More than one v=spf1 record is published at the name. RFC 7208 section 4.5
+# makes that a PermError for the whole evaluation, not just for that name.
+SPF_MULTIPLE = "multiple"
 
 
 def _lookup_spf(domain: str) -> Dict[str, Any]:
@@ -106,11 +116,22 @@ def _lookup_spf(domain: str) -> Dict[str, Any]:
                 "error": (f"DNS lookup for {domain} did not complete "
                           f"({type(e).__name__})")}
 
+    # Every v=spf1 record at the name, not just the first. RFC 7208 section
+    # 4.5: if more than one is published, check_host() returns permerror, so
+    # stopping at the first one hides a record that fails at every receiver.
+    records = []
     for rdata in answers:
         txt = b"".join(rdata.strings).decode("utf-8", errors="replace")
         if txt.strip().lower().startswith("v=spf1"):
             repaired, _ = repair_spf_missing_spaces(txt.strip())
-            return {"record": repaired, "status": SPF_FOUND, "error": None}
+            records.append(repaired)
+
+    if len(records) > 1:
+        return {"record": None, "status": SPF_MULTIPLE,
+                "error": (f"{domain} publishes {len(records)} SPF records "
+                          f"(RFC 7208 section 4.5 requires exactly one)")}
+    if records:
+        return {"record": records[0], "status": SPF_FOUND, "error": None}
 
     return {"record": None, "status": SPF_NO_RECORD, "error": None}
 
@@ -165,6 +186,44 @@ def _mechanism_lookup_status(mtype: str, target: str) -> str:
 
 # Mechanisms that consume a DNS lookup per RFC 7208
 LOOKUP_MECHANISMS = {"include", "a", "mx", "ptr", "exists", "redirect"}
+
+
+def record_has_all(mechanisms: List[Dict[str, str]]) -> bool:
+    """True when an 'all' mechanism appears anywhere in the record."""
+    return any(
+        m.get("type") == "no_lookup" and (m.get("value") or "").lower() == "all"
+        for m in mechanisms
+    )
+
+
+def mechanism_is_all(mech: Dict[str, str]) -> bool:
+    """True for the 'all' mechanism, whatever qualifier it carries."""
+    return (mech.get("type") == "no_lookup"
+            and (mech.get("value") or "").lower() == "all")
+
+
+def mechanism_is_macro(mech: Dict[str, str]) -> bool:
+    """True when the target is macro expanded at evaluation time.
+
+    A macro expanded target depends on the connecting client, so it cannot be
+    resolved from the record alone.
+    """
+    return "%" in (mech.get("value") or "")
+
+
+def mechanism_recurses(mech: Dict[str, str], has_all: bool) -> bool:
+    """True when this mechanism causes the counter to fetch a target's SPF.
+
+    The trace and the tree visualization pair child nodes to mechanisms, so
+    they have to agree with the counter on which mechanisms produced one.
+    """
+    mtype = mech.get("type")
+    if mtype == "redirect" and has_all:
+        # RFC 7208 section 6.1: redirect is ignored when 'all' is present.
+        return False
+    if mtype not in ("include", "redirect"):
+        return False
+    return not mechanism_is_macro(mech)
 
 
 def _parse_spf_mechanisms(spf_record: str) -> List[Dict[str, str]]:
@@ -234,6 +293,7 @@ def _count_recursive(domain: str, visited: Set[str], depth: int = 0,
         "lookup_status": None,
         "void_lookups": 0,
         "indeterminate": False,
+        "macro_targets": [],
     }
 
     domain_lower = domain.lower().rstrip(".")
@@ -259,6 +319,10 @@ def _count_recursive(domain: str, visited: Set[str], depth: int = 0,
             )
         elif node["lookup_status"] == SPF_NXDOMAIN:
             node["error"] = f"{domain} does not exist (NXDOMAIN)"
+        elif node["lookup_status"] == SPF_MULTIPLE:
+            node["error"] = lookup.get("error") or (
+                f"{domain} publishes more than one SPF record"
+            )
         else:
             node["error"] = f"No SPF record found for {domain}"
         return node
@@ -270,19 +334,17 @@ def _count_recursive(domain: str, visited: Set[str], depth: int = 0,
     # RFC 7208 §6.1: a redirect modifier MUST be ignored if an 'all'
     # mechanism appears anywhere in the record, since 'all' always
     # matches and redirect is only reached when nothing else matched.
-    has_all = any(
-        m["type"] == "no_lookup" and m["value"].lower() == "all"
-        for m in mechanisms
-    )
+    has_all = record_has_all(mechanisms)
 
     local_lookups = 0
     local_voids = 0
+    local_macros = []
 
     for mech in mechanisms:
         mtype = mech["type"]
 
         # RFC 7208 §5.1: terms after 'all' are never evaluated.
-        if mtype == "no_lookup" and mech["value"].lower() == "all":
+        if mechanism_is_all(mech):
             break
 
         if mtype in ("a", "mx", "ptr", "exists"):
@@ -306,17 +368,25 @@ def _count_recursive(domain: str, visited: Set[str], depth: int = 0,
                 elif mech_status == "error":
                     node["indeterminate"] = True
 
-        elif mtype == "include":
-            local_lookups += 1
-            child = _count_recursive(mech["value"], set(visited), depth + 1, max_depth)
-            node["children"].append(child)
-            if child.get("lookup_status") == SPF_NXDOMAIN:
-                local_voids += 1
-
-        elif mtype == "redirect":
-            if has_all:
+        elif mtype in ("include", "redirect"):
+            # RFC 7208 §6.1: a redirect with 'all' present is never reached,
+            # so it costs nothing and resolves nothing.
+            if mtype == "redirect" and has_all:
                 continue
+
             local_lookups += 1
+
+            # A macro expanded target is built from the connecting client's
+            # address and identity, so there is no name here to resolve. The
+            # lookup still happens at evaluation time and is counted, but
+            # recursing into the literal text queries a name nobody publishes
+            # and books the NXDOMAIN as a void lookup, which turns a working
+            # macro record into a false PermError.
+            if mechanism_is_macro(mech):
+                mech["macro"] = True
+                local_macros.append(mech.get("raw") or mech["value"])
+                continue
+
             child = _count_recursive(mech["value"], set(visited), depth + 1, max_depth)
             node["children"].append(child)
             if child.get("lookup_status") == SPF_NXDOMAIN:
@@ -324,6 +394,7 @@ def _count_recursive(domain: str, visited: Set[str], depth: int = 0,
 
     node["lookups_here"] = local_lookups
     node["void_lookups"] = local_voids
+    node["macro_targets"] = local_macros
     child_total = sum(c["total"] for c in node["children"])
     node["total"] = local_lookups + child_total
 
@@ -344,6 +415,7 @@ def _flatten_chain(node: Dict, chain: List[Dict] = None, indent: int = 0) -> Lis
         "lookup_status": node.get("lookup_status"),
         "void_lookups": node.get("void_lookups", 0),
         "indeterminate": bool(node.get("indeterminate")),
+        "macro_targets": list(node.get("macro_targets") or []),
     }
 
     lookup_details = []
@@ -401,6 +473,20 @@ def count_spf_lookups(domain: str) -> Dict[str, Any]:
     nxdomain_domains = [
         e["domain"] for e in chain[1:] if e.get("lookup_status") == SPF_NXDOMAIN
     ]
+    # RFC 7208 section 4.5 makes more than one SPF record at a name a
+    # permerror for the whole evaluation, wherever in the chain it sits, so
+    # the audited domain is included here rather than skipped.
+    multiple_spf_domains = [
+        e["domain"] for e in chain if e.get("lookup_status") == SPF_MULTIPLE
+    ]
+    # (domain, term) for every include or redirect whose target is macro
+    # expanded. Deduplicated, since the same term can appear more than once.
+    macro_terms = []
+    for entry in chain:
+        for term in entry.get("macro_targets", []):
+            pair = (entry["domain"], term)
+            if pair not in macro_terms:
+                macro_terms.append(pair)
 
     result = {
         "domain": domain,
@@ -418,6 +504,8 @@ def count_spf_lookups(domain: str) -> Dict[str, Any]:
         "indeterminate": bool(indeterminate_domains),
         "indeterminate_domains": indeterminate_domains,
         "permerror_domains": permerror_domains,
+        "multiple_spf_domains": multiple_spf_domains,
+        "macro_terms": [{"domain": d, "term": t} for d, t in macro_terms],
     }
 
     if total > limit:
@@ -538,6 +626,50 @@ def count_spf_lookups(domain: str) -> Dict[str, Any]:
             ),
             "impact": "Wasted lookup slot and potential PermError.",
             "fix": f"Remove the include for {target}.",
+        })
+
+    # RFC 7208 section 4.5: exactly one SPF record per name. Two of them at
+    # any name in the chain is a permerror for the whole evaluation, so an
+    # include target with duplicates breaks the including domain too.
+    for target in multiple_spf_domains:
+        result["issues"].append({
+            "severity": "error",
+            "issue": f"Multiple SPF records at {target}",
+            "plain_english": (
+                f"{target} publishes more than one v=spf1 record. RFC 7208 "
+                f"section 4.5 requires exactly one, and receivers return a "
+                f"PermError for the entire evaluation when they find two. "
+                f"That failure applies to this whole SPF chain, not only to "
+                f"mail sent from {target}."
+            ),
+            "impact": "SPF returns PermError. Authentication fails for every message.",
+            "fix": (
+                f"Merge the SPF records at {target} into a single v=spf1 "
+                f"record. If {target} is not yours, raise it with whoever "
+                f"operates it."
+            ),
+        })
+
+    # Macro expanded include and redirect targets. Reported so the lookup they
+    # cost is explained, not so the operator removes a working mechanism.
+    for owner, term in macro_terms:
+        result["issues"].append({
+            "severity": "info",
+            "issue": f"Macro expanded target not evaluated: {term}",
+            "plain_english": (
+                f"The term {term} in the SPF record for {owner} builds its "
+                f"target from macros at evaluation time, using the connecting "
+                f"client's address and identity. The target cannot be "
+                f"resolved from the record alone, so this audit counts the "
+                f"DNS lookup it costs and makes no claim about what the "
+                f"target publishes."
+            ),
+            "impact": "One lookup counted. This branch is not checked further.",
+            "fix": (
+                "No change needed if the macro is intentional. Confirm the "
+                "expansion with whoever operates the macro zone if you are "
+                "not sure it still resolves."
+            ),
         })
 
     # Check for deprecated ptr mechanism

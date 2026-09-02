@@ -124,9 +124,13 @@ SPF_VENDOR_MAP = {
 }
 
 def parse_spf_record(spf_record: str) -> List[str]:
-    """Extract all include: mechanisms from SPF record"""
+    """Extract all include: mechanisms from SPF record.
+
+    RFC 7208 section 4.6.1 makes terms case insensitive, so INCLUDE: and
+    Include: are the same mechanism as include:.
+    """
     include_pattern = r'include:([^\s]+)'
-    return re.findall(include_pattern, spf_record)
+    return re.findall(include_pattern, spf_record, flags=re.IGNORECASE)
 
 def detect_vendors_from_spf(spf_record: str) -> List[Dict]:
     """
@@ -142,8 +146,12 @@ def detect_vendors_from_spf(spf_record: str) -> List[Dict]:
     seen_vendors = set()
     
     for include in includes:
+        # Match on label boundaries, not substrings. "sendgrid.net" inside
+        # "sendgrid.net.attacker.example" is a lookalike, not SendGrid, and
+        # labeling it as the vendor is the wrong way for this tool to fail.
+        include_lower = include.lower().rstrip(".")
         for pattern, vendor_info in SPF_VENDOR_MAP.items():
-            if pattern in include:
+            if include_lower == pattern or include_lower.endswith("." + pattern):
                 vendor_name = vendor_info['vendor']
                 if vendor_name not in seen_vendors:
                     detected_vendors.append({
@@ -260,7 +268,9 @@ def smart_dkim_check(domain: str, spf_record: Optional[str] = None, max_selector
             answers = dns.resolver.resolve(domain, 'TXT')
             for rdata in answers:
                 txt = b"".join(rdata.strings).decode("utf-8", errors="replace")
-                if txt.startswith('v=spf1'):
+                # RFC 7208 section 4.6.1: the version term is case
+                # insensitive, and spf_recursive already lowercases here.
+                if txt.strip().lower().startswith('v=spf1'):
                     from spf_recursive import repair_spf_missing_spaces
                     spf_record, _ = repair_spf_missing_spaces(txt)
                     break

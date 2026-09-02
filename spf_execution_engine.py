@@ -10,6 +10,7 @@ Zero extra DNS queries. Transforms data already computed by the audit.
 
 from typing import Dict, List, Optional
 from spf_intelligence import SPF_VENDOR_MAP
+from spf_recursive import mechanism_is_all, mechanism_recurses, record_has_all
 
 
 # ============================================================
@@ -17,10 +18,16 @@ from spf_intelligence import SPF_VENDOR_MAP
 # ============================================================
 
 def _match_vendor(domain: str) -> tuple:
-    """Match a domain against SPF_VENDOR_MAP. Returns (vendor, category) or (None, None)."""
+    """Match a domain against SPF_VENDOR_MAP. Returns (vendor, category) or (None, None).
+
+    Matching is on label boundaries, not substrings. A substring test hands
+    "sendgrid.net.attacker.example" SendGrid's name and badge, which is the
+    wrong direction to fail for a tool people run to find out whether their
+    SPF has been tampered with.
+    """
     domain_lower = domain.lower().rstrip(".")
     for pattern, info in SPF_VENDOR_MAP.items():
-        if pattern in domain_lower:
+        if domain_lower == pattern or domain_lower.endswith("." + pattern):
             return info["vendor"], info["category"]
     return None, None
 
@@ -47,8 +54,16 @@ def _walk_tree(node: Dict, flat_steps: List[Dict], running_total: int,
         Updated running_total after processing this node
     """
     mechanisms = node.get("mechanisms", [])
-    children = node.get("children", [])
-    child_idx = 0
+    # Children are pulled from an iterator, and only for mechanisms that were
+    # actually recursed into. Pairing by position assumed every include and
+    # redirect produced a child, which is false the moment one is suppressed:
+    # the next include's subtree rendered under the wrong parent.
+    children = iter(node.get("children", []))
+    # RFC 7208 section 6.1 (redirect is ignored when 'all' is present) and
+    # section 5.1 (terms after 'all' are never evaluated). The lookup counter
+    # applies both, so the trace has to as well, or it prints a running total
+    # that contradicts the total shown beside it.
+    has_all = record_has_all(mechanisms)
 
     for mech in mechanisms:
         mtype = mech["type"]
@@ -57,14 +72,19 @@ def _walk_tree(node: Dict, flat_steps: List[Dict], running_total: int,
         if raw and raw[0] in "+-~?":
             qualifier = raw[0]
 
+        if mtype == "redirect" and has_all:
+            continue
+
         if mtype in ("include", "redirect"):
             # This mechanism costs 1 lookup itself, plus its children
             running_total += 1
             mechanism_start = running_total
 
-            # Get the child subtree for this include/redirect
-            child_node = children[child_idx] if child_idx < len(children) else None
-            child_idx += 1
+            # Get the child subtree for this include/redirect. A macro
+            # expanded target has none: it costs its lookup and stops there.
+            child_node = (
+                next(children, None) if mechanism_recurses(mech, has_all) else None
+            )
 
             # Only match vendor on top-level includes (depth 0)
             vendor, vendor_category = (None, None)
@@ -147,6 +167,10 @@ def _walk_tree(node: Dict, flat_steps: List[Dict], running_total: int,
                 "status": "ok",
                 "depth": depth,
             })
+            if mechanism_is_all(mech):
+                # RFC 7208 section 5.1: 'all' always matches, so nothing
+                # after it is ever evaluated.
+                break
 
         else:
             # Modifiers such as exp= and anything the parser could not
@@ -369,16 +393,22 @@ def _build_tree_node(node: Dict, depth: int, total_lookups: int) -> Optional[Dic
                 qualifier = mech.get("raw", "+all")[0] if mech.get("raw", "") and mech["raw"][0] in "+-~?" else "+"
                 terminal = qualifier + "all"
 
-    # Recurse into children
-    child_idx = 0
+    # Recurse into children. Same iterator rule as the trace: only the
+    # mechanisms the counter actually resolved consumed a child node, so
+    # pairing by position nests one include's targets under another.
+    has_all = record_has_all(mechanisms)
+    child_iter = iter(children)
     child_nodes = []
     for mech in mechanisms:
-        if mech["type"] in ("include", "redirect"):
-            if child_idx < len(children):
-                child_node = _build_tree_node(children[child_idx], depth + 1, total_lookups)
-                if child_node:
-                    child_nodes.append(child_node)
-                child_idx += 1
+        if mechanism_is_all(mech):
+            break
+        if mechanism_recurses(mech, has_all):
+            child = next(child_iter, None)
+            if child is None:
+                continue
+            child_node = _build_tree_node(child, depth + 1, total_lookups)
+            if child_node:
+                child_nodes.append(child_node)
 
     result = {
         "domain": domain,
