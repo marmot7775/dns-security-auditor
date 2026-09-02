@@ -291,6 +291,56 @@ _active_audits = 0
 _active_audits_lock = threading.Lock()
 _MAX_CONCURRENT_AUDITS = MAX_CONCURRENT_AUDITS
 
+# Audits currently running, keyed on cache_key, each holding an asyncio.Future
+# that resolves to the audit result. Share a link and five people can click
+# inside the twenty seconds before the first audit populates the cache: all
+# five used to miss, reserve a slot, and run the same 13 checks against the
+# same nameservers. Now the first arrival runs it and the rest await the same
+# future. Guarded by _active_audits_lock; no await happens while it is held.
+# /api/audit and the PDF endpoint share this registry because they key on the
+# same audit, so a PDF request can join a JSON audit already in flight.
+# /api/audit/stream stays out: each client needs its own progress stream.
+_inflight: Dict[str, "asyncio.Future"] = {}
+
+
+def _join_or_lead(cache_key: str):
+    """Return (future, is_leader) for this cache key.
+
+    The leader must resolve the future exactly once, in a finally, and pop the
+    key. Anything else leaves every follower waiting forever.
+    """
+    with _active_audits_lock:
+        existing = _inflight.get(cache_key)
+        if existing is not None:
+            return existing, False
+        future = asyncio.get_running_loop().create_future()
+        _inflight[cache_key] = future
+        return future, True
+
+
+def _release_inflight(cache_key: str, future, payload: Optional[Dict]) -> None:
+    """Hand the result to the followers and clear the key.
+
+    Called from the leader's finally, so it also runs when the leader is
+    cancelled mid-request or returns 503. A payload of None means the leader
+    produced nothing usable, and the followers get a plain error rather than
+    waiting on a future that will never resolve.
+    """
+    with _active_audits_lock:
+        if _inflight.get(cache_key) is future:
+            del _inflight[cache_key]
+    if future.done():
+        return
+    if payload is None:
+        payload = {
+            "checks": [],
+            "priority_fixes": [],
+            "vendors": [],
+            "error": "server_error",
+            "error_message": "Audit could not complete. Please try again.",
+        }
+    future.set_result(payload)
+
 
 def _get_client_ip(request: Request) -> str:
     """Get real client IP behind nginx reverse proxy.
@@ -541,68 +591,88 @@ async def audit_domain(
         cached_with_rid = {**cached, "request_id": request_id, "cached": True}
         return JSONResponse(content=cached_with_rid)
 
+    # Join an identical audit already running, rather than starting a second
+    # one. A follower does no work, so it takes no concurrency slot.
+    _audit_future, _is_leader = _join_or_lead(cache_key)
+    if not _is_leader:
+        log.info("Coalesced onto in-flight audit: %s (rid=%s)", domain, request_id)
+        # shield: awaiting a Future directly propagates the awaiting task's
+        # cancellation into the Future itself, so one follower giving up would
+        # otherwise cancel the shared result for the leader and every other
+        # follower.
+        shared = await asyncio.shield(_audit_future)
+        return JSONResponse(content={**shared, "request_id": request_id, "coalesced": True})
+
     # Reserve a concurrent-audit slot atomically (DoS protection).
     # Shared with /api/audit/stream: both endpoints invoke the same
     # expensive run_full_audit(), so they draw from one global budget
     # rather than /api/audit being unbounded.
     global _active_audits
-    with _active_audits_lock:
-        if _active_audits >= _MAX_CONCURRENT_AUDITS:
-            return JSONResponse(
-                status_code=503,
-                content={"detail": "Server is busy. Please try again in a moment."},
-                headers={"Retry-After": "5"},
-            )
-        _active_audits += 1
-
-    # Run audit (offloaded -- this is fully synchronous and would otherwise
-    # block the event loop, stalling every other request on this worker).
-    start = time.time()
+    _payload = None
     try:
-        # Pre-flight DNS check (offloaded -- this does blocking socket I/O).
-        # It runs inside the reservation so a domain whose nameservers
-        # blackhole traffic is bounded by the audit budget instead of tying up
-        # an anyio thread that plain page loads draw from too.
-        preflight_err = await anyio.to_thread.run_sync(_preflight_dns_check, domain)
-        if preflight_err:
-            log.info("Preflight failed for %s: %s", domain, preflight_err.get("error"))
-            return JSONResponse(content=preflight_err)
-
-        try:
-            result = await anyio.to_thread.run_sync(
-                functools.partial(run_full_audit, domain, dkim_selector=selector, scope=scope)
-            )
-        except Exception as e:
-            log.error("Audit failed for %s: %s", domain, str(e)[:200], exc_info=True)
-            result = {
-                "domain": domain,
-                "timestamp": datetime.now(timezone.utc).isoformat(),
-                "checks": [],
-                "priority_fixes": [],
-                "vendors": [],
-                "error": "server_error",
-                "error_message": "Audit could not complete. Please try again.",
-            }
-    finally:
         with _active_audits_lock:
-            _active_audits -= 1
+            if _active_audits >= _MAX_CONCURRENT_AUDITS:
+                return JSONResponse(
+                    status_code=503,
+                    content={"detail": "Server is busy. Please try again in a moment."},
+                    headers={"Retry-After": "5"},
+                )
+            _active_audits += 1
 
-    elapsed = round(time.time() - start, 2)
-    log.info("Audit complete: %s -- %.2fs (rid=%s)", domain, elapsed, request_id)
+        # Run audit (offloaded -- this is fully synchronous and would otherwise
+        # block the event loop, stalling every other request on this worker).
+        start = time.time()
+        try:
+            # Pre-flight DNS check (offloaded -- this does blocking socket I/O).
+            # It runs inside the reservation so a domain whose nameservers
+            # blackhole traffic is bounded by the audit budget instead of tying
+            # up an anyio thread that plain page loads draw from too.
+            preflight_err = await anyio.to_thread.run_sync(_preflight_dns_check, domain)
+            if preflight_err:
+                log.info("Preflight failed for %s: %s", domain, preflight_err.get("error"))
+                _payload = preflight_err
+                return JSONResponse(content=preflight_err)
 
-    # Audit log (GDPR-safe). A failed audit must not read as ordinary
-    # healthy usage: the outcome is carried on the entry itself.
-    log_status, log_error = _audit_status(result)
-    _log_audit(request, domain, scope,
-               elapsed, len(result.get("checks", [])), source="web",
-               status=log_status, error=log_error)
+            try:
+                result = await anyio.to_thread.run_sync(
+                    functools.partial(run_full_audit, domain, dkim_selector=selector, scope=scope)
+                )
+            except Exception as e:
+                log.error("Audit failed for %s: %s", domain, str(e)[:200], exc_info=True)
+                result = {
+                    "domain": domain,
+                    "timestamp": datetime.now(timezone.utc).isoformat(),
+                    "checks": [],
+                    "priority_fixes": [],
+                    "vendors": [],
+                    "error": "server_error",
+                    "error_message": "Audit could not complete. Please try again.",
+                }
+        finally:
+            with _active_audits_lock:
+                _active_audits -= 1
 
-    # Cache result (skip caching errors -- they may be transient)
-    if "error" not in result:
-        _set_cached(cache_key, result)
+        elapsed = round(time.time() - start, 2)
+        log.info("Audit complete: %s -- %.2fs (rid=%s)", domain, elapsed, request_id)
 
-    result["request_id"] = request_id
-    return JSONResponse(content=result)
+        # Audit log (GDPR-safe). A failed audit must not read as ordinary
+        # healthy usage: the outcome is carried on the entry itself.
+        log_status, log_error = _audit_status(result)
+        _log_audit(request, domain, scope,
+                   elapsed, len(result.get("checks", [])), source="web",
+                   status=log_status, error=log_error)
+
+        # Cache result (skip caching errors -- they may be transient)
+        if "error" not in result:
+            _set_cached(cache_key, result)
+
+        result["request_id"] = request_id
+        _payload = result
+        return JSONResponse(content=result)
+    finally:
+        # Runs on every path out, including the 503 and a cancelled request,
+        # so a follower is never left waiting on a future nobody resolves.
+        _release_inflight(cache_key, _audit_future, _payload)
 
 
 # ============================================================
@@ -926,6 +996,8 @@ async def audit_pdf(
             )
         _active_audits += 1
 
+    _pdf_future = None
+    _pdf_payload = None
     try:
         # Reuse cached audit data if available
         cached = _get_cached(cache_key)
@@ -933,17 +1005,36 @@ async def audit_pdf(
             data = cached
             log.info("PDF using cached data: %s", domain)
         else:
-            start = time.time()
-            try:
-                data = await anyio.to_thread.run_sync(
-                    functools.partial(run_full_audit, domain, dkim_selector=selector, scope=scope)
-                )
-            except Exception as e:
-                log.error("PDF audit failed for %s: %s", domain, str(e)[:200], exc_info=True)
-                raise HTTPException(status_code=500, detail="Audit failed: cannot generate PDF")
-            elapsed = round(time.time() - start, 2)
-            log.info("PDF audit complete: %s -- %.2fs", domain, elapsed)
-            _set_cached(cache_key, data)
+            # Join an identical audit already in flight rather than running a
+            # second one. Unlike /api/audit a follower here keeps its slot: it
+            # still has a PDF to render, which is the CPU-bound half. The
+            # registry is joined after the reservation on purpose, so the
+            # leader always already holds a slot and cannot end up waiting on
+            # followers that hold them all.
+            _pdf_future, _is_leader = _join_or_lead(cache_key)
+            if not _is_leader:
+                log.info("PDF coalesced onto in-flight audit: %s", domain)
+                data = await asyncio.shield(_pdf_future)
+                _pdf_future = None  # a follower must not resolve or pop it
+                if data.get("error"):
+                    return Response(
+                        content=data.get("error_message", "Audit failed"),
+                        status_code=400,
+                        media_type="text/plain",
+                    )
+            else:
+                start = time.time()
+                try:
+                    data = await anyio.to_thread.run_sync(
+                        functools.partial(run_full_audit, domain, dkim_selector=selector, scope=scope)
+                    )
+                except Exception as e:
+                    log.error("PDF audit failed for %s: %s", domain, str(e)[:200], exc_info=True)
+                    raise HTTPException(status_code=500, detail="Audit failed: cannot generate PDF")
+                elapsed = round(time.time() - start, 2)
+                log.info("PDF audit complete: %s -- %.2fs", domain, elapsed)
+                _set_cached(cache_key, data)
+                _pdf_payload = data
 
         # Check for audit errors
         if data.get("error"):
@@ -960,6 +1051,8 @@ async def audit_pdf(
             log.error("PDF generation failed for %s: %s", domain, str(e)[:200], exc_info=True)
             raise HTTPException(status_code=500, detail="PDF generation failed")
     finally:
+        if _pdf_future is not None:
+            _release_inflight(cache_key, _pdf_future, _pdf_payload)
         with _active_audits_lock:
             _active_audits -= 1
 

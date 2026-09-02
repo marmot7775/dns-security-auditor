@@ -32,10 +32,23 @@ class AdvancedVendorFingerprinter:
     Quality-focused: thorough analysis, accurate results.
     """
     
-    def __init__(self, domain: str, verbose: bool = False):
+    # Distinguishes "the caller did not supply this" from "the caller supplied
+    # it and the answer is that the record does not exist". The second must not
+    # trigger a DNS query.
+    _MISSING = object()
+
+    def __init__(self, domain: str, verbose: bool = False, prefetch: Optional[Dict] = None):
         self.domain = domain
         self.verbose = verbose
         self.signals = []  # All detection signals
+        # Records the caller already has. Every probe below reads from here
+        # first: eight of them re-fetched records the audit had just looked up,
+        # strictly sequentially, on the module default resolver.
+        self.prefetch = prefetch or {}
+
+    def _given(self, key):
+        """Caller-supplied value, or _MISSING when this has to be queried."""
+        return self.prefetch.get(key, self._MISSING)
         
     def fingerprint_all(self) -> Dict:
         """
@@ -64,199 +77,259 @@ class AdvancedVendorFingerprinter:
         if self.verbose:
             print("\n[1] Analyzing SPF record...")
         
-        try:
-            answers = dns.resolver.resolve(self.domain, 'TXT')
-            for rdata in answers:
-                txt = b"".join(rdata.strings).decode("utf-8", errors="replace")
-                if txt.startswith('v=spf1'):
-                    from spf_recursive import repair_spf_missing_spaces
-                    txt, _ = repair_spf_missing_spaces(txt)
-                    # Extract includes
-                    includes = re.findall(r'include:([^\s]+)', txt)
-                    
-                    for inc in includes:
-                        vendor = self._match_spf_vendor(inc)
-                        if vendor:
-                            self.signals.append({
-                                'technique': 'SPF Include',
-                                'vendor': vendor,
-                                'evidence': f'include:{inc}',
-                                'confidence': 0.95
-                            })
-                            if self.verbose:
-                                print(f"  ✓ {vendor} (from {inc})")
-                    
-                    # Analyze mechanism complexity
-                    mechanisms = re.findall(r'(ip4|ip6|a|mx|include):[^\s]+', txt)
-                    if len(mechanisms) > 5:
-                        self.signals.append({
-                            'technique': 'SPF Complexity',
-                            'vendor': 'Multiple Email Systems',
-                            'evidence': f'{len(mechanisms)} SPF mechanisms',
-                            'confidence': 0.70
-                        })
-        except (dns.resolver.NXDOMAIN, dns.resolver.NoAnswer, dns.resolver.NoNameservers, dns.exception.DNSException):
+        txt = self._given('spf_record')
+        if txt is self._MISSING:
+            txt = None
+            try:
+                answers = dns.resolver.resolve(self.domain, 'TXT')
+                for rdata in answers:
+                    candidate = b"".join(rdata.strings).decode("utf-8", errors="replace")
+                    if candidate.startswith('v=spf1'):
+                        from spf_recursive import repair_spf_missing_spaces
+                        txt, _ = repair_spf_missing_spaces(candidate)
+                        break
+            except (dns.resolver.NXDOMAIN, dns.resolver.NoAnswer, dns.resolver.NoNameservers, dns.exception.DNSException):
+                txt = None
+
+        if not txt:
             if self.verbose:
                 print("  ✗ No SPF record found")
+            return
+
+        for inc in re.findall(r'include:([^\s]+)', txt):
+            vendor = self._match_spf_vendor(inc)
+            if vendor:
+                self.signals.append({
+                    'technique': 'SPF Include',
+                    'vendor': vendor,
+                    'evidence': f'include:{inc}',
+                    'confidence': 0.95
+                })
+                if self.verbose:
+                    print(f"  ✓ {vendor} (from {inc})")
+
+        # Analyze mechanism complexity
+        mechanisms = re.findall(r'(ip4|ip6|a|mx|include):[^\s]+', txt)
+        if len(mechanisms) > 5:
+            self.signals.append({
+                'technique': 'SPF Complexity',
+                'vendor': 'Multiple Email Systems',
+                'evidence': f'{len(mechanisms)} SPF mechanisms',
+                'confidence': 0.70
+            })
     
     def _fingerprint_mx(self):
         """MX record pattern analysis"""
         if self.verbose:
             print("\n[2] Analyzing MX records...")
         
-        try:
-            answers = dns.resolver.resolve(self.domain, 'MX')
-            for rdata in answers:
-                mx_host = str(rdata.exchange).lower()
-                vendor = self._match_mx_vendor(mx_host)
-                if vendor:
-                    self.signals.append({
-                        'technique': 'MX Record',
-                        'vendor': vendor,
-                        'evidence': mx_host,
-                        'confidence': 0.90
-                    })
-                    if self.verbose:
-                        print(f"  ✓ {vendor} (from {mx_host})")
-        except (dns.resolver.NXDOMAIN, dns.resolver.NoAnswer, dns.resolver.NoNameservers, dns.exception.DNSException):
+        hosts = self._given('mx_hosts')
+        if hosts is self._MISSING:
+            hosts = []
+            try:
+                answers = dns.resolver.resolve(self.domain, 'MX')
+                hosts = [str(rdata.exchange).lower() for rdata in answers]
+            except (dns.resolver.NXDOMAIN, dns.resolver.NoAnswer, dns.resolver.NoNameservers, dns.exception.DNSException):
+                hosts = []
+
+        if not hosts:
             if self.verbose:
                 print("  ✗ No MX records found")
+            return
+
+        for mx_host in hosts:
+            mx_host = str(mx_host).lower()
+            vendor = self._match_mx_vendor(mx_host)
+            if vendor:
+                self.signals.append({
+                    'technique': 'MX Record',
+                    'vendor': vendor,
+                    'evidence': mx_host,
+                    'confidence': 0.90
+                })
+                if self.verbose:
+                    print(f"  ✓ {vendor} (from {mx_host})")
     
     def _fingerprint_dmarc(self):
         """DMARC record analysis - policy and reporting"""
         if self.verbose:
             print("\n[3] Analyzing DMARC record...")
         
-        try:
-            answers = dns.resolver.resolve(f'_dmarc.{self.domain}', 'TXT')
-            for rdata in answers:
-                record = b"".join(rdata.strings).decode("utf-8", errors="replace")
-                
-                # Policy analysis
-                policy_match = re.search(r'p=([^;]+)', record)
-                if policy_match:
-                    policy = policy_match.group(1)
-                    if policy in ['reject', 'quarantine']:
-                        self.signals.append({
-                            'technique': 'DMARC Policy',
-                            'vendor': 'Enterprise Email Security',
-                            'evidence': f'p={policy}',
-                            'confidence': 0.75
-                        })
-                
-                # Reporting destination
-                rua_match = re.search(r'rua=mailto:([^;,\s]+)', record)
-                if rua_match:
-                    rua_email = rua_match.group(1)
-                    vendor = self._match_reporting_vendor(rua_email)
-                    if vendor:
-                        self.signals.append({
-                            'technique': 'DMARC Reporting',
-                            'vendor': vendor,
-                            'evidence': f'Reports to {rua_email}',
-                            'confidence': 0.85
-                        })
-                        if self.verbose:
-                            print(f"  ✓ {vendor} (DMARC reports)")
-        except (dns.resolver.NXDOMAIN, dns.resolver.NoAnswer, dns.resolver.NoNameservers, dns.exception.DNSException):
+        record = self._given('dmarc_record')
+        if record is self._MISSING:
+            record = None
+            try:
+                answers = dns.resolver.resolve(f'_dmarc.{self.domain}', 'TXT')
+                for rdata in answers:
+                    candidate = b"".join(rdata.strings).decode("utf-8", errors="replace")
+                    if candidate.lower().startswith('v=dmarc1'):
+                        record = candidate
+                        break
+            except (dns.resolver.NXDOMAIN, dns.resolver.NoAnswer, dns.resolver.NoNameservers, dns.exception.DNSException):
+                record = None
+
+        if not record:
             if self.verbose:
                 print("  ✗ No DMARC record found")
+            return
+
+        # Policy analysis
+        policy_match = re.search(r'p=([^;]+)', record)
+        if policy_match:
+            policy = policy_match.group(1)
+            if policy in ['reject', 'quarantine']:
+                self.signals.append({
+                    'technique': 'DMARC Policy',
+                    'vendor': 'Enterprise Email Security',
+                    'evidence': f'p={policy}',
+                    'confidence': 0.75
+                })
+
+        # Reporting destination
+        rua_match = re.search(r'rua=mailto:([^;,\s]+)', record)
+        if rua_match:
+            rua_email = rua_match.group(1)
+            vendor = self._match_reporting_vendor(rua_email)
+            if vendor:
+                self.signals.append({
+                    'technique': 'DMARC Reporting',
+                    'vendor': vendor,
+                    'evidence': f'Reports to {rua_email}',
+                    'confidence': 0.85
+                })
+                if self.verbose:
+                    print(f"  ✓ {vendor} (DMARC reports)")
     
     def _fingerprint_tls_rpt(self):
         """TLS-RPT analysis"""
         if self.verbose:
             print("\n[4] Analyzing TLS-RPT...")
         
-        try:
-            answers = dns.resolver.resolve(f'_smtp._tls.{self.domain}', 'TXT')
-            for rdata in answers:
-                record = b"".join(rdata.strings).decode("utf-8", errors="replace")
-                rua_match = re.search(r'rua=mailto:([^;,\s]+)', record)
-                if rua_match:
-                    rua_email = rua_match.group(1)
-                    vendor = self._match_reporting_vendor(rua_email)
-                    if vendor:
-                        self.signals.append({
-                            'technique': 'TLS-RPT',
-                            'vendor': vendor,
-                            'evidence': f'TLS reports to {rua_email}',
-                            'confidence': 0.80
-                        })
-                        if self.verbose:
-                            print(f"  ✓ {vendor} (TLS-RPT)")
-        except (dns.resolver.NXDOMAIN, dns.resolver.NoAnswer, dns.resolver.NoNameservers, dns.exception.DNSException):
+        record = self._given('tls_rpt_record')
+        if record is self._MISSING:
+            record = None
+            try:
+                answers = dns.resolver.resolve(f'_smtp._tls.{self.domain}', 'TXT')
+                for rdata in answers:
+                    candidate = b"".join(rdata.strings).decode("utf-8", errors="replace")
+                    if candidate.lower().startswith('v=tlsrptv1'):
+                        record = candidate
+                        break
+            except (dns.resolver.NXDOMAIN, dns.resolver.NoAnswer, dns.resolver.NoNameservers, dns.exception.DNSException):
+                record = None
+
+        if not record:
             if self.verbose:
                 print("  ✗ No TLS-RPT record")
+            return
+
+        rua_match = re.search(r'rua=mailto:([^;,\s]+)', record)
+        if rua_match:
+            rua_email = rua_match.group(1)
+            vendor = self._match_reporting_vendor(rua_email)
+            if vendor:
+                self.signals.append({
+                    'technique': 'TLS-RPT',
+                    'vendor': vendor,
+                    'evidence': f'TLS reports to {rua_email}',
+                    'confidence': 0.80
+                })
+                if self.verbose:
+                    print(f"  ✓ {vendor} (TLS-RPT)")
     
     def _fingerprint_mta_sts(self):
         """MTA-STS policy analysis"""
         if self.verbose:
             print("\n[5] Analyzing MTA-STS...")
         
-        try:
-            dns.resolver.resolve(f'_mta-sts.{self.domain}', 'TXT')
-            self.signals.append({
-                'technique': 'MTA-STS',
-                'vendor': 'Enterprise Email Security',
-                'evidence': 'MTA-STS policy present',
-                'confidence': 0.70
-            })
-            if self.verbose:
-                print("  ✓ MTA-STS configured")
-        except (dns.resolver.NXDOMAIN, dns.resolver.NoAnswer, dns.resolver.NoNameservers, dns.exception.DNSException):
+        record = self._given('mta_sts_record')
+        if record is self._MISSING:
+            record = None
+            try:
+                dns.resolver.resolve(f'_mta-sts.{self.domain}', 'TXT')
+                record = True
+            except (dns.resolver.NXDOMAIN, dns.resolver.NoAnswer, dns.resolver.NoNameservers, dns.exception.DNSException):
+                record = None
+
+        if not record:
             if self.verbose:
                 print("  ✗ No MTA-STS policy")
+            return
+
+        self.signals.append({
+            'technique': 'MTA-STS',
+            'vendor': 'Enterprise Email Security',
+            'evidence': 'MTA-STS policy present',
+            'confidence': 0.70
+        })
+        if self.verbose:
+            print("  ✓ MTA-STS configured")
     
     def _fingerprint_bimi(self):
         """BIMI record analysis"""
         if self.verbose:
             print("\n[6] Analyzing BIMI...")
         
-        try:
-            answers = dns.resolver.resolve(f'default._bimi.{self.domain}', 'TXT')
-            for rdata in answers:
-                record = b"".join(rdata.strings).decode("utf-8", errors="replace")
-                if 'v=BIMI1' in record:
-                    self.signals.append({
-                        'technique': 'BIMI',
-                        'vendor': 'Enterprise Brand Protection',
-                        'evidence': 'BIMI record present',
-                        'confidence': 0.75
-                    })
-                    if self.verbose:
-                        print("  ✓ BIMI configured")
-        except (dns.resolver.NXDOMAIN, dns.resolver.NoAnswer, dns.resolver.NoNameservers, dns.exception.DNSException):
+        record = self._given('bimi_record')
+        if record is self._MISSING:
+            record = None
+            try:
+                answers = dns.resolver.resolve(f'default._bimi.{self.domain}', 'TXT')
+                for rdata in answers:
+                    candidate = b"".join(rdata.strings).decode("utf-8", errors="replace")
+                    if 'v=BIMI1' in candidate:
+                        record = candidate
+                        break
+            except (dns.resolver.NXDOMAIN, dns.resolver.NoAnswer, dns.resolver.NoNameservers, dns.exception.DNSException):
+                record = None
+
+        if not record or 'v=BIMI1' not in str(record):
             if self.verbose:
                 print("  ✗ No BIMI record")
+            return
+
+        self.signals.append({
+            'technique': 'BIMI',
+            'vendor': 'Enterprise Brand Protection',
+            'evidence': 'BIMI record present',
+            'confidence': 0.75
+        })
+        if self.verbose:
+            print("  ✓ BIMI configured")
     
     def _fingerprint_dns_patterns(self):
         """DNS TTL and record patterns"""
         if self.verbose:
             print("\n[7] Analyzing DNS patterns...")
         
-        try:
-            answers = dns.resolver.resolve(self.domain, 'TXT')
-            ttl = answers.rrset.ttl
-            
-            if ttl == 300:
-                self.signals.append({
-                    'technique': 'DNS TTL',
-                    'vendor': 'M365/Proofpoint Pattern',
-                    'evidence': f'TTL {ttl}',
-                    'confidence': 0.35
-                })
-            elif ttl == 3600:
-                self.signals.append({
-                    'technique': 'DNS TTL',
-                    'vendor': 'Google Workspace Pattern',
-                    'evidence': f'TTL {ttl}',
-                    'confidence': 0.35
-                })
-            
-            if self.verbose:
-                print(f"  ℹ️  DNS TTL: {ttl} seconds")
-        except (dns.resolver.NXDOMAIN, dns.resolver.NoAnswer, dns.resolver.NoNameservers, dns.exception.DNSException):
-            pass
+        ttl = self._given('txt_ttl')
+        if ttl is self._MISSING:
+            try:
+                answers = dns.resolver.resolve(self.domain, 'TXT')
+                ttl = answers.rrset.ttl
+            except (dns.resolver.NXDOMAIN, dns.resolver.NoAnswer, dns.resolver.NoNameservers, dns.exception.DNSException):
+                ttl = None
+
+        if ttl is None:
+            return
+
+        if ttl == 300:
+            self.signals.append({
+                'technique': 'DNS TTL',
+                'vendor': 'M365/Proofpoint Pattern',
+                'evidence': f'TTL {ttl}',
+                'confidence': 0.35
+            })
+        elif ttl == 3600:
+            self.signals.append({
+                'technique': 'DNS TTL',
+                'vendor': 'Google Workspace Pattern',
+                'evidence': f'TTL {ttl}',
+                'confidence': 0.35
+            })
+
+        if self.verbose:
+            print(f"  ℹ️  DNS TTL: {ttl} seconds")
     
     def _fingerprint_subdomains(self):
         """Check for common subdomain patterns"""

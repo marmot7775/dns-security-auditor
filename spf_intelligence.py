@@ -15,8 +15,13 @@ from typing import List, Dict, Optional, Callable
 
 from dkim_formatter import analyze_dkim_key_strength
 
+from dns_tools import get_resolver
+
 # Hard limits for DKIM selector discovery
-DKIM_DISCOVERY_TIMEOUT = 30   # seconds for entire discovery
+# Kept below the Phase 2 batch budget (CHECK_TIMEOUT + 5 = 20s). A child
+# deadline larger than its parent's can only ever be enforced by the parent,
+# which means the child's own timeout handling never runs.
+DKIM_DISCOVERY_TIMEOUT = 15   # seconds for entire discovery
 DKIM_MAX_FOUND = 15           # stop after finding this many selectors
 
 # Map SPF includes to vendors and their DKIM selectors
@@ -211,8 +216,9 @@ def generate_vendor_intelligence_report(spf_record: str) -> str:
     
     return report
 
-def smart_dkim_check(domain: str, spf_record: Optional[str] = None, max_selectors: int = 200,
-                     progress_callback: Optional[Callable[[int], None]] = None) -> Dict:
+def smart_dkim_check(domain: str, spf_record: Optional[str] = None, max_selectors: int = 40,
+                     progress_callback: Optional[Callable[[int], None]] = None,
+                     executor: Optional[ThreadPoolExecutor] = None) -> Dict:
     """
     INTELLIGENT DKIM checking using SPF-based vendor detection.
 
@@ -225,13 +231,20 @@ def smart_dkim_check(domain: str, spf_record: Optional[str] = None, max_selector
     Args:
         domain: Domain to check
         spf_record: SPF record (optional, will query if not provided)
-        max_selectors: Max selectors to test (default 200, 0 = unlimited)
+        max_selectors: Max prioritized selectors to test (default 40, 0 = unlimited).
+            GENERIC_SELECTORS are tested on top of this cap, never inside it.
+        executor: Pool to run the selector probes on. Defaults to a private
+            pool. Callers that already run inside a pool must pass one that is
+            not the pool they are running on.
 
     Returns:
         Complete DKIM discovery results with vendor intelligence
     """
-    from comprehensive_selectors import COMPREHENSIVE_DKIM_SELECTORS as DKIM_SELECTORS
-    
+    from comprehensive_selectors import (
+        COMPREHENSIVE_DKIM_SELECTORS as DKIM_SELECTORS,
+        GENERIC_SELECTORS,
+    )
+
     result = {
         'domain': domain,
         'vendors_detected': [],
@@ -266,9 +279,25 @@ def smart_dkim_check(domain: str, spf_record: Optional[str] = None, max_selector
         selectors_to_test = DKIM_SELECTORS
         result['discovery_method'] = 'blind_loop'
     
-    # Cap the selector list if max_selectors is set
+    # Cap the prioritized list, then union the generics in behind it.
+    #
+    # The generics sit at the tail of the master list, behind 358 sequential
+    # and 370 date-based entries, so "default" lands at index 981 and no cap
+    # short of the whole list ever reached it. The effect was that every
+    # domain signing with default._domainkey and naming no recognized vendor
+    # in SPF got "no public keys found": OpenDKIM out of the box, cPanel,
+    # Plesk, most self-hosted mail. Those are precisely the domains with no
+    # vendor to prioritize from, so the cap and the ordering failed together.
+    #
+    # The generics go on top of max_selectors rather than inside it, so
+    # tightening the cap can never push default out of reach again.
     if max_selectors > 0:
         selectors_to_test = selectors_to_test[:max_selectors]
+    _seen = set()
+    selectors_to_test = [
+        s for s in list(selectors_to_test) + list(GENERIC_SELECTORS)
+        if not (s in _seen or _seen.add(s))
+    ]
 
     # Wildcard detection: query a random nonsense selector. If it returns
     # a TXT record, the domain has wildcard DNS and DKIM discovery is unreliable.
@@ -299,7 +328,9 @@ def smart_dkim_check(domain: str, spf_record: Optional[str] = None, max_selector
     def _test_selector(selector: str) -> dict | None:
         fqdn = f"{selector}._domainkey.{domain}"
         try:
-            resolver = dns.resolver.Resolver()
+            # Built per probe, so with the generics unioned in this ran ~190
+            # times per audit, each one re-reading /etc/resolv.conf from disk.
+            resolver = get_resolver(3)
             resolver.lifetime = 3
             answers = resolver.resolve(fqdn, 'TXT')
             dkim_record = str(answers[0]).replace('" "', '').strip('"')
@@ -334,33 +365,53 @@ def smart_dkim_check(domain: str, spf_record: Optional[str] = None, max_selector
 
     found = []
     timed_out = False
+    tested = 0
     deadline = time.monotonic() + DKIM_DISCOVERY_TIMEOUT
 
-    with ThreadPoolExecutor(max_workers=15) as executor:
+    # A private pool here meant 15 fresh threads per audit, so eight
+    # concurrent audits spawned up to 120 of them on top of the audit pools.
+    # Callers pass a long-lived pool instead.
+    own_pool = executor is None
+    pool = executor or ThreadPoolExecutor(max_workers=15)
+    try:
         futures = {
-            executor.submit(_test_selector, sel): sel
+            pool.submit(_test_selector, sel): sel
             for sel in selectors_to_test
         }
-        for future in as_completed(futures):
-            r = future.result()
-            if r:
-                found.append(r)
-                if progress_callback:
-                    progress_callback(len(found))
-                if len(found) >= DKIM_MAX_FOUND:
-                    executor.shutdown(wait=False, cancel_futures=True)
+        try:
+            for future in as_completed(futures):
+                tested += 1
+                r = future.result()
+                if r:
+                    found.append(r)
+                    if progress_callback:
+                        progress_callback(len(found))
+                    if len(found) >= DKIM_MAX_FOUND:
+                        break
+                if time.monotonic() >= deadline:
+                    timed_out = True
                     break
-            if time.monotonic() >= deadline:
-                timed_out = True
-                executor.shutdown(wait=False, cancel_futures=True)
-                break
+        finally:
+            # Cancel the stragglers rather than shutting the pool down. The
+            # pool may belong to the caller, and shutting a shared pool down
+            # from inside one check would take every other check in the
+            # process with it.
+            for f in futures:
+                f.cancel()
+    finally:
+        if own_pool:
+            pool.shutdown(wait=False, cancel_futures=True)
 
     # Preserve priority order from SPF-based ranking
     selector_order = {sel: i for i, sel in enumerate(selectors_to_test)}
     found.sort(key=lambda r: selector_order.get(r['selector'], 999))
 
     result['found_selectors'] = found
-    result['tested_count'] = len(selectors_to_test)
+    # The real number of probes that finished, not the number queued. The
+    # deadline and the DKIM_MAX_FOUND break both stop the loop early, and
+    # reporting the queued count told users we had checked selectors we never
+    # got to.
+    result['tested_count'] = tested
 
     if timed_out:
         result['timed_out'] = True

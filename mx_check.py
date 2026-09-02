@@ -24,9 +24,12 @@ try:
     import dns.resolver
     import dns.reversename
     import dns.exception
+
     DNS_AVAILABLE = True
 except ImportError:
     DNS_AVAILABLE = False
+
+from dns_tools import get_resolver
 
 
 # ============================================================
@@ -82,10 +85,10 @@ COMPILED_PROVIDERS = [(re.compile(pat, re.IGNORECASE), name) for pat, name in MX
 # ============================================================
 
 def _get_resolver(timeout: float = 5.0):
-    resolver = dns.resolver.Resolver()
-    resolver.timeout = timeout
-    resolver.lifetime = timeout * 2
-    return resolver
+    # Shared factory: every resolver in the process draws from one TTL-honoring
+    # answer cache, so the repeated lookups a single audit makes hit memory
+    # instead of the network.
+    return get_resolver(timeout)
 
 
 def _make_issue(severity: str, issue: str, plain_english: str,
