@@ -4246,6 +4246,18 @@ def _probe_subdomain(subdomain: str) -> Dict[str, Any]:
     return result
 
 
+def _positive_non_mail_signal(raw_mx: Optional[Dict], raw_spf: Optional[Dict]) -> bool:
+    """True only on a POSITIVE declaration that the domain does not handle
+    mail: an RFC 7505 null MX, or an SPF record that is exactly
+    ``v=spf1 -all``. Merely-absent MX is never a signal: an ordinary
+    send-only subdomain has no MX and still sends (and should sign) real
+    mail. Shared by the defensive-DNS classifier and the per-check
+    "not applicable" gating so the two can never disagree."""
+    has_null_mx = bool((raw_mx or {}).get("has_null_mx"))
+    spf_record = ((raw_spf or {}).get("record") or "").strip().lower()
+    return has_null_mx or spf_record == "v=spf1 -all"
+
+
 def _audit_subdomains(domain: str) -> Dict[str, Any]:
     """Probe common subdomains in parallel and return raw discovery results.
 
@@ -4482,19 +4494,24 @@ def run_full_audit(domain: str, dkim_selector: Optional[str] = None,
         or (_bimi_dmarc.get("inherited_policy") or "").lower() in ("quarantine", "reject")
     )
 
+    # Positive non-mail declaration (null MX or null SPF). Absent MX alone
+    # never waives DKIM / MTA-STS / TLS-RPT / BIMI: send-only subdomains
+    # have no MX and still send real mail.
+    non_mail = _positive_non_mail_signal(raw_results.get("mx"), raw_results.get("spf"))
+
     # Define each independent check as (key, run_func, transform_func, label, extra_kwargs)
     _parallel_checks = []
 
     if _should_include("mta_sts", scope_set):
         _parallel_checks.append(("mta_sts",
             lambda: check_mta_sts(domain),
-            lambda raw: transform_mta_sts(raw, domain, has_mx=has_mx),
+            lambda raw: transform_mta_sts(raw, domain, has_mx=has_mx, non_mail=non_mail),
             "MTA-STS"))
 
     if _should_include("tls_rpt", scope_set):
         _parallel_checks.append(("tls_rpt",
             lambda: check_tls_rpt(domain),
-            lambda raw: transform_tls_rpt(raw, domain, has_mx=has_mx),
+            lambda raw: transform_tls_rpt(raw, domain, has_mx=has_mx, non_mail=non_mail),
             "TLS-RPT"))
 
     if _should_include("bimi", scope_set):
@@ -4505,7 +4522,7 @@ def run_full_audit(domain: str, dkim_selector: Optional[str] = None,
             lambda: check_bimi(domain, dmarc_enforcing_override=_bimi_enforcing,
                                 dmarc_found_override=_bimi_found,
                                 dmarc_pct_override=_bimi_pct),
-            lambda raw: transform_bimi(raw, domain, has_mx=has_mx),
+            lambda raw: transform_bimi(raw, domain, has_mx=has_mx, non_mail=non_mail),
             "BIMI"))
 
     if _should_include("dnssec", scope_set):
@@ -4559,7 +4576,7 @@ def run_full_audit(domain: str, dkim_selector: Optional[str] = None,
                     _raw["tested_count"] = 1
                 return _raw
             _parallel_checks.append(("dkim", _run_dkim_direct,
-                lambda raw: transform_dkim(raw, domain, has_mx=has_mx), "DKIM"))
+                lambda raw: transform_dkim(raw, domain, has_mx=has_mx, non_mail=non_mail), "DKIM"))
         else:
             _spf_rec = spf_record  # capture
             def _dkim_progress(found_count):
@@ -4569,7 +4586,7 @@ def run_full_audit(domain: str, dkim_selector: Optional[str] = None,
                 _raw = smart_dkim_check(domain, _spf_rec, progress_callback=_dkim_progress)
                 return _raw
             _parallel_checks.append(("dkim", _run_dkim_smart,
-                lambda raw: transform_dkim(raw, domain, has_mx=has_mx), "DKIM"))
+                lambda raw: transform_dkim(raw, domain, has_mx=has_mx, non_mail=non_mail), "DKIM"))
 
     if _should_include("ct", scope_set):
         _ct_raw = dict(raw_results)
@@ -4654,7 +4671,7 @@ def run_full_audit(domain: str, dkim_selector: Optional[str] = None,
         # A positive declaration of non-mail intent (RFC 7505 null MX, or a
         # null SPF record) is required. DMARC p=reject on its own is normal
         # hygiene for a sending domain, not evidence that it never sends.
-        _has_positive_non_mail_signal = _has_null_mx or _has_null_spf
+        _has_positive_non_mail_signal = _positive_non_mail_signal(_raw_mx, _raw_spf)
         is_defensive = (
             _has_positive_non_mail_signal and len(defensive_signals) >= 2
         )

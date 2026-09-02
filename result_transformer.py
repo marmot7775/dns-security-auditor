@@ -3964,7 +3964,8 @@ def _build_spf_deep_analysis(raw: Dict) -> Optional[Dict]:
 # DKIM
 # ============================================================
 
-def transform_dkim(raw: Dict, domain: str, has_mx: bool = True) -> Dict:
+def transform_dkim(raw: Dict, domain: str, has_mx: bool = True, non_mail: bool = False) -> Dict:
+    """Only a positive non-mail declaration (RFC 7505 null MX, or a null ``v=spf1 -all`` SPF record) waives this check. Absent MX alone does not: send-only subdomains have no MX and still send real mail."""
     # Lazy import avoids the audit_engine ↔ result_transformer cycle.
     from audit_engine import BUSINESS_RISK
 
@@ -3972,21 +3973,21 @@ def transform_dkim(raw: Dict, domain: str, has_mx: bool = True) -> Dict:
     tested = raw.get("tested_count", 0)
 
     if not found:
-        # No DKIM keys found. If the domain has no MX records it doesn't send email,
-        # so the absence of DKIM keys is expected and not actionable.
-        if not has_mx:
+        # No DKIM keys found. Only a positive non-mail declaration (null MX
+        # or null SPF) makes that expected. Absent MX alone is not one.
+        if non_mail:
             return {
                 "name": "DKIM",
                 "status": "pass",
                 "pill_label": "N/A",
-                "verdict": "No mail domain",
+                "verdict": "Not applicable (non-mail domain)",
                 "record": None,
                 "explanation": (
-                    "This domain has no MX records, so it does not send or receive email. "
-                    "DKIM signing is not applicable."
+                    "This domain declares that it does not send email (RFC 7505 null MX "
+                    "or a null SPF record). DKIM signing is not applicable."
                 ),
                 "details": [
-                    {"type": "info", "text": "No MX records - domain does not handle email"},
+                    {"type": "info", "text": "Null MX or null SPF published - domain declares it does not handle email"},
                     {"type": "info", "text": "DKIM is only relevant for domains that send email"},
                 ],
                 "fix": None,
@@ -4533,7 +4534,8 @@ def transform_mx(raw: Dict) -> Dict:
 # MTA-STS
 # ============================================================
 
-def transform_mta_sts(raw: Dict, domain: str, has_mx: bool = True) -> Dict:
+def transform_mta_sts(raw: Dict, domain: str, has_mx: bool = True, non_mail: bool = False) -> Dict:
+    """Only a positive non-mail declaration (RFC 7505 null MX, or a null ``v=spf1 -all`` SPF record) waives this check. Absent MX alone does not: send-only subdomains have no MX and still send real mail."""
     raw_status = raw.get("status", "warning")
     status = _map_status(raw_status)
     txt_record = raw.get("txt_record")
@@ -4544,21 +4546,22 @@ def transform_mta_sts(raw: Dict, domain: str, has_mx: bool = True) -> Dict:
         status = "pass"
 
     if not txt_record:
-        # MTA-STS protects inbound delivery, so it is only relevant for domains with MX records.
-        if not has_mx:
+        # MTA-STS protects inbound delivery. Waive it only on a positive
+        # non-mail declaration (null MX or null SPF), never on absent MX alone.
+        if non_mail:
             return {
                 "name": "MTA-STS",
                 "status": "pass",
                 "pill_label": "N/A",
-                "verdict": "No mail domain",
+                "verdict": "Not applicable (non-mail domain)",
                 "record": None,
                 "explanation": (
                     "MTA-STS protects inbound email delivery by requiring TLS encryption. "
-                    "This domain has no MX records, so it does not receive email and "
-                    "MTA-STS is not applicable."
+                    "This domain declares that it does not handle email (RFC 7505 null MX "
+                    "or a null SPF record), so MTA-STS is not applicable."
                 ),
                 "details": [
-                    {"type": "info", "text": "No MX records - domain does not receive email"},
+                    {"type": "info", "text": "Null MX or null SPF published - domain declares it does not handle email"},
                     {"type": "info", "text": "MTA-STS is only relevant for domains with MX records"},
                 ],
                 "fix": None,
@@ -4693,27 +4696,29 @@ def _build_mta_sts_deep(raw: Dict, domain: str) -> Optional[Dict]:
 # TLS-RPT
 # ============================================================
 
-def transform_tls_rpt(raw: Dict, domain: str, has_mx: bool = True) -> Dict:
+def transform_tls_rpt(raw: Dict, domain: str, has_mx: bool = True, non_mail: bool = False) -> Dict:
+    """Only a positive non-mail declaration (RFC 7505 null MX, or a null ``v=spf1 -all`` SPF record) waives this check. Absent MX alone does not: send-only subdomains have no MX and still send real mail."""
     status = _map_status(raw.get("status", "warning"))
     record = raw.get("record")
 
     if not record:
-        # TLS-RPT reports on inbound TLS delivery issues, so it only makes sense for
-        # domains that receive email (i.e. have MX records).
-        if not has_mx:
+        # TLS-RPT reports on inbound TLS delivery issues. Waive it only on a
+        # positive non-mail declaration (null MX or null SPF), never on
+        # absent MX alone.
+        if non_mail:
             return {
                 "name": "TLS-RPT",
                 "status": "pass",
                 "pill_label": "N/A",
-                "verdict": "No mail domain",
+                "verdict": "Not applicable (non-mail domain)",
                 "record": None,
                 "explanation": (
                     "TLS-RPT reports on TLS encryption failures during inbound email delivery. "
-                    "This domain has no MX records, so it does not receive email and "
-                    "TLS-RPT is not applicable."
+                    "This domain declares that it does not handle email (RFC 7505 null MX "
+                    "or a null SPF record), so TLS-RPT is not applicable."
                 ),
                 "details": [
-                    {"type": "info", "text": "No MX records - domain does not receive email"},
+                    {"type": "info", "text": "Null MX or null SPF published - domain declares it does not handle email"},
                     {"type": "info", "text": "TLS-RPT is only relevant for domains with MX records"},
                 ],
                 "fix": None,
@@ -4804,28 +4809,30 @@ def _build_tls_rpt_deep(raw: Dict) -> Optional[Dict]:
 # BIMI
 # ============================================================
 
-def transform_bimi(raw: Dict, domain: str, has_mx: bool = True) -> Dict:
+def transform_bimi(raw: Dict, domain: str, has_mx: bool = True, non_mail: bool = False) -> Dict:
+    """Only a positive non-mail declaration (RFC 7505 null MX, or a null ``v=spf1 -all`` SPF record) waives this check. Absent MX alone does not: send-only subdomains have no MX and still send real mail."""
     status = _map_status(raw.get("status", "info"))
     record = raw.get("record")
     records_found = raw.get("records_found", 0)
 
     if not record and records_found == 0:
-        # BIMI is an email branding feature, so it only applies to domains that send email.
-        if not has_mx:
+        # BIMI is an email branding feature. Waive it only on a positive
+        # non-mail declaration (null MX or null SPF), never on absent MX alone.
+        if non_mail:
             return {
                 "name": "BIMI",
                 "status": "pass",
                 "pill_label": "N/A",
-                "verdict": "No mail domain",
+                "verdict": "Not applicable (non-mail domain)",
                 "record": None,
                 "records_found": 0,
                 "explanation": (
                     "BIMI displays a brand logo next to emails in supporting mail clients. "
-                    "This domain has no MX records, so it does not handle email and "
-                    "BIMI is not applicable."
+                    "This domain declares that it does not handle email (RFC 7505 null MX "
+                    "or a null SPF record), so BIMI is not applicable."
                 ),
                 "details": [
-                    {"type": "info", "text": "No MX records - domain does not handle email"},
+                    {"type": "info", "text": "Null MX or null SPF published - domain declares it does not handle email"},
                     {"type": "info", "text": "BIMI is only relevant for domains that send email"},
                 ],
                 "fix": None,
