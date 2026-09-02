@@ -255,7 +255,9 @@ async function runAudit(domain) {
     // Idle watchdog. A stalled TCP connection (Cloudflare drops it, the laptop
     // sleeps, the phone moves from Wi-Fi to LTE) leaves reader.read() hanging:
     // it never resolves and never rejects, so the UI spins until the page is
-    // reloaded. Every data line pushes the deadline back.
+    // reloaded. Every chunk that arrives pushes the deadline back, including
+    // the server's ": keepalive" comments, so the watchdog measures the health
+    // of the connection rather than the duration of a check.
     let idleTimer = null;
     let stalled = false;
     const clearIdleTimer = () => {
@@ -295,6 +297,7 @@ async function runAudit(domain) {
         while (true) {
             const { done, value } = await reader.read();
             if (done) break;
+            resetIdleTimer();
 
             buffer += decoder.decode(value, { stream: true });
             const lines = buffer.split('\n');
@@ -303,7 +306,6 @@ async function runAudit(domain) {
 
             for (const line of lines) {
                 if (!line.startsWith('data: ')) continue;
-                resetIdleTimer();
                 const payload = line.slice(6);
                 let msg;
                 try { msg = JSON.parse(payload); } catch { continue; }
@@ -3903,36 +3905,3 @@ function _renderComparison(data1, data2, container) {
 
     container.innerHTML = html;
 }
-
-(function() {
-    const toggle = document.getElementById('theme-toggle');
-    if (!toggle) return;
-
-    const sunIcon = toggle.querySelector('.theme-icon-sun');
-    const moonIcon = toggle.querySelector('.theme-icon-moon');
-
-    function setTheme(theme) {
-        document.documentElement.dataset.theme = theme;
-        localStorage.setItem('theme', theme);
-        if (theme === 'light') {
-            sunIcon.style.display = 'none';
-            moonIcon.style.display = 'block';
-        } else {
-            sunIcon.style.display = 'block';
-            moonIcon.style.display = 'none';
-        }
-    }
-
-    const saved = localStorage.getItem('theme');
-    if (saved) {
-        setTheme(saved);
-    } else {
-        const prefersDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
-        setTheme(prefersDark ? 'dark' : 'light');
-    }
-
-    toggle.addEventListener('click', () => {
-        const current = document.documentElement.dataset.theme;
-        setTheme(current === 'light' ? 'dark' : 'light');
-    });
-})();

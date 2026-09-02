@@ -18,7 +18,6 @@ import hashlib
 import json
 import logging
 import logging.handlers
-import queue
 import re
 import secrets
 import threading
@@ -433,6 +432,20 @@ def _validate_scope(scope: Optional[str]) -> Optional[str]:
     return s
 
 
+# Preflight resolver, built once. dns.resolver.Resolver() re-reads
+# /etc/resolv.conf from disk on every construction, and this configuration
+# never changes between calls.
+try:
+    _preflight_resolver = dns.resolver.Resolver()
+except dns.exception.DNSException:
+    # No resolver configuration at import time. An unconfigured resolver still
+    # raises through _preflight_dns_check's own handling rather than taking the
+    # whole module down on import.
+    _preflight_resolver = dns.resolver.Resolver(configure=False)
+_preflight_resolver.timeout = 5
+_preflight_resolver.lifetime = 3
+
+
 def _preflight_dns_check(domain: str) -> Optional[Dict]:
     """Quick DNS existence check before running the full audit.
 
@@ -445,13 +458,10 @@ def _preflight_dns_check(domain: str) -> Optional[Dict]:
         "priority_fixes": [],
     }
     try:
-        resolver = dns.resolver.Resolver()
-        resolver.timeout = 5
-        resolver.lifetime = 10
         try:
-            resolver.resolve(domain, "SOA")
+            _preflight_resolver.resolve(domain, "SOA")
         except dns.resolver.NoAnswer:
-            resolver.resolve(domain, "NS")
+            _preflight_resolver.resolve(domain, "NS")
     except dns.resolver.NXDOMAIN:
         return {
             **_err_base,
@@ -513,7 +523,11 @@ async def audit_domain(
 
     domain = _validate_domain(domain)
     scope = _validate_scope(scope)
-    if selector and not SELECTOR_PATTERN.match(selector.strip()):
+    # Normalize before validating. Validating the trimmed value while caching
+    # and resolving the raw one lets "%20google" pass, poison its own cache
+    # key, and look up " google._domainkey.example.com".
+    selector = selector.strip() if selector else None
+    if selector and not SELECTOR_PATTERN.match(selector):
         raise HTTPException(status_code=400, detail="Invalid DKIM selector (RFC 6376: alphanumeric and hyphens only)")
     request_id = str(uuid.uuid4())
     log.info("Audit requested: %s (scope=%s, ip=%s, rid=%s)", domain, scope or "complete", client_ip, request_id)
@@ -526,12 +540,6 @@ async def audit_domain(
         log.info("Cache hit: %s (rid=%s)", domain, request_id)
         cached_with_rid = {**cached, "request_id": request_id, "cached": True}
         return JSONResponse(content=cached_with_rid)
-
-    # Pre-flight DNS check (offloaded -- this does blocking socket I/O)
-    preflight_err = await anyio.to_thread.run_sync(_preflight_dns_check, domain)
-    if preflight_err:
-        log.info("Preflight failed for %s: %s", domain, preflight_err.get("error"))
-        return JSONResponse(content=preflight_err)
 
     # Reserve a concurrent-audit slot atomically (DoS protection).
     # Shared with /api/audit/stream: both endpoints invoke the same
@@ -551,6 +559,15 @@ async def audit_domain(
     # block the event loop, stalling every other request on this worker).
     start = time.time()
     try:
+        # Pre-flight DNS check (offloaded -- this does blocking socket I/O).
+        # It runs inside the reservation so a domain whose nameservers
+        # blackhole traffic is bounded by the audit budget instead of tying up
+        # an anyio thread that plain page loads draw from too.
+        preflight_err = await anyio.to_thread.run_sync(_preflight_dns_check, domain)
+        if preflight_err:
+            log.info("Preflight failed for %s: %s", domain, preflight_err.get("error"))
+            return JSONResponse(content=preflight_err)
+
         try:
             result = await anyio.to_thread.run_sync(
                 functools.partial(run_full_audit, domain, dkim_selector=selector, scope=scope)
@@ -619,7 +636,11 @@ async def audit_stream(
 
     domain = _validate_domain(domain)
     scope = _validate_scope(scope)
-    if selector and not SELECTOR_PATTERN.match(selector.strip()):
+    # Normalize before validating. Validating the trimmed value while caching
+    # and resolving the raw one lets "%20google" pass, poison its own cache
+    # key, and look up " google._domainkey.example.com".
+    selector = selector.strip() if selector else None
+    if selector and not SELECTOR_PATTERN.match(selector):
         raise HTTPException(status_code=400, detail="Invalid DKIM selector (RFC 6376: alphanumeric and hyphens only)")
     request_id = str(uuid.uuid4())
     log.info("SSE audit requested: %s (scope=%s, ip=%s, rid=%s)", domain, scope or "complete", client_ip, request_id)
@@ -634,14 +655,6 @@ async def audit_stream(
             cached_result = {**cached, "request_id": request_id}
             yield f"data: {json.dumps({'done': True, 'result': cached_result, 'cached': True, 'request_id': request_id})}\n\n"
         return StreamingResponse(_cached_stream(), media_type="text/event-stream")
-
-    # Pre-flight DNS check (offloaded -- this does blocking socket I/O)
-    preflight_err = await anyio.to_thread.run_sync(_preflight_dns_check, domain)
-    if preflight_err:
-        log.info("SSE preflight failed for %s: %s", domain, preflight_err.get("error"))
-        async def _preflight_error():
-            yield f"data: {json.dumps({'done': True, 'result': preflight_err})}\n\n"
-        return StreamingResponse(_preflight_error(), media_type="text/event-stream")
 
     # Reserve a concurrent-audit slot atomically (DoS protection)
     with _active_audits_lock:
@@ -658,11 +671,41 @@ async def audit_stream(
     # RuntimeError under thread exhaustion is the case that actually happens,
     # and eight of those leave every user with "Server is busy" until the
     # service is restarted.
+    slot_held = True
     try:
+        # Pre-flight DNS check (offloaded -- this does blocking socket I/O).
+        # It runs inside the reservation so a domain whose nameservers
+        # blackhole traffic is bounded by the audit budget instead of tying up
+        # an anyio thread that plain page loads draw from too.
+        preflight_err = await anyio.to_thread.run_sync(_preflight_dns_check, domain)
+        if preflight_err:
+            log.info("SSE preflight failed for %s: %s", domain, preflight_err.get("error"))
+            with _active_audits_lock:
+                _active_audits -= 1
+            slot_held = False
 
-        # Run audit in a background thread, streaming progress via a queue
-        progress_q: queue.Queue = queue.Queue()
+            async def _preflight_error():
+                yield f"data: {json.dumps({'done': True, 'result': preflight_err})}\n\n"
+
+            return StreamingResponse(_preflight_error(), media_type="text/event-stream")
+
+        # Run audit in a background thread, streaming progress over an
+        # asyncio.Queue. The old queue.Queue had to be polled from a worker
+        # thread, so every open stream held one of the default executor's
+        # threads (6 on a 2 vCPU box) to watch a queue that is empty almost
+        # all the time.
+        loop = asyncio.get_running_loop()
+        progress_q: asyncio.Queue = asyncio.Queue()
         cancel_event = threading.Event()
+
+        def _emit(msg):
+            # Called from the audit thread. The stream's loop can already be
+            # gone (client disconnected, worker shutting down); dropping the
+            # message is right then, there is nobody left to receive it.
+            try:
+                loop.call_soon_threadsafe(progress_q.put_nowait, msg)
+            except RuntimeError:
+                pass
 
         def _progress_callback(step_name, completed, total):
             if cancel_event.is_set():
@@ -679,7 +722,7 @@ async def audit_stream(
                 count = step_name.split(":", 1)[1]
                 msg["step"] = "DKIM"
                 msg["detail"] = f"{count} found so far"
-            progress_q.put(msg)
+            _emit(msg)
 
         def _run_audit():
             # Note: the concurrency slot reserved above is released in
@@ -691,10 +734,10 @@ async def audit_stream(
             try:
                 result = run_full_audit(domain, dkim_selector=selector, scope=scope,
                                         progress_callback=_progress_callback)
-                progress_q.put({"_done": True, "_result": result})
+                _emit({"_done": True, "_result": result})
             except InterruptedError:
                 log.info("SSE audit cancelled (client disconnect): %s", domain)
-                progress_q.put({"_done": True, "_result": {"error": "cancelled"}})
+                _emit({"_done": True, "_result": {"error": "cancelled"}})
             except Exception as e:
                 log.error("SSE audit failed for %s: %s", domain, str(e)[:200], exc_info=True)
                 error_result = {
@@ -706,7 +749,7 @@ async def audit_stream(
                     "error": "server_error",
                     "error_message": "Audit could not complete. Please try again.",
                 }
-                progress_q.put({"_done": True, "_result": error_result})
+                _emit({"_done": True, "_result": error_result})
 
         sse_start_time = time.time()
         audit_thread = threading.Thread(target=_run_audit, daemon=True)
@@ -714,12 +757,14 @@ async def audit_stream(
 
         async def _event_stream():
             global _active_audits
-            loop = asyncio.get_running_loop()
             outcome_logged = False
+            # Nothing has been written to the socket yet, so the keepalive
+            # clock starts with the stream itself.
+            last_yield = time.time()
             try:
                 while True:
-                    if time.time() - sse_start_time > 120:
-                        log.warning("SSE stream exceeded 120s limit: %s", domain)
+                    if time.time() - sse_start_time > 90:
+                        log.warning("SSE stream exceeded 90s limit: %s", domain)
                         cancel_event.set()
                         timeout_result = {
                             "domain": domain,
@@ -728,16 +773,29 @@ async def audit_stream(
                             "priority_fixes": [],
                             "vendors": [],
                             "error": "timeout",
-                            "error_message": "Audit exceeded the 120 second time limit. Please try again.",
+                            "error_message": "Audit exceeded the 90 second time limit. Please try again.",
                         }
-                        _log_audit(request, domain, scope, 120.0, 0, source="sse",
+                        _log_audit(request, domain, scope, 90.0, 0, source="sse",
                                    status="timeout", error="timeout")
                         outcome_logged = True
                         yield f"data: {json.dumps({'done': True, 'result': timeout_result})}\n\n"
                         return
                     try:
-                        msg = await loop.run_in_executor(None, lambda: progress_q.get(timeout=0.2))
-                    except queue.Empty:
+                        msg = await asyncio.wait_for(progress_q.get(), timeout=0.2)
+                    except asyncio.TimeoutError:
+                        # Between checks the stream would otherwise write
+                        # nothing at all. Cloudflare closes a proxied
+                        # connection that goes quiet, well before the 90s cap
+                        # above can produce a graceful result, and the client's
+                        # idle watchdog cannot tell a slow check from a dead
+                        # socket. An SSE comment line fixes both: browsers
+                        # ignore any line starting with a colon. Only when the
+                        # stream has actually been silent, not on every 200ms
+                        # poll.
+                        if time.time() - last_yield > 10:
+                            last_yield = time.time()
+                            yield ": keepalive\n\n"
+
                         # Check if client disconnected
                         if await request.is_disconnected():
                             log.info("SSE client disconnected: %s", domain)
@@ -770,6 +828,7 @@ async def audit_stream(
                         yield f"data: {json.dumps({'done': True, 'result': result, 'request_id': request_id})}\n\n"
                         return
                     else:
+                        last_yield = time.time()
                         yield f"data: {json.dumps(msg)}\n\n"
             finally:
                 cancel_event.set()  # Ensure thread stops if generator exits for any reason
@@ -797,8 +856,9 @@ async def audit_stream(
             },
         )
     except Exception as e:
-        with _active_audits_lock:
-            _active_audits -= 1
+        if slot_held:
+            with _active_audits_lock:
+                _active_audits -= 1
         log.error("SSE audit setup failed for %s: %s", domain, str(e)[:200], exc_info=True)
 
         async def _setup_error():
@@ -837,7 +897,11 @@ async def audit_pdf(
 
     domain = _validate_domain(domain)
     scope = _validate_scope(scope)
-    if selector and not SELECTOR_PATTERN.match(selector.strip()):
+    # Normalize before validating. Validating the trimmed value while caching
+    # and resolving the raw one lets "%20google" pass, poison its own cache
+    # key, and look up " google._domainkey.example.com".
+    selector = selector.strip() if selector else None
+    if selector and not SELECTOR_PATTERN.match(selector):
         raise HTTPException(status_code=400, detail="Invalid DKIM selector (RFC 6376: alphanumeric and hyphens only)")
     log.info("PDF requested: %s (scope=%s, ip=%s)", domain, scope or "complete", client_ip)
 
@@ -916,21 +980,45 @@ async def audit_pdf(
 # Health check
 # ============================================================
 
+# The health probe's DNS lookup is a real network round trip. Memoizing it
+# keeps an uptime monitor on a 30 second interval from generating live DNS
+# traffic on every hit.
+_HEALTH_TTL = 30
+_health_cache = {"ok": None, "expires": 0.0}
+_health_cache_lock = threading.Lock()
+
+
 @app.get("/api/health", tags=["System"])
 async def health():
     """
     Health check endpoint for monitoring and load balancers.
     Returns 200 if the application and DNS resolution are functional.
     """
-    try:
-        dns.resolver.resolve("example.com", "A", lifetime=2)
+    with _health_cache_lock:
+        verdict = _health_cache["ok"] if time.time() < _health_cache["expires"] else None
+
+    if verdict is None:
+        try:
+            # Offloaded: this is a blocking socket call, and the service runs a
+            # single uvicorn worker, so running it inline froze the event loop
+            # for the whole round trip and stalled every request in flight.
+            await anyio.to_thread.run_sync(
+                functools.partial(dns.resolver.resolve, "example.com", "A", lifetime=2)
+            )
+            verdict = True
+        except Exception as e:
+            log.error("Health check DNS resolution failed: %s", str(e)[:200])
+            verdict = False
+        with _health_cache_lock:
+            _health_cache["ok"] = verdict
+            _health_cache["expires"] = time.time() + _HEALTH_TTL
+
+    if verdict:
         return {"status": "ok", "dns_resolution": "working"}
-    except Exception as e:
-        log.error("Health check DNS resolution failed: %s", str(e)[:200])
-        return JSONResponse(
-            content={"status": "error"},
-            status_code=500,
-        )
+    return JSONResponse(
+        content={"status": "error"},
+        status_code=500,
+    )
 
 
 # ============================================================
