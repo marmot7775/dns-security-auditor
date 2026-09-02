@@ -152,6 +152,7 @@ class FakeZone:
         self.ttl = ttl
         self.queries = []
         self._records = {}
+        self._failures = {}
         for name, by_type in (records or {}).items():
             for rtype, values in by_type.items():
                 self.add(name, rtype, values)
@@ -168,9 +169,23 @@ class FakeZone:
         self._records[self._key(name, rtype)] = list(values)
         return self
 
+    def fail(self, name, rtype, exc=None):
+        """Make one (name, type) pair fail the way a broken server does.
+
+        NXDOMAIN and NoAnswer are answers: the record is not there. This is
+        for the other outcome, where the query never completed and the tool
+        learned nothing. Defaults to NoNameservers, which is what dnspython
+        raises when every nameserver for a zone returns SERVFAIL.
+        """
+        self._failures[self._key(name, rtype)] = exc or dns.resolver.NoNameservers()
+        return self
+
     def resolve(self, name, rdtype="A", *args, **kwargs):
         key = self._key(name, rdtype)
         self.queries.append(key)
+        failure = self._failures.get(key)
+        if failure is not None:
+            raise failure
         values = self._records.get(key)
         if values is None:
             raise dns.resolver.NXDOMAIN()

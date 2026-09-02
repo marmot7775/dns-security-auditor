@@ -129,3 +129,35 @@ def test_a_clean_lookup_still_passes(audit):
     card = _card(audit(FakeZone(dict(BASE)), DOMAIN), "Blocklist")
     assert card["status"] == "pass"
     assert card["pill_label"] == "Clean"
+
+
+def test_blocklist_with_no_results_at_all_is_not_a_pass():
+    """The empty-results branch said status "pass" in one field and "could
+    not be completed" in the next, and its pass counted toward the tally on
+    the PDF cover for a check that assessed nothing.
+
+    It was hard to reach while a failed DNSBL query was recorded as a clean
+    result. Now that a failed query produces no result at all, an entirely
+    unreachable blocklist lands here, so the branch is exercised directly.
+    """
+    from result_transformer import transform_blacklist
+
+    card = transform_blacklist({
+        "check": "Blocklist",
+        "domain": DOMAIN,
+        "domain_checked": DOMAIN,
+        "domain_results": [],
+        "ip_results": [],
+        "total_listings": 0,
+        "issues": [],
+        "status": "ok",
+    }, DOMAIN)
+
+    assert card["status"] == "unavailable", (
+        f"a check with no results assessed nothing about the domain. Got "
+        f"status={card['status']!r} explanation={card['explanation']!r}"
+    )
+    assert card["status"] != "pass"
+    assert card["pill_label"] == "Not checked"
+    assert "not assessed" in card["explanation"].lower()
+    assert not card.get("fix")

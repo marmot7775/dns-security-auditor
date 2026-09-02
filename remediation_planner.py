@@ -100,6 +100,15 @@ def build_remediation_plan(
     mx = raw_results.get("mx") or {}
     blacklist = raw_results.get("blacklist") or {}
 
+    # A check whose DNS query never completed reports status "unavailable"
+    # with an empty record field. Every "you have no X record" item below
+    # reads that emptiness as absence, so a plan built from a failed lookup
+    # would tell the operator to publish records they may already have.
+    spf_unavailable = spf.get("status") == "unavailable"
+    dmarc_unavailable = (
+        dmarc.get("status") == "unavailable" or bool(dmarc.get("inheritance_lookup_failed"))
+    )
+
     spf_record = spf.get("record") or ""
     spf_all = (spf.get("all_mechanism") or "").lower()
     spf_lookups = spf.get("lookup_count") or 0
@@ -153,7 +162,7 @@ def build_remediation_plan(
         })
 
     # Missing SPF (only meaningful for mail-sending domains)
-    if has_mx and not spf_record:
+    if has_mx and not spf_record and not spf_unavailable:
         immediate.append({
             "title": "Publish SPF Record",
             "description": (
@@ -193,7 +202,7 @@ def build_remediation_plan(
         })
 
     # Missing DMARC (no direct record AND no inherited policy)
-    if not dmarc_record and not _dmarc_inherited:
+    if not dmarc_record and not _dmarc_inherited and not dmarc_unavailable:
         immediate.append({
             "title": "Publish DMARC Record",
             "description": (

@@ -63,13 +63,22 @@ try:
     import tldextract
     # ProtectHome=read-only on the prod systemd unit makes tldextract's
     # default ~/.cache path unwritable. Pin the cache under the working
-    # directory (in ReadWritePaths) to keep the suffix-list refresh able
-    # to complete.
+    # directory (in ReadWritePaths).
     _tldextract_cache_dir = os.path.join(
         os.path.dirname(os.path.abspath(__file__)), ".tldextract_cache"
     )
-    _tld_extract = tldextract.TLDExtract(cache_dir=_tldextract_cache_dir)
+    # suffix_list_urls=() pins the bundled snapshot so the tree walk never
+    # blocks on an HTTPS fetch of the public suffix list, and the timeout
+    # bounds that fetch if a future edit ever restores the URLs. See the
+    # matching block in audit_engine.py.
+    _tld_extract = tldextract.TLDExtract(
+        cache_dir=_tldextract_cache_dir,
+        suffix_list_urls=(),
+        cache_fetch_timeout=3.0,
+    )
 except ImportError:
+    # A guard, not a path anything is expected to take. tldextract is
+    # pinned in requirements.txt.
     tldextract = None
     _tld_extract = None
 

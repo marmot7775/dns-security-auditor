@@ -46,6 +46,42 @@ def _map_status(raw_status: str) -> str:
     return mapping.get(raw_status.lower(), "warn")
 
 
+def _lookup_unavailable_card(name: str, raw: Dict, subject: str) -> Dict:
+    """Card for a check whose DNS query never completed.
+
+    NXDOMAIN and NoAnswer mean the record is absent and are reported as
+    such. SERVFAIL, REFUSED and timeout mean nothing was learned, and the
+    difference matters more here than anywhere else in the report: "you have
+    no SPF record" and "we could not ask" lead to opposite actions, and the
+    first one hands the operator a fix for a problem they may not have.
+
+    Neither a pass nor a finding, so it drops out of the pass/warn/fail
+    tallies on the PDF cover and the executive summary rather than padding
+    one of them.
+    """
+    target = raw.get("lookup_target") or raw.get("domain") or ""
+    where = f" at <strong>{_e(target)}</strong>" if target else ""
+    return {
+        "name": name,
+        "status": "unavailable",
+        "pill_label": "Not checked",
+        "verdict": "Not checked by this audit",
+        "record": None,
+        "explanation": (
+            f"The DNS query for this domain's {subject}{where} did not complete. "
+            "The nameserver returned a failure or stopped responding, so this "
+            "audit did not learn whether the record exists. This is not a "
+            "finding about the domain, and it does not mean the record is "
+            "missing. Nothing about the domain was assessed here."
+        ),
+        "details": [
+            {"type": "info", "text": f"The {name} lookup did not complete, so it was not assessed"},
+        ],
+        "fix": None,
+        "fix_records": None,
+    }
+
+
 def _issue_to_detail(issue: Dict) -> Dict[str, str]:
     """Convert a module issue dict to a frontend detail item."""
     severity = issue.get("severity", "info").lower()
@@ -1203,6 +1239,21 @@ def transform_dmarc(raw: Dict, tree_walk: Optional[Dict] = None, is_no_mail: boo
     # must keep working on that path or the whole DMARC card is lost to a
     # transient DNS failure.
     tw = tree_walk or {}
+
+    # The _dmarc lookup never completed, or the subdomain has no record of
+    # its own and the org domain lookup that would have found the inherited
+    # policy never completed either. Either way this audit does not know
+    # what policy applies, and "No DMARC policy published" would be a claim
+    # it cannot support.
+    if raw.get("status") == "unavailable":
+        return _lookup_unavailable_card("DMARC", raw, "DMARC record")
+    if not raw.get("record") and raw.get("inheritance_lookup_failed"):
+        return _lookup_unavailable_card(
+            "DMARC",
+            {"lookup_target": raw.get("inheritance_lookup_target")},
+            "inherited DMARC policy",
+        )
+
     # On no-mail domains, missing rua is not a visibility gap because there is
     # no legitimate mail to monitor. Drop the issue so it stops driving the
     # status, details, fix, and downstream summaries.
@@ -1458,6 +1509,15 @@ def transform_dmarc(raw: Dict, tree_walk: Optional[Dict] = None, is_no_mail: boo
                     "type": "good",
                     "text": f"Aggregate reporting (rua): {len(rua_dests)} destination(s), all authorized",
                 })
+        elif raw.get("rua") and raw.get("report_auth_indeterminate"):
+            details.append({
+                "type": "info",
+                "text": (
+                    "Aggregate reporting (rua) is configured. The check of whether "
+                    "each destination has authorized this domain did not finish, so "
+                    "those destinations were not verified"
+                ),
+            })
         elif raw.get("rua"):
             details.append({"type": "good", "text": "Aggregate reporting (rua) is configured"})
         elif is_no_mail:
@@ -1929,6 +1989,17 @@ def _build_attack_surface(raw: Dict, record: Optional[str], is_no_mail: bool = F
             "summary": "No reporting configured. No leakage risk, but zero visibility.",
             "detail": "No aggregate reporting means you have no visibility into authentication results, but also no risk of report data being sent to unauthorized parties.",
         }
+    elif raw.get("report_auth_indeterminate"):
+        # Not "protected". Nothing verified these destinations, and the green
+        # card said "Reports go to authorized destinations" on the strength
+        # of a check that never ran.
+        v4 = {
+            "name": "Reporting Intelligence",
+            "status": "partial",
+            "color": "amber",
+            "summary": "Report destinations were not verified by this audit.",
+            "detail": "The check of whether each rua destination has authorized this domain to send it reports did not finish, so this audit cannot say where the reports are going. Re-run the audit to complete it.",
+        }
     elif has_unauthorized:
         v4 = {
             "name": "Reporting Intelligence",
@@ -1975,7 +2046,10 @@ def _build_attack_surface(raw: Dict, record: Optional[str], is_no_mail: bool = F
         elif weakest["name"] == "Non-Existent Subdomain Spoofing":
             attacker_path = f"If an attacker wanted to spoof this domain, they would target non-existent subdomains like secure-login.{domain} since there is no np= policy to prevent it."
         elif weakest["name"] == "Reporting Intelligence":
-            attacker_path = "An unauthorized party may be receiving aggregate reports revealing your email infrastructure."
+            if raw.get("report_auth_indeterminate"):
+                attacker_path = "This audit did not finish verifying where aggregate reports are sent, so it cannot say whether an unauthorized party is receiving them."
+            else:
+                attacker_path = "An unauthorized party may be receiving aggregate reports revealing your email infrastructure."
 
     return {
         "overall": overall,
@@ -3321,6 +3395,11 @@ def _is_null_spf(record: str) -> bool:
 
 
 def transform_spf(raw: Dict, has_mx: bool = True) -> Dict:
+    # The apex TXT lookup never completed. "No SPF record published" would
+    # be a claim about the domain that this audit did not establish.
+    if raw.get("status") == "unavailable":
+        return _lookup_unavailable_card("SPF", raw, "SPF record")
+
     status = _map_status(raw.get("status", "error"))
     record = raw.get("record")
     pill_label = None
@@ -5692,16 +5771,27 @@ def transform_blacklist(raw: Dict, domain: str) -> Dict:
         "Spamhaus DBL": "https://check.spamhaus.org/",
     }
 
-    # No domain results available
+    # No domain results at all. The old card said "pass" in one field and
+    # "could not be completed" in the next, and counted toward the passing
+    # tally on the PDF cover for a check that assessed nothing. It became
+    # reachable the moment DNSBL lookup failures stopped being recorded as
+    # clean results.
     if not domain_results:
         return {
             "name": "Blocklist",
-            "status": "pass",
-            "pill_label": "N/A",
-            "verdict": "No blocklist data available",
+            "status": "unavailable",
+            "pill_label": "Not checked",
+            "verdict": "Not checked by this audit",
             "record": None,
-            "explanation": "Domain blocklist check could not be completed.",
-            "details": [{"type": "info", "text": "No blocklist results available"}],
+            "explanation": (
+                "Blocklist status was not assessed for this domain. No blocklist "
+                "returned a usable answer, so this audit has nothing to report "
+                "either way. It does not mean the domain is listed, and it does "
+                "not mean it is clean."
+            ),
+            "details": [
+                {"type": "info", "text": "No blocklist returned a usable answer, so nothing was assessed"},
+            ],
             "fix_records": None,
             "fix": None,
         }

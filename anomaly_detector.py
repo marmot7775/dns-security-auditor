@@ -100,7 +100,9 @@ def detect_anomalies(raw_results: dict, has_mx: bool, is_defensive: bool = False
     dmarc_present = bool(dmarc.get("record") or dmarc.get("policy") or _dmarc_inherited)
 
     # 1. DMARC enforcement without SPF
-    if dmarc_present and dmarc_enforced:
+    # spf.get("status") == "unavailable" means the SPF lookup did not
+    # complete, so an empty record field says nothing about the domain.
+    if dmarc_present and dmarc_enforced and spf.get("status") != "unavailable":
         spf_record = spf.get("record") or spf.get("raw_record")
         if not spf_record:
             anomalies.append({

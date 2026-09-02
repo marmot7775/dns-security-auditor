@@ -17,6 +17,14 @@ idna>=3.4
 # DNSSEC RRSIG signature verification, and RSA key generation in tests
 cryptography>=42.0.0
 
+# Public Suffix List parsing, for the DMARC organizational domain and the
+# CAA parent climb. audit_engine and dmarc_tree_walk both fall back to a
+# 68-entry hardcoded list when this is absent, which computes the wrong org
+# domain for any suffix outside it and raises no error while doing so. That
+# fallback is a guard, not a supported configuration, so this is pinned as a
+# runtime dependency: the deploy runs pip install -r requirements.txt only.
+tldextract==5.3.2
+
 # PDF audit reports. pdf_report.py imports reportlab and server.py imports
 # pdf_report, so /api/audit/{domain}/pdf returns 503 without it. Runtime
 # dependency, not a test-only one: the deploy installs requirements.txt only.

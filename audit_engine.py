@@ -88,8 +88,24 @@ try:
     _tldextract_cache_dir = os.path.join(
         os.path.dirname(os.path.abspath(__file__)), ".tldextract_cache"
     )
-    _tld_extract = tldextract.TLDExtract(cache_dir=_tldextract_cache_dir)
+    # suffix_list_urls=() pins the bundled public suffix snapshot and takes
+    # the network off the audit hot path entirely. .tldextract_cache/ is
+    # gitignored, so without this the first lookup after every restart
+    # fetched the list over HTTPS, serialized behind a file lock across
+    # every concurrent audit. Public suffixes change on the order of weeks,
+    # so a snapshot that ships with the pinned version is close enough.
+    # cache_fetch_timeout is set anyway: it defaults to None, so if a future
+    # edit restores the URLs the fetch would once again hang without bound.
+    _tld_extract = tldextract.TLDExtract(
+        cache_dir=_tldextract_cache_dir,
+        suffix_list_urls=(),
+        cache_fetch_timeout=3.0,
+    )
 except ImportError:
+    # Kept as a guard for an environment that somehow lacks the dependency,
+    # not as a path anything is expected to take. tldextract is pinned in
+    # requirements.txt: the 68-entry fallback below mis-computes the org
+    # domain for every suffix outside it, and does so silently.
     tldextract = None
     _tld_extract = None
 from spf_intelligence import smart_dkim_check
@@ -410,6 +426,8 @@ def _check_report_authorization(domain: str, raw_dmarc: Dict, tree_walk_result: 
         else:
             org_domain = domain.lower().rstrip(".")
 
+    # Pass 1: build the destination list. No DNS happens here, so every
+    # probe below can be issued at once.
     for tag_type in ("rua", "ruf"):
         raw_val = raw_dmarc.get(tag_type)
         if not raw_val:
@@ -448,73 +466,97 @@ def _check_report_authorization(domain: str, raw_dmarc: Dict, tree_walk_result: 
                     break
 
             if is_external:
-                # Check authorization record
-                auth_fqdn = f"{domain}._report._dmarc.{dest_domain}"
-                dest_info["authorization_record"] = auth_fqdn
-                try:
-                    txt_records = _lookup_txt(auth_fqdn, raise_on_failure=True)
-                    authorized = any(
-                        r.strip().startswith("v=DMARC1")
-                        for r in txt_records
-                    )
-                    dest_info["authorized"] = authorized
-                except dns.exception.DNSException:
-                    # The lookup itself failed (SERVFAIL, REFUSED, timeout) --
-                    # this is not the same as the destination having no
-                    # authorization record published. Report indeterminate
-                    # rather than telling the user their reports are dropped.
-                    dest_info["authorized"] = None
-                    dest_info["authorization_check_failed"] = True
-
-                if dest_info["authorized"] is False:
-                    issues.append({
-                        "severity": "error",
-                        "issue": f"External report destination not authorized: {email}",
-                        "plain_english": (
-                            f"Reports sent to {email} will be silently dropped. "
-                            f"RFC 7489 S7.1 requires {dest_domain} to publish a TXT record at "
-                            f"{auth_fqdn} containing 'v=DMARC1' to authorize report delivery."
-                        ),
-                        "fix": (
-                            f"Ask the administrator of {dest_domain} to add a TXT record at "
-                            f"{auth_fqdn} with value: v=DMARC1"
-                        ),
-                    })
-                elif dest_info.get("authorization_check_failed"):
-                    issues.append({
-                        "severity": "warning",
-                        "issue": f"Could not verify report authorization for: {email}",
-                        "plain_english": (
-                            f"The DNS lookup for {auth_fqdn} failed (timeout or server "
-                            f"error), so it's undetermined whether {dest_domain} has "
-                            f"authorized {domain} to send it DMARC reports."
-                        ),
-                        "fix": (
-                            f"Re-run the audit later, or manually verify that {auth_fqdn} "
-                            f"contains 'v=DMARC1'."
-                        ),
-                    })
-            else:
-                dest_info["authorized"] = None  # same domain, no auth needed
-
-            # Check MX for destination domain
-            try:
-                resolver.resolve(dest_domain, "MX")
-                dest_info["has_mx"] = True
-            except dns.exception.DNSException:
-                dest_info["has_mx"] = False
-                if is_external:
-                    issues.append({
-                        "severity": "warning",
-                        "issue": f"Report destination has no MX: {dest_domain}",
-                        "plain_english": (
-                            f"The domain {dest_domain} has no MX records, meaning it may not be "
-                            f"able to receive DMARC aggregate reports sent to {email}."
-                        ),
-                        "fix": f"Verify that {dest_domain} can receive email, or use a different report address.",
-                    })
+                dest_info["authorization_record"] = f"{domain}._report._dmarc.{dest_domain}"
 
             destinations.append(dest_info)
+
+    # Pass 2: probe every destination at once.
+    #
+    # Serially this was two queries per address under a 10 second budget, so
+    # a record listing four rua addresses needed eight round trips, overran,
+    # and the caller's except-and-log dropped the entire report chain section
+    # from the response. A reader then saw no section and no note, which
+    # makes a domain whose reports really are going somewhere unauthorized
+    # look exactly like one that was never checked.
+    def _probe(dest: Dict) -> None:
+        auth_fqdn = dest.get("authorization_record")
+        if auth_fqdn:
+            try:
+                txt_records = _lookup_txt(auth_fqdn, raise_on_failure=True)
+                dest["authorized"] = any(
+                    r.strip().startswith("v=DMARC1") for r in txt_records
+                )
+            except dns.exception.DNSException:
+                # The lookup itself failed (SERVFAIL, REFUSED, timeout).
+                # That is not the same as the destination having published
+                # no authorization record, so report indeterminate rather
+                # than telling the user their reports are dropped.
+                dest["authorized"] = None
+                dest["authorization_check_failed"] = True
+        else:
+            dest["authorized"] = None  # same domain, no auth needed
+
+        try:
+            resolver.resolve(dest["domain"], "MX")
+            dest["has_mx"] = True
+        except dns.exception.DNSException:
+            dest["has_mx"] = False
+
+    if destinations:
+        # _probe_executor, not _shared_executor. This function is itself
+        # running as a task on _shared_executor, and the rule at that pool's
+        # definition is that no task may submit into the pool it is running
+        # on: it would block waiting on a queue it is holding a worker in.
+        list(_probe_executor.map(_probe, destinations))
+
+    # Pass 3: turn the probe results into issues, in destination order so
+    # the report reads the same way on every run.
+    for dest in destinations:
+        if not dest["is_external"]:
+            continue
+        email = dest["address"]
+        dest_domain = dest["domain"]
+        auth_fqdn = dest["authorization_record"]
+
+        if dest["authorized"] is False:
+            issues.append({
+                "severity": "error",
+                "issue": f"External report destination not authorized: {email}",
+                "plain_english": (
+                    f"Reports sent to {email} will be silently dropped. "
+                    f"RFC 7489 S7.1 requires {dest_domain} to publish a TXT record at "
+                    f"{auth_fqdn} containing 'v=DMARC1' to authorize report delivery."
+                ),
+                "fix": (
+                    f"Ask the administrator of {dest_domain} to add a TXT record at "
+                    f"{auth_fqdn} with value: v=DMARC1"
+                ),
+            })
+        elif dest.get("authorization_check_failed"):
+            issues.append({
+                "severity": "warning",
+                "issue": f"Could not verify report authorization for: {email}",
+                "plain_english": (
+                    f"The DNS lookup for {auth_fqdn} failed (timeout or server "
+                    f"error), so it's undetermined whether {dest_domain} has "
+                    f"authorized {domain} to send it DMARC reports."
+                ),
+                "fix": (
+                    f"Re-run the audit later, or manually verify that {auth_fqdn} "
+                    f"contains 'v=DMARC1'."
+                ),
+            })
+
+        if dest["has_mx"] is False:
+            issues.append({
+                "severity": "warning",
+                "issue": f"Report destination has no MX: {dest_domain}",
+                "plain_english": (
+                    f"The domain {dest_domain} has no MX records, meaning it may not be "
+                    f"able to receive DMARC aggregate reports sent to {email}."
+                ),
+                "fix": f"Verify that {dest_domain} can receive email, or use a different report address.",
+            })
 
     if ruf_present:
         issues.append({
@@ -641,7 +683,17 @@ def _enrich_dmarc_inheritance(
     if not org_domain or org_domain.lower() == domain.lower():
         return  # Already the org domain, no inheritance possible
 
-    org_recs = _lookup_txt(f"_dmarc.{org_domain}")
+    # A failed lookup here is not "the parent publishes no policy". The
+    # subdomain card falls back to "No DMARC policy published" on that path,
+    # which is a claim about the org domain this code did not establish.
+    try:
+        org_recs = _lookup_txt(f"_dmarc.{org_domain}", raise_on_failure=True)
+    except dns.exception.DNSException:
+        log.info("Inherited DMARC lookup did not complete for _dmarc.%s", org_domain)
+        raw_dmarc["inheritance_lookup_failed"] = True
+        raw_dmarc["inheritance_lookup_target"] = f"_dmarc.{org_domain}"
+        return
+
     org_dmarc = [r for r in org_recs if r.strip().startswith("v=DMARC1")]
     if len(org_dmarc) != 1:
         return  # No valid record (zero or multiple)
@@ -813,7 +865,19 @@ def _raw_check_dmarc(domain: str) -> Dict[str, Any]:
         pass  # No CNAME -- normal case
 
     # ── Step 1: Lookup ──────────────────────────────────────────
-    dmarc_recs = _lookup_txt(dmarc_fqdn)
+    # raise_on_failure distinguishes "no record published" (NXDOMAIN or
+    # NoAnswer, still an empty list) from "the query never completed"
+    # (SERVFAIL, REFUSED, timeout). Collapsing the two told operators with a
+    # perfectly good DMARC record that they had none, and offered them a fix
+    # for a problem they did not have.
+    try:
+        dmarc_recs = _lookup_txt(dmarc_fqdn, raise_on_failure=True)
+    except dns.exception.DNSException:
+        log.info("DMARC lookup did not complete for %s", dmarc_fqdn)
+        result["status"] = "unavailable"
+        result["unavailable_reason"] = "dns_lookup_failed"
+        result["lookup_target"] = dmarc_fqdn
+        return result
 
     # Pre-check: lowercase v=dmarc1 is invalid per RFC 7489 S6.3 (case-sensitive).
     # Detect BEFORE the strict v=DMARC1 filter so the syntax error is captured
@@ -2205,7 +2269,18 @@ def _raw_check_spf(domain: str) -> Dict[str, Any]:
         })
 
     # ── Step 1: Lookup ──────────────────────────────────────────
-    all_txt = _lookup_txt(domain)
+    # See the matching block in _raw_check_dmarc: an apex TXT query that
+    # fails is not a domain with no SPF record, and telling the operator to
+    # publish one they already have is worse than saying nothing.
+    try:
+        all_txt = _lookup_txt(domain, raise_on_failure=True)
+    except dns.exception.DNSException:
+        log.info("SPF lookup did not complete for %s", domain)
+        result["status"] = "unavailable"
+        result["unavailable_reason"] = "dns_lookup_failed"
+        result["lookup_target"] = domain
+        return result
+
     spf_records = [r for r in all_txt if r.strip().lower().startswith("v=spf1")]
 
     if not spf_records:
@@ -4075,23 +4150,45 @@ def _raw_check_blacklist(domain: str, raw_results: Dict[str, Any]) -> Dict[str, 
             "fix": fix,
         })
 
-    def _dnsbl_lookup(query_name: str, timeout: float = 3.0) -> Optional[str]:
-        """Query a DNSBL. Returns the A record response or None if clean."""
+    def _dnsbl_lookup(query_name: str, timeout: float = 3.0):
+        """Query a DNSBL. Returns (state, return_code).
+
+        Three states, not a nullable string. NXDOMAIN and NoAnswer are the
+        protocol's way of saying "not on this list" and are a real answer.
+        A SERVFAIL or a timeout is not: it means the query never completed,
+        which is the expected path once the site takes enough traffic for
+        Spamhaus to start rate limiting. Collapsing the two into None made
+        every failed query read as a clean bill of health.
+        """
         try:
             resolver = _get_resolver(timeout=timeout)
             answers = resolver.resolve(query_name, "A")
             for rdata in answers:
-                return str(rdata)
-        except (dns.resolver.NXDOMAIN, dns.resolver.NoAnswer, dns.resolver.NoNameservers):
-            return None
-        except dns.exception.DNSException:
-            return None
+                return "listed", str(rdata)
+            return "not_listed", None
+        except (dns.resolver.NXDOMAIN, dns.resolver.NoAnswer):
+            return "not_listed", None
+        except dns.exception.DNSException as e:
+            # NoNameservers is a subclass of DNSException and lands here:
+            # SERVFAIL from every nameserver tried is a failed query, not an
+            # answer of "not listed".
+            log.debug("DNSBL lookup did not complete for %s: %s", query_name, e)
+            return "unknown", None
 
     # Check domain against domain-based lists
     for list_name, list_host, _tier, _delist_url in DOMAIN_LISTS:
         query = f"{domain}.{list_host}"
-        return_code = _dnsbl_lookup(query)
-        listed = return_code is not None
+        state, return_code = _dnsbl_lookup(query)
+
+        if state == "unknown":
+            result["domain_results"].append({
+                "list": list_name, "listed": False,
+                "return_code": None, "meaning": None,
+                "error": f"{list_name} lookup did not complete",
+            })
+            continue
+
+        listed = state == "listed"
 
         meaning = None
         if listed:
@@ -4509,7 +4606,12 @@ def run_full_audit(domain: str, dkim_selector: Optional[str] = None,
                         raw_dmarc["ruf_provider_note"] = report_auth.get("ruf_provider_note", False)
                         raw_dmarc["issues"].extend(report_auth.get("report_auth_issues", []))
                 except Exception:
+                    # The section used to vanish here with no note, so a
+                    # domain whose reports really are going to an
+                    # unauthorized destination looked identical to one that
+                    # was never checked. Mark it indeterminate instead.
                     log.debug("Report auth enrichment failed", exc_info=True)
+                    raw_dmarc["report_auth_indeterminate"] = True
 
             if _should_include("dmarc", scope_set):
                 checks.append(transform_dmarc(raw_dmarc, tree_walk=tree_walk_result, is_no_mail=is_defensive))
@@ -4901,6 +5003,10 @@ def run_full_audit(domain: str, dkim_selector: Optional[str] = None,
         and (_xc_dmarc.get("record") or _xc_inherited)
         and "spf" in raw_results
         and "dkim" in raw_results
+        # Every branch below reads "no SPF record" off an empty record field.
+        # When the SPF lookup did not complete that is unknown, not absent,
+        # and the cross-check would state it as a finding on the DMARC card.
+        and raw_results["spf"].get("status") != "unavailable"
         and _should_include("dmarc", scope_set)
     )
 
@@ -5054,7 +5160,11 @@ def run_full_audit(domain: str, dkim_selector: Optional[str] = None,
     provider_intelligence = _build_provider_intelligence(raw_results, checks)
 
     # --- Enrich SPF fix text with vendor-specific includes ---
-    if vendors:
+    # Skipped when the SPF lookup did not complete: _build_suggested_spf
+    # treats an empty current record as "no SPF published" and offers a
+    # from-scratch record, which would be a lossy replacement for whatever
+    # the domain actually publishes.
+    if vendors and raw_results.get("spf", {}).get("status") != "unavailable":
         current_spf = raw_results.get("spf", {}).get("record", "") or ""
         missing_includes = []
         matched_vendors = []
