@@ -24,6 +24,7 @@ let lastAuditData = null;
 let auditStartTime = 0;
 let auditController = null;
 let auditReader = null;
+let auditInFlight = false;
 let sessionAuditCount = 0;
 
 // -- DOM References --
@@ -156,7 +157,7 @@ if (eduToggle && eduContent) {
 auditForm.addEventListener('submit', (e) => {
     e.preventDefault();
     // Prevent concurrent audits from rapid submissions
-    if (auditController && !auditController.signal.aborted) return;
+    if (auditInFlight) return;
     const raw = domainInput.value.trim();
     if (!raw) {
         _showInlineError('Please enter a domain name.');
@@ -235,6 +236,9 @@ function normalizeDomain(input) {
 }
 
 // -- Main audit runner --
+// How long the stream may go without a data line before we give up on it.
+const STREAM_IDLE_TIMEOUT_MS = 25000;
+
 async function runAudit(domain) {
     // Cancel any in-flight reader
     if (auditReader) {
@@ -244,7 +248,26 @@ async function runAudit(domain) {
     // Abort any in-flight audit request
     if (auditController) auditController.abort();
     auditController = new AbortController();
-    const signal = auditController.signal;
+    const controller = auditController;
+    const signal = controller.signal;
+    auditInFlight = true;
+
+    // Idle watchdog. A stalled TCP connection (Cloudflare drops it, the laptop
+    // sleeps, the phone moves from Wi-Fi to LTE) leaves reader.read() hanging:
+    // it never resolves and never rejects, so the UI spins until the page is
+    // reloaded. Every data line pushes the deadline back.
+    let idleTimer = null;
+    let stalled = false;
+    const clearIdleTimer = () => {
+        if (idleTimer) { clearTimeout(idleTimer); idleTimer = null; }
+    };
+    const resetIdleTimer = () => {
+        clearIdleTimer();
+        idleTimer = setTimeout(() => {
+            stalled = true;
+            controller.abort();
+        }, STREAM_IDLE_TIMEOUT_MS);
+    };
 
     auditStartTime = performance.now();
     document.title = `Scanning ${domain}...`;
@@ -257,6 +280,7 @@ async function runAudit(domain) {
     if (currentScope && currentScope !== 'complete') streamUrl += `&scope=${encodeURIComponent(currentScope)}`;
 
     try {
+        resetIdleTimer();
         const resp = await fetch(streamUrl, { signal });
         if (!resp.ok) {
             const err = await resp.json().catch(() => ({}));
@@ -279,12 +303,19 @@ async function runAudit(domain) {
 
             for (const line of lines) {
                 if (!line.startsWith('data: ')) continue;
+                resetIdleTimer();
                 const payload = line.slice(6);
                 let msg;
                 try { msg = JSON.parse(payload); } catch { continue; }
 
                 if (msg.error) {
-                    throw new Error(msg.error);
+                    // The server sends bare error events for capacity and rate
+                    // limiting. Flagging them keeps the catch below from firing
+                    // a second full audit at the JSON endpoint, which would
+                    // double load exactly when the server is already saturated.
+                    const serverErr = new Error(msg.error);
+                    serverErr.fromServer = true;
+                    throw serverErr;
                 }
 
                 if (msg.done) {
@@ -302,7 +333,20 @@ async function runAudit(domain) {
         // If we got here without a done message, fall back to JSON endpoint
         throw new Error('Stream ended without results');
     } catch (err) {
+        // Stop the watchdog before the fallback runs, so its deadline cannot
+        // abort a fallback request that is still making progress.
+        clearIdleTimer();
+        if (stalled) {
+            hideLoading();
+            showError('The connection stalled and the audit stopped responding. Please check your network and try again.');
+            return;
+        }
         if (err.name === 'AbortError') return;
+        if (err.fromServer) {
+            hideLoading();
+            showError(err.message);
+            return;
+        }
         console.error('SSE audit error:', err);
         // Fall back to the regular JSON endpoint
         try {
@@ -321,6 +365,15 @@ async function runAudit(domain) {
             console.error('Fallback audit error:', fallbackErr);
             hideLoading();
             showError(fallbackErr.message || 'Audit failed. Please check the domain and try again.');
+        }
+    } finally {
+        clearIdleTimer();
+        // Only retire the state this call owns. A Recent chip or a subdomain
+        // Audit button can start a new audit while this one is still unwinding,
+        // and that newer call has already claimed auditController.
+        if (auditController === controller) {
+            auditController = null;
+            auditInFlight = false;
         }
     }
 }
@@ -409,6 +462,14 @@ function hideResults() {
 
 function showError(message) {
     document.title = DEFAULT_TITLE;
+    // Clear the top progress bar. Left at its partial width it reads as
+    // "still loading" next to the error card.
+    const topBar = document.querySelector('.top-progress-bar');
+    if (topBar) {
+        topBar.classList.remove('complete');
+        topBar.style.width = '0%';
+        topBar.style.opacity = '0';
+    }
     loadingSection.style.display = 'block';
     const card = loadingSection.querySelector('.loading-card');
     card.innerHTML = `
@@ -3456,9 +3517,28 @@ function showToast(message) {
 // Recent Audits (Prompt 2)
 // ============================================================
 
+// An earlier implementation stored bare domain strings under the same key, so
+// existing browsers can hold a mixed array. Map strings to the object shape on
+// read, otherwise r.domain is undefined and the chip renders as "undefined".
+function _readRecentAudits() {
+    const raw = JSON.parse(localStorage.getItem('recentAudits') || '[]');
+    if (!Array.isArray(raw)) return [];
+    const seen = new Set();
+    return raw
+        .map(r => (typeof r === 'string' ? { domain: r, timestamp: 0 } : r))
+        .filter(r => {
+            if (!r || typeof r.domain !== 'string' || !r.domain) return false;
+            // A mixed array holds the same domain twice, once per shape.
+            const key = r.domain.toLowerCase();
+            if (seen.has(key)) return false;
+            seen.add(key);
+            return true;
+        });
+}
+
 function _recordRecentAudit(domain) {
     try {
-        let recent = JSON.parse(localStorage.getItem('recentAudits') || '[]');
+        let recent = _readRecentAudits();
         // Remove duplicate
         recent = recent.filter(r => r.domain !== domain);
         recent.unshift({ domain, timestamp: Date.now() });
@@ -3485,7 +3565,7 @@ function _renderRecentAudits() {
     }
 
     try {
-        const recent = JSON.parse(localStorage.getItem('recentAudits') || '[]');
+        const recent = _readRecentAudits();
         if (recent.length === 0) {
             container.style.display = 'none';
             return;
@@ -3856,73 +3936,3 @@ function _renderComparison(data1, data2, container) {
         setTheme(current === 'light' ? 'dark' : 'light');
     });
 })();
-
-(function() {
-    const STORAGE_KEY = 'recentAudits';
-    const MAX_ITEMS = 5;
-    const container = document.getElementById('recent-audits');
-    const chipsContainer = document.getElementById('recent-audits-chips');
-    const clearBtn = document.getElementById('recent-audits-clear');
-    const domainInput = document.getElementById('domain-input');
-    const auditForm = document.getElementById('audit-form');
-
-    if (!container || !chipsContainer) return;
-
-    function getRecent() {
-        try {
-            const raw = localStorage.getItem(STORAGE_KEY);
-            return raw ? JSON.parse(raw) : [];
-        } catch {
-            return [];
-        }
-    }
-
-    function saveRecent(domains) {
-        localStorage.setItem(STORAGE_KEY, JSON.stringify(domains));
-    }
-
-    function addDomain(domain) {
-        let domains = getRecent();
-        domains = domains.filter(d => d.toLowerCase() !== domain.toLowerCase());
-        domains.unshift(domain);
-        if (domains.length > MAX_ITEMS) domains.pop();
-        saveRecent(domains);
-        render();
-    }
-
-    function render() {
-        const domains = getRecent();
-        if (!domains.length) {
-            container.style.display = 'none';
-            return;
-        }
-        container.style.display = 'block';
-        chipsContainer.innerHTML = '';
-        domains.forEach(domain => {
-            const chip = document.createElement('button');
-            chip.type = 'button';
-            chip.className = 'recent-audit-chip';
-            chip.textContent = domain;
-            chip.addEventListener('click', () => {
-                domainInput.value = domain;
-                auditForm.dispatchEvent(new Event('submit', { cancelable: true }));
-            });
-            chipsContainer.appendChild(chip);
-        });
-    }
-
-    auditForm.addEventListener('submit', () => {
-        const domain = domainInput.value.trim();
-        if (domain) addDomain(domain);
-    });
-
-    clearBtn.addEventListener('click', () => {
-        localStorage.removeItem(STORAGE_KEY);
-        container.style.display = 'none';
-        chipsContainer.innerHTML = '';
-    });
-
-    render();
-})();
-
-
