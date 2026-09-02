@@ -419,7 +419,10 @@ def _check_report_authorization(domain: str, raw_dmarc: Dict, tree_walk_result: 
 
         addrs = [a.strip() for a in raw_val.split(",") if a.strip()]
         for addr in addrs:
-            email = addr.removeprefix("mailto:").removeprefix("MAILTO:")
+            # RFC 7489 allows an optional !size modifier on a report URI.
+            # It is part of the URI, not part of the address, so strip it
+            # before the domain is read or the org domain never matches.
+            email = addr.removeprefix("mailto:").removeprefix("MAILTO:").split("!", 1)[0]
             if "@" not in email:
                 continue
             dest_domain = email.split("@", 1)[1].lower().rstrip(".")
@@ -4355,6 +4358,81 @@ def _count_checks_for_scope(scope_set) -> int:
     return count
 
 
+_SPF_QUALIFIERS = "+-~?"
+
+
+def _spf_terms(record: str) -> List[str]:
+    """Every term after the v=spf1 version tag, in the order it was published."""
+    parts = (record or "").strip().split()
+    if not parts or not parts[0].lower().startswith("v=spf1"):
+        return []
+    return parts[1:]
+
+
+def _spf_authorization_sources(record: str) -> set:
+    """The terms of an SPF record that authorize a sender.
+
+    Everything except the version tag, the all mechanism and the exp=
+    modifier counts, so a rebuilt record can be compared term for term
+    against the record it would replace.
+    """
+    sources = set()
+    for term in _spf_terms(record):
+        bare = term.lstrip(_SPF_QUALIFIERS).lower()
+        if bare == "all" or bare.startswith("exp="):
+            continue
+        sources.add(term.lower())
+    return sources
+
+
+def _build_suggested_spf(current_spf: str, missing_includes: List[str],
+                         all_mechanism: Optional[str] = None) -> Optional[str]:
+    """Add missing vendor includes to the operator's existing mechanism list.
+
+    The suggestion is the published record with the new includes spliced in
+    ahead of the all mechanism, so ip4, ip6, a, mx and exists terms survive
+    in their original order and the qualifier on all is left alone. Returns
+    None when the result would authorize fewer sources than the record it
+    replaces: a lossy suggestion stops the sender's own hosts from passing
+    SPF the moment it is pasted, so no suggestion is better than that one.
+    """
+    current = (current_spf or "").strip()
+    if not current:
+        return " ".join(["v=spf1"] + list(missing_includes) + [all_mechanism or "-all"])
+
+    terms = _spf_terms(current)
+    if not terms:
+        return None
+
+    published = {t.lower() for t in terms}
+    new_includes = [inc for inc in missing_includes if inc.lower() not in published]
+    if not new_includes:
+        return None
+
+    all_index = next(
+        (i for i, t in enumerate(terms)
+         if t.lstrip(_SPF_QUALIFIERS).lower() == "all"),
+        None,
+    )
+    if all_index is None:
+        rebuilt = terms + new_includes
+    else:
+        rebuilt = terms[:all_index] + new_includes + terms[all_index:]
+
+    suggested = " ".join(["v=spf1"] + rebuilt)
+
+    # The suggested record has to be a superset of the published one. If any
+    # authorization source went missing, drop the suggestion entirely.
+    lost = _spf_authorization_sources(current) - _spf_authorization_sources(suggested)
+    if lost:
+        log.warning(
+            "Skipping SPF suggestion for a record that would lose %s",
+            ", ".join(sorted(lost)),
+        )
+        return None
+    return suggested
+
+
 def run_full_audit(domain: str, dkim_selector: Optional[str] = None,
                    scope: Optional[str] = None,
                    progress_callback=None) -> Dict[str, Any]:
@@ -4989,17 +5067,20 @@ def run_full_audit(domain: str, dkim_selector: Optional[str] = None,
             for check in checks:
                 if check.get("name") != "SPF":
                     continue
-                # Build suggested record
-                existing_includes = re.findall(r'include:\S+', current_spf)
-                all_includes = list(dict.fromkeys(existing_includes + missing_includes))
-                all_mech = raw_results.get("spf", {}).get("all_mechanism") or "-all"
-                suggested = f"v=spf1 {' '.join(all_includes)} {all_mech}"
-                vendor_list = ", ".join(matched_vendors)
-                vendor_hint = (
-                    f"<strong>Detected services:</strong> {_e(vendor_list)}<br><br>"
-                    f"<strong>Suggested SPF record:</strong><br>"
-                    f"<code>{_e(suggested)}</code>"
+                # Build suggested record from the operator's own terms, so
+                # ip4, a, mx and exists survive alongside the new includes.
+                suggested = _build_suggested_spf(
+                    current_spf,
+                    missing_includes,
+                    raw_results.get("spf", {}).get("all_mechanism"),
                 )
+                vendor_list = ", ".join(matched_vendors)
+                vendor_hint = f"<strong>Detected services:</strong> {_e(vendor_list)}"
+                if suggested:
+                    vendor_hint += (
+                        f"<br><br><strong>Suggested SPF record:</strong><br>"
+                        f"<code>{_e(suggested)}</code>"
+                    )
                 if check.get("fix"):
                     check["fix"] = vendor_hint + "<br><br>" + check["fix"]
                 else:

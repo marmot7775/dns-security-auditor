@@ -8,6 +8,8 @@ section of the audit report.
 
 from typing import List
 
+from remediation_planner import _is_ed25519
+
 
 _SEVERITY_ORDER = {"critical": 0, "high": 1, "medium": 2}
 
@@ -187,6 +189,11 @@ def detect_anomalies(raw_results: dict, has_mx: bool, is_defensive: bool = False
         found_selectors = dkim.get("found_selectors") or []
         key_bits = []
         for k in found_selectors:
+            # An Ed25519 key is 256 bits by definition and is not weak. The
+            # comparison below is an RSA modulus threshold, so a key type
+            # that is not RSA has no business in the set at all.
+            if _is_ed25519(k, k.get("key_analysis") or {}):
+                continue
             bits = k.get("key_size") or k.get("key_bits") or k.get("bits")
             if bits is not None:
                 try:

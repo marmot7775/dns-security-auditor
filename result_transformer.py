@@ -728,7 +728,6 @@ def build_consistency_findings(
     check_map = {c.get("name", ""): c for c in checks}
 
     # 1. SPF includes that resolve to empty/error
-    spf_raw = raw_results.get("spf", {})
     spf_deep = check_map.get("SPF", {}).get("spf_deep")
     if spf_deep:
         for mech in spf_deep.get("mechanisms", []):
@@ -777,32 +776,10 @@ def build_consistency_findings(
         if sel.get("status") == "nxdomain" or (not sel.get("record") and sel.get("selector")):
             pass  # Already handled by DKIM check
 
-    # 4. DMARC rua provider vs SPF authorization
-    dmarc_raw = raw_results.get("dmarc", {})
-    rua = dmarc_raw.get("rua", "")
-    spf_record = spf_raw.get("record", "")
-    if rua and spf_record:
-        # Extract domain from rua mailto:
-        import re
-        rua_domains = re.findall(r'mailto:[^@]+@([^,;\s]+)', rua)
-        for rua_domain in rua_domains:
-            rua_domain = rua_domain.lower().rstrip(".")
-            domain_val = dmarc_raw.get("domain", "").lower()
-            # Only flag if rua domain differs from audited domain
-            if rua_domain and rua_domain != domain_val:
-                # Check if SPF includes this domain
-                if rua_domain not in spf_record.lower():
-                    findings.append({
-                        "protocol": "DMARC",
-                        "badge": "Informational",
-                        "title": "DMARC reports sent to external domain",
-                        "detail": (
-                            f"Your DMARC aggregate reports are sent to {rua_domain}, "
-                            f"which is not authorized in your SPF record. This is normal "
-                            f"if they only receive reports, but verify the destination is correct."
-                        ),
-                        "severity": "info",
-                    })
+    # 4. Removed: an external rua destination was flagged for not appearing in
+    # the SPF record. SPF does not authorize DMARC report destinations, the
+    # <domain>._report._dmarc.<destination> record does, and the anomaly
+    # detector already checks that one against parsed report_destinations.
 
     # 5. CAA vs MTA-STS certificate providers
     caa_raw = raw_results.get("caa", {})
@@ -1220,6 +1197,12 @@ def _build_dmarcbis_card_data(readiness: Optional[Dict], record: Optional[str]) 
 
 
 def transform_dmarc(raw: Dict, tree_walk: Optional[Dict] = None, is_no_mail: bool = False) -> Dict:
+    # The tree walk is optional and comes back None whenever dmarc_tree_walk
+    # times out or raises, while _enrich_dmarc_inheritance still sets
+    # inherited_policy from its PSL fallback. The inherited branches below
+    # must keep working on that path or the whole DMARC card is lost to a
+    # transient DNS failure.
+    tw = tree_walk or {}
     # On no-mail domains, missing rua is not a visibility gap because there is
     # no legitimate mail to monitor. Drop the issue so it stops driving the
     # status, details, fix, and downstream summaries.
@@ -1254,21 +1237,30 @@ def transform_dmarc(raw: Dict, tree_walk: Optional[Dict] = None, is_no_mail: boo
         verdict = "No DMARC policy published"
         status = "fail"
         pill_label = "Missing"
-    elif policy == "reject":
+    elif policy in ("reject", "quarantine"):
         pct = raw.get("pct", 100)
-        verdict = "p=reject (authentication failures are rejected)"
-        if pct is not None and pct < 100:
-            verdict += f" (pct={pct})"
-        # p=reject is always a pass regardless of what the audit engine returned
-        # (the engine may flag "warning" for missing rua, but the policy itself is correct)
-        status = "pass"
-    elif policy == "quarantine":
-        pct = raw.get("pct", 100)
-        verdict = "p=quarantine (failures sent to spam)"
-        if pct is not None and pct < 100:
-            verdict += f" (pct={pct})"
-        # p=quarantine is enforcing; treat as pass even if rua is absent
-        status = "pass"
+        if pct is None:
+            pct = 100
+        if policy == "reject":
+            verdict = "p=reject (authentication failures are rejected)"
+            _disabled = "p=reject with pct=0 (enforcement is switched off)"
+            _partial = "p=reject (authentication failures are rejected)"
+        else:
+            verdict = "p=quarantine (failures sent to spam)"
+            _disabled = "p=quarantine with pct=0 (enforcement is switched off)"
+            _partial = "p=quarantine (failures sent to spam)"
+        # An enforcing policy is only a pass when it applies to all failing
+        # mail. pct is what receivers act on, so it decides the status here
+        # and is not merely appended to the sentence. A missing rua still
+        # does not downgrade a policy that really is enforcing.
+        if pct <= 0:
+            verdict = _disabled
+            status = "fail"
+        elif pct < 100:
+            verdict = f"{_partial} (pct={pct}, applied to {pct}% of failing messages)"
+            status = "warn"
+        else:
+            status = "pass"
     elif policy == "none":
         verdict = "p=none (monitoring only, no enforcement)"
         # p=none with no rua is a critical failure: no enforcement AND no visibility
@@ -1417,7 +1409,7 @@ def transform_dmarc(raw: Dict, tree_walk: Optional[Dict] = None, is_no_mail: boo
     # Details
     details = []
     if inherited:
-        applied_tag = tree_walk.get("applied_tag", "p")
+        applied_tag = tw.get("applied_tag", "p")
         if inherited_policy == "reject":
             details.append({"type": "good", "text": f"Effective policy: reject (inherited from {inherited_source})"})
         elif inherited_policy == "quarantine":
@@ -1429,8 +1421,8 @@ def transform_dmarc(raw: Dict, tree_walk: Optional[Dict] = None, is_no_mail: boo
         details.append({"type": "info", "text": f"No record at _dmarc.{raw.get('domain', '')}. Policy found via {_detail_method}"})
         details.append({"type": "info", "text": f"Applied tag: {applied_tag}= from {inherited_source}"})
 
-        if tree_walk.get("org_domain"):
-            details.append({"type": "info", "text": f"Organizational domain: {tree_walk['org_domain']}"})
+        if tw.get("org_domain"):
+            details.append({"type": "info", "text": f"Organizational domain: {tw['org_domain']}"})
 
     elif record:
         if raw.get("policy_recovery_applied"):
@@ -1550,7 +1542,7 @@ def transform_dmarc(raw: Dict, tree_walk: Optional[Dict] = None, is_no_mail: boo
     display_record = record
     if inherited and not display_record:
         # Pull record from tree walk steps
-        for step in (tree_walk.get("steps") or []):
+        for step in (tw.get("steps") or []):
             if step.get("found") and step.get("record"):
                 display_record = step["record"]
                 break
@@ -4248,15 +4240,18 @@ def transform_mx(raw: Dict) -> Dict:
     providers = raw.get("providers", [])
     count = raw.get("record_count", 0)
 
-    # Null MX (RFC 7505): "0 ." means domain explicitly does not accept email
-    is_null_mx = (count == 1 and records and records[0].strip() in ("0 .", "0  ."))
+    # Null MX (RFC 7505): "0 ." means domain explicitly does not accept email.
+    # mx_check strips the trailing dot off the hostname, so the record string
+    # is "0 " and never matched a literal comparison here. Read the producer's
+    # own boolean instead and render the record as valid zone-file syntax.
+    is_null_mx = bool(raw.get("has_null_mx"))
     if is_null_mx:
         return {
             "name": "MX Records",
             "status": "pass",
             "pill_label": "Null MX",
             "verdict": "Domain does not accept email (RFC 7505)",
-            "record": records[0],
+            "record": "0 .",
             "explanation": (
                 "This domain publishes a null MX record (<strong>0 .</strong>) per RFC 7505, "
                 "which explicitly declares that it does not accept inbound email. "
