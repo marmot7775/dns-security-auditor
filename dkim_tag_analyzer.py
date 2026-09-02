@@ -25,6 +25,8 @@ from typing import Any, Dict, List, Optional, Tuple
 
 import dns.resolver
 
+from dns_tools import get_resolver
+
 
 # ----------------------------------------------------------------
 # Priority tiers
@@ -208,8 +210,7 @@ def _dns_lookup_dkim(domain: str, selector: str, timeout: int = 5) -> Dict[str, 
         "nxdomain": False,
     }
 
-    resolver = dns.resolver.Resolver()
-    resolver.timeout = timeout
+    resolver = get_resolver(timeout)
     resolver.lifetime = timeout
 
     try:

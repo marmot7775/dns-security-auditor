@@ -16,6 +16,7 @@ _STS_ID_RE = re.compile(r"[A-Za-z0-9]{1,32}")
 try:
     import requests
     from requests.adapters import HTTPAdapter
+
     REQUESTS_AVAILABLE = True
 except ImportError:
     REQUESTS_AVAILABLE = False
@@ -135,12 +136,14 @@ try:
 except ImportError:
     DNS_AVAILABLE = False
 
+from dns_tools import get_resolver
+
 
 def _get_resolver(timeout: float = 5.0):
-    resolver = dns.resolver.Resolver()
-    resolver.timeout = timeout
-    resolver.lifetime = timeout * 2
-    return resolver
+    # Shared factory: every resolver in the process draws from one TTL-honoring
+    # answer cache, so the repeated lookups a single audit makes hit memory
+    # instead of the network.
+    return get_resolver(timeout)
 
 
 def _lookup_ttl(name: str, rdtype: str = "TXT") -> Optional[int]:

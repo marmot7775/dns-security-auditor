@@ -93,6 +93,7 @@ except ImportError:
     tldextract = None
     _tld_extract = None
 from spf_intelligence import smart_dkim_check
+from dns_tools import get_resolver, get_dnssec_resolver
 
 from result_transformer import (
     transform_dmarc,
@@ -263,10 +264,9 @@ def _should_include(check_key, scope_set):
 # ============================================================
 
 def _get_resolver(timeout: float = 5.0):
-    resolver = dns.resolver.Resolver()
-    resolver.timeout = timeout
-    resolver.lifetime = timeout * 2
-    return resolver
+    # Backed by the shared plain answer cache. A single complete audit used to
+    # re-issue about 35 identical queries because nothing anywhere cached.
+    return get_resolver(timeout)
 
 
 def _get_dnssec_resolver(timeout: float = 8.0):
@@ -277,23 +277,15 @@ def _get_dnssec_resolver(timeout: float = 8.0):
       - Sets the DO (DNSSEC OK) EDNS flag so the recursive resolver
         returns DNSKEY/RRSIG/DS records and sets the AD bit when
         validation succeeds.
-      - Uses DNSSEC-validating public resolvers (Cloudflare primary,
-        Google fallback) instead of the system default, which may be
-        a stub resolver that strips DNSSEC data.
+      - Uses DNSSEC-validating public resolvers instead of the system
+        default, which may be a stub resolver that strips DNSSEC data.
       - Larger EDNS buffer (4096) to handle DNSKEY responses which
         are often >512 bytes.
+      - Draws from its own cache, separate from the plain one. dnspython
+        keys the cache on (name, rdtype, rdclass) only, so sharing would
+        let a plain answer with no RRSIG satisfy a DNSSEC query.
     """
-    resolver = dns.resolver.Resolver()
-    resolver.timeout = timeout
-    resolver.lifetime = timeout * 2
-    # Use DNSSEC-validating public resolvers. Quad9 first because its
-    # AD-bit signal is the strictest (drops bogus answers rather than
-    # returning AD=0), so when we fall back to AD-only annotation the
-    # signal is most trustworthy.
-    resolver.nameservers = ["9.9.9.9", "1.1.1.1", "1.0.0.1", "8.8.8.8"]
-    # Set DO flag — without this, resolvers may not return DNSKEY/RRSIG
-    resolver.use_edns(0, dns.flags.DO, 4096)
-    return resolver
+    return get_dnssec_resolver(timeout)
 
 
 def _lookup_txt(name: str, raise_on_failure: bool = False) -> List[str]:
@@ -2682,6 +2674,11 @@ def _raw_check_dnssec(domain: str) -> Dict[str, Any]:
         "issues": [],
         "status": "ok",
     }
+    # TTL comes off the DNSKEY answer this check already holds. The old
+    # _lookup_ttl(domain, "DNSKEY") at the end re-issued the query on the plain
+    # resolver, which is a different nameserver set and a separate cache, so it
+    # was a guaranteed second DNSKEY round trip on every audit.
+    _dnskey_ttl = None
     # Track whether the DNSKEY query failed so we can run the bogus probe
     # once after the DNSKEY block, instead of duplicating the call across
     # several exception handlers.
@@ -2705,6 +2702,8 @@ def _raw_check_dnssec(domain: str) -> Dict[str, Any]:
     try:
         dnskey_answers = resolver.resolve(domain, "DNSKEY")
         result["has_dnssec"] = True
+        _rrset = getattr(dnskey_answers, "rrset", None)
+        _dnskey_ttl = _rrset.ttl if _rrset else None
         result["key_count"] = len(dnskey_answers)
 
         # Record whether the recursive resolver validated the chain (AD
@@ -2764,6 +2763,8 @@ def _raw_check_dnssec(domain: str) -> Dict[str, Any]:
         try:
             dnskey_answers = retry_resolver.resolve(domain, "DNSKEY")
             result["has_dnssec"] = True
+            _rrset = getattr(dnskey_answers, "rrset", None)
+            _dnskey_ttl = _rrset.ttl if _rrset else None
             result["key_count"] = len(dnskey_answers)
 
             ad_flag = bool(dnskey_answers.response.flags & dns.flags.AD)
@@ -3060,7 +3061,7 @@ def _raw_check_dnssec(domain: str) -> Dict[str, Any]:
     elif "warning" in severities:
         result["status"] = "warning"
 
-    result["ttl"] = _lookup_ttl(domain, "DNSKEY")
+    result["ttl"] = _dnskey_ttl
     return result
 
 
@@ -4166,6 +4167,14 @@ _shared_executor = ThreadPoolExecutor(max_workers=20)
 # all. No task may submit into the pool it is running on.
 _probe_executor = ThreadPoolExecutor(max_workers=20)
 
+# DKIM selector discovery gets its own pool for the same reason. smart_dkim_check
+# runs as a Phase 2 task on _shared_executor and then blocks on the selector
+# probes it submits, so handing it _shared_executor would make it wait on a
+# queue it is holding a worker in. Before this it built a private
+# ThreadPoolExecutor(15) per call, which is 15 fresh threads per audit and up
+# to 120 at the concurrency cap; one long-lived pool replaces all of them.
+_dkim_executor = ThreadPoolExecutor(max_workers=20)
+
 
 # ============================================================
 # Subdomain Discovery & Audit
@@ -4514,6 +4523,44 @@ def run_full_audit(domain: str, dkim_selector: Optional[str] = None,
     # have no MX and still send real mail.
     non_mail = _positive_non_mail_signal(raw_results.get("mx"), raw_results.get("spf"))
 
+    # DNSSEC is hoisted out of Phase 2 because DANE needs its verdict.
+    #
+    # DANE used to read it from a dict(raw_results) snapshot taken here, while
+    # Phase 2 was still being assembled and before a single future had been
+    # submitted. DNSSEC is itself a Phase 2 check whose result is only written
+    # in the as_completed loop below, so the snapshot could never contain it
+    # and _raw_check_dane fell through to its fallback branch on every audit:
+    # a second full DNSKEY query, bogus probe, both DS resolution methods
+    # including the parent NS walk, and a chain re-fetch, running concurrently
+    # with the copy already in flight. The transport scope has no DNSSEC card
+    # at all and still paid for a whole DNSSEC run.
+    #
+    # Running it once up front costs one serial check and removes the
+    # duplicate. It cannot be submitted as a future that DANE then waits on:
+    # DANE runs on _shared_executor, and a task on that pool may not block on
+    # another task in the same pool.
+    _dnssec_raw = None
+    _dnssec_error = None
+    if _should_include("dnssec", scope_set) or _should_include("dane", scope_set):
+        try:
+            _dnssec_raw = _run_with_timeout(_raw_check_dnssec, domain, timeout=CHECK_TIMEOUT)
+            raw_results["dnssec"] = _dnssec_raw
+        except FuturesTimeoutError:
+            _dnssec_error = "timeout"
+            # Recorded rather than left absent, so DANE reads "no DNSSEC"
+            # from here instead of taking its guard branch and running the
+            # whole check a second time after it has already blown the budget.
+            raw_results["dnssec"] = {
+                "check": "DNSSEC", "domain": domain, "has_dnssec": False,
+                "has_ds": False, "chain_valid": None, "timed_out": True,
+            }
+        except Exception as e:
+            _dnssec_error = e
+            raw_results["dnssec"] = {
+                "check": "DNSSEC", "domain": domain, "has_dnssec": False,
+                "has_ds": False, "chain_valid": None, "error": str(e),
+            }
+
     # Define each independent check as (key, run_func, transform_func, label, extra_kwargs)
     _parallel_checks = []
 
@@ -4541,8 +4588,17 @@ def run_full_audit(domain: str, dkim_selector: Optional[str] = None,
             "BIMI"))
 
     if _should_include("dnssec", scope_set):
+        # Already computed above. Re-raising here routes a failed hoist through
+        # the same timeout and error card handling every other Phase 2 check
+        # gets, rather than duplicating that logic at the hoist.
+        def _dnssec_hoisted():
+            if isinstance(_dnssec_error, Exception):
+                raise _dnssec_error
+            if _dnssec_error == "timeout":
+                raise FuturesTimeoutError("DNSSEC check timed out")
+            return _dnssec_raw
         _parallel_checks.append(("dnssec",
-            lambda: _raw_check_dnssec(domain),
+            _dnssec_hoisted,
             lambda raw: transform_dnssec(raw, domain),
             "DNSSEC"))
 
@@ -4559,7 +4615,8 @@ def run_full_audit(domain: str, dkim_selector: Optional[str] = None,
             "Nameservers"))
 
     if _should_include("dane", scope_set):
-        # DANE needs raw_results for MX info -- capture current snapshot
+        # DANE needs raw_results for MX info and the DNSSEC verdict. The
+        # snapshot now carries dnssec because it is hoisted above.
         _dane_raw = dict(raw_results)
         _parallel_checks.append(("dane",
             lambda: _raw_check_dane(domain, _dane_raw),
@@ -4598,7 +4655,8 @@ def run_full_audit(domain: str, dkim_selector: Optional[str] = None,
                 if progress_callback:
                     progress_callback(f"DKIM:{found_count}", completed, total_checks)
             def _run_dkim_smart():
-                _raw = smart_dkim_check(domain, _spf_rec, progress_callback=_dkim_progress)
+                _raw = smart_dkim_check(domain, _spf_rec, progress_callback=_dkim_progress,
+                                        executor=_dkim_executor)
                 return _raw
             _parallel_checks.append(("dkim", _run_dkim_smart,
                 lambda raw: transform_dkim(raw, domain, has_mx=has_mx, non_mail=non_mail), "DKIM"))
@@ -4872,10 +4930,41 @@ def run_full_audit(domain: str, dkim_selector: Optional[str] = None,
     fp_vendors = []
     _email_checks = {"dmarc", "spf", "dkim", "mx"}
     if scope_set is None or bool(scope_set & _email_checks):
+        # Seven of the eight probes re-queried a record this audit already
+        # holds, strictly sequentially, on the module default resolver with no
+        # timeout above them: worst case roughly 50 seconds bolted onto every
+        # email-scope audit, transport included. Hand them the answers instead.
+        _raw_spf = raw_results.get("spf") or {}
+        _raw_mx = raw_results.get("mx") or {}
+        _raw_dmarc = raw_results.get("dmarc") or {}
+        _raw_tls_rpt = raw_results.get("tls_rpt") or {}
+        _raw_mta_sts = raw_results.get("mta_sts") or {}
+        _raw_bimi = raw_results.get("bimi") or {}
+        _fp_mx_hosts = [
+            d["hostname"] for d in _raw_mx.get("mx_details", []) if d.get("hostname")
+        ] or [
+            rec.strip().split()[-1].rstrip(".")
+            for rec in _raw_mx.get("records", [])
+            if len(rec.strip().split()) >= 2
+        ]
+        _fp_prefetch = {
+            "spf_record": _raw_spf.get("record"),
+            "mx_hosts": _fp_mx_hosts,
+            "dmarc_record": _raw_dmarc.get("record"),
+            "tls_rpt_record": _raw_tls_rpt.get("record"),
+            "mta_sts_record": _raw_mta_sts.get("txt_record"),
+            "bimi_record": _raw_bimi.get("record"),
+            "txt_ttl": _raw_spf.get("ttl"),
+        }
+        # Only the subdomain probe still queries, and it is not worth a card of
+        # its own, so the whole call gets a hard ceiling rather than running
+        # unbounded outside every budget in the audit.
         try:
-            fp = AdvancedVendorFingerprinter(domain)
-            fp_result = fp.fingerprint_all()
+            fp = AdvancedVendorFingerprinter(domain, prefetch=_fp_prefetch)
+            fp_result = _run_with_timeout(fp.fingerprint_all, timeout=8)
             fp_vendors = fp_result.get("vendors", [])
+        except FuturesTimeoutError:
+            log.warning("Vendor fingerprinting for %s exceeded its 8s budget", domain)
         except Exception:
             log.debug("Vendor fingerprinting failed", exc_info=True)
         _notify("Vendor Fingerprinting")

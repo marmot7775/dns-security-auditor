@@ -20,6 +20,8 @@ import dns.exception
 import re
 from typing import Any, Dict, List, Optional, Set, Tuple
 
+from dns_tools import get_resolver
+
 
 def repair_spf_missing_spaces(record: str) -> Tuple[str, bool]:
     """Detect and fix missing spaces between SPF mechanisms.
@@ -60,10 +62,10 @@ def repair_spf_missing_spaces(record: str) -> Tuple[str, bool]:
 
 
 def _get_resolver(timeout: float = 5.0):
-    resolver = dns.resolver.Resolver()
-    resolver.timeout = timeout
-    resolver.lifetime = timeout * 2
-    return resolver
+    # Shared factory: every resolver in the process draws from one TTL-honoring
+    # answer cache, so the repeated lookups a single audit makes hit memory
+    # instead of the network.
+    return get_resolver(timeout)
 
 
 # Outcome of a single SPF TXT lookup.
