@@ -355,6 +355,21 @@ def no_network(request):
         yield
 
 
+@pytest.fixture(autouse=True)
+def reset_health_cache():
+    """Clear /api/health's memoized verdict between tests.
+
+    The endpoint caches its DNS verdict for 30 seconds so an uptime monitor
+    polling on that interval does not generate live DNS traffic on every hit.
+    A whole test run fits inside that window, so without this one test's
+    verdict answers the next test's request.
+    """
+    server = sys.modules.get("server")
+    if server is not None:
+        server._health_cache.update({"ok": None, "expires": 0.0})
+    yield
+
+
 def pytest_configure(config):
     config.addinivalue_line(
         "markers", "allow_network: test binds or connects a real socket on purpose"
