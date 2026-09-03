@@ -136,7 +136,7 @@
     --text-primary: #f1f5f9;
     --text-secondary: #94a3b8;
     --text-tertiary: #9ca3af;
-    --text-muted: #6b7b8f;
+    --text-muted: #8b99ad;
     --text-inverse: #ffffff;
 
     /* Brand accent — professional blue */
@@ -1435,7 +1435,8 @@ h3.result-title,
     border: 1px solid #30363d;
     border-radius: 6px;
     padding: 0.4rem 0.7rem;
-    min-height: 32px;
+    min-height: 44px;
+    min-width: 44px;
     font-family: var(--font-body);
     font-size: var(--font-xs);
     font-weight: 500;
@@ -4268,8 +4269,8 @@ body {
     position: fixed;
     bottom: 24px;
     right: 24px;
-    width: 40px;
-    height: 40px;
+    width: 44px;
+    height: 44px;
     border-radius: 50%;
     background: var(--surface);
     border: 1px solid var(--border);
@@ -7308,7 +7309,7 @@ body {
         --text-primary: #0f172a;
         --text-secondary: #475569;
         --text-tertiary: #64748b;
-        --text-muted: #94a3b8;
+        --text-muted: #5b6b7f;
         --text-inverse: #ffffff;
 
         /* Brand accent */
@@ -8564,3 +8565,66 @@ body {
     border-color: var(--border-strong);
 }
 
+
+/* ==========================================================================
+   CSP-SAFE UTILITIES
+   The policy is "style-src 'self'" with no unsafe-inline, so a style
+   attribute written into markup is refused and silently does nothing.
+   Anything that used to ride on one lives here as a class instead.
+   Values set through CSSOM (el.style.x = ...) are unaffected and still work.
+   ========================================================================== */
+
+/* Collapsed by default. Declared last so it beats the display rule on any
+   component that sets one, e.g. .anomalies-section and .pi-section. */
+.is-hidden {
+    display: none;
+}
+
+/* Change History chevron, previously rotated by a JS style write. */
+.cd-header[aria-expanded="true"] .cd-chevron {
+    transform: rotate(180deg);
+}
+
+/* Record blocks that need breathing room inside a surrounding block. */
+.record-block.record-block-inset {
+    margin: 0.4rem 0;
+}
+.record-block.record-block-inset-lg {
+    margin: 0.5rem 0;
+}
+
+/* Roadmap rows are click-to-scroll targets. */
+.sr-item[data-scroll-to] {
+    cursor: pointer;
+}
+
+/* SPF deep-analysis note sits directly above the record it annotates. */
+.rb-bis-note.rb-bis-note-lead {
+    margin-bottom: 0.6rem;
+}
+
+/* Toolbar action group. */
+.results-toolbar-actions {
+    display: flex;
+    gap: 0.5rem;
+    align-items: center;
+}
+
+/* ==========================================================================
+   TOUCH TARGETS
+   CLAUDE.md requires 44px minimum on mobile. .copy-btn and .back-to-top are
+   44px at every width above. These two are compact controls where a mouse is
+   available, so they grow on the widths a finger actually uses.
+   ========================================================================== */
+@media (max-width: 768px) {
+    .cache-rerun-btn {
+        min-height: 44px;
+        padding: 0.5rem 0.9rem;
+        font-size: var(--font-xs);
+    }
+
+    .articles-tag-pill {
+        height: 44px;
+        padding: 0 18px;
+    }
+}

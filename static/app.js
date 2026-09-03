@@ -410,11 +410,15 @@ function showLoading() {
 
     loadingSection.style.display = 'block';
     const card = loadingSection.querySelector('.loading-card');
+    // The static markup declares the progressbar role and the live region.
+    // Rebuilding the card here throws them away unless the template repeats
+    // them, which is how screen reader users got silence for the whole audit.
     card.innerHTML = `
-        <div class="loading-bar-track">
+        <div class="loading-bar-track" role="progressbar" aria-valuenow="0"
+             aria-valuemin="0" aria-valuemax="100" aria-label="Audit progress">
             <div class="loading-bar-fill" id="loading-bar"></div>
         </div>
-        <div class="loading-status" id="loading-status">Starting audit...</div>
+        <div class="loading-status" id="loading-status" aria-live="polite">Starting audit...</div>
     `;
     resultsSection.style.display = 'none';
     auditBtn.disabled = true;
@@ -474,9 +478,12 @@ function showError(message) {
     }
     loadingSection.style.display = 'block';
     const card = loadingSection.querySelector('.loading-card');
+    // role="alert" so the failure is announced. This card replaces the polite
+    // live region the progress card carried, so without it the audit simply
+    // stops talking.
     card.innerHTML = `
         <div class="error-title">Audit Failed</div>
-        <div class="error-message">${escapeHtml(message)}</div>
+        <div class="error-message" role="alert">${escapeHtml(message)}</div>
         <button class="error-retry" id="retry-btn">Try Again</button>
     `;
     document.getElementById('retry-btn').addEventListener('click', () => {
@@ -925,6 +932,28 @@ function renderResults(data) {
 }
 
 // ============================================================
+// Deferred inline styles
+// ============================================================
+
+// The CSP is "style-src 'self'" with no unsafe-inline, so a style attribute
+// written into an innerHTML string is refused and silently does nothing. Values
+// that genuinely have to be computed per element (stagger delays, bar widths)
+// ship as data attributes and are applied here through CSSOM, which the policy
+// does allow. Call this on any subtree built from a template string.
+function applyDeferredStyles(root) {
+    if (!root) return;
+    root.querySelectorAll('[data-anim-delay]').forEach(el => {
+        el.style.animationDelay = el.dataset.animDelay;
+    });
+    root.querySelectorAll('[data-line-delay]').forEach(el => {
+        el.style.setProperty('--line-delay', el.dataset.lineDelay);
+    });
+    root.querySelectorAll('[data-fill-width]').forEach(el => {
+        el.style.width = el.dataset.fillWidth;
+    });
+}
+
+// ============================================================
 // Result card  --  auto-collapse passing, expand fail/warn
 // ============================================================
 
@@ -1016,10 +1045,11 @@ function createResultCard(check, index) {
     card.querySelectorAll('.cd-header').forEach(hdr => {
         const toggle = () => {
             const body = hdr.nextElementSibling;
-            const expanded = body.style.display !== 'none';
-            body.style.display = expanded ? 'none' : 'block';
-            hdr.setAttribute('aria-expanded', expanded ? 'false' : 'true');
-            hdr.querySelector('.cd-chevron').style.transform = expanded ? '' : 'rotate(180deg)';
+            // The collapsed state is a class, not a style attribute: the CSP
+            // refuses inline styles, so markup cannot ship one. The chevron
+            // rotation follows aria-expanded in the stylesheet.
+            const collapsed = body.classList.toggle('is-hidden');
+            hdr.setAttribute('aria-expanded', collapsed ? 'false' : 'true');
         };
         hdr.addEventListener('click', (e) => { e.stopPropagation(); toggle(); });
         hdr.addEventListener('keydown', (e) => {
@@ -1027,6 +1057,7 @@ function createResultCard(check, index) {
         });
     });
 
+    applyDeferredStyles(card);
     return card;
 }
 
@@ -1192,7 +1223,7 @@ function renderCheckBody(check) {
 
     // Legacy Validation (hidden by default, shown in Legacy mode)
     if (check.legacy_validation) {
-        html += `<div class="spec-legacy" style="display:none;">`;
+        html += `<div class="spec-legacy is-hidden">`;
         html += renderStrictValidation(check.legacy_validation, 'RFC 7489');
         html += `</div>`;
     }
@@ -1380,7 +1411,7 @@ function renderChangeHistory(changes) {
             <span class="cd-header-count">${changes.length} change${changes.length !== 1 ? 's' : ''} detected</span>
             <span class="cd-chevron">&#9662;</span>
         </div>
-        <div class="cd-body" style="display:none;">`;
+        <div class="cd-body is-hidden">`;
 
     for (const change of changes) {
         const dateStr = change.timestamp ? new Date(change.timestamp + 'Z').toLocaleDateString('en-US', {
@@ -1495,7 +1526,7 @@ function renderSpecToggle(comparison) {
     }
     let deltaLegacy = '';
     if (comparison.dmarcbis_only_count > 0) {
-        deltaLegacy = `<div class="st-delta spec-legacy" style="display:none;">The obsolete RFC 7489 was more lenient. ${comparison.dmarcbis_only_count} issue${comparison.dmarcbis_only_count !== 1 ? 's' : ''} flagged by RFC 9989 ${comparison.dmarcbis_only_count !== 1 ? 'were' : 'was'} accepted under it.</div>`;
+        deltaLegacy = `<div class="st-delta spec-legacy is-hidden">The obsolete RFC 7489 was more lenient. ${comparison.dmarcbis_only_count} issue${comparison.dmarcbis_only_count !== 1 ? 's' : ''} flagged by RFC 9989 ${comparison.dmarcbis_only_count !== 1 ? 'were' : 'was'} accepted under it.</div>`;
     }
 
     return `
@@ -1532,10 +1563,10 @@ document.addEventListener('click', function(e) {
 
     // Toggle visibility of spec-mode sections
     card.querySelectorAll('.spec-dmarcbis').forEach(el => {
-        el.style.display = mode === 'dmarcbis' ? '' : 'none';
+        el.classList.toggle('is-hidden', mode !== 'dmarcbis');
     });
     card.querySelectorAll('.spec-legacy').forEach(el => {
-        el.style.display = mode === 'legacy' ? '' : 'none';
+        el.classList.toggle('is-hidden', mode !== 'legacy');
     });
 });
 
@@ -1909,7 +1940,7 @@ function renderDmarcTagBreakdown(bd) {
                 <div class="mw-steps">${stepsHtml}</div>
                 <div class="mw-target">
                     <div class="mw-target-label">Target RFC 9989-Ready Record</div>
-                    <div class="record-block" style="margin: 0.4rem 0;">
+                    <div class="record-block record-block-inset">
                         <span class="record-text">${escapeHtml(bd.migration.target_record)}</span>
                         <button class="copy-btn" aria-label="Copy to clipboard">Copy</button>
                     </div>
@@ -2112,7 +2143,7 @@ function renderRecordBuilder(rb) {
             ${changesHtml}
             <div class="rcb-result">
                 <div class="rcb-result-label">${isFirst ? 'Recommended starting record' : 'Recommended RFC 9989-Ready record'}</div>
-                <div class="rcb-result-record record-block" style="margin: 0.4rem 0;">
+                <div class="rcb-result-record record-block record-block-inset">
                     <span class="record-text">${escapeHtml(rb.recommended_record)}</span>
                     <button class="copy-btn" aria-label="Copy to clipboard">Copy</button>
                 </div>
@@ -2241,8 +2272,8 @@ function renderTreeWalkFull(tw) {
         const stepDelay = (0.05 + i * stepInterval).toFixed(2);
         const lineDelay = (0.05 + i * stepInterval + 0.13).toFixed(2);
 
-        html += `<div class="tw-step ${statusClass} ${sourceClass} ${lineColor} ${connector}" style="animation-delay:${stepDelay}s">`;
-        html += `<div class="tw-connector" style="--line-delay:${lineDelay}s"><div class="tw-dot"></div></div>`;
+        html += `<div class="tw-step ${statusClass} ${sourceClass} ${lineColor} ${connector}" data-anim-delay="${stepDelay}s">`;
+        html += `<div class="tw-connector" data-line-delay="${lineDelay}s"><div class="tw-dot"></div></div>`;
         html += `<div class="tw-content">`;
         html += `<div class="tw-domain">${escapeHtml(step.query || '_dmarc.' + step.domain)}</div>`;
         html += `<div class="tw-label">${escapeHtml(step.label)}`;
@@ -2267,7 +2298,7 @@ function renderTreeWalkFull(tw) {
         const tag = tw.applied_tag || 'p';
         const tagExplanation = getTagExplanation(tag, tw);
 
-        html += `<div class="tw-meta" style="animation-delay:${metaDelay}s">`;
+        html += `<div class="tw-meta" data-anim-delay="${metaDelay}s">`;
 
         if (tw.org_domain) {
             html += `<div class="tw-meta-row">
@@ -2297,12 +2328,12 @@ function renderTreeWalkFull(tw) {
 
         // Note for inherited policies
         if (tw.is_subdomain) {
-            html += `<div class="tw-footnote" style="animation-delay:${metaDelay}s">
+            html += `<div class="tw-footnote" data-anim-delay="${metaDelay}s">
                 This subdomain inherits its DMARC policy from the organizational domain.
             </div>`;
         }
     } else {
-        html += `<div class="tw-summary tw-no-policy" style="animation-delay:${metaDelay}s">No DMARC policy found in the DNS hierarchy.</div>`;
+        html += `<div class="tw-summary tw-no-policy" data-anim-delay="${metaDelay}s">No DMARC policy found in the DNS hierarchy.</div>`;
     }
 
     html += '</div>';
@@ -2440,7 +2471,7 @@ function renderDmarcbisReadiness(readiness) {
         suggestedHtml = `
             <div class="dbis-suggested">
                 <div class="dbis-suggested-label">Suggested RFC 9989 Record</div>
-                <div class="record-block" style="margin: 0.5rem 0;">
+                <div class="record-block record-block-inset-lg">
                     <span class="record-text">${escapeHtml(readiness.suggested_record)}</span>
                 </div>
                 <div class="dbis-changes">${changesHtml}</div>
@@ -2557,7 +2588,7 @@ function renderSecurityRoadmap(rm) {
 
         let rows = tierItems.map(item => {
             const anchor = `check-${item.protocol.toLowerCase().replace(/[^a-z0-9]/g, '-')}`;
-            return `<div class="sr-item sr-item-${priorityColors[item.priority]}" data-scroll-to="${anchor}" style="cursor:pointer;">
+            return `<div class="sr-item sr-item-${priorityColors[item.priority]}" data-scroll-to="${anchor}">
                 <span class="sr-protocol">${escapeHtml(item.protocol)}</span>
                 <div class="sr-item-body">
                     <div class="sr-action">${escapeHtml(item.action)}</div>
@@ -2637,7 +2668,7 @@ function renderSpfDeepAnalysis(spf) {
     if (!spf) return '';
 
     // RFC 9989 context note
-    let noteHtml = `<div class="rb-bis-note" style="margin-bottom:0.6rem;"><span class="rb-bis-note-label">RFC 9989</span> ${escapeHtml(spf.dmarcbis_note)}</div>`;
+    let noteHtml = `<div class="rb-bis-note rb-bis-note-lead"><span class="rb-bis-note-label">RFC 9989</span> ${escapeHtml(spf.dmarcbis_note)}</div>`;
 
     // Mechanism table
     let mechHtml = '';
@@ -2748,8 +2779,8 @@ function renderSpfExecution(exec) {
         const stepDelay = (0.05 + i * stepInterval).toFixed(2);
         const lineDelay = (0.05 + i * stepInterval + 0.13).toFixed(2);
 
-        html += `<div class="se-step ${statusClass} ${connector} ${depthClass}" style="animation-delay:${stepDelay}s">`;
-        html += `<div class="se-connector" style="--line-delay:${lineDelay}s"><div class="se-dot"></div></div>`;
+        html += `<div class="se-step ${statusClass} ${connector} ${depthClass}" data-anim-delay="${stepDelay}s">`;
+        html += `<div class="se-connector" data-line-delay="${lineDelay}s"><div class="se-dot"></div></div>`;
         html += `<div class="se-content">`;
 
         // Mechanism name
@@ -2782,7 +2813,7 @@ function renderSpfExecution(exec) {
 
     // Summary footer
     const totalClass = exec.over_limit ? 'se-counter exceeded' : 'se-counter';
-    html += `<div class="se-footer" style="animation-delay:${metaDelay}s">
+    html += `<div class="se-footer" data-anim-delay="${metaDelay}s">
         Total: <span class="${totalClass}">${exec.total_lookups} / ${exec.limit} lookups</span>
     </div>`;
 
@@ -2907,7 +2938,7 @@ function renderReportChain(rc) {
         }
 
         html += `
-            <div class="rc-dest" style="animation-delay:${delay}s">
+            <div class="rc-dest" data-anim-delay="${delay}s">
                 <span class="rc-type ${typeClass}">${dest.type === 'rua' ? 'Aggregate reports' : 'Failure reports'}</span>
                 <span class="rc-address">${escapeHtml(dest.address)}</span>
                 ${serviceHtml}
@@ -2952,7 +2983,7 @@ function renderSpfTree(tree) {
                     ${statusLabel ? `<span class="st-budget-status ${barClass}">${statusLabel}</span>` : ''}
                 </div>
                 <div class="st-budget-track">
-                    <div class="st-budget-fill ${barClass}" style="width:${pct}%"></div>
+                    <div class="st-budget-fill ${barClass}" data-fill-width="${pct}%"></div>
                 </div>
                 <div class="st-budget-note">RFC 7208 limits SPF to 10 DNS-querying mechanisms (include, a, mx, redirect, exists). Exceeding this causes a PermError.</div>
             </div>
@@ -3313,7 +3344,13 @@ function sanitizeHtml(html) {
     if (!html) return '';
     const ALLOWED_TAGS = ['strong', 'em', 'code', 'br', 'b', 'i', 'a'];
     const ALLOWED_LINK_ATTRS = ['href', 'target', 'rel'];
-    const tmp = document.createElement('div');
+    // Parse in a detached document, not the live one. A div created from the
+    // live document parses actively, so <img src=...> starts fetching before
+    // the allowlist pass below strips it, handing an attacker who controls a
+    // DNS record a callback from every browser that audits the domain. A
+    // document from createHTMLDocument() loads nothing.
+    const inert = document.implementation.createHTMLDocument('');
+    const tmp = inert.createElement('div');
     tmp.innerHTML = html;
 
     function clean(node) {
@@ -3323,7 +3360,7 @@ function sanitizeHtml(html) {
                 const tag = child.tagName.toLowerCase();
                 if (!ALLOWED_TAGS.includes(tag)) {
                     // Replace disallowed element with its text content
-                    const text = document.createTextNode(child.textContent);
+                    const text = inert.createTextNode(child.textContent);
                     node.replaceChild(text, child);
                 } else {
                     // Strip all attributes; for <a> keep only the safe link attrs
@@ -3404,7 +3441,7 @@ function renderProviderIntelligence(pi) {
             const body = btn.nextElementSibling;
             const expanded = btn.getAttribute('aria-expanded') === 'true';
             btn.setAttribute('aria-expanded', String(!expanded));
-            body.style.display = expanded ? 'none' : 'block';
+            body.classList.toggle('is-hidden', expanded);
             btn.querySelector('.pi-chevron').textContent = expanded ? '\u25B6' : '\u25BC';
         });
     });
@@ -3433,7 +3470,7 @@ function _renderProviderCard(provider, showScorecard) {
         html += `<button class="pi-guidance-toggle" aria-expanded="false">
             <span class="pi-chevron">&#9654;</span> Platform Guidance
         </button>
-        <div class="pi-guidance-body" style="display:none">`;
+        <div class="pi-guidance-body is-hidden">`;
         for (const g of provider.guidance) {
             html += `<div class="pi-guidance-item">
                 <span class="pi-guidance-topic">${escapeHtml(g.topic)}</span>
@@ -3817,7 +3854,7 @@ function _initComparisonMode() {
                        placeholder="Enter second domain..." autocomplete="off" spellcheck="false" />
                 <button type="submit" class="audit-btn">Compare</button>
             </form>
-            <div id="comparison-results" class="comparison-results" style="display:none"></div>
+            <div id="comparison-results" class="comparison-results is-hidden"></div>
         `;
         resultsBanner.parentNode.insertBefore(panel, resultsBanner.nextSibling);
 
@@ -3829,7 +3866,7 @@ function _initComparisonMode() {
             if (!domain2) return;
 
             const resultsDiv = document.getElementById('comparison-results');
-            resultsDiv.style.display = 'block';
+            resultsDiv.classList.remove('is-hidden');
             resultsDiv.innerHTML = '<div class="comparison-loading">Running comparison audit...</div>';
 
             try {
