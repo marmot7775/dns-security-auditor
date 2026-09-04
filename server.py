@@ -1324,6 +1324,15 @@ if STATIC_DIR.exists():
     async def dnssec_stopped_being_hard():
         return RedirectResponse(url="/articles/dnssec", status_code=301)
 
+    # Third of the three /blog/ slugs. It had no route and 404'd while the
+    # other two redirected. The markdown that declared these canonicals is
+    # gone now, and nginx logs show no real traffic to any of the three, but
+    # the log window is two weeks and a 301 is cheaper than a dead link in
+    # someone's old message.
+    @app.get("/blog/the-dnssec-story-nobody-tells", tags=["Pages"])
+    async def the_dnssec_story_nobody_tells():
+        return RedirectResponse(url="/articles/dnssec", status_code=301)
+
     @app.get("/methodology", tags=["Pages"])
     async def methodology_redirect():
         return RedirectResponse(url="/about", status_code=301)
