@@ -9,7 +9,11 @@ GET  /                               -- serve frontend
 GET  /static/*                       -- serve static assets
 
 Usage:
-    uvicorn server:app --host 0.0.0.0 --port 8000
+    uvicorn server:app --host 127.0.0.1 --port 8000
+
+    One worker only. nginx terminates TLS in front of this and proxies to
+    loopback. See the "Single worker guard" section below before adding
+    --workers or WEB_CONCURRENCY.
 """
 
 import asyncio
@@ -18,8 +22,10 @@ import hashlib
 import json
 import logging
 import logging.handlers
+import os
 import re
 import secrets
+import sys
 import threading
 import time
 import uuid
@@ -103,6 +109,99 @@ try:
     audit_logger.addHandler(audit_handler)
 except PermissionError:
     log.warning("Cannot create log directory %s -- file logging disabled", _log_dir)
+
+
+# ============================================================
+# Single worker guard
+# ============================================================
+
+# This app is single worker by design, and it has to stay that way. Every
+# piece of coordination state in this module is a plain module-level global,
+# private to one process:
+#
+#   _rate_limits    (line 398)   per-IP rate limit table
+#   _active_audits  (line 402)   concurrency budget
+#   _inflight       (line 415)   single-flight audit registry
+#   _cache          (line 532)   audit result cache
+#   _health_cache   (line 1202)  health probe memo
+#
+# A second worker gets its own copy of all five, so none of them are global
+# any more: the per-IP limit multiplies by the worker count, so does the
+# concurrency cap, the same audit runs once per worker because neither can
+# see the other's _inflight dict, and the health probe stops deduplicating
+# its DNS lookup. Nothing raises and nothing logs at request time, so the
+# start-up check below is the only signal anyone gets. Scaling out means
+# moving all five to shared storage first. See CLAUDE.md, "Single worker by
+# design", and the comment above ExecStart in dns-auditor.service.
+
+def _parse_worker_flag(argv) -> Optional[int]:
+    """Pull a worker count out of a uvicorn or gunicorn argv, or return None."""
+    for i, arg in enumerate(argv):
+        if arg in ("--workers", "-w") and i + 1 < len(argv):
+            try:
+                return int(argv[i + 1])
+            except ValueError:
+                return None
+        if arg.startswith("--workers="):
+            try:
+                return int(arg.split("=", 1)[1])
+            except ValueError:
+                return None
+    return None
+
+
+def _detect_worker_count():
+    """Return (count, source) for the configured worker count, else (None, "").
+
+    Three places the number can come from: this process's own argv, the
+    supervisor's argv (uvicorn and gunicorn respawn workers with a rewritten
+    command line, so under spawn the flag only survives in the parent), and
+    WEB_CONCURRENCY, which both servers honour without any flag at all.
+    """
+    count = _parse_worker_flag(sys.argv)
+    if count is not None:
+        return count, "workers flag on the command line"
+
+    try:
+        with open("/proc/%d/cmdline" % os.getppid(), "rb") as fh:
+            parent_argv = fh.read().decode("utf-8", "replace").split("\0")
+        count = _parse_worker_flag(parent_argv)
+        if count is not None:
+            return count, "workers flag on the supervising process"
+    except OSError:
+        pass
+
+    raw = os.getenv("WEB_CONCURRENCY")
+    if raw:
+        try:
+            return int(raw), "WEB_CONCURRENCY"
+        except ValueError:
+            return None, ""
+    return None, ""
+
+
+def _warn_if_multiple_workers() -> None:
+    """Shout at start-up if this process is one of several workers."""
+    count, source = _detect_worker_count()
+    if count is None or count <= 1:
+        return
+    log.error(
+        "MULTI WORKER START DETECTED (%s: %s). This app is single worker by "
+        "design and its limits are no longer being enforced. The rate limit "
+        "table, the concurrency budget, the single flight audit registry, "
+        "the result cache and the health cache are all per process globals, "
+        "so every worker keeps a private copy. Each IP now gets %s times the "
+        "intended requests per window, %s times MAX_CONCURRENT_AUDITS can "
+        "run at once, identical audits run side by side instead of sharing "
+        "one result, and the health probe stops deduplicating its DNS "
+        "lookup. Nothing else will report any of this. Run one worker, or "
+        "move all five to shared storage first. See CLAUDE.md, section "
+        "Single worker by design.",
+        source, count, count, count,
+    )
+
+
+_warn_if_multiple_workers()
 
 
 # ============================================================
@@ -248,6 +347,23 @@ app.add_middleware(
 # ============================================================
 
 class SecurityHeadersMiddleware(BaseHTTPMiddleware):
+    """Headers this app owns.
+
+    X-Frame-Options and Referrer-Policy are deliberately not here: nginx sets
+    both, at server level and again inside the /static/ block, so it covers
+    every route including the static files that are served straight from disk
+    and never reach this process. Setting them here as well only put each one
+    on the wire twice. Framing is still blocked from this side by the CSP's
+    frame-ancestors 'none'.
+
+    Strict-Transport-Security is not here either. It used to be gated on
+    request.url.scheme == "https", which can never be true: uvicorn runs
+    without --proxy-headers (see _get_client_ip for why that matters), so
+    behind nginx the scheme is always http and the branch was dead. The HSTS
+    header users actually receive comes from the edge. If this app ever needs
+    to send its own, gate it on a config value, not on the scheme.
+    """
+
     CSP = (
         "default-src 'self'; "
         "font-src 'self'; "
@@ -261,12 +377,8 @@ class SecurityHeadersMiddleware(BaseHTTPMiddleware):
     async def dispatch(self, request: Request, call_next):
         response = await call_next(request)
         response.headers["X-Content-Type-Options"] = "nosniff"
-        response.headers["X-Frame-Options"] = "DENY"
-        response.headers["Referrer-Policy"] = "strict-origin-when-cross-origin"
         response.headers["Permissions-Policy"] = "camera=(), microphone=(), geolocation=()"
         response.headers["Content-Security-Policy"] = self.CSP
-        if request.url.scheme == "https":
-            response.headers["Strict-Transport-Security"] = "max-age=31536000; includeSubDomains; preload"
         path = request.url.path
         if path.startswith("/api/"):
             response.headers["Cache-Control"] = "no-store"
@@ -349,12 +461,22 @@ def _get_client_ip(request: Request) -> str:
     nginx sets X-Real-IP from the connecting Cloudflare edge IP's
     CF-Connecting-IP header. That's trustworthy when nginx (a configured
     TRUSTED_PROXY_IPS peer) is the direct TCP peer -- but uvicorn can also
-    be reached directly (Procfile: --host 0.0.0.0), where the header
-    comes straight from whoever connects and rotating it would bypass the
-    rate limit entirely. Only honor X-Real-IP when the direct peer is a
-    trusted proxy; otherwise use the peer address itself.
+    be started bound to 0.0.0.0, where the header comes straight from
+    whoever connects and rotating it would bypass the rate limit entirely.
+    Only honor X-Real-IP when the direct peer is a trusted proxy; otherwise
+    use the peer address itself.
     Client-sent headers like CF-Connecting-IP and X-Forwarded-For
     are NOT trusted directly (trivially spoofable for rate limit bypass).
+
+    DO NOT add --proxy-headers to the uvicorn command line. This whole
+    check depends on it being absent. With the flag off, request.client.host
+    is nginx's loopback address, which is exactly the "is the direct peer a
+    trusted proxy" test above. With the flag on, uvicorn rewrites
+    request.client.host from X-Forwarded-For before this function ever runs,
+    so peer_ip becomes an attacker-supplied value, it stops matching
+    TRUSTED_PROXY_IPS, and the rate limiter's trust model is gone. The one
+    thing the flag looks like it would fix, request.url.scheme being http
+    behind nginx, is not worth that: see SecurityHeadersMiddleware.
     """
     peer_ip = request.client.host if request.client else None
     real_ip = request.headers.get("X-Real-IP")

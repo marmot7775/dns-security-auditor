@@ -48,10 +48,10 @@ MAX_CONCURRENT_AUDITS = int(os.getenv("MAX_CONCURRENT_AUDITS", "8"))
 
 # Only trust the X-Real-IP header when the direct TCP peer is one of these
 # addresses. Behind nginx (dns-auditor.service) that's loopback, so this
-# defaults to loopback. But the Procfile runs uvicorn on 0.0.0.0 directly,
-# where a client that connects straight to it could set X-Real-IP itself
-# and rotate it to dodge the per-IP rate limit -- so the header must not
-# be trusted unless it actually came through a known proxy.
+# defaults to loopback. Someone running uvicorn on 0.0.0.0 directly exposes
+# it to clients that could set X-Real-IP themselves and rotate it to dodge
+# the per-IP rate limit -- so the header must not be trusted unless it
+# actually came through a known proxy.
 _trusted_proxies_raw = os.getenv("TRUSTED_PROXY_IPS", "127.0.0.1,::1")
 TRUSTED_PROXY_IPS = {ip.strip() for ip in _trusted_proxies_raw.split(",") if ip.strip()}
 

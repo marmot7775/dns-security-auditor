@@ -46,6 +46,47 @@
     (audit.log and audit.log.N). It backs up originals, leaves entries that
     already have a bot flag alone, and prints before and after line counts.
 
+## Single worker by design
+The service runs exactly one uvicorn process. `dns-auditor.service` passes no
+`--workers` flag and nothing sets `WEB_CONCURRENCY`, and that has to stay true.
+
+Every piece of coordination state in `server.py` is a module level global,
+private to one process:
+
+- `_rate_limits` (server.py:398) per IP rate limit table
+- `_active_audits` (server.py:402) concurrency budget
+- `_inflight` (server.py:415) single flight audit registry
+- `_cache` (server.py:532) audit result cache
+- `_health_cache` (server.py:1202) health probe memo
+
+Start N workers and each process gets its own copy of all five. The
+concurrency cap becomes N times `MAX_CONCURRENT_AUDITS` instead of
+`MAX_CONCURRENT_AUDITS`. Each IP gets N times the intended requests per
+window, because each worker keeps a separate rate limit table. Two workers run
+the same audit at the same moment despite the single flight registry, because
+neither can see the other's `_inflight` dict. The health cache stops
+deduplicating its DNS lookup. Nothing errors, nothing logs at request time,
+and no test catches it. The site quietly stops enforcing its own limits.
+
+`_inflight` and `_health_cache` are recent additions, so this assumption is
+getting more load bearing over time, not less.
+
+Scaling out means moving the cache, the rate limiter, the concurrency budget
+and the in flight map to shared storage (Redis or equivalent) first. Until
+that is done, one worker is the only correct configuration.
+
+`server.py` defends itself: `_warn_if_multiple_workers()` runs at import,
+reads the worker count from `WEB_CONCURRENCY` or from a workers flag on its
+own or its supervisor's command line, and logs an error naming everything
+that breaks. A comment protects a reader; the warning protects the person who
+did not read.
+
+Related: uvicorn runs without `--proxy-headers` on purpose. That is what keeps
+`request.client.host` equal to nginx's loopback address, which is the whole
+basis of the `X-Real-IP` trust check in `_get_client_ip`. Turning the flag on
+would let a client supply its own peer address and walk past the rate
+limiter. Read the docstring on `_get_client_ip` before touching it.
+
 ## Deploy
 git push && ssh marmot7@159.223.201.90 "cd dns-security-auditor && git pull && ~/.venv/bin/pip install -r requirements.txt && sudo systemctl restart dns-auditor"
 

@@ -7,6 +7,31 @@ Type=simple
 User=marmot7
 WorkingDirectory=/home/marmot7/dns-security-auditor
 Environment="PATH=/home/marmot7/.venv/bin"
+# SINGLE WORKER BY DESIGN. Do not add --workers. Do not set WEB_CONCURRENCY.
+# Every piece of coordination state in server.py is a module-level global,
+# private to one process:
+#
+#   _rate_limits    server.py:398   per-IP rate limit table
+#   _active_audits  server.py:402   concurrency budget
+#   _inflight       server.py:415   single-flight audit registry
+#   _cache          server.py:532   audit result cache
+#   _health_cache   server.py:1202  health probe memo
+#
+# With N workers each process gets its own copy of all five. Every per-IP
+# rate limit becomes N times the intended allowance, the concurrency cap
+# becomes N times MAX_CONCURRENT_AUDITS, the same audit runs once per worker
+# because neither can see the other's _inflight dict, and the health cache
+# stops deduplicating. Nothing errors and nothing logs at request time; the
+# site just quietly stops enforcing its own limits. server.py does log an
+# error at start-up if it detects more than one worker.
+#
+# Scaling out requires moving the cache, the rate limiter, the concurrency
+# budget and the in-flight map to shared storage (Redis or equivalent)
+# first. See CLAUDE.md, "Single worker by design".
+#
+# --host 127.0.0.1 is also deliberate: nginx terminates TLS in front of this
+# and proxies to loopback, so the app must never accept connections directly.
+# --proxy-headers is deliberately absent; see _get_client_ip in server.py.
 ExecStart=/home/marmot7/.venv/bin/uvicorn server:app --host 127.0.0.1 --port 8000
 Restart=always
 RestartSec=3
