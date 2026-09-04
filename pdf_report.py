@@ -1491,16 +1491,33 @@ def _about_page(data, S):
     els.append(bt)
     els.append(Spacer(1, 16))
 
-    # Report details
+    # Report details. The check list is read off the report's own checks
+    # rather than hardcoded: a scoped audit runs fewer than the full set, and
+    # a fixed list would keep claiming all of them.
     els.append(Paragraph("Report Details", S["subheading"]))
+    check_names = [c.get("name", "") for c in data.get("checks", []) or [] if c.get("name")]
     details = [
         ("Domain audited", domain),
         ("Date and time", now),
         ("Audit type", "Comprehensive DNS Security Audit"),
-        ("Protocols checked", "DMARC, SPF, DKIM, MTA-STS, TLS-RPT, DANE, DNSSEC, CAA, MX, BIMI, CT, Nameservers, Blocklist"),
+        ("Checks performed", ", ".join(check_names) if check_names else "None"),
     ]
     for label, value in details:
         els.append(Paragraph(f"<b>{_safe(label)}:</b>  {_safe(value)}", S["body"]))
+
+    # The cover's Protocol Coverage metric scores a subset of the above, so
+    # the two figures disagree unless the report says which subset. The
+    # denominator is read from the metric itself so the two cannot drift.
+    es = data.get("executive_summary", {}) or {}
+    pc_total = (es.get("protocol_coverage") or {}).get("total")
+    if check_names and pc_total:
+        els.append(Spacer(1, 4))
+        els.append(Paragraph(
+            f"The Protocol Coverage figure on the cover scores {pc_total} of these, "
+            "the ones a domain owner configures. The rest observe what is already "
+            "published rather than something to switch on, so they are reported "
+            "here but not scored.", S["body_small"]
+        ))
     els.append(Spacer(1, 14))
 
     # Methodology
