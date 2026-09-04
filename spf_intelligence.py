@@ -343,9 +343,22 @@ def smart_dkim_check(domain: str, spf_record: Optional[str] = None, max_selector
             resolver = get_resolver(3)
             resolver.lifetime = 3
             answers = resolver.resolve(fqdn, 'TXT')
-            dkim_record = str(answers[0]).replace('" "', '').strip('"')
 
-            if "p=" not in dkim_record or dkim_record.strip().startswith("v=spf1"):
+            # Every record at the name, one joined string each. Looking only
+            # at answers[0] dropped the key whenever a domain verification
+            # token happened to sort first, and the domain was then reported
+            # as having no DKIM at all.
+            dkim_record = None
+            for rdata in answers:
+                txt = "".join(
+                    s.decode("utf-8", errors="replace") if isinstance(s, bytes) else str(s)
+                    for s in rdata.strings
+                )
+                if "p=" in txt and not txt.strip().startswith("v=spf1"):
+                    dkim_record = txt
+                    break
+
+            if dkim_record is None:
                 return None
 
             # Key type and size come from the same analyzer the manual

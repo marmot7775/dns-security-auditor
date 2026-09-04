@@ -248,6 +248,15 @@ BUSINESS_RISK = {
         "An empty p= tag means the key is revoked per RFC 6376. Every message "
         "signed with this selector fails DKIM verification at receivers."
     ),
+    "DKIM_UNDECODABLE_KEY": (
+        "The published key does not parse as a public key, which is what a TXT "
+        "value truncated by a DNS provider looks like. Every message signed with "
+        "this selector fails DKIM verification at receivers."
+    ),
+    "DKIM_NO_KEY": (
+        "A DKIM record with no p= tag publishes no key at all. Receivers have "
+        "nothing to verify a signature against, so every signed message fails."
+    ),
 }
 
 
@@ -4812,17 +4821,45 @@ def run_full_audit(domain: str, dkim_selector: Optional[str] = None,
                 try:
                     import dns.resolver as _dkim_resolver
                     answers = _dkim_resolver.resolve(_fqdn, "TXT")
-                    txt = "".join(
-                        s.decode() if isinstance(s, bytes) else s
-                        for rdata in answers for s in rdata.strings
-                    )
-                    if "p=" in txt:
+                    # One joined string per rdata. Joining a record's own
+                    # strings is right, that is how a TXT value over 255
+                    # bytes is reassembled, but joining across records merges
+                    # a domain verification token or a second key mid
+                    # rotation into the key and nothing decodes. errors is
+                    # set because a bare decode() raises UnicodeDecodeError,
+                    # which the DNSException handler below does not catch and
+                    # which would take the whole DKIM check down.
+                    _txts = [
+                        "".join(
+                            s.decode("utf-8", errors="replace") if isinstance(s, bytes) else str(s)
+                            for s in rdata.strings
+                        )
+                        for rdata in answers
+                    ]
+                    _key_txts = [
+                        t for t in _txts
+                        if "p=" in t and not t.strip().startswith("v=spf1")
+                    ]
+                    if _key_txts:
+                        txt = _key_txts[0]
                         key_analysis = analyze_dkim_key_strength(txt)
                         _raw["found_selectors"].append({
                             "selector": _dkim_sel, "record": txt,
                             "key_type": key_analysis.get("key_type"),
                             "key_bits": key_analysis.get("key_bits"),
                         })
+                        if len(_key_txts) > 1:
+                            _raw.setdefault("issues", []).append({
+                                "severity": "warning",
+                                "issue": f"{len(_key_txts)} DKIM keys published at {_fqdn}",
+                                "plain_english": (
+                                    f"{len(_key_txts)} TXT records at {_fqdn} carry a p= tag. "
+                                    "Receivers pick one and the choice is not yours to make, so "
+                                    "a signature made with the other key can fail. This audit "
+                                    "graded the first record. Publish one key per selector and "
+                                    "give a rotating key its own selector name."
+                                ),
+                            })
                 except dns.exception.DNSException:
                     _raw["selector_not_found"] = _dkim_sel
                     _raw["tested_count"] = 1

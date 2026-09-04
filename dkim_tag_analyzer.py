@@ -125,7 +125,14 @@ TAG_SPECS: Dict[str, TagSpec] = {
 # ----------------------------------------------------------------
 
 def _decode_rsa_key_bits(b64_data: str) -> Optional[int]:
-    """Decode an RSA SubjectPublicKeyInfo DER blob and return the modulus bit length."""
+    """Decode an RSA SubjectPublicKeyInfo DER blob and return the modulus bit length.
+
+    Every declared ASN.1 length is checked against the bytes actually
+    present. A DER length header is a claim, not a guarantee: a TXT value
+    truncated by a DNS provider still carries the original header, so
+    trusting mod_len alone reports a 60-character fragment of a 2048-bit key
+    as a healthy 2048-bit key while every signature it made fails.
+    """
     try:
         raw = base64.b64decode(b64_data)
     except Exception:
@@ -142,6 +149,8 @@ def _decode_rsa_key_bits(b64_data: str) -> Optional[int]:
             return None
         idx += 1
         idx, algo_len = _asn1_length(raw, idx)
+        if idx + algo_len > len(raw):
+            return None
         idx += algo_len
 
         # BIT STRING
@@ -149,23 +158,32 @@ def _decode_rsa_key_bits(b64_data: str) -> Optional[int]:
             return None
         idx += 1
         idx, bs_len = _asn1_length(raw, idx)
+        if idx + bs_len > len(raw):
+            return None
         idx += 1  # skip unused-bits byte
 
         # Inner SEQUENCE
         if raw[idx] != 0x30:
             return None
         idx += 1
-        idx, _ = _asn1_length(raw, idx)
+        idx, seq_len = _asn1_length(raw, idx)
+        if idx + seq_len > len(raw):
+            return None
 
         # First INTEGER = modulus
         if raw[idx] != 0x02:
             return None
         idx += 1
         idx, mod_len = _asn1_length(raw, idx)
+        if idx + mod_len > len(raw):
+            return None
 
         # Leading zero byte for positive integers
         if raw[idx] == 0x00:
             mod_len -= 1
+
+        if mod_len <= 0:
+            return None
 
         return mod_len * 8
     except (IndexError, ValueError):
@@ -653,9 +671,30 @@ class DKIMValidator:
             ))
             return
 
-        # RSA - try DER decode first, fallback to estimation
+        # RSA. The DER decode is the only basis for a strength verdict. A
+        # length estimate cannot tell a complete key from a truncated one, so
+        # falling back to it turned an unparseable key into a confident
+        # "1024-bit, rotate to 2048" about a key that does not exist, and the
+        # real problem was never mentioned.
         actual_bits = _decode_rsa_key_bits(clean_b64)
-        self.key_bits = actual_bits if actual_bits else _estimate_key_bits_fallback(clean_b64)
+        if actual_bits is None:
+            # The length estimate is context for the reader, never a verdict:
+            # it says what a complete key of this length would be, not what
+            # this one is, because this one does not parse at all.
+            estimate = _estimate_key_bits_fallback(clean_b64)
+            self.issues.append(DKIMIssue(
+                Priority.P0_CRITICAL, "p",
+                "Public key is not a valid RSA SubjectPublicKeyInfo",
+                f"The p= value is {len(clean_b64)} base64 characters, the length of a "
+                f"complete {estimate}-bit key, but it does not parse as an RSA public "
+                "key structure, so no key size can be confirmed. A DNS provider that "
+                "cuts a long TXT value produces exactly this.",
+                fix="Republish the complete public key from the key pair you generated, "
+                    "split into quoted 255-character strings rather than truncated.",
+                impact="Every signature made with this selector fails verification.",
+            ))
+            return
+        self.key_bits = actual_bits
 
         if self.key_bits < 1024:
             self.issues.append(DKIMIssue(

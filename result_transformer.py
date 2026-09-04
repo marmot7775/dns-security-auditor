@@ -4014,7 +4014,10 @@ def transform_dkim(raw: Dict, domain: str, has_mx: bool = True, non_mail: bool =
     details = []
     vendor_names = set()
     weak_keys = []
-    revoked_keys = []
+    # Every key that failed to yield a size, whatever the reason. The three
+    # reasons are distinguished in the detail line and the callout below.
+    invalid_keys = []
+    risks_called_out = set()
     for sel in found:
         selector = sel.get("selector", "unknown")
         sel_record = sel.get("record", "")
@@ -4031,16 +4034,28 @@ def transform_dkim(raw: Dict, domain: str, has_mx: bool = True, non_mail: bool =
             vendor_names.add(vendor)
 
         if strength == "invalid":
-            revoked_detail = {
+            invalid_detail = {
                 "type": "error",
                 "text": f"{selector}: {key_analysis.get('warning') or 'invalid key'}{vendor_str}",
             }
-            # Only attach business_risk to the first revoked-key detail to
-            # avoid repeating the same callout once per selector.
-            if not revoked_keys:
-                revoked_detail["business_risk"] = BUSINESS_RISK.get("DKIM_REVOKED_KEY")
-            details.append(revoked_detail)
-            revoked_keys.append(selector)
+            # "invalid" covers three different conditions and only one of them
+            # is a revocation. Attaching the revoked-key callout to all three
+            # put "an empty p= tag means the key is revoked" next to a detail
+            # line reading "could not decode RSA public key", and the reader
+            # had no way to tell which had happened.
+            risk_key = {
+                "revoked": "DKIM_REVOKED_KEY",
+                "undecodable": "DKIM_UNDECODABLE_KEY",
+                "no_key": "DKIM_NO_KEY",
+            }.get(key_analysis.get("reason"))
+            # One callout per distinct condition, not one per selector: two
+            # revoked keys do not need the same paragraph twice, but a revoked
+            # key and an undecodable one are different problems.
+            if risk_key and risk_key not in risks_called_out:
+                invalid_detail["business_risk"] = BUSINESS_RISK.get(risk_key)
+                risks_called_out.add(risk_key)
+            details.append(invalid_detail)
+            invalid_keys.append(selector)
         elif strength == "weak":
             weak_detail = {
                 "type": "warning",
@@ -4082,7 +4097,7 @@ def transform_dkim(raw: Dict, domain: str, has_mx: bool = True, non_mail: bool =
     status = "pass"
     if weak_keys:
         status = "warn"
-    if revoked_keys:
+    if invalid_keys:
         status = "fail"
     # Downgrade status if audit engine found errors or warnings
     if raw.get("syntax_errors") or any(i.get("severity") == "error" for i in raw.get("issues", [])):

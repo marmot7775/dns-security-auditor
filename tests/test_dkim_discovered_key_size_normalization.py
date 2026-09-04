@@ -66,10 +66,18 @@ RECORDS = {bits: _rsa_record(bits) for bits in (1024, 2048, 3072, 4096)}
 
 
 class _FakeAnswer:
-    """Mimics dnspython's str() of a TXT rdata, split into 255-char strings."""
+    """Mimics a dnspython TXT rdata, split into 255-char strings.
+
+    Real rdata carries the split as a `strings` list of bytes and renders it
+    as quoted chunks from `__str__`. Both are modelled here: reading the
+    record by munging `str()` and reading it from `strings` are different
+    code paths, and a fake that offers only the first cannot tell whether the
+    caller reassembled the record correctly.
+    """
 
     def __init__(self, txt):
         chunks = [txt[i:i + 255] for i in range(0, len(txt), 255)]
+        self.strings = [c.encode("utf-8") for c in chunks] or [b""]
         self._rendered = " ".join('"%s"' % c for c in chunks)
 
     def __str__(self):

@@ -5,39 +5,62 @@ analyze_dkim_key_strength() is the only public function; audit_engine,
 result_transformer and spf_intelligence use it to grade a selector's key.
 """
 
-from typing import Dict
+from typing import Dict, Optional
 import re
 
 from dkim_tag_analyzer import _decode_rsa_key_bits
 
+
+def _extract_p_tag(dkim_record: str) -> Optional[str]:
+    """Return the p= value with all whitespace stripped, or None if absent.
+
+    Split on ';' the way DKIMValidator._parse_tags does. RFC 6376 §3.6.1
+    permits folding whitespace inside the base64 and long keys are routinely
+    published folded, so a regex that stops at the first space silently
+    truncates a valid key and it fails to decode.
+    """
+    for part in dkim_record.split(";"):
+        key, sep, value = part.partition("=")
+        if sep and key.strip() == "p":
+            return re.sub(r"\s+", "", value)
+    return None
+
+
 def analyze_dkim_key_strength(dkim_record: str) -> Dict:
     """
     Analyze DKIM key strength and return security assessment.
-    
+
     Returns:
-        dict with key_type, key_bits, status, warning
+        dict with key_type, key_bits, status, warning, reason
+
+    'reason' qualifies a status of 'invalid', which covers three distinct
+    conditions: 'no_key' (no p= tag at all), 'revoked' (an empty p=, which is
+    the only one that actually means revocation) and 'undecodable' (a p= that
+    will not parse as a public key). Callers select their explanation on this
+    rather than assuming a revocation.
     """
     result = {
         'key_type': 'Unknown',
         'key_bits': 0,
         'status': 'unknown',
-        'warning': None
+        'warning': None,
+        'reason': None
     }
-    
+
     # Extract public key data first (may be empty). Per RFC 6376 §3.6.1, an
     # empty p= means the key is REVOKED -- this must be checked before the
     # Ed25519 shortcut below, which otherwise returns 'strong' without ever
     # looking at whether the key was revoked.
-    key_match = re.search(r'p=([A-Za-z0-9+/=]*)', dkim_record)
-    if not key_match:
+    key_data = _extract_p_tag(dkim_record)
+    if key_data is None:
         result['status'] = 'invalid'
+        result['reason'] = 'no_key'
         result['warning'] = 'No public key found'
         return result
 
-    key_data = key_match.group(1)
-
     if not key_data:
         result['status'] = 'invalid'
+        result['reason'] = 'revoked'
         result['warning'] = 'Empty public key (p=): this key is revoked'
         return result
 
@@ -57,6 +80,7 @@ def analyze_dkim_key_strength(dkim_record: str) -> Dict:
     key_bits = _decode_rsa_key_bits(key_data)
     if key_bits is None:
         result['status'] = 'invalid'
+        result['reason'] = 'undecodable'
         result['warning'] = 'Could not decode RSA public key'
         return result
 
