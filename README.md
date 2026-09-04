@@ -184,10 +184,24 @@ Python 3.8+. No external services or databases.
 
 ```bash
 pip install -r requirements.txt
-uvicorn server:app --host 0.0.0.0 --port 8000
+uvicorn server:app --host 127.0.0.1 --port 8000
 ```
 
 All DNS resolution via dnspython. No API keys needed.
+
+Run it behind a reverse proxy that terminates TLS, and bind it to loopback as
+above so it never accepts connections directly. If you expose it on 0.0.0.0
+instead, set `TRUSTED_PROXY_IPS=` (empty) so the `X-Real-IP` header is ignored,
+because any client can then set that header itself and rotate it to walk past
+the per IP rate limit. Do not pass `--proxy-headers`: the rate limiter
+identifies clients by checking that the connecting peer is a trusted proxy, and
+that flag overwrites the peer address with a client supplied one.
+
+Use a single worker. No `--workers` flag, and leave `WEB_CONCURRENCY` unset.
+The cache, the rate limiter, the concurrency budget and the in flight audit
+registry are all in process state, so a second worker gets its own copy of each
+and every limit silently multiplies by the worker count. The server logs an
+error at start-up if it detects more than one.
 
 ## Tech Stack
 
