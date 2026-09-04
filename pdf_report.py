@@ -24,8 +24,10 @@ Wire into server.py:
 """
 
 import io
+import logging
 import re
 import tempfile
+from collections import Counter
 from datetime import datetime, timezone
 
 from reportlab.lib import colors
@@ -37,6 +39,8 @@ from reportlab.platypus import (
     SimpleDocTemplate, Paragraph, Spacer, Table, TableStyle,
     KeepTogether, HRFlowable, PageBreak, CondPageBreak,
 )
+
+log = logging.getLogger("dns-auditor.pdf")
 
 # ================================================================
 # Brand colors
@@ -131,16 +135,47 @@ def _alt_rows(cmds, row_count):
     return cmds
 
 
-def _findings_summary(passes, warns, fails):
-    """Return a stacked tally of pass/warn/fail counts as a list of Paragraphs.
+def _tally(checks):
+    """Split checks into (passes, warns, fails, unavailable), summing to len(checks).
+
+    Every check has to land in exactly one counter or the cover page stops
+    describing the document it introduces. "unavailable" exists because a
+    lookup that failed now says so rather than inventing a finding, and such a
+    check used to fall through all three counters and vanish from the cover.
+
+    Any status this function does not recognise is counted as unavailable and
+    logged, so a status added later shows up as a visible figure on the cover
+    instead of quietly going missing. The assertion below is the guard: the
+    four counters must always account for every check.
+    """
+    counts = Counter((c.get("status") or "unavailable") for c in checks)
+    passes = counts.pop("pass", 0)
+    warns = counts.pop("warn", 0)
+    fails = counts.pop("fail", 0)
+    unavailable = counts.pop("unavailable", 0)
+    if counts:
+        log.warning(
+            "PDF cover tally saw unrecognised check statuses %s; counting them "
+            "as not checked. Give each one its own counter in _tally.",
+            sorted(counts),
+        )
+        unavailable += sum(counts.values())
+    assert passes + warns + fails + unavailable == len(checks)
+    return passes, warns, fails, unavailable
+
+
+def _findings_summary(passes, warns, fails, unavailable=0):
+    """Return a stacked tally of the cover counts as a list of Paragraphs.
 
     Drops into a Table cell in place of the old donut gauge. Each line is a
-    colored count with a short label (issues / warnings / passing).
+    colored count with a short label (issues / warnings / passing / not
+    checked). The "not checked" line only appears when there is something to
+    report, so a clean run reads the same as it always did.
     """
-    total = passes + warns + fails
+    total = passes + warns + fails + unavailable
     line = ParagraphStyle("FS", fontName="Helvetica-Bold", fontSize=11, leading=16)
     label = ParagraphStyle("FSL", fontName="Helvetica", fontSize=9, textColor=TEXT_TER, leading=12)
-    return [
+    els = [
         Paragraph(f'<font color="{TEXT_PRI.hexval()}" size="22"><b>{total}</b></font>', line),
         Paragraph("checks total", label),
         Spacer(1, 6),
@@ -148,6 +183,10 @@ def _findings_summary(passes, warns, fails):
         Paragraph(f'<font color="{WARN_CLR.hexval()}"><b>{warns}</b></font> warnings', line),
         Paragraph(f'<font color="{PASS_CLR.hexval()}"><b>{passes}</b></font> passing', line),
     ]
+    if unavailable:
+        els.append(Paragraph(
+            f'<font color="{TEXT_TER.hexval()}"><b>{unavailable}</b></font> not checked', line))
+    return els
 
 
 # ================================================================
@@ -217,9 +256,7 @@ def _cover_page(data, S):
     """Build cover page elements."""
     domain = data.get("domain", "unknown")
     checks = data.get("checks", []) or []
-    passes = sum(1 for c in checks if c.get("status") == "pass")
-    warns = sum(1 for c in checks if c.get("status") == "warn")
-    fails = sum(1 for c in checks if c.get("status") == "fail")
+    passes, warns, fails, unavailable = _tally(checks)
     es = data.get("executive_summary", {})
     now = datetime.now(timezone.utc).strftime("%B %d, %Y at %H:%M UTC")
 
@@ -258,7 +295,7 @@ def _cover_page(data, S):
     els.append(Spacer(1, 16))
 
     # Findings summary tally + verdict
-    summary_cell = _findings_summary(passes, warns, fails)
+    summary_cell = _findings_summary(passes, warns, fails, unavailable)
 
     verdict_text = es.get("verdict", "")
     verdict_cell = [
@@ -327,7 +364,8 @@ def _cover_page(data, S):
         "2. Email Security Roadmap",
         "3. DMARC Deep Dive",
         "4. Attack Surface Analysis",
-        "5. Protocol Details (SPF, DKIM, MTA-STS, TLS-RPT, DANE, DNSSEC, CAA, MX)",
+        "5. Protocol Details (Blocklist, SPF, DKIM, MTA-STS, TLS-RPT, DANE, "
+        "DNSSEC, CAA, MX, Nameservers, BIMI, Certificate Transparency)",
         "6. Migration Path",
         "7. About This Report",
     ]
@@ -417,9 +455,9 @@ def _executive_summary_page(data, S):
 
     # Summary table: pass/warn/fail counts
     checks = data.get("checks", [])
-    pc = sum(1 for c in checks if c.get("status") == "pass")
-    wc = sum(1 for c in checks if c.get("status") == "warn")
-    fc = sum(1 for c in checks if c.get("status") == "fail")
+    # Same four buckets as the cover. Counting only three here would put a
+    # total on page 2 that disagrees with the one on page 1.
+    pc, wc, fc, uc = _tally(checks)
     def _count_cell(label, val, clr):
         return [
             Paragraph(f'<font color="{clr.hexval()}" size="20"><b>{val}</b></font>',
@@ -427,16 +465,20 @@ def _executive_summary_page(data, S):
             Paragraph(f'<font color="#6b6b6b" size="9">{label}</font>',
                       ParagraphStyle("CL", alignment=TA_CENTER, leading=13)),
         ]
-    count_tbl = Table([
-        [_count_cell("Passing", str(pc), PASS_CLR),
-         _count_cell("Warnings", str(wc), WARN_CLR),
-         _count_cell("Issues", str(fc), FAIL_CLR)],
-    ], colWidths=[2.17*inch]*3)
+    count_cells = [
+        _count_cell("Passing", str(pc), PASS_CLR),
+        _count_cell("Warnings", str(wc), WARN_CLR),
+        _count_cell("Issues", str(fc), FAIL_CLR),
+    ]
+    if uc:
+        count_cells.append(_count_cell("Not checked", str(uc), TEXT_TER))
+    col_w = 6.5 / len(count_cells)
+    count_tbl = Table([count_cells], colWidths=[col_w*inch]*len(count_cells))
     count_tbl.setStyle(TableStyle([
         ("VALIGN", (0,0), (-1,-1), "TOP"),
         ("TOPPADDING", (0,0), (-1,-1), 10),
         ("BOTTOMPADDING", (0,0), (-1,-1), 10),
-        ("LINEAFTER", (0,0), (1,0), 0.5, BORDER),
+        ("LINEAFTER", (0,0), (len(count_cells)-2,0), 0.5, BORDER),
     ]))
     els.append(count_tbl)
     els.append(Spacer(1, 14))
@@ -1002,6 +1044,13 @@ def _protocol_details(data, S):
     els = [PageBreak()]
     els.extend(_section_header("5", "Protocol Details", S))
 
+    # Blocklist. First in the section on purpose: an active listing outranks
+    # every other finding in the report, and it is the one thing a reader
+    # should not have to page to the end to find.
+    blocklist = _get_check(data, "Blocklist")
+    if blocklist:
+        els.extend(_protocol_card(blocklist, S))
+
     # SPF
     spf = _get_check(data, "SPF")
     if spf:
@@ -1057,6 +1106,11 @@ def _protocol_details(data, S):
     bimi = _get_check(data, "BIMI")
     if bimi:
         els.extend(_protocol_card(bimi, S))
+
+    # Certificate Transparency
+    ct = _get_check(data, "Certificate Transparency")
+    if ct:
+        els.extend(_protocol_card(ct, S))
 
     # Detected vendors
     els.extend(_vendors(data, S))
@@ -1458,13 +1512,6 @@ def _about_page(data, S):
         "SPF evaluation tracks lookup counts against the RFC 7208 10-lookup limit including "
         "void lookup detection. DANE validation checks TLSA records per RFC 7672 with DNSSEC "
         "dependency verification.", S["body_small"]
-    ))
-    els.append(Spacer(1, 6))
-    els.append(Paragraph(
-        "Scores are based on authentication configuration (DMARC 25, SPF 20, DKIM 15), "
-        "best practices (20), key security (10), and vendor intelligence (10). "
-        "DNSSEC, CAA, and nameserver diversity contribute to the Best Practices category. "
-        "Certificate Transparency and Blocklist checks are non-scoring.", S["body_small"]
     ))
     els.append(Spacer(1, 14))
 
