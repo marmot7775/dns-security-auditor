@@ -117,6 +117,15 @@ def _first_fix(issues: List[Dict]) -> Optional[str]:
 # Executive Summary (Prompt 16)
 # ============================================================
 
+def _join_names(names: List[str]) -> str:
+    """Join names for prose: "SPF", "DMARC and SPF", "DMARC, SPF and DKIM"."""
+    if not names:
+        return ""
+    if len(names) == 1:
+        return names[0]
+    return ", ".join(names[:-1]) + " and " + names[-1]
+
+
 def build_executive_summary(checks: List[Dict], roadmap: Dict) -> Dict:
     """Build the executive summary card shown at the very top of results.
 
@@ -125,6 +134,24 @@ def build_executive_summary(checks: List[Dict], roadmap: Dict) -> Dict:
     """
     check_map = {c.get("name", ""): c for c in checks}
     dmarc = check_map.get("DMARC", {})
+
+    # A check whose DNS query never completed carries status "unavailable"
+    # and an empty record. Every gate below tests for "fail", so without
+    # this guard an unavailable check reads as "nothing wrong here" and the
+    # summary issues an explicit all clear about records it never read.
+    # remediation_planner.py already models this correctly; same guard here.
+    def _unavailable(name):
+        return check_map.get(name, {}).get("status") == "unavailable"
+
+    dmarc_unavailable = _unavailable("DMARC")
+    spf_unavailable = _unavailable("SPF")
+    dkim_unavailable = _unavailable("DKIM")
+    unread = [n for n, u in (("DMARC", dmarc_unavailable),
+                             ("SPF", spf_unavailable),
+                             ("DKIM", dkim_unavailable)) if u]
+    auth_unavailable = bool(unread)
+    unread_names = _join_names(unread)
+    unread_verb = "lookups did" if len(unread) > 1 else "lookup did"
 
     # ── Part 1: One-sentence verdict ─────────────────────────
     attack_surface = dmarc.get("attack_surface")
@@ -139,7 +166,16 @@ def build_executive_summary(checks: List[Dict], roadmap: Dict) -> Dict:
     exposed_count = sum(1 for v in vectors if v.get("status") == "exposed")
     partial_count = sum(1 for v in vectors if v.get("status") == "partial")
 
-    if dmarc_status == "fail" and dmarc.get("pill_label") == "Missing":
+    # Ahead of every other branch: if a lookup never completed, this report
+    # cannot say the domain is healthy or that a record is absent. Saying
+    # either would be a claim the audit did not establish.
+    if auth_unavailable:
+        verdict = (
+            "Parts of this domain's DNS did not answer, so its email authentication "
+            f"was not assessed. The {unread_names} {unread_verb} not complete, and this "
+            "report cannot say whether those records exist."
+        )
+    elif dmarc_status == "fail" and dmarc.get("pill_label") == "Missing":
         if spf_status == "fail":
             verdict = "Your domain has no email authentication. Anyone on the internet can send email pretending to be you."
         else:
@@ -164,8 +200,9 @@ def build_executive_summary(checks: List[Dict], roadmap: Dict) -> Dict:
     else:
         verdict = "Your domain has email authentication configured."
 
-    # Check if enforcement exists but no reporting
-    if health_status in ("ready", "compatible", "attention"):
+    # Check if enforcement exists but no reporting. Skipped when something
+    # went unread, so this cannot overwrite the verdict set above.
+    if not auth_unavailable and health_status in ("ready", "compatible", "attention"):
         tb = dmarc.get("tag_breakdown") or {}
         cw = tb.get("config_warnings", [])
         has_no_rua = any(w.get("title") == "No aggregate reporting" for w in cw)
@@ -175,7 +212,9 @@ def build_executive_summary(checks: List[Dict], roadmap: Dict) -> Dict:
     # ── Part 2: Three key metrics ────────────────────────────
 
     # Metric 1: Spoofing Protection
-    if protected_count == 4:
+    if dmarc_unavailable:
+        spoof_label, spoof_color = "Not assessed", "neutral"
+    elif protected_count == 4:
         spoof_label, spoof_color = "Full", "green"
     elif protected_count == 3:
         spoof_label, spoof_color = "Strong", "green"
@@ -186,15 +225,17 @@ def build_executive_summary(checks: List[Dict], roadmap: Dict) -> Dict:
     else:
         spoof_label, spoof_color = "None", "red"
 
-    # No attack surface means no DMARC record
-    if not attack_surface:
+    # No attack surface means no DMARC record, unless the DMARC lookup is the
+    # thing that failed, in which case zero vectors is not a finding.
+    if not attack_surface and not dmarc_unavailable:
         spoof_label, spoof_color = "None", "red"
         protected_count = 0
 
     spoofing_protection = {
         "label": spoof_label,
         "color": spoof_color,
-        "detail": f"{protected_count}/4 vectors protected",
+        "detail": ("DMARC lookup did not complete" if dmarc_unavailable
+                   else f"{protected_count}/4 vectors protected"),
     }
 
     # Metric 2: RFC 9989 Readiness
@@ -205,7 +246,10 @@ def build_executive_summary(checks: List[Dict], roadmap: Dict) -> Dict:
         "attention": ("In Progress", "amber"),
         "misconfigured": ("Action Needed", "red"),
     }
-    if health_status and health_status in readiness_map:
+    if dmarc_unavailable:
+        # "Action Needed" would be advice drawn from a record never read.
+        rd_label, rd_color = "Not assessed", "neutral"
+    elif health_status and health_status in readiness_map:
         rd_label, rd_color = readiness_map[health_status]
     else:
         rd_label, rd_color = "Action Needed", "red"
@@ -218,20 +262,33 @@ def build_executive_summary(checks: List[Dict], roadmap: Dict) -> Dict:
     # Metric 3: Protocol Coverage
     protocol_names = ["DMARC", "SPF", "DKIM", "MTA-STS", "TLS-RPT", "DANE", "DNSSEC", "BIMI", "CAA"]
     configured = 0
+    assessed = 0
     for pname in protocol_names:
         c = check_map.get(pname, {})
         st = c.get("status", "")
         pill = c.get("pill_label", "")
+        # A lookup that never completed is not evidence either way, so it
+        # leaves the denominator instead of scoring as "not configured".
+        # Otherwise a protocol nobody could read is indistinguishable from
+        # one the domain genuinely does not publish.
+        if st == "unavailable":
+            continue
+        assessed += 1
         # Consider configured if not missing/not-configured/fail-with-missing
         if st == "pass":
             configured += 1
         elif st in ("warn", "fail") and pill not in ("Missing", "Not configured", ""):
             configured += 1
 
-    total_protocols = len(protocol_names)
-    if configured >= 7:
+    total_protocols = assessed
+    # Thresholds stay proportional so they mean the same thing when the
+    # denominator shrinks. At the full nine these are the original 7 and 4.
+    ratio = (configured / total_protocols) if total_protocols else 0.0
+    if not total_protocols:
+        cov_color = "neutral"
+    elif ratio >= 7 / 9:
         cov_color = "green"
-    elif configured >= 4:
+    elif ratio >= 4 / 9:
         cov_color = "amber"
     else:
         cov_color = "red"
@@ -244,7 +301,17 @@ def build_executive_summary(checks: List[Dict], roadmap: Dict) -> Dict:
 
     # ── Part 3: Biggest risk ─────────────────────────────────
     roadmap_items = roadmap.get("items", [])
-    if roadmap_items:
+    _urgent = any(i.get("priority") in ("critical", "high") for i in roadmap_items)
+    if auth_unavailable and not _urgent:
+        # The roadmap gates on "fail", so an unread record contributes no item
+        # and some minor nicety floats to the top. Presenting that as the
+        # biggest risk implies the real ones were weighed, and they were not.
+        biggest_risk = (
+            "This audit could not read part of this domain's DNS, so it cannot name the "
+            f"biggest risk. The {unread_names} {unread_verb} not complete. Re-run the audit "
+            "once the nameservers are answering."
+        )
+    elif roadmap_items:
         top = roadmap_items[0]
         biggest_risk = top.get("impact", top.get("action", ""))
     else:
@@ -296,6 +363,22 @@ def build_executive_summary(checks: List[Dict], roadmap: Dict) -> Dict:
             deliverability_summary = f"Your configuration has {len(deliverability_issues)} issue{'s' if len(deliverability_issues) != 1 else ''} that may affect inbox placement."
     else:
         deliverability_summary = "Your configuration looks solid. SPF, DKIM, and DMARC are properly set up, giving you the best chance of reaching inboxes."
+
+    # A lookup that never completed is not a clean bill of health. Without
+    # this, the branch above names SPF, DKIM and DMARC as properly set up on
+    # a run that never read them. Real findings are kept and annotated rather
+    # than replaced, since a blocklist listing still matters here.
+    if auth_unavailable:
+        caveat = (f"The {unread_names} {unread_verb} not complete, so that part of the "
+                  "configuration was not assessed.")
+        if deliverability_issues:
+            deliverability_summary = f"{deliverability_summary} {caveat}"
+        else:
+            deliverability_summary = (
+                f"The {unread_names} {unread_verb} not complete, so inbox placement "
+                "could not be assessed. Nothing here says the configuration is good "
+                "or bad, only that it was not read."
+            )
 
     return {
         "verdict": verdict,

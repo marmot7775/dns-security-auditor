@@ -5433,10 +5433,28 @@ def _build_resilience_analysis(
     raw_dkim = raw_results.get("dkim") or {}
     raw_dmarc = raw_results.get("dmarc") or {}
 
+    # A lookup that never completed leaves "record" and "policy" empty, and
+    # every branch below reads that emptiness as absence. Without these flags
+    # this section states that records are missing when it never read them.
+    # The DKIM branch already models the inconclusive case; SPF and DMARC
+    # follow the same shape. Matches remediation_planner.py.
+    spf_unavailable = raw_spf.get("status") == "unavailable"
+    dmarc_unavailable = (
+        raw_dmarc.get("status") == "unavailable"
+        or bool(raw_dmarc.get("inheritance_lookup_failed"))
+    )
+
     # -- SPF mechanism status --
     spf_record = raw_spf.get("record")
     spf_lookup_count = raw_spf.get("lookup_count") or 0
-    if spf_record and spf_lookup_count > 10:
+    if spf_unavailable:
+        spf_status = "inconclusive"
+        spf_note = (
+            "The SPF lookup did not complete, so this audit did not learn whether an "
+            "SPF record exists. This is not a finding about the domain. Re-run the "
+            "audit once the nameservers are answering."
+        )
+    elif spf_record and spf_lookup_count > 10:
         spf_status = "broken"
         spf_note = (
             f"SPF record exceeds the 10-lookup limit ({spf_lookup_count} lookups). "
@@ -5505,7 +5523,12 @@ def _build_resilience_analysis(
 
     # -- DMARC mechanism status --
     # Check for inherited policy (set by _enrich_dmarc_inheritance)
-    _inherited = not raw_dmarc.get("record") and raw_dmarc.get("is_subdomain") and raw_dmarc.get("inherited_policy")
+    _inherited = (
+        not dmarc_unavailable
+        and not raw_dmarc.get("record")
+        and raw_dmarc.get("is_subdomain")
+        and raw_dmarc.get("inherited_policy")
+    )
     if _inherited:
         _inh_policy = raw_dmarc["inherited_policy"].lower()
         _inh_source = raw_dmarc.get("inherited_from", "organizational domain")
@@ -5517,7 +5540,14 @@ def _build_resilience_analysis(
     else:
         dmarc_policy = (raw_dmarc.get("policy") or "").lower().strip()
 
-    if _inherited and _inh_policy in ("reject", "quarantine"):
+    if dmarc_unavailable:
+        dmarc_status = "inconclusive"
+        dmarc_note = (
+            "The DMARC lookup did not complete, so this audit did not learn whether a "
+            "DMARC record exists or what policy it sets. This is not a finding about "
+            "the domain. Re-run the audit once the nameservers are answering."
+        )
+    elif _inherited and _inh_policy in ("reject", "quarantine"):
         dmarc_status = _inh_policy
         dmarc_note = (
             f"No DMARC record at this subdomain, but it inherits {_tag_label}{_inh_policy} "
@@ -5618,7 +5648,26 @@ def _build_resilience_analysis(
     _is_inherited_dmarc = _inherited and dmarc_enforcing
     _is_non_sending_sub = _is_inherited_dmarc and not has_mx and not spf_functional
 
-    if _is_non_sending_sub:
+    if spf_unavailable or dmarc_unavailable:
+        # Ahead of every branch below. Those read a missing record as a
+        # finding and hand the operator a plan to publish one they may
+        # already have.
+        _unread = [n for n, u in (("SPF", spf_unavailable),
+                                  ("DMARC", dmarc_unavailable)) if u]
+        _which = " and ".join(_unread)
+        _verb = "lookups did" if len(_unread) > 1 else "lookup did"
+        level = "inconclusive"
+        summary = (
+            f"The {_which} {_verb} not complete, so this domain's authentication "
+            "resilience was not assessed. The report cannot say whether these records "
+            "exist, and nothing below should be read as a finding about the domain."
+        )
+        risk = (
+            "No conclusion is available. A nameserver returned a failure or stopped "
+            "responding during this audit, which is a separate problem from anything "
+            "these records might say. Confirm the domain resolves, then re-run the audit."
+        )
+    elif _is_non_sending_sub:
         _inh_source = raw_dmarc.get("inherited_from", "organizational domain")
         level = "high" if dmarc_status == "reject" else "moderate"
         summary = (

@@ -1030,6 +1030,13 @@ main {
     border-top-color: var(--fail);
 }
 
+/* Checks whose lookup never completed. Neutral on purpose: not a finding,
+   and colouring it red or green would state something the audit did not
+   establish. Shown only when the count is non-zero, matching the PDF. */
+.unavailable-card {
+    border-top-color: var(--text-tertiary);
+}
+
 .summary-label {
     font-size: var(--font-xs);
     font-weight: 600;
@@ -1056,6 +1063,10 @@ main {
 
 .fail-value {
     color: var(--fail);
+}
+
+.unavailable-value {
+    color: var(--text-tertiary);
 }
 
 /* Priority fixes */
@@ -3664,6 +3675,7 @@ details.st-node>summary:hover {
 .resilience-pass { background: var(--pass); }
 .resilience-warn { background: var(--warn); color: #1a1a1a; }
 .resilience-fail { background: var(--fail); }
+.resilience-info { background: var(--text-tertiary); }
 
 .resilience-text {
     font-size: var(--font-sm);
@@ -3706,6 +3718,7 @@ details.st-node>summary:hover {
 .resilience-mech-status.resilience-pass { background: var(--pass-bg); color: var(--pass); }
 .resilience-mech-status.resilience-warn { background: var(--warn-bg); color: var(--warn); }
 .resilience-mech-status.resilience-fail { background: var(--fail-bg); color: var(--fail); }
+.resilience-mech-status.resilience-info { background: var(--bg-raised); color: var(--text-tertiary); }
 
 .resilience-mech-note {
     font-size: var(--font-xs);
@@ -4846,6 +4859,7 @@ body {
 .es-color-amber { color: var(--warn); }
 .es-color-red { color: var(--fail); }
 .es-color-blue { color: var(--primary-light, #60a5fa); }
+.es-color-neutral { color: var(--text-tertiary); }
 
 .es-metric-ring {
     position: relative;

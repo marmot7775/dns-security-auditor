@@ -626,10 +626,17 @@ function renderResults(data) {
     const passCount = checks.filter(c => c.status === 'pass').length;
     const warnCount = checks.filter(c => c.status === 'warn').length;
     const failCount = checks.filter(c => c.status === 'fail').length;
+    // A check whose lookup never completed is none of the three. Counting only
+    // pass, warn and fail left the tiles adding up to less than the number of
+    // cards on screen, which the PDF already fixed with a fourth bucket.
+    const unavailableCount = checks.filter(c => c.status === 'unavailable').length;
 
     document.getElementById('summary-pass').textContent = passCount;
     document.getElementById('summary-warn').textContent = warnCount;
     document.getElementById('summary-fail').textContent = failCount;
+    document.getElementById('summary-unavailable').textContent = unavailableCount;
+    document.getElementById('summary-unavailable-card')
+        .classList.toggle('is-hidden', unavailableCount === 0);
 
     // Tab title with issue summary
     if (failCount > 0) {
@@ -645,7 +652,8 @@ function renderResults(data) {
     const res = data.resilience;
     if (res) {
         resSection.style.display = 'block';
-        const levelColors = { high: 'pass', moderate: 'warn', low: 'fail', none: 'fail' };
+        const levelColors = { high: 'pass', moderate: 'warn', low: 'fail', none: 'fail',
+            inconclusive: 'info' };
         const levelClass = levelColors[res.level] || 'info';
 
         document.getElementById('resilience-summary').innerHTML = `
@@ -656,8 +664,11 @@ function renderResults(data) {
         const mechs = res.mechanisms || {};
         let mechHtml = '';
         for (const [name, info] of Object.entries(mechs)) {
+            // 'inconclusive' has to be listed: the final fallback is 'pass', so a
+            // mechanism nobody could read used to render green.
             const sClass = info.status === 'missing' || info.status === 'broken' ? 'fail'
-                : info.status === 'not_detected' || info.status === 'none' ? 'warn' : 'pass';
+                : info.status === 'not_detected' || info.status === 'none' ? 'warn'
+                : info.status === 'inconclusive' ? 'info' : 'pass';
             mechHtml += `<div class="resilience-mech">
                 <span class="resilience-mech-name">${escapeHtml(name.toUpperCase())}</span>
                 <span class="resilience-mech-status resilience-${sClass}">${escapeHtml(info.status)}</span>
@@ -2510,7 +2521,12 @@ function renderExecutiveSummary(es) {
     const pct = pc.total ? (pc.configured / pc.total) : 0;
     const circumference = 2 * Math.PI * 18;
     const dashOffset = circumference * (1 - pct);
-    const ringColor = pc.color === 'green' ? 'var(--pass)' : pc.color === 'amber' ? 'var(--warn)' : 'var(--fail)';
+    // 'neutral' means nothing in the denominator could be assessed, so the ring
+    // must not read as a red score.
+    const ringColor = pc.color === 'green' ? 'var(--pass)'
+        : pc.color === 'amber' ? 'var(--warn)'
+        : pc.color === 'neutral' ? 'var(--text-tertiary)' : 'var(--fail)';
+    const ringText = pc.total ? `${pc.configured}/${pc.total}` : 'n/a';
 
     const ringSvg = `<svg class="es-ring" width="44" height="44" viewBox="0 0 44 44">
         <circle cx="22" cy="22" r="18" fill="none" stroke="var(--border)" stroke-width="3"/>
@@ -2520,7 +2536,10 @@ function renderExecutiveSummary(es) {
     </svg>`;
 
     // Biggest risk styling
-    const riskBg = es.biggest_risk.startsWith('No urgent risks')
+    // "could not read" is not an urgent finding, and styling it red would give
+    // an incomplete audit the same weight as a real one.
+    const riskBg = (es.biggest_risk.startsWith('No urgent risks')
+        || es.biggest_risk.startsWith('This audit could not read'))
         ? 'es-risk-calm' : 'es-risk-urgent';
 
     // Action buttons
@@ -2544,7 +2563,7 @@ function renderExecutiveSummary(es) {
                 <div class="es-metric-label">RFC 9989 Readiness</div>
             </div>
             <div class="es-metric">
-                <div class="es-metric-ring">${ringSvg}<span class="es-ring-text">${pc.configured}/${pc.total}</span></div>
+                <div class="es-metric-ring">${ringSvg}<span class="es-ring-text">${escapeHtml(ringText)}</span></div>
                 <div class="es-metric-label">Protocol Coverage</div>
             </div>
         </div>
