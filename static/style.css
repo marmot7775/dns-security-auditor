@@ -3675,7 +3675,10 @@ details.st-node>summary:hover {
 .resilience-pass { background: var(--pass); }
 .resilience-warn { background: var(--warn); color: #1a1a1a; }
 .resilience-fail { background: var(--fail); }
-.resilience-info { background: var(--text-tertiary); }
+/* Fixed slate, not var(--text-tertiary): that token is a light grey in the
+   dark theme, and .resilience-level sets white text, which measured 2.54:1
+   against it. This holds 7.58:1 in both themes. */
+.resilience-info { background: #475569; }
 
 .resilience-text {
     font-size: var(--font-sm);
