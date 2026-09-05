@@ -20,7 +20,7 @@
     <link rel="icon" type="image/svg+xml" href="/static/favicon.svg">
     <link rel="apple-touch-icon" sizes="180x180" href="/static/apple-touch-icon.png">
     <link rel="icon" type="image/png" sizes="32x32" href="/static/favicon-32.png">
-    <link rel="stylesheet" href="/static/style.css?v=fac68a9">
+    <link rel="stylesheet" href="/static/style.css?v=dc00ed4">
     <script type="application/ld+json">
     {
         "@context": "https://schema.org",
@@ -61,8 +61,8 @@
     </header>
     <main class="dbis-page">
         <article class="dbis-article">
-            <h1 style="font-size: 2rem; font-weight: 700; letter-spacing: -0.03em; color: var(--text-primary); margin-bottom: 0.25rem; line-height: 1.2;">DANE didn't fail. The web version did.</h1>
-            <p style="font-size: 1rem; color: var(--text-muted); margin-bottom: 2rem;">You read that DANE failed. You were half right.</p>
+            <h1 class="dbis-article-title">DANE didn't fail. The web version did.</h1>
+            <p class="dbis-article-sub">You read that DANE failed. You were half right.</p>
             <p class="dbis-lede">DANE for browsers and DANE for SMTP got buried in the same obituary, and only one of them was actually dead.</p>
             <p class="dbis-lede">The version meant to put TLS keys in DNS for browsers, supplementing or replacing certificate authorities, is gone. Chrome never shipped it. Firefox never shipped it. Adam Langley <a href="https://www.imperialviolet.org/2015/01/17/notdane.html" target="_blank" rel="noopener">wrote the obituary in 2015</a> and the obituary stuck.</p>
             <p class="dbis-lede">The other version, DANE for SMTP (<a href="https://datatracker.ietf.org/doc/html/rfc7672" target="_blank" rel="noopener">RFC 7672</a>), now covers <a href="https://www.zivver.com/blog/use-of-email-security-standards-in-the-netherlands-september-2025-only-14-dane-6-mta-sts" target="_blank" rel="noopener">about a quarter of inbound email by volume to Dutch mailboxes</a>, with a much smaller share by domain count. Microsoft turned on DANE for Exchange Online in two stages. Outbound rolled out through 2022. Inbound went GA in <a href="https://techcommunity.microsoft.com/blog/exchange/announcing-general-availability-of-inbound-smtp-dane-with-dnssec-for-exchange-on/4281292" target="_blank" rel="noopener">October 2024</a>. Most "DANE is dead" posts collapse the two protocols into one story and end up wrong on both halves.</p>

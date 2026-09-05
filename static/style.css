@@ -8184,6 +8184,9 @@ body {
 
 .dbis-page { max-width: 680px; margin: 0 auto; padding: 3rem 1.25rem 4rem; }
 .dbis-article { font-family: var(--font-body); color: var(--text-primary); }
+.dbis-article-title { font-size: 2rem; font-weight: 700; letter-spacing: -0.03em; color: var(--text-primary); margin-bottom: 0.25rem; line-height: 1.2; }
+.dbis-article-sub { font-size: 1rem; color: var(--text-muted); margin-bottom: 2rem; }
+.dbis-article .article-card-meta { margin-bottom: 2rem; }
 .dbis-lede { font-size: 1.25rem; line-height: 1.65; color: var(--text-secondary); margin-bottom: 2rem; font-weight: 400; letter-spacing: -0.01em; }
 .dbis-lede strong { color: var(--text-primary); font-weight: 600; }
 .dbis-section { margin-top: 3rem; }
