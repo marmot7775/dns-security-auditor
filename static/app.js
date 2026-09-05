@@ -3579,7 +3579,20 @@ function showToast(message) {
 // existing browsers can hold a mixed array. Map strings to the object shape on
 // read, otherwise r.domain is undefined and the chip renders as "undefined".
 function _readRecentAudits() {
-    const raw = JSON.parse(localStorage.getItem('recentAudits') || '[]');
+    // A value that will not parse has to be cleared, not just stepped over.
+    // Both callers wrap their own call in try/catch, so nothing reaches the
+    // user, but the bad value survived: _renderRecentAudits hid the container
+    // and _recordRecentAudit swallowed the write, which left the feature dead
+    // in that browser forever with the Clear button that would have repaired
+    // it hidden inside the container. Reachable through a truncated setItem
+    // under quota pressure, or an extension writing the key.
+    let raw;
+    try {
+        raw = JSON.parse(localStorage.getItem('recentAudits') || '[]');
+    } catch {
+        try { localStorage.removeItem('recentAudits'); } catch { /* storage gone */ }
+        return [];
+    }
     if (!Array.isArray(raw)) return [];
     const seen = new Set();
     return raw

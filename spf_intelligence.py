@@ -15,7 +15,7 @@ from typing import List, Dict, Optional, Callable
 
 from dkim_formatter import analyze_dkim_key_strength
 
-from dns_tools import get_resolver
+from dns_tools import get_resolver, get_uncached_resolver
 
 # Hard limits for DKIM selector discovery
 # Kept below the Phase 2 batch budget (CHECK_TIMEOUT + 5 = 20s). A child
@@ -265,7 +265,7 @@ def smart_dkim_check(domain: str, spf_record: Optional[str] = None, max_selector
     # Get SPF record if not provided
     if spf_record is None:
         try:
-            answers = dns.resolver.resolve(domain, 'TXT')
+            answers = get_resolver().resolve(domain, 'TXT')
             for rdata in answers:
                 txt = b"".join(rdata.strings).decode("utf-8", errors="replace")
                 # RFC 7208 section 4.6.1: the version term is case
@@ -314,7 +314,9 @@ def smart_dkim_check(domain: str, spf_record: Optional[str] = None, max_selector
     import uuid
     _canary = f"_dkimwildcardtest{uuid.uuid4().hex[:8]}._domainkey.{domain}"
     try:
-        _canary_answers = dns.resolver.resolve(_canary, 'TXT')
+        # Uncached: the canary name is random per call, so caching it can
+        # only evict a real answer to store one that will never be read.
+        _canary_answers = get_uncached_resolver(3).resolve(_canary, 'TXT')
         # Got a response for a random selector -- wildcard DNS detected
         result['wildcard_detected'] = True
         result['found_selectors'] = []
@@ -340,7 +342,13 @@ def smart_dkim_check(domain: str, spf_record: Optional[str] = None, max_selector
         try:
             # Built per probe, so with the generics unioned in this ran ~190
             # times per audit, each one re-reading /etc/resolv.conf from disk.
-            resolver = get_resolver(3)
+            # Uncached on purpose. The prioritized list plus the generics dedupe
+            # to ~193 probes per audit and essentially all are NXDOMAIN. Cached,
+            # one audit evicted about a tenth of the 2000 entry cache and ten
+            # audits flushed it, pushing out the repeated record lookups the
+            # cache exists for in favour of names never queried again for any
+            # other domain. With 193 unique names a cache buys nothing here.
+            resolver = get_uncached_resolver(3)
             resolver.lifetime = 3
             answers = resolver.resolve(fqdn, 'TXT')
 

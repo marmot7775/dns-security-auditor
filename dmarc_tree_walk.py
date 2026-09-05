@@ -55,6 +55,8 @@ Spec rules implemented (per §4.10 numbered steps and §4.10.1 / §4.10.2):
 
 import dns.resolver
 import dns.name
+
+from dns_tools import get_resolver
 from typing import Dict, Any, Optional, List
 
 import os
@@ -155,7 +157,12 @@ def _query_dmarc(domain: str) -> Optional[str]:
     """
     target = f"_dmarc.{domain}"
     try:
-        answers = dns.resolver.resolve(target, "TXT")
+        # The shared cache, not the module default resolver. _raw_check_dmarc
+        # reads _dmarc.<domain> through the cache; reading it live here let one
+        # audit report a freshly published record in the tree walk and "no
+        # DMARC policy published" on the card above it, in the same response,
+        # about the same name.
+        answers = get_resolver().resolve(target, "TXT")
         dmarc_records = []
         for rdata in answers:
             txt = "".join(
@@ -189,7 +196,7 @@ def _domain_exists(domain: str) -> bool:
     Only NXDOMAIN means it does not exist.
     """
     try:
-        dns.resolver.resolve(domain, "SOA")
+        get_resolver().resolve(domain, "SOA")
         return True
     except dns.resolver.NXDOMAIN:
         return False

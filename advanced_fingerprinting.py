@@ -23,6 +23,8 @@ Based on analyzing 1000+ enterprise email configurations.
 import re
 import dns.resolver
 import dns.exception
+
+from dns_tools import get_resolver
 from typing import Dict, List, Optional
 from collections import defaultdict
 
@@ -45,6 +47,12 @@ class AdvancedVendorFingerprinter:
         # first: eight of them re-fetched records the audit had just looked up,
         # strictly sequentially, on the module default resolver.
         self.prefetch = prefetch or {}
+        # Whatever prefetch does not cover is queried through the shared cache
+        # rather than the module default resolver, which has none. Probing live
+        # here while the rest of the audit read the same names through the
+        # cache gave one audit two different views of one name. Safe to hold
+        # one resolver: every probe below runs sequentially.
+        self._resolver = get_resolver()
 
     def _given(self, key):
         """Caller-supplied value, or _MISSING when this has to be queried."""
@@ -81,7 +89,7 @@ class AdvancedVendorFingerprinter:
         if txt is self._MISSING:
             txt = None
             try:
-                answers = dns.resolver.resolve(self.domain, 'TXT')
+                answers = self._resolver.resolve(self.domain, 'TXT')
                 for rdata in answers:
                     candidate = b"".join(rdata.strings).decode("utf-8", errors="replace")
                     if candidate.startswith('v=spf1'):
@@ -127,7 +135,7 @@ class AdvancedVendorFingerprinter:
         if hosts is self._MISSING:
             hosts = []
             try:
-                answers = dns.resolver.resolve(self.domain, 'MX')
+                answers = self._resolver.resolve(self.domain, 'MX')
                 hosts = [str(rdata.exchange).lower() for rdata in answers]
             except (dns.resolver.NXDOMAIN, dns.resolver.NoAnswer, dns.resolver.NoNameservers, dns.exception.DNSException):
                 hosts = []
@@ -159,7 +167,7 @@ class AdvancedVendorFingerprinter:
         if record is self._MISSING:
             record = None
             try:
-                answers = dns.resolver.resolve(f'_dmarc.{self.domain}', 'TXT')
+                answers = self._resolver.resolve(f'_dmarc.{self.domain}', 'TXT')
                 for rdata in answers:
                     candidate = b"".join(rdata.strings).decode("utf-8", errors="replace")
                     if candidate.lower().startswith('v=dmarc1'):
@@ -209,7 +217,7 @@ class AdvancedVendorFingerprinter:
         if record is self._MISSING:
             record = None
             try:
-                answers = dns.resolver.resolve(f'_smtp._tls.{self.domain}', 'TXT')
+                answers = self._resolver.resolve(f'_smtp._tls.{self.domain}', 'TXT')
                 for rdata in answers:
                     candidate = b"".join(rdata.strings).decode("utf-8", errors="replace")
                     if candidate.lower().startswith('v=tlsrptv1'):
@@ -246,7 +254,7 @@ class AdvancedVendorFingerprinter:
         if record is self._MISSING:
             record = None
             try:
-                dns.resolver.resolve(f'_mta-sts.{self.domain}', 'TXT')
+                self._resolver.resolve(f'_mta-sts.{self.domain}', 'TXT')
                 record = True
             except (dns.resolver.NXDOMAIN, dns.resolver.NoAnswer, dns.resolver.NoNameservers, dns.exception.DNSException):
                 record = None
@@ -274,7 +282,7 @@ class AdvancedVendorFingerprinter:
         if record is self._MISSING:
             record = None
             try:
-                answers = dns.resolver.resolve(f'default._bimi.{self.domain}', 'TXT')
+                answers = self._resolver.resolve(f'default._bimi.{self.domain}', 'TXT')
                 for rdata in answers:
                     candidate = b"".join(rdata.strings).decode("utf-8", errors="replace")
                     if 'v=BIMI1' in candidate:
@@ -305,7 +313,7 @@ class AdvancedVendorFingerprinter:
         ttl = self._given('txt_ttl')
         if ttl is self._MISSING:
             try:
-                answers = dns.resolver.resolve(self.domain, 'TXT')
+                answers = self._resolver.resolve(self.domain, 'TXT')
                 ttl = answers.rrset.ttl
             except (dns.resolver.NXDOMAIN, dns.resolver.NoAnswer, dns.resolver.NoNameservers, dns.exception.DNSException):
                 ttl = None
@@ -344,7 +352,7 @@ class AdvancedVendorFingerprinter:
         
         for subdomain, meaning in subdomains:
             try:
-                dns.resolver.resolve(f'{subdomain}.{self.domain}', 'A')
+                self._resolver.resolve(f'{subdomain}.{self.domain}', 'A')
                 self.signals.append({
                     'technique': 'Subdomain Pattern',
                     'vendor': meaning,

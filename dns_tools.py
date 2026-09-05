@@ -4,6 +4,7 @@ DNS Security Auditor - Core DNS Tools
 Domain normalization and audit entry point.
 """
 
+import time
 from typing import Any, Dict, Optional
 
 import dns.flags
@@ -27,8 +28,71 @@ import idna
 #
 # LRUCache takes its own lock, so it is safe to share across threads, and it
 # honors record TTLs, so entries expire on their own. Process-wide is right.
-_PLAIN_CACHE = dns.resolver.LRUCache(max_size=2000)
-_DNSSEC_CACHE = dns.resolver.LRUCache(max_size=1000)
+
+# How long a "there is no such record" answer may be reused. Deliberately
+# shorter than the 5 minute result cache in server.py, so a re-audit can never
+# be answered from a negative entry the previous audit created.
+NEGATIVE_TTL_CAP = 120.0
+
+
+class BoundedNegativeCache(dns.resolver.LRUCache):
+    """LRUCache that will not hold a negative answer for long.
+
+    dnspython caches NODATA under (qname, rdtype, rdclass) and NXDOMAIN under
+    (qname, ANY, rdclass), and Answer.expiration is time.time() plus
+    chaining_result.minimum_ttl, which for a negative answer comes from the
+    SOA minimum in the authority section. Measured on dnspython 2.8.0:
+
+        NXDOMAIN with SOA (minimum 86400)   900 s
+        NODATA with SOA                     900 s
+        NXDOMAIN with no SOA                4,294,967,295 s (136 years)
+
+    The last one pins an entry for the life of the process, bounded only by
+    LRU eviction, and it is reachable through any stub forwarder that drops
+    the authority section.
+
+    The result cache in server.py is 5 minutes, and it is 5 minutes on
+    purpose: a re-audit is supposed to show a change. A 15 minute negative
+    entry underneath it breaks the one workflow this tool exists for. An
+    operator audits, is told "No DMARC policy published", publishes the
+    record, waits out the result cache, re-runs, and is told the same thing
+    again, with nothing in the report explaining why. For a tool whose job is
+    to verify a fix, that is the worst failure available.
+
+    Positive answers keep their real TTL. They are where the saving of about
+    35 duplicate queries per audit came from. The negatives contribute almost
+    none of it and carry all of the staleness.
+    """
+
+    def put(self, key, value):
+        # rrset is None for both negative shapes: the NODATA answer and the
+        # ANY-keyed NXDOMAIN answer. A positive answer always has an rrset.
+        if getattr(value, "rrset", None) is None:
+            cap = time.time() + NEGATIVE_TTL_CAP
+            if getattr(value, "expiration", 0) > cap:
+                value.expiration = cap
+        super().put(key, value)
+
+
+_PLAIN_CACHE = BoundedNegativeCache(max_size=2000)
+_DNSSEC_CACHE = BoundedNegativeCache(max_size=1000)
+
+# Selector probes get their own resolver with no cache at all. Auto-discovery
+# tries roughly 193 unique <selector>._domainkey.<domain> names per audit and
+# essentially every one is NXDOMAIN. Cached, one audit evicts about a tenth of
+# a 2000 entry cache and ten audits flush it, pushing out exactly the repeated
+# record lookups the cache exists for, in favour of names that will never be
+# queried again for any other domain. With 193 unique names a cache buys
+# nothing here.
+
+
+def get_uncached_resolver(timeout: float = 5.0) -> "dns.resolver.Resolver":
+    """A resolver that neither reads nor writes the shared answer cache."""
+    resolver = dns.resolver.Resolver()
+    resolver.timeout = timeout
+    resolver.lifetime = timeout * 2
+    resolver.cache = None
+    return resolver
 
 # DNSSEC-validating public resolvers. Quad9 first because its AD-bit signal is
 # the strictest: it drops bogus answers rather than returning AD=0.

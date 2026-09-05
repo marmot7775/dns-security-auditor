@@ -43,6 +43,26 @@ def _resolver_for(records):
     return _resolve
 
 
+def _fake_dns(records):
+    """Patch both resolver entry points, the way conftest.fake_dns does.
+
+    The tree walk reads through dns_tools.get_resolver() so that one audit
+    cannot hold two different views of _dmarc.<domain>. That is an instance
+    call, so patching only the module-level dns.resolver.resolve left these
+    tests querying the real internet, where _dmarc.example.com publishes a
+    genuine "v=DMARC1;p=reject". The inheritance test then passed for the
+    wrong reason and the two case-sensitivity tests inherited a record the
+    fixture never declared.
+    """
+    resolve = _resolver_for(records)
+    return (
+        patch("dns.resolver.resolve", side_effect=resolve),
+        patch("dns.resolver.Resolver.resolve",
+              side_effect=lambda self, name, rdtype, *a, **kw: resolve(name, rdtype),
+              autospec=True),
+    )
+
+
 def test_parent_uppercase_v_dmarc1_is_inherited():
     """Properly-cased v=DMARC1 at parent: walk inherits, policy=reject."""
     domain = "alpha.example.com"
@@ -51,7 +71,8 @@ def test_parent_uppercase_v_dmarc1_is_inherited():
         "_dmarc.example.com": ["v=DMARC1; p=reject"],
         "_dmarc.com": None,
     }
-    with patch("dns.resolver.resolve", side_effect=_resolver_for(records)), \
+    _module_patch, _method_patch = _fake_dns(records)
+    with _module_patch, _method_patch, \
          patch.object(tw, "_domain_exists", return_value=True):
         result = tw.dmarc_tree_walk(domain)
 
@@ -69,7 +90,8 @@ def test_parent_lowercase_v_dmarc1_is_skipped():
         "_dmarc.example.com": ["v=dmarc1; p=reject"],
         "_dmarc.com": None,
     }
-    with patch("dns.resolver.resolve", side_effect=_resolver_for(records)), \
+    _module_patch, _method_patch = _fake_dns(records)
+    with _module_patch, _method_patch, \
          patch.object(tw, "_domain_exists", return_value=True):
         result = tw.dmarc_tree_walk(domain)
 
@@ -88,7 +110,8 @@ def test_parent_uppercase_V_dmarc1_is_skipped():
         "_dmarc.example.com": ["V=DMARC1; p=reject"],
         "_dmarc.com": None,
     }
-    with patch("dns.resolver.resolve", side_effect=_resolver_for(records)), \
+    _module_patch, _method_patch = _fake_dns(records)
+    with _module_patch, _method_patch, \
          patch.object(tw, "_domain_exists", return_value=True):
         result = tw.dmarc_tree_walk(domain)
 
