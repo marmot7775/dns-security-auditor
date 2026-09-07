@@ -78,9 +78,9 @@ Requirements:
 - Build the link and the flow. Keep the target in one place so it can be
   changed without touching markup.
 
-### Recommended target: sample.dns-audit.com
+### Target: sample.dns-audit.com
 
-Rationale: the visible label says "sample audit", so `sample.` matches the
+Decided by Neil, 7 September 2026. Rationale: the visible label says "sample audit", so `sample.` matches the
 copy exactly. It sits under a domain already controlled at Cloudflare, so
 publishing records needs no new registration.
 
@@ -124,8 +124,9 @@ no reputation. The org domain and every other subdomain keep p=reject. The
 alternative is a separate throwaway domain, which isolates the risk fully at
 the cost of a registration and a sample URL that no longer reads as ours.
 
-Recommendation: accept the subdomain. Record the decision here so it is not
-rediscovered later as a misconfiguration.
+Decision: accept the subdomain. Recorded here so it is not rediscovered
+later as a misconfiguration and quietly "fixed" back to p=reject, which
+would empty the sample of the finding it exists to show.
 
 ## 3. Pre-run empty state
 
@@ -253,7 +254,5 @@ here.
 
 ## Open decisions
 
-1. Sample audit target. Recommended above as sample.dns-audit.com, with the
-   p=none spoofing tradeoff named. Needs Neil's yes before records go in.
-2. Where the RFC 9989 article link lives once the subhead drops it.
-3. Whether definitions cover four protocols or all thirteen.
+1. Where the RFC 9989 article link lives once the subhead drops it.
+2. Whether definitions cover four protocols or all thirteen.
