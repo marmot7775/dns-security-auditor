@@ -4654,10 +4654,8 @@ def run_full_audit(domain: str, dkim_selector: Optional[str] = None,
     # ================================================================
     _bimi_dmarc = raw_results.get("dmarc") or {}
     _bimi_dmarc_found = bool(_bimi_dmarc.get("record")) or bool(_bimi_dmarc.get("inherited_policy"))
-    _bimi_dmarc_enforcing = (
-        (_bimi_dmarc.get("policy") or "").lower() in ("quarantine", "reject")
-        or (_bimi_dmarc.get("inherited_policy") or "").lower() in ("quarantine", "reject")
-    )
+    _bimi_dmarc_policy = (_bimi_dmarc.get("policy") or _bimi_dmarc.get("inherited_policy") or "").lower() or None
+    _bimi_dmarc_enforcing = _bimi_dmarc_policy in ("quarantine", "reject")
 
     # Positive non-mail declaration (null MX or null SPF). Absent MX alone
     # never waives DKIM / MTA-STS / TLS-RPT / BIMI: send-only subdomains
@@ -4725,10 +4723,12 @@ def run_full_audit(domain: str, dkim_selector: Optional[str] = None,
         _bimi_enforcing = _bimi_dmarc_enforcing  # capture for closure
         _bimi_found = _bimi_dmarc_found  # capture for closure
         _bimi_pct = _bimi_dmarc.get("pct")  # capture for closure
+        _bimi_policy = _bimi_dmarc_policy  # capture for closure
         _parallel_checks.append(("bimi",
             lambda: check_bimi(domain, dmarc_enforcing_override=_bimi_enforcing,
                                 dmarc_found_override=_bimi_found,
-                                dmarc_pct_override=_bimi_pct),
+                                dmarc_pct_override=_bimi_pct,
+                                dmarc_policy_override=_bimi_policy),
             lambda raw: transform_bimi(raw, domain, has_mx=has_mx, non_mail=non_mail),
             "BIMI"))
 

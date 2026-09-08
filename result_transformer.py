@@ -631,7 +631,7 @@ def build_security_roadmap(checks: List[Dict], is_no_mail: bool = False) -> Dict
     if _assessed(dane) and dane.get("pill_label") == "Not configured":
         items.append({"priority": "medium", "protocol": "DANE",
                       "action": "Consider DANE TLSA records",
-                      "impact": "DANE provides CA-independent certificate verification."})
+                      "impact": "Inbound mail TLS relies solely on the CA system, with no DNS-pinned backstop if a CA is compromised or coerced."})
 
     # RFC 9989 readiness gaps
     if health.get("status") in ("compatible", "attention"):
@@ -1753,14 +1753,14 @@ def transform_dmarc(raw: Dict, tree_walk: Optional[Dict] = None, is_no_mail: boo
     elif policy == "quarantine":
         explanation = (
             "The enforcing DMARC policy <strong>p=quarantine</strong> requests that mail receivers "
-            "to send messages to spam when neither SPF nor DKIM passes with an aligned domain. "
+            "send messages to spam when neither SPF nor DKIM passes with an aligned domain. "
             "Only one of SPF or DKIM needs to pass with alignment for the message to be delivered normally. "
             "DKIM is the more resilient mechanism because it survives mail forwarding."
         )
     elif policy == "reject":
         explanation = (
             "The enforcing DMARC policy <strong>p=reject</strong> requests that mail receivers "
-            "to reject messages outright when neither SPF nor DKIM passes with an aligned domain. "
+            "reject messages outright when neither SPF nor DKIM passes with an aligned domain. "
             "Only one of SPF or DKIM needs to pass with alignment for the message to be delivered. "
             "DKIM is the more resilient mechanism because it survives mail forwarding."
         )

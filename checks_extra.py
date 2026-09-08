@@ -811,7 +811,7 @@ def _validate_bimi_record(record: str) -> Tuple[Dict[str, str], List[Dict]]:
     elif "a" not in tags:
         issues.append(_make_issue("info", "No VMC tag",
             "Gmail requires a VMC for BIMI logos.", "",
-            "Obtain a VMC from DigiCert or Entrust."))
+            "Obtain a VMC or CMC from a certificate authority that issues them."))
 
     return tags, issues
 
@@ -833,7 +833,7 @@ def _parse_dmarc_tag(record: str, tag: str) -> Optional[str]:
 
 
 def check_bimi(domain: str, dmarc_enforcing_override: bool = None, dmarc_found_override: bool = None,
-                dmarc_pct_override: int = None) -> Dict[str, Any]:
+                dmarc_pct_override: int = None, dmarc_policy_override: str = None) -> Dict[str, Any]:
     result = {
         "check": "BIMI", "domain": domain,
         "record": None, "records_found": 0, "tags": {},
@@ -895,10 +895,12 @@ def check_bimi(domain: str, dmarc_enforcing_override: bool = None, dmarc_found_o
     # always supplies a bool for enforcement, so a None-check on the
     # enforcement value alone can never distinguish "no DMARC record" from
     # "DMARC found but not enforcing".
+    dmarc_policy = None
     if dmarc_found_override is not None:
         dmarc_found = dmarc_found_override
         dmarc_enforcing = bool(dmarc_enforcing_override)
         dmarc_pct = dmarc_pct_override if dmarc_pct_override is not None else 100
+        dmarc_policy = dmarc_policy_override
     else:
         dmarc_records = _lookup_txt(f"_dmarc.{domain}")
         dmarc_found = False
@@ -907,7 +909,8 @@ def check_bimi(domain: str, dmarc_enforcing_override: bool = None, dmarc_found_o
         for rec in dmarc_records:
             if rec.strip().lower().startswith("v=dmarc1"):
                 dmarc_found = True
-                dmarc_enforcing = _parse_dmarc_tag(rec, "p") in ("quarantine", "reject")
+                dmarc_policy = _parse_dmarc_tag(rec, "p")
+                dmarc_enforcing = dmarc_policy in ("quarantine", "reject")
                 pct_raw = _parse_dmarc_tag(rec, "pct")
                 if pct_raw is not None:
                     try:
@@ -924,9 +927,14 @@ def check_bimi(domain: str, dmarc_enforcing_override: bool = None, dmarc_found_o
             "Implement DMARC first, then set up BIMI.",
         ))
     elif not dmarc_enforcing:
+        # The audit read this record; say what it found rather than guessing
+        # at the common case. dmarc_policy is None only when the override
+        # path was used without one, e.g. an inherited policy this check
+        # was not given a name for.
+        policy_desc = f"'{dmarc_policy}'" if dmarc_policy else "not enforcing"
         result["issues"].append(_make_issue(
             "warning", "DMARC not at enforcement (BIMI requires p=quarantine or p=reject)",
-            "Your DMARC policy is likely 'none' (monitoring only).",
+            f"Your DMARC policy is {policy_desc}.",
             "Most clients won't display BIMI logos.",
             "Move DMARC to p=quarantine or p=reject.",
         ))

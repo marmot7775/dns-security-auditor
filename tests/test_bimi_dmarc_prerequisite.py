@@ -31,10 +31,8 @@ def _bimi_card_via_override(dmarc_raw):
     check_bimi from raw_results["dmarc"], and run the real production
     call path (override, not direct DNS lookup)."""
     dmarc_found = bool(dmarc_raw.get("record")) or bool(dmarc_raw.get("inherited_policy"))
-    dmarc_enforcing = (
-        (dmarc_raw.get("policy") or "").lower() in ("quarantine", "reject")
-        or (dmarc_raw.get("inherited_policy") or "").lower() in ("quarantine", "reject")
-    )
+    dmarc_policy = (dmarc_raw.get("policy") or dmarc_raw.get("inherited_policy") or "").lower() or None
+    dmarc_enforcing = dmarc_policy in ("quarantine", "reject")
 
     with patch.object(checks_extra, "_lookup_txt", return_value=[BIMI_RECORD]), \
          patch.object(checks_extra, "REQUESTS_AVAILABLE", False):
@@ -42,6 +40,7 @@ def _bimi_card_via_override(dmarc_raw):
             "example.com",
             dmarc_enforcing_override=dmarc_enforcing,
             dmarc_found_override=dmarc_found,
+            dmarc_policy_override=dmarc_policy,
         )
     return result_transformer.transform_bimi(raw, "example.com", has_mx=True)
 
@@ -89,7 +88,7 @@ def test_sp_reject_does_not_satisfy_p_enforcement_check():
 
     card = result_transformer.transform_bimi(raw, "example.com", has_mx=True)
     texts = " ".join(d.get("text", "") for d in card["details"])
-    assert "not at enforcement" in texts.lower() or "likely" in texts.lower(), (
+    assert "'none'" in texts.lower(), (
         f"p=none must NOT be treated as enforcing just because sp=reject "
         f"appears later in the record; got details: {texts!r}"
     )
