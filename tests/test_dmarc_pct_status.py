@@ -45,13 +45,27 @@ def _raw(record, policy, pct=None, rua="mailto:d@pct.example.test"):
 
 @pytest.mark.parametrize("policy", ["reject", "quarantine"])
 def test_pct_zero_is_not_a_pass(policy):
+    """Not a pass, and for reject not a fail either.
+
+    "pct=0 applies the policy to no mail at all" was the premise here and it is
+    wrong for reject. RFC 7489 section 6.6.4: mail not subject to the reject
+    policy is treated "as though the 'quarantine' policy applies", so p=reject
+    with pct=0 is full quarantine on RFC 7489 receivers and full reject on RFC
+    9989 ones. Every failing message is acted on, which is not a failure.
+    Quarantine is the policy that really does degrade to nothing, since the
+    same section sends its unselected fraction to local classification.
+    """
     record = f"v=DMARC1; p={policy}; pct=0; rua=mailto:d@{DOMAIN}"
     card = transform_dmarc(_raw(record, policy, pct=0))
 
-    assert card["status"] == "fail", (
-        f"pct=0 applies p={policy} to no mail at all. A green card tells the "
-        f"client they are protected when nothing is enforced. Got "
+    assert card["status"] != "pass", (
+        f"a green card tells the client pct=0 is full enforcement. Got "
         f"status={card['status']!r} verdict={card['verdict']!r}"
+    )
+    _expected = "fail" if policy == "quarantine" else "warn"
+    assert card["status"] == _expected, (
+        f"p={policy} with pct=0: expected {_expected!r}, got "
+        f"{card['status']!r} verdict={card['verdict']!r}"
     )
     assert "pct=0" in card["verdict"]
     # The verdict must not claim failures are rejected, and must not claim
@@ -111,9 +125,14 @@ def test_card_and_attack_surface_agree_on_pct_zero(audit):
     card = next(c for c in result["checks"] if c.get("name") == "DMARC")
 
     vectors = {v["name"]: v for v in card["attack_surface"]["vectors"]}
-    assert vectors["Direct Domain Spoofing"]["status"] == "exposed"
+    # "exposed" means the spoofed mail reaches the inbox. Under p=reject with
+    # pct=0 that is the one outcome that cannot happen: RFC 7489 receivers
+    # quarantine all of it (section 6.6.4) and RFC 9989 receivers reject all of
+    # it. Partial is the honest reading, and the card must agree with it.
+    assert vectors["Direct Domain Spoofing"]["status"] == "partial"
     assert card["status"] != "pass", (
-        f"The attack surface panel calls direct spoofing exposed. The card "
+        f"The attack surface panel calls direct spoofing partial. The card "
         f"above it cannot be green in the same report. Got "
         f"{card['status']!r} / {card['verdict']!r}"
     )
+    assert card["status"] == "warn"

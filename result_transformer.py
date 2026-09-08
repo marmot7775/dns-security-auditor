@@ -1529,12 +1529,26 @@ def transform_dmarc(raw: Dict, tree_walk: Optional[Dict] = None, is_no_mail: boo
         # ignore it, so an unqualified claim contradicts the tool's own tag
         # breakdown and the RFC 9989 Readiness metric on the cover. The split
         # between receiver populations is the fact; state it.
+        #
+        # What the unselected fraction gets differs by policy, and reading it as
+        # "nothing" for both was wrong for reject. RFC 7489 section 6.6.4: "If
+        # the email is not subject to the 'reject' policy (due to the 'pct'
+        # tag), the Mail Receiver SHOULD treat the email as though the
+        # 'quarantine' policy applies." So p=reject with pct=0 is not zero
+        # enforcement, it is full quarantine on RFC 7489 receivers and full
+        # reject on RFC 9989 ones. Only quarantine degrades to nothing, where
+        # the same section sends the unselected fraction to "local message
+        # classification as normal".
         _pct_raw = raw.get("pct")
         if policy == "reject":
             verdict = "p=reject (authentication failures are rejected)"
             _disabled = (
-                f"p=reject with pct={_pct_raw} (RFC 7489 receivers enforce on no mail; "
-                "RFC 9989 receivers ignore pct and reject in full)"
+                f"p=reject with pct={_pct_raw} (RFC 7489 receivers quarantine all "
+                "failing mail; RFC 9989 receivers ignore pct and reject in full)"
+            )
+            _partial_note = (
+                f"pct={pct}: RFC 7489 receivers reject {pct}% and quarantine the rest, "
+                "RFC 9989 receivers reject all of them"
             )
             _partial = "p=reject (authentication failures are rejected)"
         else:
@@ -1543,19 +1557,25 @@ def transform_dmarc(raw: Dict, tree_walk: Optional[Dict] = None, is_no_mail: boo
                 f"p=quarantine with pct={_pct_raw} (RFC 7489 receivers enforce on no "
                 "mail; RFC 9989 receivers ignore pct and quarantine in full)"
             )
+            _partial_note = (
+                f"pct={pct}: RFC 7489 receivers apply the policy to {pct}% of failing "
+                "messages, RFC 9989 receivers to all of them"
+            )
             _partial = "p=quarantine (failures sent to spam)"
         # An enforcing policy is only a pass when it applies to all failing
         # mail. pct is what receivers act on, so it decides the status here
         # and is not merely appended to the sentence. A missing rua still
         # does not downgrade a policy that really is enforcing.
+        #
+        # p=reject with pct=0 is a warn, not a fail: every receiver population
+        # acts on every failing message, one quarantining where the other
+        # rejects. Grading that a failure put a red card on a domain whose
+        # failing mail is universally enforced against.
         if pct <= 0:
             verdict = _disabled
-            status = "fail"
+            status = "fail" if policy == "quarantine" else "warn"
         elif pct < 100:
-            verdict = (
-                f"{_partial} (pct={pct}: RFC 7489 receivers apply the policy to "
-                f"{pct}% of failing messages, RFC 9989 receivers to all of them)"
-            )
+            verdict = f"{_partial} ({_partial_note})"
             status = "warn"
         else:
             status = "pass"
@@ -2122,7 +2142,25 @@ def _build_attack_surface(raw: Dict, record: Optional[str], is_no_mail: bool = F
             "status": "partial",
             "color": "amber",
             "summary": f"Only {pct}% of failing mail is rejected (pct={pct}).",
-            "detail": f"pct={pct} means receivers apply p=reject to only {pct}% of messages that fail authentication; the rest are delivered as if p=none. An attacker sending as user@{domain} has roughly a {100 - pct}% chance their spoofed message is delivered normally.",
+            # Not "delivered as if p=none". RFC 7489 section 6.6.4 sends the
+            # unselected fraction of a reject policy to quarantine, so the
+            # attacker lands in spam rather than the inbox, and the old
+            # "{100-pct}% chance their spoofed message is delivered normally"
+            # overstated the exposure it was describing.
+            "detail": f"pct={pct} means RFC 7489 receivers apply p=reject to {pct}% of messages that fail authentication and quarantine the rest (RFC 7489 section 6.6.4), so roughly {100 - pct}% of spoofed mail reaches the spam folder instead of being rejected outright. RFC 9989 receivers ignore pct and reject all of it.",
+        }
+    elif policy == "reject" and pct <= 0:
+        # Every receiver population acts on every failing message here: RFC 7489
+        # treats mail not subject to reject as though p=quarantine applies
+        # (section 6.6.4), and RFC 9989 ignores pct and rejects in full. Scoring
+        # this "exposed" told the reader spoofed mail lands in the inbox, which
+        # is the one outcome that cannot happen under either reading.
+        v1 = {
+            "name": "Direct Domain Spoofing",
+            "status": "partial",
+            "color": "amber",
+            "summary": "pct=0 degrades reject to quarantine on RFC 7489 receivers.",
+            "detail": f"pct=0 means RFC 7489 receivers apply p=reject to none of the failing mail and treat all of it as p=quarantine instead (RFC 7489 section 6.6.4), so spoofed mail sent as user@{domain} reaches the spam folder rather than being rejected. RFC 9989 receivers ignore pct and reject all of it. Removing pct closes the gap.",
         }
     elif policy == "quarantine" and pct >= 100:
         v1 = {

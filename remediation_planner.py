@@ -112,6 +112,11 @@ def build_remediation_plan(
     )
 
     spf_record = spf.get("record") or ""
+    # _raw_check_spf leaves "record" None when a domain publishes more than one
+    # v=spf1 record and puts both in multiple_records. Reading only "record"
+    # made this plan tell a domain with two records to publish one, which is
+    # the advice the card and the security roadmap were fixed to stop giving.
+    spf_multiple = spf.get("multiple_records") or []
     spf_all = (spf.get("all_mechanism") or "").lower()
     spf_lookups = spf.get("lookup_count") or 0
 
@@ -168,8 +173,24 @@ def build_remediation_plan(
             "check": "Blacklist",
         })
 
+    # Duplicate SPF records: a PermError, not an absent record.
+    if spf_multiple:
+        immediate.append({
+            "title": "Merge Duplicate SPF Records",
+            "description": (
+                f"This domain publishes {len(spf_multiple)} v=spf1 records. RFC 7208 "
+                "section 4.5 requires exactly one, and receivers return PermError "
+                "rather than choosing between them, so SPF provides no DMARC "
+                "alignment path at all. Combine every authorized source into a "
+                "single record with one all mechanism at the end."
+            ),
+            "effort": "low",
+            "impact": "high",
+            "check": "SPF",
+        })
+
     # Missing SPF (only meaningful for mail-sending domains)
-    if has_mx and not spf_record and not spf_unavailable:
+    if has_mx and not spf_record and not spf_multiple and not spf_unavailable:
         immediate.append({
             "title": "Publish SPF Record",
             "description": (

@@ -5520,6 +5520,10 @@ def _build_resilience_analysis(
 
     # -- SPF mechanism status --
     spf_record = raw_spf.get("record")
+    # Two v=spf1 records leave "record" None with both in multiple_records, and
+    # the else branch below reads that emptiness as "No SPF record found." The
+    # card says "2 SPF records published" in the same report.
+    spf_multiple = raw_spf.get("multiple_records") or []
     spf_lookup_count = raw_spf.get("lookup_count") or 0
     if spf_unavailable:
         spf_status = "inconclusive"
@@ -5527,6 +5531,16 @@ def _build_resilience_analysis(
             "The SPF lookup did not complete, so this audit did not learn whether an "
             "SPF record exists. This is not a finding about the domain. Re-run the "
             "audit once the nameservers are answering."
+        )
+    elif spf_multiple:
+        # Same status as the lookup overflow, and for the same reason: a
+        # PermError means SPF supplies no alignment path for DMARC.
+        spf_status = "broken"
+        spf_note = (
+            f"{len(spf_multiple)} SPF records are published. RFC 7208 section 4.5 "
+            "requires exactly one, so receivers return PermError instead of choosing "
+            "between them. SPF cannot provide a DMARC alignment path in this state, "
+            "which leaves DKIM as the only viable authentication mechanism."
         )
     elif spf_record and spf_lookup_count > 10:
         spf_status = "broken"

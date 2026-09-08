@@ -727,14 +727,26 @@ async def audit_domain(
         # concurrency budget is full, before _payload is ever set. Followers
         # then received the generic error dict with HTTP 200, telling them the
         # audit failed rather than that the server was busy and worth a retry.
-        _status = shared.pop("_http_status", 200)
+        #
+        # Read, never pop. _release_inflight resolves the future once and every
+        # follower awaits that one dict object, so popping here served the first
+        # follower its 503 and left every other follower reading the default
+        # 200: an empty checks list under a success code, which renders as a
+        # completed audit that found nothing. That is worse than the error it
+        # replaced. The key is filtered out of the success body instead, so an
+        # internal field never reaches a client.
+        _status = shared.get("_http_status", 200)
         if _status != 200:
             return JSONResponse(
                 status_code=_status,
                 content={"detail": shared.get("error_message", "Audit failed")},
                 headers={"Retry-After": "5"} if _status == 503 else None,
             )
-        return JSONResponse(content={**shared, "request_id": request_id, "coalesced": True})
+        return JSONResponse(content={
+            **{k: v for k, v in shared.items() if k != "_http_status"},
+            "request_id": request_id,
+            "coalesced": True,
+        })
 
     # Reserve a concurrent-audit slot atomically (DoS protection).
     # Shared with /api/audit/stream: both endpoints invoke the same

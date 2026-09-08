@@ -33,14 +33,26 @@ def _build_card(record):
     return result_transformer.transform_dmarc(raw)
 
 
-def test_pct_zero_reject_exposes_direct_spoofing_vector():
+def test_pct_zero_reject_degrades_the_direct_spoofing_vector():
+    """Degraded, not exposed.
+
+    The original assertion was "exposed", on the premise that pct=0 rejects
+    nothing. It rejects nothing and quarantines everything: RFC 7489 section
+    6.6.4 treats mail not subject to reject as though p=quarantine applies, and
+    RFC 9989 receivers ignore pct and reject in full. "Exposed" is the label
+    for spoofed mail arriving in the inbox, which neither population allows.
+    """
     card = _build_card("v=DMARC1; p=reject; pct=0; rua=mailto:r@example.com")
 
     vectors = {v["name"]: v for v in card["attack_surface"]["vectors"]}
     direct = vectors["Direct Domain Spoofing"]
-    assert direct["status"] == "exposed", (
-        f"pct=0 rejects nothing; Direct Domain Spoofing must be exposed, "
+    assert direct["status"] == "partial", (
+        f"pct=0 downgrades reject to quarantine rather than switching "
+        f"enforcement off, so the vector is degraded and not exposed; "
         f"got status={direct['status']!r} summary={direct['summary']!r}"
+    )
+    assert "quarantine" in direct["detail"].lower(), (
+        f"the detail must say where the mail actually goes: {direct['detail']!r}"
     )
 
     assert "pct=0" in card["verdict"], (

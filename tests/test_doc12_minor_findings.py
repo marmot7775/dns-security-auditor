@@ -6,7 +6,10 @@ sizing, and a status code that told followers the wrong thing.
 import base64
 import os
 import re
+import socket
 import sys
+import threading
+import time
 
 import pytest
 
@@ -248,14 +251,113 @@ def test_probe_pools_are_still_separate_from_the_shared_pool():
 # Finding 20: a follower must not be told the audit failed when it was busy
 # ---------------------------------------------------------------------------
 
-def test_busy_leader_hands_followers_a_retryable_status():
-    source = open(os.path.join(
-        os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
-        "server.py")).read()
-    assert '"_http_status": 503' in source, (
-        "the 503 path must record a status for the followers waiting on it"
+def _free_port() -> int:
+    s = socket.socket()
+    s.bind(("127.0.0.1", 0))
+    port = s.getsockname()[1]
+    s.close()
+    return port
+
+
+def test_every_follower_honours_the_leaders_status_not_just_the_first():
+    """The follower branch must read the shared payload, never mutate it.
+
+    Two things were wrong with how this was covered. The old test asserted the
+    literal source line `_status = shared.pop("_http_status", 200)`, and that
+    line was the defect: _release_inflight resolves the future once, so every
+    follower awaits one dict object and the first pop removed the key for
+    everyone behind it. Followers 2..n read the default 200 and returned an
+    empty checks list under a success code.
+
+    The second thing is that the defect is latent, not live. On the leader's
+    path there is no await between _join_or_lead and the 503 return, so the
+    event loop never yields in that window and no follower can attach to a
+    leader that goes on to answer busy. Driving the endpoint normally therefore
+    exercises none of this: every caller simply becomes a leader in turn and
+    gets its own 503, with or without the bug.
+
+    So the follower branch is entered directly here, by handing the endpoint an
+    already-resolved future. That is the code under test, and it protects the
+    invariant if an await is ever introduced above it.
+    """
+    import asyncio
+
+    import httpx2 as httpx
+    import uvicorn
+
+    import server as server_module
+
+    busy_payload = {
+        "checks": [], "priority_fixes": [], "vendors": [],
+        "error": "server_busy",
+        "error_message": "Server is busy. Please try again in a moment.",
+        "_http_status": 503,
+    }
+
+    port = _free_port()
+    orig_join = server_module._join_or_lead
+    orig_limit = server_module.RATE_LIMIT_MAX
+    server_module.RATE_LIMIT_MAX = 10_000
+    server_module._rate_limits.clear()
+    server_module._cache.clear()
+
+    holder = {}
+
+    def _always_follower(cache_key):
+        # One future, one payload dict, shared by every caller: exactly what
+        # _release_inflight produces for the real followers of one leader.
+        fut = holder.get("fut")
+        if fut is None or fut.get_loop() is not asyncio.get_event_loop():
+            fut = asyncio.get_event_loop().create_future()
+            fut.set_result(busy_payload)
+            holder["fut"] = fut
+        return fut, False
+
+    server_module._join_or_lead = _always_follower
+
+    config = uvicorn.Config(server_module.app, host="127.0.0.1", port=port,
+                            log_level="error")
+    srv = uvicorn.Server(config)
+    thread = threading.Thread(target=srv.run, daemon=True)
+    thread.start()
+    try:
+        for _ in range(100):
+            if srv.started:
+                break
+            time.sleep(0.05)
+        assert srv.started, "test server did not start"
+
+        async def fire():
+            async with httpx.AsyncClient(timeout=10) as c:
+                return await asyncio.gather(*[
+                    c.get(f"http://127.0.0.1:{port}/api/audit",
+                          params={"domain": "coalesce.example.com"})
+                    for _ in range(6)
+                ])
+
+        responses = asyncio.run(fire())
+    finally:
+        srv.should_exit = True
+        thread.join(timeout=10)
+        server_module._join_or_lead = orig_join
+        server_module.RATE_LIMIT_MAX = orig_limit
+        server_module._rate_limits.clear()
+
+    codes = [r.status_code for r in responses]
+    assert set(codes) == {503}, (
+        f"every follower must get the leader's 503; got {codes}. A 200 here is "
+        f"a follower that read the shared payload after another follower "
+        f"mutated it, and its body carries an empty audit rather than an error."
     )
-    assert '_status = shared.pop("_http_status", 200)' in source, (
-        "the follower must honour the leader's status instead of returning 200 "
-        "with a generic 'Audit could not complete'"
+    for r in responses:
+        body = r.json()
+        assert "checks" not in body, (
+            f"a busy response must not carry an audit body: {body!r}"
+        )
+        assert "busy" in body.get("detail", "").lower()
+        assert r.headers.get("Retry-After") == "5"
+
+    assert busy_payload["_http_status"] == 503, (
+        "the follower branch mutated the payload every other follower still "
+        "has to read"
     )

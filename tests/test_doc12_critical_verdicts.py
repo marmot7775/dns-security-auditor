@@ -11,6 +11,7 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 import audit_engine
 import pdf_report
+import remediation_planner
 import result_transformer
 
 
@@ -178,6 +179,51 @@ def test_multiple_spf_records_reach_the_roadmap_as_critical():
     spf_items = [i for i in roadmap["items"] if i["protocol"] == "SPF"]
     assert spf_items, "a PermError for every message must appear in the roadmap"
     assert spf_items[0]["priority"] == "critical"
+
+
+def test_multiple_spf_records_reach_every_layer_not_just_the_card():
+    """Doc 16: two layers below the card still read the empty record field.
+
+    The card and build_security_roadmap were taught that "record": None plus a
+    populated multiple_records is a PermError. build_remediation_plan and the
+    resilience section were not, and both key their "you have no SPF" branch
+    off the same empty field. One audit of a domain publishing two records said
+    all four of these at once:
+
+        card       2 SPF records published (RFC 7208 requires exactly one)
+        roadmap    Merge the duplicate SPF records into one
+        plan       Publish SPF Record
+        resilience missing / "No SPF record found."
+    """
+    raw_spf = {
+        "check": "SPF", "domain": "example.com", "record": None, "status": "error",
+        "multiple_records": ["v=spf1 include:_spf.google.com ~all",
+                             "v=spf1 ip4:198.51.100.7 -all"],
+        "issues": [], "syntax_errors": [], "mechanisms": [],
+    }
+
+    plan = remediation_planner.build_remediation_plan(
+        checks=[], raw_results={"spf": raw_spf}, has_mx=True
+    )
+    titles = [s["title"] for tier in plan.values() for s in tier]
+    assert "Publish SPF Record" not in titles, (
+        f"the plan told a domain with two SPF records to publish one: {titles}"
+    )
+    assert "Merge Duplicate SPF Records" in titles, (
+        f"a PermError on every message has to appear in the plan: {titles}"
+    )
+
+    resilience = audit_engine._build_resilience_analysis(
+        raw_results={"spf": raw_spf, "dmarc": {}, "dkim": {}},
+        checks=[], has_mx=True, is_defensive=False,
+    )
+    spf_mech = resilience["mechanisms"]["spf"]
+    assert spf_mech["status"] != "missing", (
+        f"the resilience section reports the records absent: {spf_mech!r}"
+    )
+    assert spf_mech["status"] == "broken"
+    assert "no spf record found" not in spf_mech["note"].lower()
+    assert "7208" in spf_mech["note"]
 
 
 # ---------------------------------------------------------------------------

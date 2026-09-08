@@ -318,8 +318,14 @@ def test_pct_zero_verdict_names_both_receiver_populations(policy):
         "record": f"v=DMARC1; p={policy}; pct=0; rua=mailto:a@example.com",
         "policy": policy, "pct": 0, "rua": "mailto:a@example.com", "issues": [],
     })
-    assert card["status"] == "fail"
+    assert card["status"] == ("fail" if policy == "quarantine" else "warn")
     assert "7489" in card["verdict"] and "9989" in card["verdict"]
+    if policy == "reject":
+        # RFC 7489 section 6.6.4 quarantines the unselected fraction of a
+        # reject policy. "enforce on no mail" was the original wording and it
+        # is the one thing those receivers do not do.
+        assert "quarantine" in card["verdict"].lower(), card["verdict"]
+        assert "no mail" not in card["verdict"].lower(), card["verdict"]
 
 
 def test_out_of_range_pct_is_not_quoted_as_zero():
