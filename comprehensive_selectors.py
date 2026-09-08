@@ -273,6 +273,17 @@ DATE_SELECTORS = _generate_date_selectors()
 # ============================================================================
 
 GENERIC_SELECTORS = [
+    # Proton Mail. Here rather than only in the master list because
+    # GENERIC_SELECTORS is unioned in on top of the max_selectors cap, and the
+    # master list is where these were already sitting uselessly: protonmail is
+    # at index 46, past the 40-name prioritised slice, so nothing ever probed
+    # it. The vendor mapping for _spf.protonmail.ch now pulls them forward as
+    # well; both routes are wanted, because a domain can use Proton without
+    # that include appearing in its SPF. Verified live on proton.me,
+    # 2026-09-08: all three are CNAMEs into domains.proton.ch resolving to
+    # live 2048-bit RSA keys.
+    'protonmail', 'protonmail2', 'protonmail3',
+
     # Standard naming
     'default', 'mail', 'email', 'dkim',
     'key', 'dk', 'sig', 'signature',

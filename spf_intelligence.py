@@ -33,6 +33,20 @@ SPF_VENDOR_MAP = {
         'category': 'email_provider'
     },
     
+    # Proton Mail.
+    #
+    # Verified live on proton.me, 2026-09-08: protonmail, protonmail2 and
+    # protonmail3 under _domainkey are CNAMEs into domains.proton.ch, and each
+    # resolves through to a live 2048-bit RSA key. Proton's own setup adds
+    # exactly these three CNAMEs. Without this entry the include mapped to no
+    # vendor at all, so nothing pulled the selectors ahead of the 40-name cap
+    # and a domain publishing three live keys was reported as unconfirmed.
+    '_spf.protonmail.ch': {
+        'vendor': 'Proton Mail',
+        'dkim_selectors': ['protonmail', 'protonmail2', 'protonmail3'],
+        'category': 'email_provider'
+    },
+
     # Microsoft 365
     'spf.protection.outlook.com': {
         'vendor': 'Microsoft 365',
