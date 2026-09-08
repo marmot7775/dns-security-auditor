@@ -69,9 +69,17 @@ def test_send_only_subdomain_is_not_treated_as_non_mail(audit):
     dmarc = _card(result, "DMARC")
     assert dmarc is not None
     detail_texts = " ".join(d.get("text", "") for d in dmarc.get("details", []))
-    assert "relies solely on SPF" in detail_texts, (
+    # The cross-check must run for a sending domain. It used to say "relies
+    # solely on SPF", which asserts there is no DKIM; probing cannot establish
+    # that, so it now states the SPF path and says the DKIM question is open.
+    # The point of this test is that the cross-check runs at all, not the
+    # wording it happened to use.
+    assert "could not confirm a DKIM key" in detail_texts, (
         f"The DMARC alignment cross-check must run for a sending domain; "
         f"got details: {detail_texts!r}"
+    )
+    assert "relies solely on SPF" not in detail_texts, (
+        "that phrasing asserts a DKIM absence this audit did not establish"
     )
 
 

@@ -5183,7 +5183,25 @@ def run_full_audit(domain: str, dkim_selector: Optional[str] = None,
             _xc_aspf = (_xc_dmarc.get("aspf") or "r").lower()
 
         _xc_has_spf = bool(_xc_spf.get("record"))
-        _xc_has_dkim = bool(_xc_dkim.get("found_selectors"))
+        # DKIM is three-state here, not a boolean, and this was the fourth
+        # place reading it as one. A selector publishing an empty p= is a
+        # retired key (RFC 6376 3.6.1), so revoked-only is not "has DKIM";
+        # google.com's five retired selectors made this True. And probing that
+        # finds nothing establishes only that the guessed names did not
+        # resolve, so unconfirmed is not "no DKIM"; proton.me publishes three
+        # live keys behind a CNAME and made this False. Both readings put a
+        # claim on the DMARC card that the DKIM card two sections above
+        # refuses to make.
+        from result_transformer import _split_dkim_selectors
+        _xc_live_dkim, _xc_revoked_dkim = _split_dkim_selectors(
+            _xc_dkim.get("found_selectors") or []
+        )
+        _xc_has_dkim = bool(_xc_live_dkim)
+        # True only when this audit actually settled the question. Probing
+        # cannot prove absence, so "no DKIM" is only assertable when the
+        # operator named a selector and it did not resolve.
+        _xc_dkim_confirmed_absent = bool(_xc_dkim.get("selector_not_found"))
+        _xc_dkim_unconfirmed = not _xc_has_dkim and not _xc_dkim_confirmed_absent
         _xc_enforcing = _xc_policy in ("quarantine", "reject")
 
         # Skip for non-mail / defensive DNS (null SPF + no DKIM = intentional)
@@ -5199,7 +5217,8 @@ def run_full_audit(domain: str, dkim_selector: Optional[str] = None,
             _xc_downgrade = None
 
             # 1. Enforcement with neither auth method -- all mail will fail DMARC
-            if _xc_enforcing and not _xc_has_spf and not _xc_has_dkim:
+            if (_xc_enforcing and not _xc_has_spf
+                    and _xc_dkim_confirmed_absent):
                 _xc_details.append({
                     "type": "error",
                     "text": (
@@ -5211,17 +5230,29 @@ def run_full_audit(domain: str, dkim_selector: Optional[str] = None,
                 _xc_downgrade = "fail"
             else:
                 # 2. Strict DKIM alignment but no DKIM keys detected
-                if _xc_adkim == "s" and not _xc_has_dkim:
+                if _xc_adkim == "s" and _xc_dkim_confirmed_absent:
                     _xc_details.append({
                         "type": "warning",
                         "text": (
-                            "Strict DKIM alignment (adkim=s) is set but no DKIM keys were detected. "
-                            "DMARC can only pass via SPF alignment. "
-                            "If mail forwarding breaks SPF, messages will fail DMARC"
+                            "Strict DKIM alignment (adkim=s) is set but the selector you "
+                            "supplied publishes no key. DMARC can only pass via SPF "
+                            "alignment. If mail forwarding breaks SPF, messages will fail DMARC"
                         ),
                     })
                     if not _xc_downgrade:
                         _xc_downgrade = "warn"
+                elif _xc_adkim == "s" and _xc_dkim_unconfirmed:
+                    # The alignment question cannot be answered without knowing
+                    # whether the domain signs. Say that, rather than asserting
+                    # the absence the DKIM card explicitly refuses to assert.
+                    _xc_details.append({
+                        "type": "info",
+                        "text": (
+                            "Strict DKIM alignment (adkim=s) is set. This audit could not "
+                            "confirm a DKIM key by probing, so it cannot say whether DKIM "
+                            "alignment is available. Enter your selector above to settle it"
+                        ),
+                    })
 
                 # 3. Strict SPF alignment but no SPF record
                 if _xc_aspf == "s" and not _xc_has_spf:
@@ -5237,12 +5268,27 @@ def run_full_audit(domain: str, dkim_selector: Optional[str] = None,
 
                 # 4. Enforcement with single auth method
                 #    (skip if strict alignment already flagged the missing method above)
-                if _xc_enforcing and _xc_has_spf and not _xc_has_dkim and _xc_adkim != "s":
+                if (_xc_enforcing and _xc_has_spf and _xc_dkim_confirmed_absent
+                        and _xc_adkim != "s"):
                     _xc_details.append({
                         "type": "info",
                         "text": (
                             "DMARC enforcement relies solely on SPF (no DKIM detected). "
                             "Adding DKIM provides a second authentication path that survives mail forwarding"
+                        ),
+                    })
+                elif (_xc_enforcing and _xc_has_spf and _xc_dkim_unconfirmed
+                        and _xc_adkim != "s"):
+                    # Not "relies solely on SPF": that asserts there is no DKIM,
+                    # which probing cannot establish. The useful half of the
+                    # advice survives without the claim, because SPF breaking on
+                    # forwarding is true whether or not a second path exists.
+                    _xc_details.append({
+                        "type": "info",
+                        "text": (
+                            "DMARC enforcement has a working SPF path. This audit could not "
+                            "confirm a DKIM key by probing, so it cannot say whether a second "
+                            "path exists. DKIM is the one that survives mail forwarding"
                         ),
                     })
                 elif _xc_enforcing and _xc_has_dkim and not _xc_has_spf and _xc_aspf != "s":
