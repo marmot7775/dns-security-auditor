@@ -2569,9 +2569,12 @@ def _raw_check_spf(domain: str) -> Dict[str, Any]:
             _rec_issue.get("fix", ""),
         )
 
-    # RFC 7208 §4.6.4: no more than two "void lookups" (lookups that return
-    # no usable data) are permitted. A third causes a PermError, so SPF must
-    # be treated as failed, not merely warned about.
+    # RFC 7208 §4.6.4: "SPF implementations SHOULD limit 'void lookups' to two
+    # ... Exceeding the limit produces a 'permerror' result." SHOULD, so the
+    # user-facing text says "receivers enforcing the limit" rather than
+    # asserting every receiver does. A void lookup is a query returning
+    # NXDOMAIN or a zero-answer NOERROR, which is why the example names a:,
+    # mx: and exists: rather than include:.
     # Counted by spf_recursive, which actually resolves a:/mx:/exists:
     # targets and include/redirect targets. An include target that resolves
     # but publishes no SPF record is NOT a void lookup: RFC 7208 section 5.2
@@ -2582,12 +2585,14 @@ def _raw_check_spf(domain: str) -> Dict[str, Any]:
         _add_issue(
             "error",
             f"SPF exceeds the 2 void lookup limit ({void_lookup_count} void lookups)",
-            f"RFC 7208 section 4.6.4 limits SPF evaluation to 2 void lookups "
-            f"(lookups that return no usable data, such as an include: pointing "
-            f"to a domain with no SPF record). This record triggers "
-            f"{void_lookup_count} void lookups. Receivers enforcing this limit "
-            f"will return a PermError, treating your SPF as if it doesn't exist.",
-            "Remove includes that point to domains with no SPF record.",
+            f"RFC 7208 section 4.6.4 recommends limiting SPF evaluation to 2 void "
+            f"lookups: DNS queries that come back NXDOMAIN or with an empty answer, "
+            f"such as an a:, mx: or exists: mechanism pointing at a name that does "
+            f"not resolve. This record triggers {void_lookup_count}. Receivers "
+            f"enforcing the limit will return a PermError, treating your SPF as if "
+            f"it doesn't exist.",
+            "Remove or correct the a:, mx: and exists: mechanisms whose targets do "
+            "not resolve.",
             business_risk_key="SPF_PERMERROR",
         )
 
