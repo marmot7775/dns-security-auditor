@@ -23,9 +23,8 @@ usable as a smoke test after a deploy.
 import argparse
 import json
 import sys
-import urllib.error
-import urllib.parse
-import urllib.request
+
+import requests
 
 # Chosen to cover the branches that differ: Google-hosted with retired DKIM
 # selectors, Microsoft-hosted (our own), self-hosted with real DANE, and a
@@ -44,12 +43,19 @@ DEFAULT_BASE = "https://dns-audit.com"
 
 
 def audit(base, domain, scope, timeout):
-    url = f"{base}/api/audit?" + urllib.parse.urlencode(
-        {"domain": domain, "scope": scope}
+    # requests rather than urllib.request: bandit's B310 flags urlopen because
+    # it honours file:// and other schemes. Nothing untrusted reaches this URL,
+    # so the finding is a false positive, but requests is already a dependency
+    # and does not carry the same footgun, so satisfying the rule costs nothing
+    # and is better than an inline suppression nobody revisits.
+    resp = requests.get(
+        f"{base}/api/audit",
+        params={"domain": domain, "scope": scope},
+        headers={"User-Agent": "live-check/1.0"},
+        timeout=timeout,
     )
-    req = urllib.request.Request(url, headers={"User-Agent": "live-check/1.0"})
-    with urllib.request.urlopen(req, timeout=timeout) as resp:
-        return json.load(resp)
+    resp.raise_for_status()
+    return resp.json()
 
 
 def main():
@@ -67,7 +73,7 @@ def main():
         print(f"\n{domain}")
         try:
             result = audit(args.base, domain, args.scope, args.timeout)
-        except (urllib.error.URLError, OSError, json.JSONDecodeError) as e:
+        except (requests.RequestException, OSError, json.JSONDecodeError) as e:
             print(f"  !! audit failed: {type(e).__name__}: {str(e)[:80]}")
             failed = True
             continue
