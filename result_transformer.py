@@ -4669,6 +4669,17 @@ def transform_dkim(raw: Dict, domain: str, has_mx: bool = True, non_mail: bool =
                 "text": f"{selector}: key found{vendor_str}"
             })
 
+    # One joined string, not one record block per selector: the generic
+    # record-block renderer (app.js's renderCheckBody) takes a single
+    # string per check, and a second render path just for DKIM was more
+    # than this fix needed. Each line is prefixed with its selector so the
+    # copied text is still usable, since a bare TXT value does not say
+    # where to publish it.
+    _live_records = "\n".join(
+        f"{sel.get('selector', 'unknown')}._domainkey: {sel.get('record', '')}"
+        for sel in live if sel.get("record")
+    )
+
     details.append({"type": "info", "text": f"Tested {tested} selectors"})
 
     if raw.get("timeout_note"):
@@ -4763,7 +4774,7 @@ def transform_dkim(raw: Dict, domain: str, has_mx: bool = True, non_mail: bool =
         "name": "DKIM",
         "status": status,
         "verdict": verdict,
-        "record": None,  # DKIM has multiple records, shown in details
+        "record": _live_records or None,
         "explanation": explanation,
         "details": details,
         "fix": fix,

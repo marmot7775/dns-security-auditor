@@ -1237,7 +1237,16 @@ main {
     border-left-color: var(--fail);
 }
 
-/* Lazy rendering: skip painting off-screen cards */
+/* Skip painting off-screen cards. This is a paint optimisation only, not
+   the removed DOM-lazy-loading: the card stays in the document, reachable
+   by focus, find-in-page and assistive tech. But content-visibility:auto
+   also clamps an off-screen card to contain-intrinsic-size until it is
+   near the viewport, so any accessibility sweep of this page must force
+   these cards to paint first (override content-visibility to visible)
+   before scanning. Without that override, on / with cloudflare.com at
+   1280px only four cards render their real content and the other eight
+   clamp to 302px -- a sweep run that way reports a clean result from a
+   quarter of the page, the exact mistake PR #29 made. */
 .result-card:nth-child(n+6) {
     content-visibility: auto;
     contain-intrinsic-size: auto 300px;
@@ -9135,6 +9144,16 @@ body {
         margin: -10px -9px;
     }
 
+    /* The visible chip stays small by design; ::after below gives it a real
+       44px tap band. Verified with elementFromPoint across the whole ::after
+       height that every point still resolves to this link, on every badge
+       instance the row markup produces, so it never steals from the plain
+       -text label beside it or the content that follows. Also independently
+       clears WCAG 2.5.8's spacing exception: a 24px circle centred on the
+       badge does not intersect any neighbouring target. Do not "fix" this
+       the way .footer-linkedin was fixed first (a fixed box plus a negative
+       margin) -- that cancels the layout footprint but not the hit-test
+       box, and bled a 44px target into the row above it. */
     .tw-spec-badge {
         position: relative;
     }
@@ -9147,5 +9166,16 @@ body {
         top: 50%;
         height: 44px;
         transform: translateY(-50%);
+    }
+
+    /* Full-width block controls: grow downward, displace nothing below. */
+    summary.sua-toggle {
+        display: flex;
+        align-items: center;
+        min-height: 44px;
+    }
+
+    .cd-header {
+        min-height: 44px;
     }
 }

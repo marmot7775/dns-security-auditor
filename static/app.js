@@ -776,11 +776,13 @@ function renderResults(data) {
 
     // Every card is built here, not lazily. Deferring the cards below the
     // fold to an IntersectionObserver saved 274 nodes out of 1585 and about
-    // 3 MB of heap, which is nothing, and it broke four things that all read
-    // the DOM: Expand All and Copy All Records silently skipped the cards
-    // that had not been built, find-in-page could not find "DNSSEC" on a page
-    // reporting DNSSEC, and a screen reader met eight empty boxes. A card
-    // that exists only after you scroll past it is not in the document.
+    // 80 KB of heap, at a scripting cost of about 10.6ms on a 4x-throttled
+    // phone, and it broke four things that all read the DOM: Expand All and
+    // Copy All Records silently skipped the cards that had not been built,
+    // find-in-page could not find the DNSSEC finding on a page reporting
+    // DNSSEC (the word itself appears at scroll 0, in the marketing
+    // subtitle), and a screen reader met eight empty boxes. A card that
+    // exists only after you scroll past it is not in the document.
     checks.forEach((check, i) => {
         // Attach tree walk + DMARC eval + subdomain audit data to the DMARC check
         if ((check.name || '').toUpperCase().includes('DMARC') && data.tree_walk) {
