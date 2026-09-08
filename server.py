@@ -326,7 +326,7 @@ app = FastAPI(
     title="DNS Security Auditor",
     description=(
         "Comprehensive DNS and email security auditing API. "
-        "Checks DMARC, SPF, DKIM, MX, MTA-STS, TLS-RPT, BIMI, DNSSEC, CAA, DANE, Nameservers, Certificate Transparency, and Blocklist."
+        "Checks DMARC, SPF, DKIM, MX, MTA-STS, TLS-RPT, BIMI, DNSSEC, CAA, DANE, Nameservers, and Certificate Transparency."
     ),
     version="2.0.0",
     docs_url=None,
@@ -680,7 +680,7 @@ async def audit_domain(
 
     Returns:
     - Per-check pass/warn/fail status with priority fixes
-    - Individual check results (DMARC, SPF, DKIM, MX, MTA-STS, TLS-RPT, BIMI, DNSSEC, CAA, DANE, Nameservers, CT, Blocklist)
+    - Individual check results (DMARC, SPF, DKIM, MX, MTA-STS, TLS-RPT, BIMI, DNSSEC, CAA, DANE, Nameservers, CT)
     - Priority fixes
     - Detected email vendors
     """

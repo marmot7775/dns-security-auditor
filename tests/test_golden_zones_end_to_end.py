@@ -173,7 +173,7 @@ HTTP = {
 }
 
 EXPECTED_CHECKS = {
-    "BIMI", "Blocklist", "CAA", "Certificate Transparency", "DANE", "DKIM",
+    "BIMI", "CAA", "Certificate Transparency", "DANE", "DKIM",
     "DMARC", "DNSSEC", "MTA-STS", "MX Records", "Nameservers", "SPF", "TLS-RPT",
 }
 
@@ -222,7 +222,6 @@ def test_every_zone_produces_the_full_card_set(golden):
 # the verdict non-empty, so only the text itself catches it.
 GOLDEN_VERDICTS = {
     "BIMI": ("pass", "Logo configured"),
-    "Blocklist": ("pass", "Clean on 1 domain blocklist"),
     "CAA": ("pass", "Restricted to letsencrypt.org"),
     "Certificate Transparency": ("pass", "1 active cert from 1 issuer"),
     "DANE": ("warn", "No DANE TLSA records"),

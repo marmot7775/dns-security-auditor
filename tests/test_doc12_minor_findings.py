@@ -114,7 +114,7 @@ def test_contents_page_still_lists_everything_on_a_complete_run():
               for n in pdf_report.PROTOCOL_SECTION_ORDER]
     listed = _toc_protocols(checks)
     assert len(listed) == len(pdf_report.PROTOCOL_SECTION_ORDER)
-    assert "Blocklist" in listed and "Certificate Transparency" in listed
+    assert "Certificate Transparency" in listed and "DANE" in listed
 
 
 def test_section_order_matches_what_the_body_actually_renders():
@@ -144,16 +144,17 @@ def _about_text(checks):
 def test_unavailable_checks_are_not_listed_as_performed():
     checks = [
         {"name": "DMARC", "status": "pass"},
-        {"name": "Blocklist", "status": "unavailable"},
+        {"name": "Certificate Transparency", "status": "unavailable"},
     ]
     text = _about_text(checks)
     performed = text.split("Checks performed:")[1].split("Not checked:")[0]
     assert "DMARC" in performed
-    assert "Blocklist" not in performed, (
+    assert "Certificate Transparency" not in performed, (
         "a check whose lookup did not complete was listed as performed, on the "
         "same document whose cover counts it under 'not checked'"
     )
-    assert "Not checked:" in text and "Blocklist" in text.split("Not checked:")[1]
+    assert "Not checked:" in text
+    assert "Certificate Transparency" in text.split("Not checked:")[1]
 
 
 def test_no_not_checked_line_when_everything_ran():

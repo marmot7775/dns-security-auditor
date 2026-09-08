@@ -365,7 +365,6 @@ def build_executive_summary(checks: List[Dict], roadmap: Dict) -> Dict:
 
     # ── Part 5: Deliverability summary ────────────────────────
     spf_check = check_map.get("SPF", {})
-    blocklist_check = check_map.get("Blocklist", {})
 
     deliverability_issues = []
     if dmarc_status == "fail" and dmarc.get("pill_label") == "Missing":
@@ -383,9 +382,6 @@ def build_executive_summary(checks: List[Dict], roadmap: Dict) -> Dict:
             deliverability_issues.append("SPF lookup count is at or near the limit")
             break
 
-    if blocklist_check.get("status") == "fail":
-        deliverability_issues.append("domain is listed on a blocklist")
-
     # DKIM that could not be confirmed by probing is not an issue to list: the
     # domain may well sign under a selector this audit never guessed. It is
     # also not something to pass over in silence, because the all-clear below
@@ -393,9 +389,7 @@ def build_executive_summary(checks: List[Dict], roadmap: Dict) -> Dict:
 
     if deliverability_issues:
         top_issue = deliverability_issues[0]
-        if "blocklist" in top_issue:
-            deliverability_summary = "Your domain is listed on a blocklist. This is likely causing delivery failures right now."
-        elif "no DMARC" in top_issue:
+        if "no DMARC" in top_issue:
             deliverability_summary = "Without DMARC, your business emails may be landing in spam. Gmail and Yahoo now require DMARC for reliable delivery."
         elif "p=none" in top_issue:
             deliverability_summary = "Your DMARC policy is monitoring only (p=none). Gmail, Yahoo, and Outlook may treat your email with more suspicion until you enforce."
@@ -437,7 +431,7 @@ def build_executive_summary(checks: List[Dict], roadmap: Dict) -> Dict:
     # A lookup that never completed is not a clean bill of health. Without
     # this, the branch above names SPF, DKIM and DMARC as properly set up on
     # a run that never read them. Real findings are kept and annotated rather
-    # than replaced, since a blocklist listing still matters here.
+    # than replaced, since a real finding still matters here.
     if auth_unavailable:
         caveat = (f"The {unread_names} {unread_verb} not complete, so that part of the "
                   "configuration was not assessed.")
@@ -6377,6 +6371,20 @@ def transform_nameservers(raw: Dict, domain: str = "") -> Dict:
     if has_ipv6:
         details.append({"type": "good", "text": "IPv6 nameserver support (AAAA records present)"})
 
+    # Where the blocklist check used to be. This audit does not test blocklist
+    # listings: Spamhaus refuses DNSBL queries from public and cloud resolvers
+    # and this service runs on both, so the check never returned a result in
+    # production. Rather than keep a card that assessed nothing, the pointer
+    # goes here, on the DNS infrastructure card, for anyone who wants one.
+    details.append({
+        "type": "info",
+        "text": (
+            "This audit does not check blocklist listings. Blocklist operators "
+            "refuse queries from cloud-hosted resolvers, so the answer would not "
+            "be reliable. Check yours at check.spamhaus.org"
+        ),
+    })
+
     # Append issues (skip ones already covered by hardcoded details above)
     covered_keywords = {"only one nameserver", "lame delegation", "does not resolve"}
     for issue in issues:
@@ -6595,175 +6603,6 @@ def transform_ct(raw: Dict, domain: str) -> Dict:
     }
 
 
-# ============================================================
-# Blacklist
-# ============================================================
-
-def transform_blacklist(raw: Dict, domain: str) -> Dict:
-    domain_results = raw.get("domain_results", [])
-    issues = raw.get("issues", [])
-
-    DELIST_URLS = {
-        "Spamhaus DBL": "https://check.spamhaus.org/",
-    }
-
-    # No domain results at all. The old card said "pass" in one field and
-    # "could not be completed" in the next, and counted toward the passing
-    # tally on the PDF cover for a check that assessed nothing. It became
-    # reachable the moment DNSBL lookup failures stopped being recorded as
-    # clean results.
-    if not domain_results:
-        return {
-            "name": "Blocklist",
-            "status": "unavailable",
-            "pill_label": "Not checked",
-            "verdict": "Not checked by this audit",
-            "record": None,
-            "explanation": (
-                "Blocklist status was not assessed for this domain. No blocklist "
-                "returned a usable answer, so this audit has nothing to report "
-                "either way. It does not mean the domain is listed, and it does "
-                "not mean it is clean."
-            ),
-            "details": [
-                {"type": "info", "text": "No blocklist returned a usable answer, so nothing was assessed"},
-            ],
-            "fix_records": None,
-            "fix": None,
-        }
-
-    # Determine status from domain-based results only
-    listed = False
-    listed_names = []
-    has_errors = False
-
-    for dr in domain_results:
-        if dr.get("listed"):
-            listed = True
-            list_name = dr["list"]
-            listed_names.append(list_name)
-        if dr.get("error"):
-            has_errors = True
-
-    if listed:
-        status = "fail"
-        pill_label = "Listed"
-    elif has_errors:
-        # Spamhaus refuses queries from public and cloud resolvers outright,
-        # so this is a standing limitation of where the auditor runs, not
-        # something about the domain. "warn" read as a finding against the
-        # domain. See _UNAVAILABLE.
-        status = "unavailable"
-        pill_label = "Not checked"
-    else:
-        status = "pass"
-        pill_label = "Clean"
-
-    total_lists = len(domain_results)
-    total_listings = len(listed_names)
-
-    # Verdict
-    if total_listings > 0:
-        verdict = f"Listed on {total_listings} domain blocklist{'s' if total_listings != 1 else ''}"
-    elif has_errors:
-        verdict = "Not checked by this audit"
-    else:
-        verdict = f"Clean on {total_lists} domain blocklist{'s' if total_lists != 1 else ''}"
-
-    # Explanation
-    if total_listings > 0:
-        explanation = (
-            f"This domain is listed on {total_listings} domain-based "
-            f"blocklist{'s' if total_listings != 1 else ''}. "
-            "Domain blocklists (like Spamhaus DBL) list domains directly associated with spam, "
-            "phishing, or malware. A listing can affect deliverability. "
-            "Investigate the cause before requesting removal."
-        )
-    elif has_errors:
-        explanation = (
-            "Blocklist status was not assessed for this domain. Spamhaus refuses DNSBL "
-            "queries from public and cloud resolvers, which is where this audit runs, so "
-            "this check cannot complete here. It does not mean the domain is listed, and it "
-            "does not mean it is clean. Check it directly at "
-            "<a href=\"https://check.spamhaus.org/\" target=\"_blank\" rel=\"noopener\">"
-            "check.spamhaus.org</a>."
-        )
-    else:
-        explanation = (
-            f"Checked the domain against {total_lists} domain-based "
-            f"blocklist{'s' if total_lists != 1 else ''}. No listings found."
-        )
-
-    # Details
-    details = []
-
-    for dr in domain_results:
-        if dr.get("listed"):
-            meaning = dr.get("meaning", "Listed")
-            details.append({"type": "error", "text": f"{domain}: {dr['list']}: {meaning}"})
-        elif dr.get("error"):
-            details.append({"type": "warning", "text": f"{domain}: {dr['list']}: {dr['error']}"})
-        else:
-            details.append({"type": "good", "text": f"{domain}: clean on {dr['list']}"})
-
-    # Append raw issues
-    for issue in issues:
-        details.append(_issue_to_detail(issue))
-
-    # Fix
-    fix = None
-    if total_listings > 0:
-        delist_parts = []
-        seen_urls = set()
-        for name in listed_names:
-            url = DELIST_URLS.get(name)
-            if url and url not in seen_urls:
-                seen_urls.add(url)
-                delist_parts.append(f"<strong>{_e(name)}</strong>: <a href=\"{_e(url)}\" target=\"_blank\" rel=\"noopener\">{_e(url)}</a>")
-        if delist_parts:
-            fix = "Request delisting from each blocklist:<br>" + "<br>".join(delist_parts)
-            fix += (
-                "<br><br>Before requesting removal, identify the reason for the listing. "
-                "Common causes include a compromised sending account, misconfigured open relay, "
-                "a spike in spam complaints, or in some cases a false positive. "
-                "Removing the underlying cause first reduces the chance of re-listing."
-            )
-        else:
-            fix = "Review the listing reason with each blocklist operator and request removal once the underlying issue is resolved."
-
-    # Deliverability context
-    if total_listings > 0:
-        _deliverability = (
-            "CRITICAL: Your domain is on a blocklist. This is likely causing widespread delivery "
-            "failures right now. Emails may be bouncing or going directly to spam at major providers. "
-            "This often happens when a compromised account or aggressive outreach triggers spam reports. "
-            "Investigate the root cause before requesting delisting."
-        )
-    elif has_errors:
-        _deliverability = (
-            "The blocklist check was inconclusive due to query restrictions. "
-            "This does not indicate a problem with your domain. "
-            "Check manually at https://check.spamhaus.org/ for a definitive answer."
-        )
-    else:
-        _deliverability = (
-            "Your domain is clean on the blocklists we check. Note that Gmail, Outlook, and Yahoo "
-            "maintain their own internal reputation systems that are not publicly visible. "
-            "Blocklist clearance is a good baseline but does not guarantee inbox placement."
-        )
-
-    return {
-        "name": "Blocklist",
-        "status": status,
-        "pill_label": pill_label,
-        "verdict": verdict,
-        "record": None,
-        "explanation": explanation,
-        "details": details,
-        "fix": fix,
-        "fix_records": None,
-        "deliverability": _deliverability,
-    }
 
 
 # ============================================================

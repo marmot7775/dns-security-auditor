@@ -8,11 +8,11 @@ const API_BASE = '/api';
 // -- Scope definitions: which checks to show per scope --
 const SCOPE_CHECKS = {
     complete: null, // null = show all
-    email_full: ['DMARC', 'SPF', 'DKIM', 'MX Records', 'MX', 'MTA-STS', 'TLS-RPT', 'BIMI', 'Blocklist'],
+    email_full: ['DMARC', 'SPF', 'DKIM', 'MX Records', 'MX', 'MTA-STS', 'TLS-RPT', 'BIMI'],
     dmarc: ['DMARC', 'SPF', 'DKIM'],
     transport: ['MTA-STS', 'TLS-RPT', 'DANE', 'MX Records', 'MX'],
     dns_infra: ['DNSSEC', 'CAA', 'DANE', 'Nameservers', 'Certificate Transparency'],
-    security_scan: ['DMARC', 'SPF', 'DKIM', 'DNSSEC', 'DANE', 'Certificate Transparency', 'Blocklist', 'CAA', 'MTA-STS'],
+    security_scan: ['DMARC', 'SPF', 'DKIM', 'DNSSEC', 'DANE', 'Certificate Transparency', 'CAA', 'MTA-STS'],
 };
 
 // Severity sort order (lower = higher priority = displayed first)
@@ -96,7 +96,6 @@ const PROTOCOL_TOOLTIPS = {
     'MX': 'Specifies which mail servers accept email for your domain',
     'Nameservers': 'The DNS servers that answer queries about your domain',
     'Certificate Transparency': 'Public log of all certificates issued for your domain',
-    'Blocklist': 'Checks if your domain or IPs appear on email blocklists',
 };
 
 // -- Check URL for domain parameter on load --
@@ -399,7 +398,6 @@ const STEP_MESSAGES = {
     'DANE': 'Checking DANE TLSA records...',
     'DKIM': 'Discovering DKIM selectors...',
     'Certificate Transparency': 'Querying certificate transparency logs...',
-    'Blocklist': 'Checking IP and domain blocklists...',
     'Vendor Fingerprinting': 'Fingerprinting email services...',
     'Scoring': 'Finalizing audit...',
 };

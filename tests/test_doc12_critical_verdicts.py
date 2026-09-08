@@ -16,22 +16,23 @@ import result_transformer
 
 
 # ---------------------------------------------------------------------------
-# Finding 1: the blocklist check's Phase 2 label must equal its card name
+# Finding 1: a Phase 2 label must equal its card name
 # ---------------------------------------------------------------------------
 
-def test_blocklist_timeout_card_is_findable_by_the_pdf():
-    """A timed-out blocklist check must appear in the PDF body, not just the tally.
+def test_a_timeout_card_is_findable_by_the_pdf():
+    """A timed-out check must appear in the PDF body, not just the tally.
 
-    Phase 2 registered the check with the label "Blacklist" while
-    transform_blacklist names the card "Blocklist". _timeout_card and
+    The original subject was the Blocklist check, whose Phase 2 label was
+    "Blacklist" while its card was named "Blocklist". _timeout_card and
     _error_card take the label, so on any failure path the cover's _tally
-    counted a check that _protocol_details could not look up and therefore
-    never rendered.
+    counted a check that _protocol_details could not look up and never
+    rendered. That check was removed in doc 17 item 7; the invariant it
+    exposed applies to every check and is what this now guards.
     """
-    for card in (audit_engine._timeout_card("Blocklist"),
-                 audit_engine._error_card("Blocklist", RuntimeError("boom"))):
+    for card in (audit_engine._timeout_card("Certificate Transparency"),
+                 audit_engine._error_card("Certificate Transparency", RuntimeError("boom"))):
         data = {"checks": [card]}
-        assert pdf_report._get_check(data, "Blocklist") == card, (
+        assert pdf_report._get_check(data, "Certificate Transparency") == card, (
             "the PDF body looks checks up by name and could not find this one"
         )
         counted = sum(pdf_report._tally(data["checks"]))
@@ -45,7 +46,7 @@ def test_no_check_is_counted_on_the_cover_without_a_body_section():
     broke it.
     """
     body_names = {
-        "Blocklist", "SPF", "DKIM", "MTA-STS", "TLS-RPT", "DANE", "DNSSEC",
+        "SPF", "DKIM", "MTA-STS", "TLS-RPT", "DANE", "DNSSEC",
         "CAA", "MX Records", "Nameservers", "BIMI", "Certificate Transparency",
         # DMARC has its own section (_dmarc_deep_dive), not a protocol card.
         "DMARC",

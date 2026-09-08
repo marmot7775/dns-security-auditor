@@ -526,7 +526,6 @@ class TestRemediationPlannerInheritedDmarc(unittest.TestCase):
             "caa": {},
             "dane": {},
             "mx": {"records": [], "record_count": 1 if has_mx else 0},
-            "blacklist": {},
         }
         if extra_raw:
             raw_results.update(extra_raw)
@@ -712,7 +711,7 @@ class TestNoEmDashesInInheritedOutput(unittest.TestCase):
             checks=[],
             raw_results={"dmarc": dmarc, "spf": {}, "dkim": {}, "mta_sts": {},
                          "tls_rpt": {}, "dnssec": {}, "caa": {}, "dane": {},
-                         "mx": {"records": [], "record_count": 0}, "blacklist": {}},
+                         "mx": {"records": [], "record_count": 0}},
             has_mx=False,
         )
         text = self._all_plan_text(plan)

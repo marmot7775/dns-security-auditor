@@ -124,7 +124,6 @@ from result_transformer import (
     transform_caa,
     transform_nameservers,
     transform_ct,
-    transform_blacklist,
     build_security_roadmap,
     build_executive_summary,
     build_subdomain_audit,
@@ -269,15 +268,15 @@ BUSINESS_RISK = {
 
 SCOPE_CHECKS = {
     "complete":      None,  # None = run all
-    "email_full":    {"dmarc", "mx", "spf", "dkim", "mta_sts", "tls_rpt", "bimi", "blacklist"},
+    "email_full":    {"dmarc", "mx", "spf", "dkim", "mta_sts", "tls_rpt", "bimi"},
     "dmarc":         {"dmarc", "spf", "dkim"},
     "transport":     {"mx", "mta_sts", "tls_rpt", "dane"},
     "dns_infra":     {"dnssec", "caa", "dane", "nameservers", "ct"},
-    "security_scan": {"dmarc", "spf", "dkim", "dnssec", "dane", "ct", "blacklist", "caa", "mta_sts"},
+    "security_scan": {"dmarc", "spf", "dkim", "dnssec", "dane", "ct", "caa", "mta_sts"},
 }
 
 # Checks that depend on MX raw results
-_MX_DEPENDENTS = {"spf", "dkim", "mta_sts", "tls_rpt", "bimi", "dane", "blacklist"}
+_MX_DEPENDENTS = {"spf", "dkim", "mta_sts", "tls_rpt", "bimi", "dane"}
 # Checks that depend on SPF raw results
 _SPF_DEPENDENTS = {"dkim"}
 
@@ -4190,156 +4189,6 @@ def _raw_check_ct_uncached(domain: str, raw_results: Dict[str, Any]) -> Dict[str
 
 
 # ============================================================
-# Blacklist (DNSBL) Check
-# ============================================================
-
-def _raw_check_blacklist(domain: str, raw_results: Dict[str, Any]) -> Dict[str, Any]:
-    """Check if domain and MX IPs appear on major DNS-based blocklists.
-
-    Uses the standard DNSBL lookup protocol:
-      - Reverse IP octets, query against blocklist domain
-      - A record returned = listed, NXDOMAIN = clean
-
-    Checks both IP-based lists (against MX IPs) and domain-based lists.
-    """
-    # Domain-based blocklists only. IP-based checks were removed because
-    # MX host IPs are shared infrastructure (e.g. Microsoft 365, Google)
-    # that the audited domain does not control. A listing on a shared IP
-    # says nothing about the domain's reputation.
-    DOMAIN_LISTS = [
-        ("Spamhaus DBL", "dbl.spamhaus.org", 1, "https://check.spamhaus.org/"),
-    ]
-    SPAMHAUS_DBL_CODES = {
-        "127.0.1.2": "Spam domain",
-        "127.0.1.4": "Phishing domain",
-        "127.0.1.5": "Malware domain",
-        "127.0.1.6": "Botnet C&C domain",
-    }
-
-    result = {
-        "check": "Blocklist",
-        "domain": domain,
-        "ips_checked": [],
-        "domain_checked": domain,
-        "total_listings": 0,
-        "ip_results": [],
-        "domain_results": [],
-        "issues": [],
-        "status": "ok",
-    }
-
-    def _add_issue(severity, issue, plain_english, fix=None):
-        result["issues"].append({
-            "severity": severity,
-            "issue": issue,
-            "plain_english": plain_english,
-            "fix": fix,
-        })
-
-    def _dnsbl_lookup(query_name: str, timeout: float = 3.0):
-        """Query a DNSBL. Returns (state, return_code).
-
-        Three states, not a nullable string. NXDOMAIN and NoAnswer are the
-        protocol's way of saying "not on this list" and are a real answer.
-        A SERVFAIL or a timeout is not: it means the query never completed,
-        which is the expected path once the site takes enough traffic for
-        Spamhaus to start rate limiting. Collapsing the two into None made
-        every failed query read as a clean bill of health.
-        """
-        try:
-            resolver = _get_resolver(timeout=timeout)
-            answers = resolver.resolve(query_name, "A")
-            for rdata in answers:
-                return "listed", str(rdata)
-            return "not_listed", None
-        except (dns.resolver.NXDOMAIN, dns.resolver.NoAnswer):
-            return "not_listed", None
-        except dns.exception.DNSException as e:
-            # NoNameservers is a subclass of DNSException and lands here:
-            # SERVFAIL from every nameserver tried is a failed query, not an
-            # answer of "not listed".
-            log.debug("DNSBL lookup did not complete for %s: %s", query_name, e)
-            return "unknown", None
-
-    # Check domain against domain-based lists
-    for list_name, list_host, _tier, _delist_url in DOMAIN_LISTS:
-        query = f"{domain}.{list_host}"
-        state, return_code = _dnsbl_lookup(query)
-
-        if state == "unknown":
-            result["domain_results"].append({
-                "list": list_name, "listed": False,
-                "return_code": None, "meaning": None,
-                "error": f"{list_name} lookup did not complete",
-            })
-            continue
-
-        listed = state == "listed"
-
-        meaning = None
-        if listed:
-            # Spamhaus error/test responses -- not a real listing
-            if return_code and return_code.startswith("127.255.255."):
-                result["domain_results"].append({
-                    "list": list_name, "listed": False,
-                    "return_code": return_code, "meaning": None,
-                    "error": "Spamhaus query blocked (public resolver)",
-                })
-                continue
-            if "spamhaus" in list_host:
-                meaning = SPAMHAUS_DBL_CODES.get(return_code)
-            if not meaning:
-                meaning = f"Listed (response: {return_code})"
-
-        result["domain_results"].append({
-            "list": list_name, "listed": listed,
-            "return_code": return_code, "meaning": meaning,
-        })
-
-    # Count total listings, keeping each list's tier and delisting URL
-    listings = []
-    for dr in result["domain_results"]:
-        if not dr.get("listed"):
-            continue
-        for list_name, _, tier, delist_url in DOMAIN_LISTS:
-            if list_name == dr["list"]:
-                listings.append({
-                    "text": f"{domain} on {dr['list']}",
-                    "tier": tier,
-                    "delist_url": delist_url,
-                })
-                break
-
-    result["total_listings"] = len(listings)
-
-    # Set status and issues. Severity follows the list's tier, so adding a
-    # tier-2 entry to DOMAIN_LISTS needs no new branch here.
-    for listing in sorted(listings, key=lambda x: x["tier"]):
-        if listing["tier"] == 1:
-            result["status"] = "error"
-            severity = "error"
-            impact = "This is a major blocklist that can cause significant email deliverability issues."
-        else:
-            if result["status"] == "ok":
-                result["status"] = "warning"
-            severity = "warning"
-            impact = "This is a secondary blocklist with less impact on deliverability."
-
-        fix = None
-        if listing["delist_url"]:
-            fix = f"Request delisting at {listing['delist_url']}"
-
-        _add_issue(
-            severity,
-            f"Listed: {listing['text']}",
-            f"{listing['text']}. {impact}",
-            fix,
-        )
-
-    return result
-
-
-# ============================================================
 # Main Audit Orchestrator
 # ============================================================
 
@@ -4357,7 +4206,7 @@ def _raw_check_blacklist(domain: str, raw_results: Dict[str, Any]) -> Dict[str, 
 # config has no project imports, so this cannot introduce a cycle.
 from config import MAX_CONCURRENT_AUDITS as _MAX_CONCURRENT_AUDITS
 
-_PHASE2_WIDTH = 10  # mta_sts, tls_rpt, bimi, dnssec, caa, nameservers, dane, dkim, ct, blacklist
+_PHASE2_WIDTH = 9  # mta_sts, tls_rpt, bimi, dnssec, caa, nameservers, dane, dkim, ct
 _shared_executor = ThreadPoolExecutor(
     max_workers=max(20, _MAX_CONCURRENT_AUDITS * _PHASE2_WIDTH),
     thread_name_prefix="audit",
@@ -4545,7 +4394,7 @@ def _count_checks_for_scope(scope_set) -> int:
         count += 1
 
     other_checks = ["mta_sts", "tls_rpt", "bimi", "dnssec", "caa",
-                     "nameservers", "dane", "dkim", "ct", "blacklist"]
+                     "nameservers", "dane", "dkim", "ct"]
     for ck in other_checks:
         if _should_include(ck, scope_set):
             count += 1
@@ -4999,19 +4848,6 @@ def run_full_audit(domain: str, dkim_selector: Optional[str] = None,
             lambda raw: transform_ct(raw, domain),
             "Certificate Transparency"))
 
-    if _should_include("blacklist", scope_set):
-        _bl_raw = dict(raw_results)
-        # The label has to be the card's own name. It is what _timeout_card and
-        # _error_card put in "name", and every consumer (the PDF's
-        # _protocol_details, build_executive_summary, the front end) looks the
-        # card up by name. With "Blacklist" here a timed-out blocklist check was
-        # counted on the PDF cover and rendered nowhere in the body, because
-        # _get_check(data, "Blocklist") missed it. The internal key stays
-        # "blacklist" since raw_results and _CARD_ORDER are keyed on it.
-        _parallel_checks.append(("blacklist",
-            lambda: _raw_check_blacklist(domain, _bl_raw),
-            lambda raw: transform_blacklist(raw, domain),
-            "Blocklist"))
 
     # Submit all Phase 2 checks in parallel
     _p2_futures = {}
@@ -5021,7 +4857,7 @@ def run_full_audit(domain: str, dkim_selector: Optional[str] = None,
 
     # Desired card ordering (DKIM inserted at position 2 later)
     _CARD_ORDER = ["mta_sts", "tls_rpt", "bimi", "dnssec", "caa",
-                    "nameservers", "dane", "ct", "blacklist"]
+                    "nameservers", "dane", "ct"]
     _p2_cards = {}  # key -> card
 
     # The budget belongs on as_completed, not on future.result. as_completed

@@ -100,7 +100,6 @@ def build_remediation_plan(
     caa = raw_results.get("caa") or {}
     dane = raw_results.get("dane") or {}
     mx = raw_results.get("mx") or {}
-    blacklist = raw_results.get("blacklist") or {}
 
     # A check whose DNS query never completed reports status "unavailable"
     # with an empty record field. Every "you have no X record" item below
@@ -139,8 +138,6 @@ def build_remediation_plan(
     mx_records = mx.get("records") or []
     mx_count = mx.get("record_count") or len(mx_records)
 
-    blacklist_listed = (blacklist.get("total_listings") or 0) > 0
-
     mta_sts_txt = mta_sts.get("txt_record") or ""
     mta_sts_mode = (mta_sts.get("policy_mode") or "").lower()
 
@@ -159,19 +156,6 @@ def build_remediation_plan(
     # --------------------------------------------------------
     # IMMEDIATE -- critical security gaps
     # --------------------------------------------------------
-
-    # Blacklist listing -- highest urgency, reputation at risk
-    if blacklist_listed:
-        immediate.append({
-            "title": "Remove Blacklist Listing",
-            "description": (
-                "Your domain or sending IP appears on one or more DNS blacklists. "
-                "Email from this domain is likely being rejected or marked as spam."
-            ),
-            "effort": "medium",
-            "impact": "high",
-            "check": "Blacklist",
-        })
 
     # Missing SPF (only meaningful for mail-sending domains).
     #

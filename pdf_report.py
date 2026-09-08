@@ -72,7 +72,7 @@ LIGHT_BLUE_BG = colors.HexColor("#eff6ff")
 # the table of contents uses for two of them. Both read from here so the
 # contents page cannot promise a section the body does not contain.
 PROTOCOL_SECTION_ORDER = [
-    "Blocklist", "SPF", "DKIM", "MTA-STS", "TLS-RPT", "DANE", "DNSSEC",
+    "SPF", "DKIM", "MTA-STS", "TLS-RPT", "DANE", "DNSSEC",
     "CAA", "MX Records", "Nameservers", "BIMI", "Certificate Transparency",
 ]
 PROTOCOL_TOC_LABELS = {"MX Records": "MX"}
@@ -1074,12 +1074,6 @@ def _protocol_details(data, S):
     els = [PageBreak()]
     els.extend(_section_header("5", "Protocol Details", S))
 
-    # Blocklist. First in the section on purpose: an active listing outranks
-    # every other finding in the report, and it is the one thing a reader
-    # should not have to page to the end to find.
-    blocklist = _get_check(data, "Blocklist")
-    if blocklist:
-        els.extend(_protocol_card(blocklist, S))
 
     # SPF
     spf = _get_check(data, "SPF")

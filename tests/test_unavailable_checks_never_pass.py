@@ -31,10 +31,6 @@ from conftest import FakeZone
 
 DOMAIN = "unavail.test"
 
-# Spamhaus's refusal code. 127.255.255.x means "your query was rejected",
-# never "this domain is listed".
-SPAMHAUS_REFUSED = "127.255.255.254"
-
 BASE = {
     DOMAIN: {
         "MX": [(10, "mail.unavail.test")],
@@ -48,30 +44,10 @@ BASE = {
 }
 
 
-def _zone_with_spamhaus_refusal():
-    zone = FakeZone(dict(BASE))
-    zone.add(f"{DOMAIN}.dbl.spamhaus.org", "A", [SPAMHAUS_REFUSED])
-    return zone
-
-
 def _card(result, name):
     return next(c for c in result["checks"] if c["name"] == name)
 
 
-def test_spamhaus_refusal_is_not_reported_as_clean(audit):
-    """A refused query says nothing about the domain, so it must not read as
-    a clean bill of health."""
-    result = audit(_zone_with_spamhaus_refusal(), DOMAIN)
-    card = _card(result, "Blocklist")
-
-    assert card["status"] == "unavailable"
-    assert card["status"] != "pass"
-    assert card["pill_label"] == "Not checked"
-    assert "not assessed" in card["explanation"].lower()
-
-    body = (card["verdict"] + " " + card["explanation"]).lower()
-    assert "listed" not in card["verdict"].lower()
-    assert "clean" not in body or "does not mean it is clean" in body
 
 
 def test_ct_without_a_reachable_log_service_is_not_a_pass(audit):
@@ -87,82 +63,26 @@ def test_ct_without_a_reachable_log_service_is_not_a_pass(audit):
     assert "not assessed" in card["explanation"].lower()
 
 
-def test_unavailable_checks_are_framed_as_a_tool_gap_not_a_domain_finding(audit):
-    result = audit(_zone_with_spamhaus_refusal(), DOMAIN)
-
-    for name in ("Blocklist", "Certificate Transparency"):
-        card = _card(result, name)
-        explanation = card["explanation"].lower()
-        assert "this audit" in explanation or "cannot complete here" in explanation, (
-            f"{name}: the card must say the audit did not run the check, "
-            f"rather than implying something about the domain"
-        )
-        # No fix can be offered for something the domain did not do wrong.
-        assert not card.get("fix")
 
 
 def test_an_unavailable_check_counts_as_neither_pass_warn_nor_fail(audit):
     """The PDF cover and the executive summary tally these three. An
     unavailable check must fall outside all of them rather than pad one."""
-    result = audit(_zone_with_spamhaus_refusal(), DOMAIN)
+    result = audit(FakeZone(dict(BASE)), DOMAIN)
     checks = result["checks"]
 
     counted = sum(1 for c in checks if c["status"] in ("pass", "warn", "fail"))
     unavailable = [c["name"] for c in checks if c["status"] == "unavailable"]
 
-    # DKIM joined these two under Doc 15, by a different route: its lookups
-    # complete and still cannot settle the question, because selectors are not
-    # enumerable from DNS. The zone above publishes no DKIM key, so probing
-    # here finds nothing and the card reports that it could not confirm rather
-    # than asserting an absence it did not establish.
-    assert set(unavailable) == {"Blocklist", "Certificate Transparency", "DKIM"}
+    # DKIM joined Certificate Transparency under Doc 15, by a different route:
+    # its lookups complete and still cannot settle the question, because
+    # selectors are not enumerable from DNS. Blocklist left the set entirely
+    # under Doc 17 item 7, along with the check itself.
+    assert set(unavailable) == {"Certificate Transparency", "DKIM"}
     assert counted == len(checks) - len(unavailable)
 
 
-def test_a_real_listing_still_fails(audit):
-    """The refusal handling must not swallow a genuine Spamhaus listing."""
-    zone = FakeZone(dict(BASE))
-    zone.add(f"{DOMAIN}.dbl.spamhaus.org", "A", ["127.0.1.2"])  # spam domain
-
-    card = _card(audit(zone, DOMAIN), "Blocklist")
-    assert card["status"] == "fail"
-    assert "listed" in card["verdict"].lower()
 
 
-def test_a_clean_lookup_still_passes(audit):
-    """And a domain that is genuinely absent from the list still passes."""
-    card = _card(audit(FakeZone(dict(BASE)), DOMAIN), "Blocklist")
-    assert card["status"] == "pass"
-    assert card["pill_label"] == "Clean"
 
 
-def test_blocklist_with_no_results_at_all_is_not_a_pass():
-    """The empty-results branch said status "pass" in one field and "could
-    not be completed" in the next, and its pass counted toward the tally on
-    the PDF cover for a check that assessed nothing.
-
-    It was hard to reach while a failed DNSBL query was recorded as a clean
-    result. Now that a failed query produces no result at all, an entirely
-    unreachable blocklist lands here, so the branch is exercised directly.
-    """
-    from result_transformer import transform_blacklist
-
-    card = transform_blacklist({
-        "check": "Blocklist",
-        "domain": DOMAIN,
-        "domain_checked": DOMAIN,
-        "domain_results": [],
-        "ip_results": [],
-        "total_listings": 0,
-        "issues": [],
-        "status": "ok",
-    }, DOMAIN)
-
-    assert card["status"] == "unavailable", (
-        f"a check with no results assessed nothing about the domain. Got "
-        f"status={card['status']!r} explanation={card['explanation']!r}"
-    )
-    assert card["status"] != "pass"
-    assert card["pill_label"] == "Not checked"
-    assert "not assessed" in card["explanation"].lower()
-    assert not card.get("fix")
