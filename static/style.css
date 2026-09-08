@@ -198,6 +198,12 @@
     /* DMARCbis — distinctive teal, the star accent */
     --dmarcbis: #2dd4bf;
     --dmarcbis-contrast: #0a2d28;
+    /* Muted text sitting on a raised or tinted panel rather than the page
+       ground. --text-muted is 3.5:1 there, which is where the strip pills,
+       the spec check codes and the verdict reasons all live. */
+    --text-muted-raised: #adbaca;
+    --pass-contrast: #06210f;
+    --ttl-long-text: #a78bfa;
     --dmarcbis-bg: rgba(45, 212, 191, 0.1);
     --dmarcbis-border: rgba(45, 212, 191, 0.25);
 
@@ -4556,7 +4562,7 @@ body {
     gap: 0.4rem;
     padding: 0.6rem 1.25rem;
     background: var(--dmarcbis);
-    color: #111;
+    color: var(--dmarcbis-contrast);
     font-size: var(--font-sm);
     font-weight: 600;
     border-radius: 8px;
@@ -4667,7 +4673,7 @@ body {
     padding: 0.1rem 0.4rem;
     border-radius: 4px;
     background: var(--dmarcbis);
-    color: #111;
+    color: var(--dmarcbis-contrast);
     letter-spacing: 0.03em;
 }
 .dbis-tag-badge-dep {
@@ -5168,7 +5174,7 @@ body {
     padding: 0.1rem 0.35rem;
     background: rgba(255, 255, 255, 0.05);
     border-radius: 3px;
-    color: var(--text-muted);
+    color: var(--text-muted-raised);
 }
 
 .dk-tag code {
@@ -5279,7 +5285,7 @@ body {
 
 .spfd-cost-zero {
     background: rgba(255, 255, 255, 0.05);
-    color: var(--text-muted);
+    color: var(--text-muted-raised);
 }
 
 .spfd-provider {
@@ -5516,7 +5522,7 @@ body {
 .sua-toggle {
     font-size: var(--font-xs);
     font-weight: 600;
-    color: var(--primary);
+    color: var(--primary-light);
     cursor: pointer;
     list-style: none;
     padding: 0.4rem 0;
@@ -5678,7 +5684,7 @@ body {
     padding: 0.3rem 0.75rem;
     border: none;
     background: transparent;
-    color: var(--text-muted);
+    color: var(--text-muted-raised);
     cursor: pointer;
     border-radius: 100px;
     transition: all 0.2s;
@@ -5692,7 +5698,7 @@ body {
 
 .st-pill-active.st-pill-dmarcbis {
     background: var(--dmarcbis);
-    color: #0a2d28;
+    color: var(--dmarcbis-contrast);
 }
 
 .st-pill-active.st-pill-legacy {
@@ -5759,7 +5765,7 @@ body {
     background: rgba(255, 255, 255, 0.06);
     padding: 0.05rem 0.35rem;
     border-radius: 3px;
-    color: var(--text-muted);
+    color: var(--text-muted-raised);
     flex-shrink: 0;
 }
 
@@ -5803,7 +5809,7 @@ body {
 
 .sv-badge {
     background: var(--dmarcbis);
-    color: #0a2d28;
+    color: var(--dmarcbis-contrast);
     font-size: var(--font-xs);
     font-weight: 700;
     padding: 0.15rem 0.5rem;
@@ -5883,7 +5889,7 @@ body {
 .sv-check-code {
     font-family: var(--font-mono);
     font-size: var(--font-xs);
-    color: var(--text-muted);
+    color: var(--text-muted-raised);
     background: rgba(255, 255, 255, 0.05);
     padding: 0.05rem 0.3rem;
     border-radius: 3px;
@@ -5968,17 +5974,17 @@ body {
     background: rgba(255, 255, 255, 0.06);
     padding: 0.1rem 0.45rem;
     border-radius: 3px;
-    color: var(--text-muted);
+    color: var(--text-muted-raised);
 }
 
 .rb-verdict-ready { background: rgba(16, 185, 129, 0.15); }
-.rb-verdict-ready .rb-verdict-label { background: var(--pass); color: #fff; }
+.rb-verdict-ready .rb-verdict-label { background: var(--pass); color: var(--pass-contrast); }
 
 .rb-verdict-compatible { background: var(--primary-subtle); }
-.rb-verdict-compatible .rb-verdict-label { background: var(--primary); color: #fff; }
+.rb-verdict-compatible .rb-verdict-label { background: var(--primary-solid); color: #fff; }
 
 .rb-verdict-monitoring { background: var(--warn-bg); }
-.rb-verdict-monitoring .rb-verdict-label { background: #e67e22; color: #fff; }
+.rb-verdict-monitoring .rb-verdict-label { background: var(--warn); color: var(--warn-contrast); }
 
 .rb-verdict-attention { background: var(--warn-bg); }
 .rb-verdict-attention .rb-verdict-label { background: var(--warn); color: #1a1a1a; }
@@ -6036,7 +6042,6 @@ body {
 .rb-default-label {
     font-size: var(--font-xs);
     font-style: italic;
-    opacity: 0.7;
 }
 
 .rb-absent {
@@ -6117,7 +6122,7 @@ body {
 
 .rb-chain-inactive {
     background: rgba(255, 255, 255, 0.05);
-    color: var(--text-muted);
+    color: var(--text-muted-raised);
     text-decoration: line-through;
 }
 
@@ -6173,7 +6178,7 @@ body {
     background: rgba(255, 255, 255, 0.08);
     padding: 0.05rem 0.35rem;
     border-radius: 3px;
-    color: var(--text-muted);
+    color: var(--text-muted-raised);
 }
 
 .rb-cw-text {
@@ -6198,7 +6203,7 @@ body {
 .rb-bis-note-label {
     font-weight: 700;
     font-size: var(--font-xs);
-    color: var(--text-inverse);
+    color: var(--dmarcbis-contrast);
     background: var(--dmarcbis);
     padding: 0.05rem 0.35rem;
     border-radius: 3px;
@@ -6392,7 +6397,7 @@ body {
 .mw-record-text {
     font-family: var(--font-mono);
     font-size: var(--font-xs);
-    color: #e6edf3;
+    color: var(--text-primary);
     white-space: nowrap;
 }
 
@@ -6402,7 +6407,7 @@ body {
     background: rgba(255, 255, 255, 0.06);
     padding: 0.05rem 0.3rem;
     border-radius: 3px;
-    color: var(--text-muted);
+    color: var(--text-muted-raised);
     margin-left: 0.2rem;
 }
 
@@ -6469,7 +6474,7 @@ body {
 
 .dbis-badge {
     background: var(--dmarcbis);
-    color: #0a2d28;
+    color: var(--dmarcbis-contrast);
     font-size: var(--font-xs);
     font-weight: 700;
     padding: 0.15rem 0.5rem;
@@ -6858,7 +6863,6 @@ body {
     font-size: 0.75rem;
     color: var(--fail-text);
     text-decoration: line-through;
-    opacity: 0.8;
 }
 
 .rcb-val-new {
@@ -6898,7 +6902,7 @@ body {
 
 .rcb-result-record .copy-btn {
     background: var(--dmarcbis);
-    color: #111;
+    color: var(--dmarcbis-contrast);
     border-color: var(--dmarcbis);
     font-weight: 700;
 }
@@ -6906,13 +6910,13 @@ body {
 .rcb-result-record .copy-btn:hover {
     opacity: 0.85;
     border-color: var(--dmarcbis);
-    color: #111;
+    color: var(--dmarcbis-contrast);
 }
 
 .rcb-result-record .copy-btn.copied {
     background: var(--pass);
     border-color: var(--pass);
-    color: #fff;
+    color: var(--pass-contrast);
 }
 
 /* ── Deploy instructions ────────────────────────────────── */
@@ -7139,18 +7143,18 @@ body {
     border-color: #f59e0b44;
     background: #f59e0b0a;
 }
-.ttl-very-short .ttl-value { color: #f59e0b; }
+.ttl-very-short .ttl-value { color: var(--warn); }
 .ttl-short {
     border-color: #3b82f644;
     background: #3b82f60a;
 }
-.ttl-short .ttl-value { color: #3b82f6; }
+.ttl-short .ttl-value { color: var(--primary-light); }
 .ttl-standard .ttl-value { color: var(--text-secondary); }
 .ttl-long {
     border-color: #8b5cf644;
     background: #8b5cf60a;
 }
-.ttl-long .ttl-value { color: #8b5cf6; }
+.ttl-long .ttl-value { color: var(--ttl-long-text); }
 
 /* Change Detection Section */
 .cd-section {
@@ -7393,6 +7397,9 @@ body {
         --fix-border: #16a34a;
         --dmarcbis: #0f766e;
         --dmarcbis-contrast: #ffffff;
+        --text-muted-raised: #556373;
+        --pass-contrast: #ffffff;
+        --ttl-long-text: #6d28d9;
         --dmarcbis-bg: rgba(15, 118, 110, 0.08);
         --dmarcbis-border: rgba(15, 118, 110, 0.2);
         --shadow-sm: 0 1px 3px rgba(0, 0, 0, 0.08);
@@ -7442,15 +7449,15 @@ body {
     }
 
     :where(html:not([data-theme="dark"])) .rec-safe {
-        color: #16a34a;
+        color: #137436;
     }
 
     :where(html:not([data-theme="dark"])) .rec-neutral {
-        color: #d97706;
+        color: #a84d08;
     }
 
     :where(html:not([data-theme="dark"])) .rec-warn {
-        color: #ea580c;
+        color: #c2410c;
     }
 
     :where(html:not([data-theme="dark"])) .rec-danger {
@@ -7458,13 +7465,13 @@ body {
     }
 
     :where(html:not([data-theme="dark"])) .rec-muted {
-        color: #94a3b8;
+        color: #5b6879;
     }
 
     :where(html:not([data-theme="dark"])) .copy-btn {
         background: #f1f5f9;
         border-color: var(--border);
-        color: #64748b;
+        color: #556373;
     }
 
     :where(html:not([data-theme="dark"])) .copy-btn:hover {
@@ -7654,6 +7661,9 @@ body {
     --fix-border: #16a34a;
     --dmarcbis: #0f766e;
     --dmarcbis-contrast: #ffffff;
+    --text-muted-raised: #556373;
+    --pass-contrast: #ffffff;
+    --ttl-long-text: #6d28d9;
     --dmarcbis-bg: rgba(15, 118, 110, 0.08);
     --dmarcbis-border: rgba(15, 118, 110, 0.2);
     --shadow-sm: 0 1px 3px rgba(0, 0, 0, 0.08);
@@ -7703,15 +7713,15 @@ body {
 }
 
 :where(html[data-theme="light"]) .rec-safe {
-    color: #16a34a;
+    color: #137436;
 }
 
 :where(html[data-theme="light"]) .rec-neutral {
-    color: #d97706;
+    color: #a84d08;
 }
 
 :where(html[data-theme="light"]) .rec-warn {
-    color: #ea580c;
+    color: #c2410c;
 }
 
 :where(html[data-theme="light"]) .rec-danger {
@@ -7719,13 +7729,13 @@ body {
 }
 
 :where(html[data-theme="light"]) .rec-muted {
-    color: #94a3b8;
+    color: #5b6879;
 }
 
 :where(html[data-theme="light"]) .copy-btn {
     background: #f1f5f9;
     border-color: var(--border);
-    color: #64748b;
+    color: #556373;
 }
 
 :where(html[data-theme="light"]) .copy-btn:hover {
@@ -8073,46 +8083,6 @@ body {
     padding: 0.1rem 0.3rem;
     border-radius: var(--radius-sm);
     border: 1px solid var(--border);
-}
-
-/* ==========================================================================
-   Lazy Load Skeleton (Prompt 3)
-   ========================================================================== */
-
-.result-card-skeleton {
-    background: var(--surface);
-    border-radius: var(--radius-lg);
-    padding: var(--space-lg);
-    border: 1px solid var(--border);
-    margin-bottom: var(--space-md);
-    min-height: 80px;
-}
-
-.skeleton-bar {
-    background: linear-gradient(90deg, var(--border) 25%, var(--surface-hover) 50%, var(--border) 75%);
-    background-size: 200% 100%;
-    animation: shimmer 1.5s infinite;
-    border-radius: var(--radius-sm);
-    height: 0.75rem;
-    margin-bottom: 0.5rem;
-}
-
-.skeleton-title {
-    width: 35%;
-    height: 1rem;
-}
-
-.skeleton-body {
-    width: 80%;
-}
-
-.skeleton-body.short {
-    width: 55%;
-}
-
-@keyframes shimmer {
-    0% { background-position: -200% 0; }
-    100% { background-position: 200% 0; }
 }
 
 /* ==========================================================================

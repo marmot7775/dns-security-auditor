@@ -774,9 +774,13 @@ function renderResults(data) {
         });
     }
 
-    // Prompt 3: Lazy load -- render first 4 cards immediately, rest via IntersectionObserver
-    const EAGER_COUNT = 4;
-
+    // Every card is built here, not lazily. Deferring the cards below the
+    // fold to an IntersectionObserver saved 274 nodes out of 1585 and about
+    // 3 MB of heap, which is nothing, and it broke four things that all read
+    // the DOM: Expand All and Copy All Records silently skipped the cards
+    // that had not been built, find-in-page could not find "DNSSEC" on a page
+    // reporting DNSSEC, and a screen reader met eight empty boxes. A card
+    // that exists only after you scroll past it is not in the document.
     checks.forEach((check, i) => {
         // Attach tree walk + DMARC eval + subdomain audit data to the DMARC check
         if ((check.name || '').toUpperCase().includes('DMARC') && data.tree_walk) {
@@ -823,52 +827,12 @@ function renderResults(data) {
             }
         }
 
-        if (i < EAGER_COUNT) {
-            const card = createResultCard(check, i);
-            resultsList.appendChild(card);
-        } else {
-            // Create a skeleton placeholder
-            const placeholder = document.createElement('div');
-            placeholder.className = 'result-card-skeleton';
-            placeholder.dataset.checkIndex = i;
-            placeholder.innerHTML = `
-                <div class="skeleton-bar skeleton-title"></div>
-                <div class="skeleton-bar skeleton-body"></div>
-                <div class="skeleton-bar skeleton-body short"></div>
-            `;
-            placeholder._checkData = check;
-            placeholder._checkIndex = i;
-            resultsList.appendChild(placeholder);
-        }
+        resultsList.appendChild(createResultCard(check, i));
     });
 
-    // IntersectionObserver for lazy-loaded cards
-    if ('IntersectionObserver' in window) {
-        const lazyObserver = new IntersectionObserver((entries) => {
-            entries.forEach(entry => {
-                if (entry.isIntersecting) {
-                    const placeholder = entry.target;
-                    const check = placeholder._checkData;
-                    const idx = placeholder._checkIndex;
-                    if (check) {
-                        const card = createResultCard(check, idx);
-                        placeholder.parentNode.replaceChild(card, placeholder);
-                    }
-                    lazyObserver.unobserve(placeholder);
-                }
-            });
-        }, { rootMargin: '200px' });
-
-        resultsList.querySelectorAll('.result-card-skeleton').forEach(el => {
-            lazyObserver.observe(el);
-        });
-    } else {
-        // Fallback: render all immediately
-        resultsList.querySelectorAll('.result-card-skeleton').forEach(el => {
-            const card = createResultCard(el._checkData, el._checkIndex);
-            el.parentNode.replaceChild(card, el);
-        });
-    }
+    // Cards render mixed: passing ones collapsed, failures, warnings and DMARC
+    // expanded. The button has to say what the next click will do.
+    syncToggleAllLabel();
 
     // Vendors
     const vendorsSection = document.getElementById('vendors-section');
@@ -3126,20 +3090,29 @@ document.getElementById('pdf-btn').addEventListener('click', () => {
 
 (() => {
     const toggleBtn = document.getElementById('toggle-all-btn');
-    let allExpanded = false;
 
     toggleBtn.addEventListener('click', () => {
-        // Sync state with actual DOM before toggling
         const cards = document.querySelectorAll('.result-card');
-        const expandedCount = document.querySelectorAll('.result-card.expanded').length;
-        allExpanded = expandedCount > cards.length / 2;
-        allExpanded = !allExpanded;
+        const expand = !majorityExpanded();
         cards.forEach(card => {
-            card.classList.toggle('expanded', allExpanded);
+            card.classList.toggle('expanded', expand);
+            const header = card.querySelector('.result-header');
+            if (header) header.setAttribute('aria-expanded', expand ? 'true' : 'false');
         });
-        toggleBtn.querySelector('span').textContent = allExpanded ? 'Collapse All' : 'Expand All';
+        syncToggleAllLabel();
     });
 })();
+
+function majorityExpanded() {
+    const cards = document.querySelectorAll('.result-card');
+    if (!cards.length) return false;
+    return document.querySelectorAll('.result-card.expanded').length > cards.length / 2;
+}
+
+function syncToggleAllLabel() {
+    const span = document.querySelector('#toggle-all-btn span');
+    if (span) span.textContent = majorityExpanded() ? 'Collapse All' : 'Expand All';
+}
 
 // ============================================================
 // Copy All Records
@@ -3147,9 +3120,16 @@ document.getElementById('pdf-btn').addEventListener('click', () => {
 
 document.getElementById('copy-all-btn').addEventListener('click', () => {
     const records = [];
-    document.querySelectorAll('.record-text').forEach(el => {
+    // Only the record a card reports as published, which is the .record-block
+    // sitting directly in the card body. The same .record-text class is also
+    // used for records this tool is suggesting: the migration wizard target,
+    // the record builder output and the RFC 9989 readiness suggestion. Those
+    // are not in the domain's DNS. Copying them under a button labelled "Copy
+    // All Records" hands someone a policy they never published, mixed in with
+    // ones they did, with nothing to tell the two apart.
+    document.querySelectorAll('.result-body-inner > .record-block .record-text').forEach(el => {
         const text = el.textContent.trim();
-        if (text) records.push(text);
+        if (text && !records.includes(text)) records.push(text);
     });
     if (records.length === 0) {
         records.push('No DNS records found.');
