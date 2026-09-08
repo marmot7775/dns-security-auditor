@@ -600,7 +600,7 @@ def build_security_roadmap(checks: List[Dict], is_no_mail: bool = False) -> Dict
     if dkim_deep and dkim_deep.get("has_weak"):
         items.append({"priority": "high", "protocol": "DKIM",
                       "action": "Rotate weak DKIM keys to 2048-bit",
-                      "impact": "Weak keys can be factored, allowing forged DKIM signatures."})
+                      "impact": "These keys are below current recommendations and should be rotated."})
 
     # SPF near limit
     spf_deep = spf.get("spf_deep", {})
@@ -4726,7 +4726,7 @@ def transform_dkim(raw: Dict, domain: str, has_mx: bool = True, non_mail: bool =
             f"{sel} ({bits}-bit)" if bits else sel for sel, bits in weak_keys
         )
         fix = (
-            f"The following selectors use RSA keys below the 2048-bit minimum: "
+            f"The following selectors use RSA keys below the recommended 2048 bits: "
             f"<strong>{_e(_sized)}</strong>. "
             f"Key rotation is provider-specific. Check your email provider's documentation "
             f"for how to generate and publish a new 2048-bit or Ed25519 key pair."

@@ -240,8 +240,8 @@ BUSINESS_RISK = {
         "verify your signatures and your mail is more likely to land in spam."
     ),
     "DKIM_WEAK_KEY": (
-        "A 1024-bit DKIM key can be cracked with current resources, allowing "
-        "attackers to forge signed mail that appears genuinely from your domain."
+        "This key is below the RSA size RFC 8301 recommends and should be "
+        "rotated to 2048 bits or an Ed25519 key."
     ),
     "DKIM_REVOKED_KEY": (
         "An empty p= tag is how RFC 6376 revokes a key. Leaving the record "

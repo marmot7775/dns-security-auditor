@@ -1672,7 +1672,7 @@ if __name__ == "__main__":
                 {"priority": "critical", "protocol": "DMARC", "action": "Progress from p=none to enforcement",
                  "impact": "Domain is in monitoring mode. Spoofed mail is still delivered."},
                 {"priority": "high", "protocol": "DKIM", "action": "Rotate weak DKIM keys to 2048-bit",
-                 "impact": "Weak keys can be factored, allowing forged DKIM signatures."},
+                 "impact": "These keys are below current recommendations and should be rotated."},
                 {"priority": "medium", "protocol": "MTA-STS", "action": "Configure MTA-STS for TLS enforcement",
                  "impact": "Without MTA-STS, email encryption can be silently stripped."},
                 {"priority": "low", "protocol": "BIMI", "action": "Consider adding BIMI for brand visibility",
