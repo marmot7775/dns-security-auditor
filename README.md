@@ -18,7 +18,7 @@ Built for engineers, email administrators, and security consultants who need to 
 |-------|-------------|
 | **DMARC + RFC 9989** | RFC 9989-strict record validation (16 layered checks), tag-by-tag decoder with RFC 9989 education notes, dangerous combination detection (21 checks across 3 severity levels), 5-state RFC 9989 health verdict, personalized migration wizard, attack surface visualization (4 spoofing vectors), RFC 7489 vs RFC 9989 spec mode toggle with delta view, "Why RFC 9989?" education section. Implements the RFC 9989 DNS Tree Walk ([RFC 9989](https://www.rfc-editor.org/rfc/rfc9989.html), Section 4.10) for hierarchical policy discovery with animated visualization. |
 | **SPF** | Syntax validation, mechanism analysis, recursive evaluation with full lookup chain tracing, void lookup detection, and vendor-labeled include tree visualization. Flags `+all`, `?all`, missing `all`, `redirect`+`all` conflicts, deprecated `ptr`, overly broad CIDRs, and invalid IPs. |
-| **DKIM** | Selector discovery across 1,100+ common patterns using SPF-based vendor fingerprinting. Key strength analysis for RSA (1024/2048/4096) and Ed25519. Key rotation age estimation. Direct lookup of user-supplied selectors. Wildcard DNS detection prevents false positives. |
+| **DKIM** | Selector discovery across 1,100+ common patterns using SPF-based vendor fingerprinting. Key strength analysis for RSA (1024/2048/4096) and Ed25519. Direct lookup of user-supplied selectors. Wildcard DNS detection prevents false positives. |
 
 ### Mail and Transport
 
@@ -147,7 +147,6 @@ Stateless single-page application with a FastAPI backend. No database, no user a
 server.py                  FastAPI, SSE streaming, rate limiting, caching, PDF endpoint
 audit_engine.py            Check orchestration, parallel execution with timeouts
 result_transformer.py      Raw results to frontend card format
-security_scoring.py        Weighted scoring and letter grading
 pdf_report.py              reportlab-based PDF generation
 dmarc_tree_walk.py         RFC 9989 Section 4.10 tree walk
 spf_recursive.py           Recursive SPF lookup counter
@@ -169,12 +168,11 @@ static/
 ```
 GET /api/audit?domain=example.com              JSON response
 GET /api/audit/stream?domain=example.com       SSE streaming
-GET /api/audit/pdf?domain=example.com          PDF download
+GET /api/audit/{domain}/pdf                    PDF download
 GET /api/health                                Health check (verifies DNS resolution)
-GET /docs                                      Swagger UI
 ```
 
-Optional parameters: `selector`, `scope`, `nocache=true`.
+Optional parameters: `selector`, `scope`.
 
 Rate limited to 10 requests per IP per minute. Results cached for 5 minutes.
 

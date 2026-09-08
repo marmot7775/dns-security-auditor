@@ -53,7 +53,7 @@ dns-security-auditor/
 dns_auditor/
 dns_auditor_backup/
 
-# Shell scripts (project uses Procfile)
+# Local helper shell scripts, never part of the deploy
 doitall.sh
 project-fixup.sh
 run.sh
