@@ -383,11 +383,18 @@ def build_executive_summary(checks: List[Dict], roadmap: Dict) -> Dict:
             f"biggest risk. The {unread_names} {unread_verb} not complete. Re-run the audit "
             "once the nameservers are answering."
         )
-    elif roadmap_items:
-        top = roadmap_items[0]
-        biggest_risk = top.get("impact", top.get("action", ""))
     else:
-        biggest_risk = "No urgent risks found. See the roadmap below for optimization opportunities."
+        # A low-priority item (an optional nicety like an explicit np= tag)
+        # floating to the top of an otherwise-empty roadmap is the same
+        # failure mode as the auth_unavailable case above: presenting it as
+        # "the biggest risk" implies real risks were weighed and lost, when
+        # none were found at all.
+        risk_candidates = [i for i in roadmap_items if i.get("priority") != "low"]
+        if risk_candidates:
+            top = risk_candidates[0]
+            biggest_risk = top.get("impact", top.get("action", ""))
+        else:
+            biggest_risk = "No urgent risks found. See the roadmap below for optimization opportunities."
 
     # ── Part 4: has_record_builder flag ──────────────────────
     has_record_builder = dmarc.get("record_builder") is not None
@@ -488,7 +495,7 @@ def build_executive_summary(checks: List[Dict], roadmap: Dict) -> Dict:
     # "No urgent risks found" and around the neutral could-not-read message.
     if auth_unavailable and not _urgent:
         biggest_risk_severity = "unknown"
-    elif roadmap_items:
+    elif risk_candidates:
         biggest_risk_severity = top.get("priority", "medium")
     else:
         biggest_risk_severity = "none"
