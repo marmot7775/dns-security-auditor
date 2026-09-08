@@ -232,6 +232,47 @@ def test_google_com_resilience_does_not_claim_broad_dkim_coverage(google_result)
 
 
 # ---------------------------------------------------------------
+# The operator named the selector: no probing happened
+# ---------------------------------------------------------------
+
+def test_a_named_selector_that_is_retired_does_not_hedge_about_probing(audit):
+    """Doc 15 carves the manual path out because the operator asserted the
+    name. That cuts both ways: nothing was probed and nothing was guessed, so
+    the not-enumerable hedge is as false here as the old "publish a DKIM
+    record" advice was. This audit did settle the question for the name it was
+    given."""
+    zone = _zone({"20230601": GOOGLE_REVOKED["20230601"]})
+    card = _card(audit(zone, DOMAIN, scope="email_full", dkim_selector="20230601"))
+
+    text = _text(card)
+    assert "probing" not in text, f"nothing was probed: {text!r}"
+    assert "did not guess" not in text, f"nothing was guessed: {text!r}"
+    assert "cannot be enumerated" not in text
+
+    assert card["status"] == "warn", (
+        f"the record is correctly published, so not a fail; the question was "
+        f"answered, so not unconfirmed; got {card['status']!r}"
+    )
+    assert card["pill_label"] == "Retired"
+    assert "20230601" in card["verdict"]
+    assert "fails dkim" in text, (
+        "the consequence for mail still signed with this selector is the whole "
+        "point of answering a named selector"
+    )
+    assert "s=" in card["fix"], "the fix must point at the header that settles it"
+
+
+def test_a_named_selector_that_does_not_resolve_is_unchanged(audit):
+    """The carve-out in the doc: this path keeps its existing handling."""
+    card = _card(audit(_zone(GOOGLE_REVOKED), DOMAIN, scope="email_full",
+                       dkim_selector="nosuch"))
+
+    assert card["status"] == "fail"
+    assert card["pill_label"] == "Not found"
+    assert "nosuch" in card["verdict"]
+
+
+# ---------------------------------------------------------------
 # Outcome C: nothing found
 # ---------------------------------------------------------------
 

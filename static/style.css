@@ -5112,6 +5112,10 @@ body {
 .dk-rating-green { border-left: 3px solid var(--pass); }
 .dk-rating-amber { border-left: 3px solid var(--warn); }
 .dk-rating-red { border-left: 3px solid var(--fail); }
+/* A retired key (empty p=, RFC 6376 3.6.1) is correctly published, so it takes
+   the same neutral grey as .status-dot.unavailable rather than a verdict
+   colour. Without this rule the row rendered with no stripe at all. */
+.dk-rating-neutral { border-left: 3px solid var(--text-secondary); }
 
 .dk-key-header {
     display: flex;
@@ -5420,6 +5424,9 @@ body {
 .as-badge-green { background: var(--pass-bg); color: var(--pass); }
 .as-badge-amber { background: var(--warn-bg); color: var(--warn); }
 .as-badge-red { background: var(--fail-bg); color: var(--fail); }
+/* Same neutral pair as .status-pill.unavailable: 5.7:1 on dark, 6.9:1 on
+   light. Used by the "Retired" badge on a revoked DKIM key. */
+.as-badge-neutral { background: var(--border-light); color: var(--text-secondary); }
 
 .as-vector-summary {
     font-size: var(--font-xs);

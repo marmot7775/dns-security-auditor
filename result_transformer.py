@@ -83,7 +83,12 @@ def _lookup_unavailable_card(name: str, raw: Dict, subject: str) -> Dict:
         # different prose above the card: a lookup that never completed, and a
         # lookup that completed but cannot settle the question (DKIM selector
         # probing). Readers branch on this rather than on the pill text.
-        "unavailable_reason": "lookup_failed",
+        #
+        # Deliberately not "unavailable_reason": raw results already use that
+        # key with an unrelated vocabulary ("dns_lookup_failed", "timeout",
+        # "response_too_large"), and one name over two vocabularies means a
+        # reader holding either dict cannot tell which it has.
+        "unavailable_kind": "lookup_failed",
     }
 
 
@@ -154,10 +159,10 @@ def build_executive_summary(checks: List[Dict], roadmap: Dict) -> Dict:
     def _unavailable(name):
         card = check_map.get(name, {})
         return (card.get("status") == "unavailable"
-                and card.get("unavailable_reason") != "not_enumerable")
+                and card.get("unavailable_kind") != "not_enumerable")
 
     def _unconfirmed(name):
-        return check_map.get(name, {}).get("unavailable_reason") == "not_enumerable"
+        return check_map.get(name, {}).get("unavailable_kind") == "not_enumerable"
 
     dmarc_unavailable = _unavailable("DMARC")
     spf_unavailable = _unavailable("SPF")
@@ -622,9 +627,9 @@ def build_security_roadmap(checks: List[Dict], is_no_mail: bool = False) -> Dict
     _ROADMAP_PROTOCOLS = ("DMARC", "SPF", "DKIM", "MTA-STS", "TLS-RPT", "DANE", "BIMI")
     unread = [n for n in _ROADMAP_PROTOCOLS
               if check_map.get(n, {}).get("status") == "unavailable"
-              and check_map.get(n, {}).get("unavailable_reason") != "not_enumerable"]
+              and check_map.get(n, {}).get("unavailable_kind") != "not_enumerable"]
     unconfirmed = [n for n in _ROADMAP_PROTOCOLS
-                   if check_map.get(n, {}).get("unavailable_reason") == "not_enumerable"]
+                   if check_map.get(n, {}).get("unavailable_kind") == "not_enumerable"]
     not_run = [n for n in _ROADMAP_PROTOCOLS if n not in check_map]
 
     _unconfirmed_note = (
@@ -4340,6 +4345,55 @@ def transform_dkim(raw: Dict, domain: str, has_mx: bool = True, non_mail: bool =
                 "deliverability": None,
             }
 
+        # The operator named a selector and it resolved, revoked. Nothing was
+        # probed and nothing was guessed, so the hedging below would be false
+        # in both directions: this audit did settle the question for the name
+        # it was given, and the answer is that the key is gone. The record is
+        # still correctly published, so this is not a fail; the finding is the
+        # gap between what the operator asserted and what is live.
+        _queried = raw.get("selector_queried")
+        if revoked and _queried:
+            _sel = revoked[0].get("selector", _queried)
+            _q_details = _dkim_retired_detail(revoked, BUSINESS_RISK.get("DKIM_REVOKED_KEY"))
+            _q_details.append({
+                "type": "warning",
+                "text": (
+                    f"Any message signed with s={_sel} fails DKIM at every receiver, "
+                    "because there is no key to verify it against"
+                ),
+            })
+            _q_details.append(dict(_DKIM_HOW_TO_SETTLE[1]))
+            for issue in raw.get("issues", []):
+                _q_details.append(_issue_to_detail(issue))
+            return {
+                "name": "DKIM",
+                "status": "warn",
+                "pill_label": "Retired",
+                "verdict": f"Selector '{_sel}' is published but retired",
+                "record": None,
+                "explanation": (
+                    f"<strong>{_e(_sel)}._domainkey.{_e(domain)}</strong> exists and "
+                    "publishes an empty <strong>p=</strong>, which per "
+                    "<a href=\"https://datatracker.ietf.org/doc/html/rfc6376#section-3.6.1\" "
+                    "target=\"_blank\" rel=\"noopener\">RFC 6376 section 3.6.1</a> means the "
+                    "key has been revoked. Publishing the record this way is the correct "
+                    "way to retire a key, so nothing is misconfigured in DNS. It does mean "
+                    "this selector signs nothing. If your mail server still signs with it, "
+                    "those signatures fail everywhere."
+                ),
+                "details": _q_details,
+                "fix": (
+                    f"Check which selector your mail server actually signs with, using the "
+                    f"s= value in the DKIM-Signature header of a message you sent. If it is "
+                    f"still <strong>{_e(_sel)}</strong>, the key was revoked and needs to be "
+                    f"republished or the server pointed at the live selector. If it is a "
+                    f"different name, re-run this audit with that name."
+                ),
+                "fix_records": None,
+                "dkim_deep": _build_dkim_key_analysis(raw),
+                "deliverability": None,
+            }
+
         # Outcome B: retired keys and nothing live. Neither a pass nor a
         # finding, so it drops out of the pass/warn/fail tallies rather than
         # padding one of them with something the domain did right.
@@ -4379,7 +4433,7 @@ def transform_dkim(raw: Dict, domain: str, has_mx: bool = True, non_mail: bool =
                 "details": _retired_details,
                 "fix": None,
                 "fix_records": None,
-                "unavailable_reason": "not_enumerable",
+                "unavailable_kind": "not_enumerable",
                 "dkim_deep": _build_dkim_key_analysis(raw),
                 "deliverability": None,
             }
@@ -4414,7 +4468,7 @@ def transform_dkim(raw: Dict, domain: str, has_mx: bool = True, non_mail: bool =
             "details": _unknown_details,
             "fix": None,
             "fix_records": None,
-            "unavailable_reason": "not_enumerable",
+            "unavailable_kind": "not_enumerable",
             "deliverability": None,
         }
 
@@ -4533,9 +4587,11 @@ def transform_dkim(raw: Dict, domain: str, has_mx: bool = True, non_mail: bool =
     )
     if revoked:
         explanation += (
-            f" A further {len(revoked)} selector{'s' if len(revoked) != 1 else ''} "
-            f"publish{'' if len(revoked) != 1 else 'es'} an empty p=, which retires "
-            "that key correctly and is not a fault."
+            (f" A further {len(revoked)} selectors publish an empty p=, which retires "
+             "those keys correctly and is not a fault.")
+            if len(revoked) != 1 else
+            (" One further selector publishes an empty p=, which retires that key "
+             "correctly and is not a fault.")
         )
     if vendor_names:
         explanation += f" Sending providers detected: {', '.join(sorted(vendor_names))}."
