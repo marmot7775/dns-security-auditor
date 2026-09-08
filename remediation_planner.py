@@ -173,23 +173,14 @@ def build_remediation_plan(
             "check": "Blacklist",
         })
 
-    # Duplicate SPF records: a PermError, not an absent record.
-    if spf_multiple:
-        immediate.append({
-            "title": "Merge Duplicate SPF Records",
-            "description": (
-                f"This domain publishes {len(spf_multiple)} v=spf1 records. RFC 7208 "
-                "section 4.5 requires exactly one, and receivers return PermError "
-                "rather than choosing between them, so SPF provides no DMARC "
-                "alignment path at all. Combine every authorized source into a "
-                "single record with one all mechanism at the end."
-            ),
-            "effort": "low",
-            "impact": "high",
-            "check": "SPF",
-        })
-
-    # Missing SPF (only meaningful for mail-sending domains)
+    # Missing SPF (only meaningful for mail-sending domains).
+    #
+    # spf_multiple suppresses this rather than replacing it with a merge step.
+    # The bug was telling a domain with two records to publish one; saying
+    # nothing here is the fix for that. The card and the security roadmap both
+    # already carry the merge instruction, so the operator is not left without
+    # it, and adding a fourth place that says the same thing is new surface
+    # this pass is not for.
     if has_mx and not spf_record and not spf_multiple and not spf_unavailable:
         immediate.append({
             "title": "Publish SPF Record",

@@ -209,8 +209,11 @@ def test_multiple_spf_records_reach_every_layer_not_just_the_card():
     assert "Publish SPF Record" not in titles, (
         f"the plan told a domain with two SPF records to publish one: {titles}"
     )
-    assert "Merge Duplicate SPF Records" in titles, (
-        f"a PermError on every message has to appear in the plan: {titles}"
+    # Suppressed, not replaced: the card and the security roadmap already tell
+    # the operator to merge, and the defect here was the publish advice.
+    assert not any("SPF" in t for t in titles), (
+        f"the plan should stay silent on SPF rather than add a fourth copy of "
+        f"the merge instruction: {titles}"
     )
 
     resilience = audit_engine._build_resilience_analysis(
