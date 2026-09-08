@@ -5969,6 +5969,97 @@ def transform_dane(raw: Dict, domain: str) -> Dict:
             "ttl_info": format_ttl(raw.get("ttl")),
         }
 
+    # No TLSA, and the MX host belongs to someone else.
+    #
+    # RFC 7672 section 3 puts TLSA records at the MX host, so who operates that
+    # host decides whether the domain owner can act on this card at all. Telling
+    # an operator to "generate a TLSA record" for a name they do not control is
+    # advice they cannot follow, and a warning they cannot clear is information
+    # wearing a warning's colour.
+    _providers = raw.get("mx_providers") or []
+    _hosts = [h.lower() for h in (raw.get("mx_hostnames") or [])]
+
+    if any(p.startswith("Google Workspace") for p in _providers):
+        # Verified 2026-09-08: no TLSA at smtp.google.com, aspmx.l.google.com or
+        # alt1.aspmx.l.google.com, and google.com publishes no DS record. Google
+        # neither publishes TLSA for its MX hosts nor signs the zone they live
+        # in, so a Workspace-hosted domain cannot do DANE by any action of its
+        # own. MTA-STS is the transport protection that applies instead.
+        return {
+            "name": "DANE",
+            "status": "pass",
+            "pill_label": "N/A",
+            "verdict": "DANE is not available on Google Workspace",
+            "record": None,
+            "explanation": (
+                "DANE (<a href=\"https://datatracker.ietf.org/doc/html/rfc7672\" "
+                "target=\"_blank\" rel=\"noopener\">RFC 7672</a>) requires a TLSA record "
+                "published at the mail server's own hostname, inside a DNSSEC-signed zone. "
+                "This domain's mail is handled by Google Workspace, so those hostnames "
+                "belong to Google, and Google publishes no TLSA records for them. There is "
+                "nothing the domain owner can publish to change that. "
+                "MTA-STS is the transport protection that applies to this configuration."
+            ),
+            "details": [
+                {"type": "info", "text": "Mail is handled by Google Workspace, so the MX hostnames are not under this domain's control"},
+                {"type": "info", "text": "Google publishes no TLSA records for its Workspace MX hosts"},
+                {"type": "info", "text": "MTA-STS is the transport protection available here. See the MTA-STS card above."},
+            ],
+            "fix": None,
+            "fix_records": None,
+            "dane_deep": _build_dane_deep(tlsa_records, dnssec_ok),
+            "ttl_info": format_ttl(raw.get("ttl")),
+        }
+
+    _LEGACY_MS_MX = (
+        ".mail.protection.outlook.com",
+        ".mail.eo.outlook.com",
+        ".mail.protection.outlook.de",
+    )
+    if (any(p.startswith("Microsoft 365") for p in _providers)
+            and any(h.endswith(_LEGACY_MS_MX) for h in _hosts)):
+        # Microsoft supports inbound SMTP DANE, but not by the owner publishing
+        # TLSA: Exchange Online issues a new MX host under mx.microsoft and
+        # publishes the TLSA for it. Every step below is from Microsoft's "How
+        # SMTP DNS-based Authentication of Named Entities (DANE) works", section
+        # "Inbound SMTP DANE with DNSSEC", read 2026-09-08. Nothing here is
+        # inferred: the two-stage priority change in particular is theirs.
+        return {
+            "name": "DANE",
+            "status": "warn",
+            "pill_label": "Available, not enabled",
+            "verdict": "DANE is available through Exchange Online but not enabled",
+            "record": None,
+            "explanation": (
+                "DANE (<a href=\"https://datatracker.ietf.org/doc/html/rfc7672\" "
+                "target=\"_blank\" rel=\"noopener\">RFC 7672</a>) requires a TLSA record at "
+                "the mail server's hostname. This domain's mail is handled by Microsoft 365 "
+                "on a legacy MX host, so that record is Microsoft's to publish, not yours. "
+                "Exchange Online supports inbound SMTP DANE: you enable DNSSEC for the "
+                "domain, move the MX to the <strong>mx.microsoft</strong> host that "
+                "Exchange Online issues, and Microsoft publishes the TLSA records for it."
+            ),
+            "details": [
+                {"type": "info", "text": "Mail is handled by Microsoft 365 on a legacy mail.protection.outlook.com MX host"},
+                {"type": "info", "text": "Enable-DnssecForVerifiedDomain returns a new MX target ending in mx.microsoft; Microsoft publishes the TLSA records for that host"},
+                {"type": "warning", "text": "If this domain uses MTA-STS, set the policy mode to testing and update the policy id, then wait out max_age before changing the MX"},
+            ],
+            "fix": (
+                "In Exchange Online PowerShell, run <strong>Enable-DnssecForVerifiedDomain "
+                "-DomainName &lt;domain&gt;</strong>. It returns a DnssecMxValue ending in "
+                "<strong>mx.microsoft</strong>. Add that as a new MX record at priority 20, "
+                "verify it with the Remote Connectivity Analyzer inbound SMTP test, then set "
+                "the new record to priority 0 and the legacy record to 30 before deleting the "
+                "legacy MX. Finally run <strong>Enable-SmtpDaneInbound -DomainName "
+                "&lt;domain&gt;</strong>. Full procedure: "
+                "<a href=\"https://learn.microsoft.com/exchange/security-and-compliance/how-dane-secures-email\" "
+                "target=\"_blank\" rel=\"noopener\">How SMTP DANE works</a>."
+            ),
+            "fix_records": None,
+            "dane_deep": _build_dane_deep(tlsa_records, dnssec_ok),
+            "ttl_info": format_ttl(raw.get("ttl")),
+        }
+
     # No TLSA, has MX
     details = [
         {"type": "warning", "text": f"Checked {mx_checked} MX host{'s' if mx_checked != 1 else ''}, but no TLSA records found"},

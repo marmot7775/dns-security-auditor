@@ -3716,6 +3716,16 @@ def _raw_check_dane(domain: str, raw_results: Dict[str, Any]) -> Dict[str, Any]:
     raw_mx = raw_results.get("mx", {})
     mx_details = raw_mx.get("mx_details", [])
     mx_hosts = [d["hostname"] for d in mx_details if d.get("hostname") and d.get("resolved")]
+    # TLSA records live at the MX host (RFC 7672 section 3), so whoever
+    # operates that host decides whether the domain owner can publish them at
+    # all. The MX card already identifies the operator; DANE reads the same
+    # answer rather than matching hostnames a second time.
+    result["mx_providers"] = sorted(
+        {d["provider"] for d in mx_details if d.get("provider")}
+    )
+    result["mx_hostnames"] = [
+        d.get("hostname", "") for d in mx_details if d.get("hostname")
+    ]
     # An MX lookup that never completed leaves mx_hosts empty for a reason that
     # is not "this domain has no MX hosts". DANE is keyed entirely on that list,
     # so the distinction has to travel with it.
