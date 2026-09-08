@@ -5164,10 +5164,6 @@ def transform_mta_sts(raw: Dict, domain: str, has_mx: bool = True, non_mail: boo
     txt_record = raw.get("txt_record")
     policy_mode = raw.get("policy_mode")
 
-    # MTA-STS in enforce mode with no errors should be pass
-    if policy_mode == "enforce" and raw_status != "error":
-        status = "pass"
-
     if not txt_record:
         # MTA-STS protects inbound delivery. Waive it only on a positive
         # non-mail declaration (null MX or null SPF), never on absent MX alone.
@@ -5253,6 +5249,12 @@ def transform_mta_sts(raw: Dict, domain: str, has_mx: bool = True, non_mail: boo
     fix = _first_fix(raw.get("issues", []))
     if not fix and policy_mode == "testing":
         fix = "Move to mode=enforce once TLS-RPT reports confirm reliable TLS delivery."
+
+    # Enforce mode is only a pass once there is nothing left to fix. An MX
+    # pattern that doesn't cover an actual MX host is a real gap the matcher
+    # correctly caught, not a false positive to override.
+    if policy_mode == "enforce" and raw_status != "error" and not fix:
+        status = "pass"
 
     return {
         "name": "MTA-STS",
@@ -5843,7 +5845,10 @@ def transform_caa(raw: Dict, domain: str) -> Dict:
     elif record_count > 0 and has_issue:
         status = "pass"
 
-    fix = _first_fix(issues)
+    # A pass card carries no fix; a suggestion like adding iodef or
+    # issuewild is an optional improvement, already listed as an info
+    # detail above, not something a passing card should also be fixing.
+    fix = None if status == "pass" else _first_fix(issues)
 
     return {
         "name": "CAA",
@@ -6434,8 +6439,10 @@ def transform_nameservers(raw: Dict, domain: str = "") -> Dict:
     else:
         verdict = f"{ns_count} nameserver{'s' if ns_count != 1 else ''}"
 
-    # Fix
-    fix = _first_fix(issues)
+    # A pass card carries no fix; a suggestion like adding a secondary
+    # provider is an optional improvement, already listed as an info
+    # detail above, not something a passing card should also be fixing.
+    fix = None if status == "pass" else _first_fix(issues)
 
     return {
         "name": "Nameservers",
