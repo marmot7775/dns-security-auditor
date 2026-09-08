@@ -4,33 +4,33 @@ google.com
   DMARC                      pass         Pass
   SPF                        pass         Pass
   DKIM                       unavailable  Not confirmed
-  MX Records                 warn         Warning
+  MX Records                 pass         Pass
   MTA-STS                    pass         Pass
   TLS-RPT                    pass         Pass
-  DANE                       warn         Not configured
+  DANE                       pass         N/A
   DNSSEC                     warn         Not enabled
   CAA                        pass         Pass
-  BIMI                       warn         Not configured
+  BIMI                       pass         Not configured
   Nameservers                pass         Pass
   Certificate Transparency   unavailable  Not checked
-  Blocklist                  unavailable  Not checked
-  · coverage                 6/8
+  Blocklist                  -
+  · coverage                 8/8
 
 dns-audit.com
   DMARC                      pass         Pass
   SPF                        pass         Pass
   DKIM                       pass         Pass
-  MX Records                 warn         Warning
+  MX Records                 pass         Pass
   MTA-STS                    warn         Not configured
   TLS-RPT                    warn         Not configured
-  DANE                       warn         Not configured
+  DANE                       warn         Available, not enabled
   DNSSEC                     pass         Pass
   CAA                        pass         Pass
-  BIMI                       warn         Not configured
+  BIMI                       pass         Not configured
   Nameservers                pass         Pass
   Certificate Transparency   unavailable  Not checked
-  Blocklist                  unavailable  Not checked
-  · coverage                 5/9
+  Blocklist                  -
+  · coverage                 7/9
 
 ietf.org
   DMARC                      warn         Warning
@@ -45,13 +45,13 @@ ietf.org
   BIMI                       warn         Warning
   Nameservers                pass         Pass
   Certificate Transparency   unavailable  Not checked
-  Blocklist                  unavailable  Not checked
+  Blocklist                  -
   · coverage                 6/9
 
 proton.me
-  DMARC                      fail         Fail
+  DMARC                      warn         Warning
   SPF                        pass         Pass
-  DKIM                       unavailable  Not confirmed
+  DKIM                       pass         Pass
   MX Records                 pass         Pass
   MTA-STS                    pass         Pass
   TLS-RPT                    pass         Pass
@@ -59,7 +59,7 @@ proton.me
   DNSSEC                     pass         Pass
   CAA                        pass         Pass
   BIMI                       pass         Pass
-  Nameservers                warn         Warning
+  Nameservers                pass         Pass
   Certificate Transparency   unavailable  Not checked
-  Blocklist                  unavailable  Not checked
-  · coverage                 8/8
+  Blocklist                  -
+  · coverage                 9/9
