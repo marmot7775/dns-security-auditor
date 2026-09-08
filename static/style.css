@@ -164,6 +164,10 @@
 
     /* Brand accent — professional blue */
     --primary: #3b82f6;
+    /* Backgrounds that carry white text. White on #3b82f6 is 3.7:1; on
+       #2563eb it is 5.2:1. Links stay on --primary, which reads 5:1 on --bg. */
+    --primary-solid: #2563eb;
+    --primary-solid-hover: #1d4ed8;
     --primary-hover: #60a5fa;
     --primary-light: #60a5fa;
     --primary-subtle: rgba(59, 130, 246, 0.15);
@@ -174,9 +178,16 @@
     --pass-bg: rgba(34, 197, 94, 0.1);
     --pass-border: rgba(34, 197, 94, 0.25);
     --warn: #f59e0b;
+    --warn-contrast: #1a1a1a;
     --warn-bg: rgba(245, 158, 11, 0.1);
     --warn-border: rgba(245, 158, 11, 0.25);
     --fail: #ef4444;
+    /* Text needs more than the fill colour: #ef4444 on the card surface is
+       3.9:1, short of the 4.5:1 AA floor for normal text. Fills, borders and
+       icons keep --fail. */
+    --fail-text: #f87171;
+    /* Solid fill that carries white text: white on #ef4444 is 3.8:1. */
+    --fail-solid: #b91c1c;
     --fail-bg: rgba(239, 68, 68, 0.1);
     --fail-border: rgba(239, 68, 68, 0.25);
 
@@ -186,6 +197,7 @@
 
     /* DMARCbis — distinctive teal, the star accent */
     --dmarcbis: #2dd4bf;
+    --dmarcbis-contrast: #0a2d28;
     --dmarcbis-bg: rgba(45, 212, 191, 0.1);
     --dmarcbis-border: rgba(45, 212, 191, 0.25);
 
@@ -685,7 +697,7 @@ main {
 .audit-btn {
     height: 48px;
     padding: 0 var(--space-lg);
-    background: var(--primary);
+    background: var(--primary-solid);
     color: var(--text-inverse);
     border: none;
     border-radius: 10px;
@@ -701,7 +713,7 @@ main {
 }
 
 .audit-btn:hover {
-    background: var(--primary-hover);
+    background: var(--primary-solid-hover);
     box-shadow: 0 4px 12px rgba(59, 130, 246, 0.4);
 }
 
@@ -905,14 +917,14 @@ main {
 }
 
 .pdf-btn {
-    background: var(--primary);
+    background: var(--primary-solid);
     color: var(--text-inverse);
-    border-color: var(--primary);
+    border-color: var(--primary-solid);
 }
 
 .pdf-btn:hover {
-    background: var(--primary-hover);
-    border-color: var(--primary-hover);
+    background: var(--primary-solid-hover);
+    border-color: var(--primary-solid-hover);
     color: var(--text-inverse);
 }
 
@@ -1063,7 +1075,7 @@ main {
 }
 
 .fail-value {
-    color: var(--fail);
+    color: var(--fail-text);
 }
 
 .unavailable-value {
@@ -1087,7 +1099,7 @@ main {
     gap: 0.5rem;
     font-weight: 600;
     font-size: var(--font-base);
-    color: var(--fail);
+    color: var(--fail-text);
     margin-bottom: 0.85rem;
 }
 
@@ -1347,7 +1359,7 @@ h3.result-title,
 
 .status-pill.fail {
     background: var(--fail-bg);
-    color: var(--fail);
+    color: var(--fail-text);
     border: 1px solid var(--fail-border);
 }
 
@@ -1499,7 +1511,7 @@ h3.result-title,
 
 /* Error state */
 .error-title {
-    color: var(--fail);
+    color: var(--fail-text);
     font-weight: 600;
     margin-bottom: 0.35rem;
 }
@@ -1570,7 +1582,7 @@ h3.result-title,
 
 .tw-spec-badge:hover {
     background: var(--dmarcbis);
-    color: var(--text-inverse);
+    color: var(--dmarcbis-contrast);
 }
 
 /* Intro / educational text */
@@ -1929,7 +1941,7 @@ h3.result-title,
 }
 
 .tw-no-policy {
-    color: var(--fail);
+    color: var(--fail-text);
     font-weight: 500;
 }
 
@@ -1982,7 +1994,7 @@ h3.result-title,
 }
 
 .se-intro strong {
-    color: var(--fail);
+    color: var(--fail-text);
     font-weight: 600;
 }
 
@@ -2134,7 +2146,7 @@ h3.result-title,
 }
 
 .se-counter.exceeded {
-    color: var(--fail);
+    color: var(--fail-text);
     background: var(--fail-bg);
     border-color: var(--fail-border);
 }
@@ -2235,7 +2247,7 @@ h3.result-title,
 }
 
 .de-pill-pass { color: var(--pass); background: var(--pass-bg); border: 1px solid var(--pass-border); }
-.de-pill-fail { color: var(--fail); background: var(--fail-bg); border: 1px solid var(--fail-border); }
+.de-pill-fail { color: var(--fail-text); background: var(--fail-bg); border: 1px solid var(--fail-border); }
 .de-pill-warn { color: var(--warn); background: var(--warn-bg); border: 1px solid var(--warn-border); }
 
 .de-pill-muted {
@@ -2265,7 +2277,7 @@ h3.result-title,
 }
 
 .de-aligned { color: var(--pass); }
-.de-not-aligned { color: var(--fail); }
+.de-not-aligned { color: var(--fail-text); }
 
 .de-policy-group {
     font-size: var(--font-xs);
@@ -2319,7 +2331,7 @@ h3.result-title,
 }
 
 .rc-intro-warn {
-    color: var(--fail);
+    color: var(--fail-text);
     font-weight: 500;
 }
 
@@ -2382,10 +2394,10 @@ h3.result-title,
 }
 
 .rc-authorized { color: var(--pass); }
-.rc-unauthorized { color: var(--fail); }
+.rc-unauthorized { color: var(--fail-text); }
 .rc-same-domain { color: var(--text-tertiary); }
 .rc-mx-ok { font-size: var(--font-xs); color: var(--pass); flex-shrink: 0; }
-.rc-mx-fail { font-size: var(--font-xs); color: var(--fail); flex-shrink: 0; }
+.rc-mx-fail { font-size: var(--font-xs); color: var(--fail-text); flex-shrink: 0; }
 
 .rc-footnote {
     margin-top: 0.85rem;
@@ -2453,7 +2465,7 @@ h3.result-title,
 }
 
 .st-budget-status.st-bar-over {
-    color: var(--fail);
+    color: var(--fail-text);
     background: var(--fail-bg);
 }
 
@@ -2557,7 +2569,7 @@ details.st-node>summary:hover {
 
 .st-budget-low { color: var(--pass); background: var(--pass-bg); border: 1px solid var(--pass-border); }
 .st-budget-mid { color: var(--warn); background: var(--warn-bg); border: 1px solid var(--warn-border); }
-.st-budget-high { color: var(--fail); background: var(--fail-bg); border: 1px solid var(--fail-border); }
+.st-budget-high { color: var(--fail-text); background: var(--fail-bg); border: 1px solid var(--fail-border); }
 
 .st-children {
     padding-left: 1.25rem;
@@ -2705,7 +2717,7 @@ details.st-node>summary:hover {
 
 .detail-item.pass-item { color: var(--pass); }
 .detail-item.warn-item { color: var(--warn); }
-.detail-item.fail-item { color: var(--fail); }
+.detail-item.fail-item { color: var(--fail-text); }
 .detail-item.info-item { color: var(--text-secondary); }
 
 /* Business impact callout (Prompt: SPF/DMARC/DKIM business_risk) */
@@ -3184,8 +3196,8 @@ details.st-node>summary:hover {
 }
 
 .scope-btn.active {
-    background: var(--primary);
-    border-color: var(--primary);
+    background: var(--primary-solid);
+    border-color: var(--primary-solid);
     color: var(--text-inverse);
     box-shadow: 0 2px 8px rgba(59, 130, 246, 0.3);
 }
@@ -3527,15 +3539,15 @@ details.st-node>summary:hover {
     }
 
     .pdf-btn {
-        background: var(--primary);
+        background: var(--primary-solid);
         color: var(--text-inverse);
-        border-color: var(--primary);
+        border-color: var(--primary-solid);
         order: -1;
         flex-basis: 100%;
     }
 
     .pdf-btn:hover {
-        background: var(--primary-hover);
+        background: var(--primary-solid-hover);
     }
 
     .loading-card {
@@ -3721,7 +3733,7 @@ details.st-node>summary:hover {
 
 .resilience-mech-status.resilience-pass { background: var(--pass-bg); color: var(--pass); }
 .resilience-mech-status.resilience-warn { background: var(--warn-bg); color: var(--warn); }
-.resilience-mech-status.resilience-fail { background: var(--fail-bg); color: var(--fail); }
+.resilience-mech-status.resilience-fail { background: var(--fail-bg); color: var(--fail-text); }
 .resilience-mech-status.resilience-info { background: var(--bg-raised); color: var(--text-tertiary); }
 
 .resilience-mech-note {
@@ -3864,9 +3876,9 @@ details.st-node>summary:hover {
     color: #fff;
 }
 
-.anomaly-severity.fail { background: var(--fail); }
-.anomaly-severity.warn { background: var(--warn); color: #1a1a1a; }
-.anomaly-severity.info { background: var(--primary); }
+.anomaly-severity.fail { background: var(--fail-solid); }
+.anomaly-severity.warn { background: var(--warn); color: var(--warn-contrast); }
+.anomaly-severity.info { background: var(--primary-solid); }
 
 .anomaly-title {
     font-size: var(--font-sm);
@@ -4660,7 +4672,7 @@ body {
 }
 .dbis-tag-badge-dep {
     background: var(--fail-bg);
-    color: var(--fail);
+    color: var(--fail-text);
 }
 .dbis-tag-card p {
     font-size: var(--font-sm);
@@ -4861,7 +4873,7 @@ body {
 
 .es-color-green { color: var(--pass); }
 .es-color-amber { color: var(--warn); }
-.es-color-red { color: var(--fail); }
+.es-color-red { color: var(--fail-text); }
 .es-color-blue { color: var(--primary-light, #60a5fa); }
 .es-color-neutral { color: var(--text-tertiary); }
 
@@ -4905,7 +4917,7 @@ body {
     font-weight: 700;
     text-transform: uppercase;
     letter-spacing: 0.04em;
-    color: var(--text-muted);
+    color: var(--text-secondary);
     margin-bottom: 0.25rem;
 }
 
@@ -5041,7 +5053,7 @@ body {
     margin-bottom: 0.3rem;
 }
 
-.sr-tier-fail { background: var(--fail-bg); color: var(--fail); }
+.sr-tier-fail { background: var(--fail-bg); color: var(--fail-text); }
 .sr-tier-warn { background: var(--warn-bg); color: var(--warn); }
 .sr-tier-info { background: var(--primary-subtle); color: var(--primary-light); }
 .sr-tier-pass { background: var(--pass-bg); color: var(--pass); }
@@ -5166,7 +5178,7 @@ body {
 
 .dk-tag-revoked {
     background: var(--fail-bg);
-    color: var(--fail);
+    color: var(--fail-text);
 }
 
 .dk-rotation {
@@ -5360,7 +5372,7 @@ body {
 
 .as-overall-green { background: var(--pass-bg); color: var(--pass); }
 .as-overall-amber { background: var(--warn-bg); color: var(--warn); }
-.as-overall-red { background: var(--fail-bg); color: var(--fail); }
+.as-overall-red { background: var(--fail-bg); color: var(--fail-text); }
 
 .as-overall-summary {
     font-size: var(--font-sm);
@@ -5424,7 +5436,7 @@ body {
 
 .as-badge-green { background: var(--pass-bg); color: var(--pass); }
 .as-badge-amber { background: var(--warn-bg); color: var(--warn); }
-.as-badge-red { background: var(--fail-bg); color: var(--fail); }
+.as-badge-red { background: var(--fail-bg); color: var(--fail-text); }
 /* Same neutral pair as .status-pill.unavailable: 5.7:1 on dark, 6.9:1 on
    light. Used by the "Retired" badge on a revoked DKIM key. */
 .as-badge-neutral { background: var(--border-light); color: var(--text-secondary); }
@@ -5820,7 +5832,7 @@ body {
 
 .sv-summary-pass { background: var(--pass-bg); color: var(--pass); }
 .sv-summary-warn { background: var(--warn-bg); color: var(--warn); }
-.sv-summary-fail { background: var(--fail-bg); color: var(--fail); }
+.sv-summary-fail { background: var(--fail-bg); color: var(--fail-text); }
 
 .sv-score { font-size: 0.75rem; color: var(--text-muted); }
 
@@ -5860,7 +5872,7 @@ body {
 }
 
 .sv-pass { color: var(--pass); }
-.sv-fail { color: var(--fail); }
+.sv-fail { color: var(--fail-text); }
 .sv-warn { color: var(--warn); }
 
 .sv-check-msg {
@@ -5886,7 +5898,7 @@ body {
     padding: 0.5rem 0.85rem;
     margin: 0.5rem 0;
     font-size: var(--font-sm);
-    color: var(--fail);
+    color: var(--fail-text);
     font-weight: 600;
 }
 
@@ -6057,13 +6069,13 @@ body {
 }
 
 .rb-bis-current { background: var(--pass-bg); color: var(--pass); }
-.rb-bis-deprecated { background: var(--fail-bg); color: var(--fail); }
+.rb-bis-deprecated { background: var(--fail-bg); color: var(--fail-text); }
 .rb-bis-new { background: var(--dmarcbis-bg); color: var(--dmarcbis); }
 
 /* Per-tag warnings */
 .rb-tag-warn {
     font-size: 0.75rem;
-    color: var(--fail);
+    color: var(--fail-text);
     margin-top: 0.25rem;
     padding: 0.25rem 0.5rem;
     background: var(--fail-bg);
@@ -6148,11 +6160,11 @@ body {
 }
 
 .rb-cw-icon { font-size: var(--font-sm); flex-shrink: 0; }
-.rb-cw-critical .rb-cw-icon { color: var(--fail); }
+.rb-cw-critical .rb-cw-icon { color: var(--fail-text); }
 .rb-cw-advisory .rb-cw-icon { color: var(--warn); }
 
 .rb-cw-title { font-size: var(--font-sm); font-weight: 600; }
-.rb-cw-critical .rb-cw-title { color: var(--fail); }
+.rb-cw-critical .rb-cw-title { color: var(--fail-text); }
 .rb-cw-advisory .rb-cw-title { color: var(--warn); }
 
 .rb-cw-tag {
@@ -6282,7 +6294,7 @@ body {
     box-shadow: 0 0 0 2px rgba(255, 255, 255, 0.1);
 }
 
-.wd-scale-red { background: var(--fail-bg); color: var(--fail); }
+.wd-scale-red { background: var(--fail-bg); color: var(--fail-text); }
 .wd-scale-amber { background: var(--warn-bg); color: var(--warn); }
 .wd-scale-blue { background: var(--primary-subtle); color: var(--primary-light); }
 .wd-scale-green { background: var(--pass-bg); color: var(--pass); }
@@ -6486,7 +6498,7 @@ body {
 
 .dbis-status-pass { background: var(--pass-bg); color: var(--pass); }
 .dbis-status-warn { background: var(--warn-bg); color: var(--warn); }
-.dbis-status-fail { background: var(--fail-bg); color: var(--fail); }
+.dbis-status-fail { background: var(--fail-bg); color: var(--fail-text); }
 
 .dbis-score { font-size: 0.75rem; color: var(--text-muted); }
 
@@ -6530,7 +6542,7 @@ body {
 .dbis-dep-tag {
     font-family: var(--font-mono);
     font-weight: 600;
-    color: var(--fail);
+    color: var(--fail-text);
     flex-shrink: 0;
 }
 
@@ -6575,7 +6587,7 @@ body {
 
 .dbis-source-spec {
     background: var(--fail-bg);
-    color: var(--fail);
+    color: var(--fail-text);
     border: 1px solid var(--fail);
 }
 
@@ -6634,7 +6646,7 @@ body {
 
 .dbis-removed {
     background: var(--fail-bg);
-    color: var(--fail);
+    color: var(--fail-text);
     font-size: var(--font-xs);
     font-weight: 700;
     padding: 0.1rem 0.4rem;
@@ -6781,7 +6793,7 @@ body {
 
 .rcb-hl-removed {
     background: var(--fail-bg);
-    color: var(--fail);
+    color: var(--fail-text);
     text-decoration: line-through;
 }
 
@@ -6838,13 +6850,13 @@ body {
 }
 
 .rcb-action-badge.rcb-added { background: rgba(16, 185, 129, 0.15); color: var(--pass); }
-.rcb-action-badge.rcb-removed { background: var(--fail-bg); color: var(--fail); }
+.rcb-action-badge.rcb-removed { background: var(--fail-bg); color: var(--fail-text); }
 .rcb-action-badge.rcb-changed { background: var(--warn-bg); color: var(--warn); }
 
 .rcb-val-old {
     font-family: var(--font-mono);
     font-size: 0.75rem;
-    color: var(--fail);
+    color: var(--fail-text);
     text-decoration: line-through;
     opacity: 0.8;
 }
@@ -7355,28 +7367,34 @@ body {
         --border-focus: #3b82f6;
         --text-primary: #0f172a;
         --text-secondary: #475569;
-        --text-tertiary: #64748b;
+        --text-tertiary: #5b6879;
         --text-muted: #5b6b7f;
         --text-inverse: #ffffff;
         --primary: #2563eb;
+        --primary-solid: #2563eb;
+        --primary-solid-hover: #1d4ed8;
         --primary-hover: #3b82f6;
         --primary-light: #2563eb;
         --primary-subtle: rgba(37, 99, 235, 0.08);
         --primary-border: rgba(37, 99, 235, 0.2);
-        --pass: #16a34a;
-        --pass-bg: rgba(22, 163, 74, 0.08);
-        --pass-border: rgba(22, 163, 74, 0.2);
-        --warn: #d97706;
-        --warn-bg: rgba(217, 119, 6, 0.08);
-        --warn-border: rgba(217, 119, 6, 0.2);
+        --pass: #137436;
+        --pass-bg: rgba(19, 116, 54, 0.06);
+        --pass-border: rgba(19, 116, 54, 0.2);
+        --warn: #a84d08;
+        --warn-contrast: #ffffff;
+        --warn-bg: rgba(168, 77, 8, 0.08);
+        --warn-border: rgba(168, 77, 8, 0.2);
         --fail: #dc2626;
+        --fail-text: #b91c1c;
+        --fail-solid: #dc2626;
         --fail-bg: rgba(220, 38, 38, 0.06);
         --fail-border: rgba(220, 38, 38, 0.2);
         --fix-bg: rgba(22, 163, 74, 0.06);
         --fix-border: #16a34a;
-        --dmarcbis: #0d9488;
-        --dmarcbis-bg: rgba(13, 148, 136, 0.08);
-        --dmarcbis-border: rgba(13, 148, 136, 0.2);
+        --dmarcbis: #0f766e;
+        --dmarcbis-contrast: #ffffff;
+        --dmarcbis-bg: rgba(15, 118, 110, 0.08);
+        --dmarcbis-border: rgba(15, 118, 110, 0.2);
         --shadow-sm: 0 1px 3px rgba(0, 0, 0, 0.08);
         --shadow-md: 0 2px 8px rgba(0, 0, 0, 0.1);
         --shadow-lg: 0 4px 16px rgba(0, 0, 0, 0.12);
@@ -7610,28 +7628,34 @@ body {
     --border-focus: #3b82f6;
     --text-primary: #0f172a;
     --text-secondary: #475569;
-    --text-tertiary: #64748b;
+    --text-tertiary: #5b6879;
     --text-muted: #5b6b7f;
     --text-inverse: #ffffff;
     --primary: #2563eb;
+    --primary-solid: #2563eb;
+    --primary-solid-hover: #1d4ed8;
     --primary-hover: #3b82f6;
     --primary-light: #2563eb;
     --primary-subtle: rgba(37, 99, 235, 0.08);
     --primary-border: rgba(37, 99, 235, 0.2);
-    --pass: #16a34a;
-    --pass-bg: rgba(22, 163, 74, 0.08);
-    --pass-border: rgba(22, 163, 74, 0.2);
-    --warn: #d97706;
-    --warn-bg: rgba(217, 119, 6, 0.08);
-    --warn-border: rgba(217, 119, 6, 0.2);
+    --pass: #137436;
+    --pass-bg: rgba(19, 116, 54, 0.06);
+    --pass-border: rgba(19, 116, 54, 0.2);
+    --warn: #a84d08;
+    --warn-contrast: #ffffff;
+    --warn-bg: rgba(168, 77, 8, 0.08);
+    --warn-border: rgba(168, 77, 8, 0.2);
     --fail: #dc2626;
+    --fail-text: #b91c1c;
+    --fail-solid: #dc2626;
     --fail-bg: rgba(220, 38, 38, 0.06);
     --fail-border: rgba(220, 38, 38, 0.2);
     --fix-bg: rgba(22, 163, 74, 0.06);
     --fix-border: #16a34a;
-    --dmarcbis: #0d9488;
-    --dmarcbis-bg: rgba(13, 148, 136, 0.08);
-    --dmarcbis-border: rgba(13, 148, 136, 0.2);
+    --dmarcbis: #0f766e;
+    --dmarcbis-contrast: #ffffff;
+    --dmarcbis-bg: rgba(15, 118, 110, 0.08);
+    --dmarcbis-border: rgba(15, 118, 110, 0.2);
     --shadow-sm: 0 1px 3px rgba(0, 0, 0, 0.08);
     --shadow-md: 0 2px 8px rgba(0, 0, 0, 0.1);
     --shadow-lg: 0 4px 16px rgba(0, 0, 0, 0.12);
@@ -7923,7 +7947,7 @@ body {
 }
 
 .recent-audits-clear:hover {
-    color: var(--fail);
+    color: var(--fail-text);
     background: rgba(239, 68, 68, 0.1);
 }
 
@@ -7976,7 +8000,7 @@ body {
 }
 
 .domain-valid-indicator.invalid {
-    color: var(--fail);
+    color: var(--fail-text);
     opacity: 0.6;
 }
 
@@ -7995,7 +8019,7 @@ body {
 }
 
 .cache-status-badge.cached {
-    background: rgba(234, 179, 8, 0.12);
+    background: rgba(234, 179, 8, 0.08);
     color: var(--warn);
     border: 1px solid rgba(234, 179, 8, 0.25);
 }
@@ -8028,15 +8052,14 @@ body {
 
 .request-id-display {
     font-size: 0.65rem;
-    color: var(--text-tertiary);
+    color: var(--text-muted);
     margin-top: 0.25rem;
     cursor: pointer;
-    opacity: 0.6;
-    transition: opacity var(--duration) var(--ease);
+    transition: color var(--duration) var(--ease);
 }
 
 .request-id-display:hover {
-    opacity: 1;
+    color: var(--text-secondary);
 }
 
 .request-id-label {
@@ -8190,7 +8213,7 @@ body {
 }
 
 .comparison-error {
-    color: var(--fail);
+    color: var(--fail-text);
     padding: var(--space-md);
     font-size: var(--font-sm);
 }
@@ -8593,7 +8616,7 @@ body {
 }
 .dbis-compare-tag-old {
     background: var(--border);
-    color: var(--text-tertiary);
+    color: var(--text-primary);
 }
 .dbis-compare-tag-new {
     background: var(--dmarcbis-bg);
@@ -8720,7 +8743,7 @@ body {
 }
 
 /* CTA and closing */
-.dbis-cta { display: inline-flex; align-items: center; gap: 0.5rem; padding: 0.75rem 1.5rem; background: var(--dmarcbis); color: #0a2d28; font-size: 1rem; font-weight: 600; border-radius: 8px; text-decoration: none; border: none; border-bottom: none; transition: opacity 0.15s var(--ease), transform 0.1s var(--ease); }
+.dbis-cta { display: inline-flex; align-items: center; gap: 0.5rem; padding: 0.75rem 1.5rem; background: var(--dmarcbis); color: var(--dmarcbis-contrast); font-size: 1rem; font-weight: 600; border-radius: 8px; text-decoration: none; border: none; border-bottom: none; transition: opacity 0.15s var(--ease), transform 0.1s var(--ease); }
 .dbis-cta:hover { opacity: 0.88; border-bottom: none; }
 .dbis-cta:active { transform: scale(0.98); }
 .dbis-closing { margin-top: 3.5rem; padding-top: 2rem; border-top: 1px solid var(--border); text-align: center; }
@@ -8765,14 +8788,14 @@ body {
 }
 .articles-tag-pill.is-active,
 .articles-tag-pill[aria-pressed="true"] {
-    background: var(--primary);
-    border-color: var(--primary);
+    background: var(--primary-solid);
+    border-color: var(--primary-solid);
     color: var(--text-inverse);
 }
 .articles-tag-pill.is-active:hover,
 .articles-tag-pill[aria-pressed="true"]:hover {
-    background: var(--primary-hover);
-    border-color: var(--primary-hover);
+    background: var(--primary-solid-hover);
+    border-color: var(--primary-solid-hover);
     color: var(--text-inverse);
 }
 .articles-tag-pill:focus-visible {
@@ -9006,5 +9029,115 @@ body {
     .articles-tag-pill {
         height: 44px;
         padding: 0 18px;
+    }
+}
+
+/* ==========================================================================
+   MOBILE TOUCH TARGETS
+   Everything tappable is at least 44px on the short axis at 640px and below.
+   Where a taller box would push the layout around, the hit area grows
+   through padding cancelled by a negative margin, or through a pseudo
+   element, so the visible size stays the same.
+   ========================================================================== */
+@media (max-width: 640px) {
+    .logo {
+        min-height: 44px;
+    }
+
+    /* The chip plus the wordmark wrapped to two lines beside a four-item nav.
+       The home page already shows the wordmark alone at this width. */
+    .logo-terminal {
+        display: none;
+    }
+
+    .logo-text {
+        white-space: nowrap;
+    }
+
+    .nav-link {
+        min-width: 44px;
+        justify-content: center;
+    }
+
+    .footer-nav {
+        flex-wrap: wrap;
+    }
+
+    .footer-link {
+        display: inline-flex;
+        align-items: center;
+        min-height: 44px;
+        padding: 0 0.25rem;
+    }
+
+    .footer-linkedin {
+        width: 44px;
+        height: 44px;
+        align-items: center;
+        justify-content: center;
+        margin: -15px -15px;
+    }
+
+    .selector-toggle {
+        padding: 13px 0.5rem;
+        margin: -13px 0;
+    }
+
+    .recent-audits-clear {
+        min-width: 44px;
+        min-height: 44px;
+        margin: -12px 0;
+    }
+
+    .copy-all-btn {
+        min-height: 44px;
+    }
+
+    .sua-audit-btn {
+        min-height: 44px;
+        min-width: 44px;
+    }
+
+    .article-card-title a {
+        display: inline-block;
+        padding: 9px 0;
+        margin: -9px 0;
+    }
+
+    .pi-guidance-toggle {
+        min-height: 44px;
+    }
+
+    /* Focusable because it scrolls sideways; give the focus target height too. */
+    .mw-record {
+        min-height: 44px;
+        display: flex;
+        align-items: center;
+    }
+
+    /* Keyboard-focusable heading that shows a tooltip. Its ::before and
+       ::after are the tooltip, so the hit area comes from padding and the
+       dotted underline moves from border-bottom to text-decoration so it
+       stays under the text. */
+    .protocol-name-tip {
+        border-bottom: none;
+        text-decoration: underline dotted var(--text-tertiary);
+        text-underline-offset: 3px;
+        padding: 10px 9px;
+        margin: -10px -9px;
+    }
+
+    .tw-spec-badge {
+        position: relative;
+    }
+
+    .tw-spec-badge::after {
+        content: "";
+        position: absolute;
+        left: 0;
+        right: 0;
+        top: 50%;
+        height: 44px;
+        transform: translateY(-50%);
     }
 }

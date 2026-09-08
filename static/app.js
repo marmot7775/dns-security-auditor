@@ -1928,7 +1928,7 @@ function renderDmarcTagBreakdown(bd) {
         let stepsHtml = '';
         bd.migration.steps.forEach(s => {
             const hasRecord = s.record_after ? `
-                <div class="mw-record">
+                <div class="mw-record" tabindex="0">
                     <span class="mw-record-text">${escapeHtml(s.record_after)}</span>
                 </div>` : '';
             const tagBadges = (s.tags_changed || []).map(t =>
