@@ -19,6 +19,11 @@
 ## Rules
 - NEVER use em-dashes (—) or double-hyphens ( -- ) in user-facing text. Rewrite the sentence instead.
 - Fail color is #ef4444 (clear red). Dark theme default, light mode via prefers-color-scheme.
+  A header toggle (static/theme.js, loaded in <head> on every page) saves a
+  choice under the localStorage key `theme` and sets data-theme on <html>,
+  which overrides prefers-color-scheme. The light-mode rules in style.css
+  exist twice for that reason: once inside the media query scoped to
+  :not([data-theme="dark"]), once scoped to [data-theme="light"].
 - All touch targets must be 44px minimum on mobile
 - Text contrast must pass WCAG AA (4.5:1 ratio)
 - No personal data in logs (GDPR-safe)
@@ -96,11 +101,11 @@ cryptography, added for DNSSEC/RSA key generation) installs fine in a
 fresh CI venv but crash-loops the live service if this step is skipped.
 
 ## Cache-busting
-After any change to `static/style.css` or `static/app.js`, run this command before committing, OR include it as the final step of your commit. It handles any alphanumeric version string and rewrites both CSS and JS references across every static HTML page:
+After any change to `static/style.css`, `static/app.js`, `static/articles.js` or `static/theme.js`, run this command before committing, OR include it as the final step of your commit. It handles any alphanumeric version string and rewrites both CSS and JS references across every static HTML page:
 
 ```bash
 NEW=$(git rev-parse --short HEAD) && for f in static/*.html static/articles/*.html; do
-  sed -i -E "s|(style\.css\|app\.js\|articles\.js)\?v=[a-zA-Z0-9]+|\1?v=$NEW|g" "$f"
+  sed -i -E "s|(style\.css\|app\.js\|articles\.js\|theme\.js)\?v=[a-zA-Z0-9]+|\1?v=$NEW|g" "$f"
 done
 ```
 

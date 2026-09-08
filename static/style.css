@@ -142,6 +142,7 @@
 
 /* -- Design Tokens -- */
 :root {
+    color-scheme: dark;
     /* Foundation — dark navy, NOT pure black */
     --bg: #0f172a;
     --bg-raised: #162032;
@@ -7336,36 +7337,32 @@ body {
 
 /* ==========================================================================
    LIGHT MODE
+   Two copies of the same rules. The first applies when the OS asks for light
+   and the visitor has not chosen dark; the second applies when the visitor
+   chose light regardless of the OS. theme.js sets data-theme on <html>.
+   :where() keeps every selector at its original specificity.
    ========================================================================== */
 @media (prefers-color-scheme: light) {
-    :root {
-        /* Foundation */
+    :root:where(:not([data-theme="dark"])) {
+        color-scheme: light;
         --bg: #f8fafc;
         --bg-raised: #ffffff;
         --surface: #ffffff;
         --surface-hover: #f1f5f9;
-
-        /* Borders */
         --border: #e2e8f0;
         --border-strong: #94a3b8;
         --border-light: #f1f5f9;
         --border-focus: #3b82f6;
-
-        /* Text */
         --text-primary: #0f172a;
         --text-secondary: #475569;
         --text-tertiary: #64748b;
         --text-muted: #5b6b7f;
         --text-inverse: #ffffff;
-
-        /* Brand accent */
         --primary: #2563eb;
         --primary-hover: #3b82f6;
         --primary-light: #2563eb;
         --primary-subtle: rgba(37, 99, 235, 0.08);
         --primary-border: rgba(37, 99, 235, 0.2);
-
-        /* Status */
         --pass: #16a34a;
         --pass-bg: rgba(22, 163, 74, 0.08);
         --pass-border: rgba(22, 163, 74, 0.2);
@@ -7375,180 +7372,484 @@ body {
         --fail: #dc2626;
         --fail-bg: rgba(220, 38, 38, 0.06);
         --fail-border: rgba(220, 38, 38, 0.2);
-
-        /* Fix */
         --fix-bg: rgba(22, 163, 74, 0.06);
         --fix-border: #16a34a;
-
-        /* DMARCbis */
         --dmarcbis: #0d9488;
         --dmarcbis-bg: rgba(13, 148, 136, 0.08);
         --dmarcbis-border: rgba(13, 148, 136, 0.2);
-
-        /* Shadows */
         --shadow-sm: 0 1px 3px rgba(0, 0, 0, 0.08);
         --shadow-md: 0 2px 8px rgba(0, 0, 0, 0.1);
         --shadow-lg: 0 4px 16px rgba(0, 0, 0, 0.12);
     }
 
-    /* Header */
-    .site-header {
+    :where(html:not([data-theme="dark"])) .site-header {
         background: rgba(248, 250, 252, 0.9);
     }
 
-    /* Input card */
-    .audit-input-card {
+    :where(html:not([data-theme="dark"])) .audit-input-card {
         background: #ffffff;
         border-color: var(--border);
         box-shadow: var(--shadow-md);
     }
 
-    .input-unified .input-wrapper {
+    :where(html:not([data-theme="dark"])) .input-unified .input-wrapper {
         background: #f1f5f9;
         border-color: var(--border);
     }
 
-    .input-unified .input-wrapper:focus-within {
+    :where(html:not([data-theme="dark"])) .input-unified .input-wrapper:focus-within {
         border-color: var(--primary);
         box-shadow: 0 0 0 3px var(--primary-subtle);
     }
 
-    .domain-input::placeholder {
+    :where(html:not([data-theme="dark"])) .domain-input::placeholder {
         color: #94a3b8;
     }
 
-    .audit-btn:hover {
+    :where(html:not([data-theme="dark"])) .audit-btn:hover {
         box-shadow: 0 4px 12px rgba(37, 99, 235, 0.3);
     }
 
-    /* Record blocks */
-    .record-block {
+    :where(html:not([data-theme="dark"])) .record-block {
         background: #f8fafc;
         border-color: var(--border);
     }
 
-    .rec-keyword { color: #2563eb; }
-    .rec-value { color: #1e40af; }
-    .rec-safe { color: #16a34a; }
-    .rec-neutral { color: #d97706; }
-    .rec-warn { color: #ea580c; }
-    .rec-danger { color: #dc2626; }
-    .rec-muted { color: #94a3b8; }
+    :where(html:not([data-theme="dark"])) .rec-keyword {
+        color: #2563eb;
+    }
 
-    .copy-btn {
+    :where(html:not([data-theme="dark"])) .rec-value {
+        color: #1e40af;
+    }
+
+    :where(html:not([data-theme="dark"])) .rec-safe {
+        color: #16a34a;
+    }
+
+    :where(html:not([data-theme="dark"])) .rec-neutral {
+        color: #d97706;
+    }
+
+    :where(html:not([data-theme="dark"])) .rec-warn {
+        color: #ea580c;
+    }
+
+    :where(html:not([data-theme="dark"])) .rec-danger {
+        color: #dc2626;
+    }
+
+    :where(html:not([data-theme="dark"])) .rec-muted {
+        color: #94a3b8;
+    }
+
+    :where(html:not([data-theme="dark"])) .copy-btn {
         background: #f1f5f9;
         border-color: var(--border);
         color: #64748b;
     }
 
-    .copy-btn:hover {
+    :where(html:not([data-theme="dark"])) .copy-btn:hover {
         background: #e2e8f0;
         color: #334155;
         border-color: #cbd5e1;
     }
 
-    /* Tree walk & SPF execution */
-    .tree-walk,
-    .spf-execution,
-    .dmarc-eval,
-    .report-chain,
-    .spf-tree {
+    :where(html:not([data-theme="dark"])) .tree-walk,
+:where(html:not([data-theme="dark"])) .spf-execution,
+:where(html:not([data-theme="dark"])) .dmarc-eval,
+:where(html:not([data-theme="dark"])) .report-chain,
+:where(html:not([data-theme="dark"])) .spf-tree {
         background: #f8fafc;
     }
 
-    .tw-dot {
+    :where(html:not([data-theme="dark"])) .tw-dot {
         background: #f8fafc;
     }
 
-    /* SPF */
-    .spfd-lookup-badge,
-    .sr-protocol,
-    .spfd-cost {
+    :where(html:not([data-theme="dark"])) .spfd-lookup-badge,
+:where(html:not([data-theme="dark"])) .sr-protocol,
+:where(html:not([data-theme="dark"])) .spfd-cost {
         background: #f1f5f9;
         color: #2563eb;
     }
 
-    .spfd-cost-zero {
+    :where(html:not([data-theme="dark"])) .spfd-cost-zero {
         background: #f1f5f9;
         color: #94a3b8;
     }
 
-    /* Footer */
-    .site-footer {
+    :where(html:not([data-theme="dark"])) .site-footer {
         background: #f1f5f9;
         border-top-color: var(--border);
     }
 
-    /* Scope buttons */
-    .scope-btn {
+    :where(html:not([data-theme="dark"])) .scope-btn {
         background: #ffffff;
     }
 
-    /* Executive summary */
-    .es-metric {
+    :where(html:not([data-theme="dark"])) .es-metric {
         background: #f8fafc;
     }
 
-    /* Progress bar */
-    .top-progress-bar {
+    :where(html:not([data-theme="dark"])) .top-progress-bar {
         box-shadow: 0 0 8px rgba(37, 99, 235, 0.2);
     }
 
-    /* Selection */
-    ::selection {
+    :where(html:not([data-theme="dark"])) ::selection {
         background: rgba(37, 99, 235, 0.15);
     }
 
-    /* Provider intelligence */
-    .dk-tag {
+    :where(html:not([data-theme="dark"])) .dk-tag {
         background: #f1f5f9;
     }
 
-    /* Auxiliary components */
-    .domain-inline-error {
+    :where(html:not([data-theme="dark"])) .domain-inline-error {
         color: #dc2626;
     }
-    .advisory-info {
+
+    :where(html:not([data-theme="dark"])) .advisory-info {
         background: #f0f9ff;
         border-color: #bae6fd;
         color: #475569;
     }
-    .advisory-warning {
+
+    :where(html:not([data-theme="dark"])) .advisory-warning {
         background: #fffbeb;
         border-color: #fde68a;
         color: #92400e;
     }
-    .cd-diff {
+
+    :where(html:not([data-theme="dark"])) .cd-diff {
         background: rgba(0,0,0,0.04);
     }
-    .prop-warning {
+
+    :where(html:not([data-theme="dark"])) .prop-warning {
         background: #eff6ff;
         border-color: #bfdbfe;
         color: #1e40af;
     }
-    .ha-verdict-healthy { background: #f0fdf4; border-color: #bbf7d0; color: #16a34a; }
-    .ha-verdict-healthy .ha-verdict-summary { color: #166534; }
-    .ha-verdict-info { background: #eff6ff; border-color: #bfdbfe; color: #2563eb; }
-    .ha-verdict-info .ha-verdict-summary { color: #1e40af; }
-    .ha-verdict-caution { background: #fffbeb; border-color: #fde68a; color: #d97706; }
-    .ha-verdict-caution .ha-verdict-summary { color: #92400e; }
-    .ha-verdict-warning { background: #fff7ed; border-color: #fed7aa; color: #ea580c; }
-    .ha-verdict-warning .ha-verdict-summary { color: #9a3412; }
-    .ha-verdict-danger { background: #fef2f2; border-color: #fecaca; color: #dc2626; }
-    .ha-verdict-danger .ha-verdict-summary { color: #991b1b; }
-    .ha-textarea { background: #fff; }
-    .ha-glossary-toggle:hover { background: rgba(0,0,0,0.04); }
-    .deliv-callout {
+
+    :where(html:not([data-theme="dark"])) .ha-verdict-healthy {
+        background: #f0fdf4; border-color: #bbf7d0; color: #16a34a;
+    }
+
+    :where(html:not([data-theme="dark"])) .ha-verdict-healthy .ha-verdict-summary {
+        color: #166534;
+    }
+
+    :where(html:not([data-theme="dark"])) .ha-verdict-info {
+        background: #eff6ff; border-color: #bfdbfe; color: #2563eb;
+    }
+
+    :where(html:not([data-theme="dark"])) .ha-verdict-info .ha-verdict-summary {
+        color: #1e40af;
+    }
+
+    :where(html:not([data-theme="dark"])) .ha-verdict-caution {
+        background: #fffbeb; border-color: #fde68a; color: #d97706;
+    }
+
+    :where(html:not([data-theme="dark"])) .ha-verdict-caution .ha-verdict-summary {
+        color: #92400e;
+    }
+
+    :where(html:not([data-theme="dark"])) .ha-verdict-warning {
+        background: #fff7ed; border-color: #fed7aa; color: #ea580c;
+    }
+
+    :where(html:not([data-theme="dark"])) .ha-verdict-warning .ha-verdict-summary {
+        color: #9a3412;
+    }
+
+    :where(html:not([data-theme="dark"])) .ha-verdict-danger {
+        background: #fef2f2; border-color: #fecaca; color: #dc2626;
+    }
+
+    :where(html:not([data-theme="dark"])) .ha-verdict-danger .ha-verdict-summary {
+        color: #991b1b;
+    }
+
+    :where(html:not([data-theme="dark"])) .ha-textarea {
+        background: #fff;
+    }
+
+    :where(html:not([data-theme="dark"])) .ha-glossary-toggle:hover {
+        background: rgba(0,0,0,0.04);
+    }
+
+    :where(html:not([data-theme="dark"])) .deliv-callout {
         background: #eff6ff;
         border-color: #bfdbfe;
     }
-    .deliv-label { color: #2563eb; }
-    .deliv-text { color: #1e40af; }
-    .es-deliverability {
+
+    :where(html:not([data-theme="dark"])) .deliv-label {
+        color: #2563eb;
+    }
+
+    :where(html:not([data-theme="dark"])) .deliv-text {
+        color: #1e40af;
+    }
+
+    :where(html:not([data-theme="dark"])) .es-deliverability {
         background: #eff6ff;
         border-color: #bfdbfe;
         color: #1e40af;
     }
+}
+
+:root:where([data-theme="light"]) {
+    color-scheme: light;
+    --bg: #f8fafc;
+    --bg-raised: #ffffff;
+    --surface: #ffffff;
+    --surface-hover: #f1f5f9;
+    --border: #e2e8f0;
+    --border-strong: #94a3b8;
+    --border-light: #f1f5f9;
+    --border-focus: #3b82f6;
+    --text-primary: #0f172a;
+    --text-secondary: #475569;
+    --text-tertiary: #64748b;
+    --text-muted: #5b6b7f;
+    --text-inverse: #ffffff;
+    --primary: #2563eb;
+    --primary-hover: #3b82f6;
+    --primary-light: #2563eb;
+    --primary-subtle: rgba(37, 99, 235, 0.08);
+    --primary-border: rgba(37, 99, 235, 0.2);
+    --pass: #16a34a;
+    --pass-bg: rgba(22, 163, 74, 0.08);
+    --pass-border: rgba(22, 163, 74, 0.2);
+    --warn: #d97706;
+    --warn-bg: rgba(217, 119, 6, 0.08);
+    --warn-border: rgba(217, 119, 6, 0.2);
+    --fail: #dc2626;
+    --fail-bg: rgba(220, 38, 38, 0.06);
+    --fail-border: rgba(220, 38, 38, 0.2);
+    --fix-bg: rgba(22, 163, 74, 0.06);
+    --fix-border: #16a34a;
+    --dmarcbis: #0d9488;
+    --dmarcbis-bg: rgba(13, 148, 136, 0.08);
+    --dmarcbis-border: rgba(13, 148, 136, 0.2);
+    --shadow-sm: 0 1px 3px rgba(0, 0, 0, 0.08);
+    --shadow-md: 0 2px 8px rgba(0, 0, 0, 0.1);
+    --shadow-lg: 0 4px 16px rgba(0, 0, 0, 0.12);
+}
+
+:where(html[data-theme="light"]) .site-header {
+    background: rgba(248, 250, 252, 0.9);
+}
+
+:where(html[data-theme="light"]) .audit-input-card {
+    background: #ffffff;
+    border-color: var(--border);
+    box-shadow: var(--shadow-md);
+}
+
+:where(html[data-theme="light"]) .input-unified .input-wrapper {
+    background: #f1f5f9;
+    border-color: var(--border);
+}
+
+:where(html[data-theme="light"]) .input-unified .input-wrapper:focus-within {
+    border-color: var(--primary);
+    box-shadow: 0 0 0 3px var(--primary-subtle);
+}
+
+:where(html[data-theme="light"]) .domain-input::placeholder {
+    color: #94a3b8;
+}
+
+:where(html[data-theme="light"]) .audit-btn:hover {
+    box-shadow: 0 4px 12px rgba(37, 99, 235, 0.3);
+}
+
+:where(html[data-theme="light"]) .record-block {
+    background: #f8fafc;
+    border-color: var(--border);
+}
+
+:where(html[data-theme="light"]) .rec-keyword {
+    color: #2563eb;
+}
+
+:where(html[data-theme="light"]) .rec-value {
+    color: #1e40af;
+}
+
+:where(html[data-theme="light"]) .rec-safe {
+    color: #16a34a;
+}
+
+:where(html[data-theme="light"]) .rec-neutral {
+    color: #d97706;
+}
+
+:where(html[data-theme="light"]) .rec-warn {
+    color: #ea580c;
+}
+
+:where(html[data-theme="light"]) .rec-danger {
+    color: #dc2626;
+}
+
+:where(html[data-theme="light"]) .rec-muted {
+    color: #94a3b8;
+}
+
+:where(html[data-theme="light"]) .copy-btn {
+    background: #f1f5f9;
+    border-color: var(--border);
+    color: #64748b;
+}
+
+:where(html[data-theme="light"]) .copy-btn:hover {
+    background: #e2e8f0;
+    color: #334155;
+    border-color: #cbd5e1;
+}
+
+:where(html[data-theme="light"]) .tree-walk,
+:where(html[data-theme="light"]) .spf-execution,
+:where(html[data-theme="light"]) .dmarc-eval,
+:where(html[data-theme="light"]) .report-chain,
+:where(html[data-theme="light"]) .spf-tree {
+    background: #f8fafc;
+}
+
+:where(html[data-theme="light"]) .tw-dot {
+    background: #f8fafc;
+}
+
+:where(html[data-theme="light"]) .spfd-lookup-badge,
+:where(html[data-theme="light"]) .sr-protocol,
+:where(html[data-theme="light"]) .spfd-cost {
+    background: #f1f5f9;
+    color: #2563eb;
+}
+
+:where(html[data-theme="light"]) .spfd-cost-zero {
+    background: #f1f5f9;
+    color: #94a3b8;
+}
+
+:where(html[data-theme="light"]) .site-footer {
+    background: #f1f5f9;
+    border-top-color: var(--border);
+}
+
+:where(html[data-theme="light"]) .scope-btn {
+    background: #ffffff;
+}
+
+:where(html[data-theme="light"]) .es-metric {
+    background: #f8fafc;
+}
+
+:where(html[data-theme="light"]) .top-progress-bar {
+    box-shadow: 0 0 8px rgba(37, 99, 235, 0.2);
+}
+
+:where(html[data-theme="light"]) ::selection {
+    background: rgba(37, 99, 235, 0.15);
+}
+
+:where(html[data-theme="light"]) .dk-tag {
+    background: #f1f5f9;
+}
+
+:where(html[data-theme="light"]) .domain-inline-error {
+    color: #dc2626;
+}
+
+:where(html[data-theme="light"]) .advisory-info {
+    background: #f0f9ff;
+    border-color: #bae6fd;
+    color: #475569;
+}
+
+:where(html[data-theme="light"]) .advisory-warning {
+    background: #fffbeb;
+    border-color: #fde68a;
+    color: #92400e;
+}
+
+:where(html[data-theme="light"]) .cd-diff {
+    background: rgba(0,0,0,0.04);
+}
+
+:where(html[data-theme="light"]) .prop-warning {
+    background: #eff6ff;
+    border-color: #bfdbfe;
+    color: #1e40af;
+}
+
+:where(html[data-theme="light"]) .ha-verdict-healthy {
+    background: #f0fdf4; border-color: #bbf7d0; color: #16a34a;
+}
+
+:where(html[data-theme="light"]) .ha-verdict-healthy .ha-verdict-summary {
+    color: #166534;
+}
+
+:where(html[data-theme="light"]) .ha-verdict-info {
+    background: #eff6ff; border-color: #bfdbfe; color: #2563eb;
+}
+
+:where(html[data-theme="light"]) .ha-verdict-info .ha-verdict-summary {
+    color: #1e40af;
+}
+
+:where(html[data-theme="light"]) .ha-verdict-caution {
+    background: #fffbeb; border-color: #fde68a; color: #d97706;
+}
+
+:where(html[data-theme="light"]) .ha-verdict-caution .ha-verdict-summary {
+    color: #92400e;
+}
+
+:where(html[data-theme="light"]) .ha-verdict-warning {
+    background: #fff7ed; border-color: #fed7aa; color: #ea580c;
+}
+
+:where(html[data-theme="light"]) .ha-verdict-warning .ha-verdict-summary {
+    color: #9a3412;
+}
+
+:where(html[data-theme="light"]) .ha-verdict-danger {
+    background: #fef2f2; border-color: #fecaca; color: #dc2626;
+}
+
+:where(html[data-theme="light"]) .ha-verdict-danger .ha-verdict-summary {
+    color: #991b1b;
+}
+
+:where(html[data-theme="light"]) .ha-textarea {
+    background: #fff;
+}
+
+:where(html[data-theme="light"]) .ha-glossary-toggle:hover {
+    background: rgba(0,0,0,0.04);
+}
+
+:where(html[data-theme="light"]) .deliv-callout {
+    background: #eff6ff;
+    border-color: #bfdbfe;
+}
+
+:where(html[data-theme="light"]) .deliv-label {
+    color: #2563eb;
+}
+
+:where(html[data-theme="light"]) .deliv-text {
+    color: #1e40af;
+}
+
+:where(html[data-theme="light"]) .es-deliverability {
+    background: #eff6ff;
+    border-color: #bfdbfe;
+    color: #1e40af;
 }
 
 /* ==========================================================================
@@ -8612,6 +8913,36 @@ body {
 .theme-toggle:hover {
     color: var(--text-primary);
     border-color: var(--border-strong);
+}
+
+.theme-toggle {
+    margin-left: 0.35rem;
+    flex: 0 0 auto;
+}
+
+.theme-toggle svg {
+    width: 18px;
+    height: 18px;
+}
+
+/* Show the icon of the theme a click switches to: sun while dark, moon while light. */
+.theme-toggle .theme-icon-moon {
+    display: none;
+}
+
+@media (prefers-color-scheme: light) {
+    :where(html:not([data-theme="dark"])) .theme-toggle .theme-icon-sun { display: none; }
+    :where(html:not([data-theme="dark"])) .theme-toggle .theme-icon-moon { display: block; }
+}
+
+:where(html[data-theme="light"]) .theme-toggle .theme-icon-sun { display: none; }
+:where(html[data-theme="light"]) .theme-toggle .theme-icon-moon { display: block; }
+
+@media (max-width: 640px) {
+    .theme-toggle {
+        width: 44px;
+        height: 44px;
+    }
 }
 
 

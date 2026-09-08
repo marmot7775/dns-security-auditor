@@ -20,6 +20,7 @@
     <link rel="apple-touch-icon" sizes="180x180" href="/static/apple-touch-icon.png">
     <link rel="icon" type="image/png" sizes="32x32" href="/static/favicon-32.png">
     <link rel="stylesheet" href="/static/style.css?v=474f341">
+    <script src="/static/theme.js?v=474f341"></script>
 </head>
 <body>
     <header class="site-header">
@@ -42,6 +43,10 @@
                     <a href="/" class="nav-link">Home</a>
                     <a href="/articles/" class="nav-link">Articles</a>
                     <a href="/about" class="nav-link">About</a>
+                    <button type="button" class="theme-toggle" id="theme-toggle" aria-label="Switch theme" title="Switch theme">
+                        <svg class="theme-icon-sun" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.93 4.93l1.41 1.41M17.66 17.66l1.41 1.41M2 12h2M20 12h2M6.34 17.66l-1.41 1.41M19.07 4.93l-1.41 1.41"/></svg>
+                        <svg class="theme-icon-moon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3a6 6 0 0 0 9 9 9 9 0 1 1-9-9Z"/></svg>
+                    </button>
                 </nav>
             </div>
         </div>
@@ -101,13 +106,13 @@
 
         <section class="dbis-section">
             <h2>Checking this yourself</h2>
-            <p>None of this has to be taken on trust. The server is open source under the MIT License: the log line is written in <code>server.py</code>, the browser and OS labels come from <code>ua_classify.py</code>, the snapshot database is <code>dns_snapshots.py</code>, and every use of local storage is in <code>static/app.js</code>. You can <a href="https://github.com/marmot7775/dns-security-auditor" target="_blank" rel="noopener">read it or run it yourself</a>.</p>
+            <p>None of this has to be taken on trust. The server is open source under the MIT License: the log line is written in <code>server.py</code>, the browser and OS labels come from <code>ua_classify.py</code>, the snapshot database is <code>dns_snapshots.py</code>, and every use of local storage is in <code>static/app.js</code> and <code>static/theme.js</code>. You can <a href="https://github.com/marmot7775/dns-security-auditor" target="_blank" rel="noopener">read it or run it yourself</a>.</p>
         </section>
 
         <section class="dbis-section">
             <h2>Changes</h2>
             <p>This page describes the tool as it works today. When the tool changes, this page changes with it.</p>
-            <p><strong>Last updated:</strong> 31 August 2026</p>
+            <p><strong>Last updated:</strong> 8 September 2026</p>
         </section>
     </main>
     <footer class="site-footer">
