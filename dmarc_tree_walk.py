@@ -143,6 +143,21 @@ def _psl_org_domain(domain: str) -> Optional[str]:
     return ".".join(labels[-2:])
 
 
+class _LookupFailed(str):
+    """Sentinel for a _dmarc query that never completed.
+
+    A str subclass so any caller that treats the result as a record sees an
+    empty string rather than raising, while `is LOOKUP_FAILED` identifies it
+    exactly. RFC 9989 section 4.10.1 leaves the handling of DNS errors to the
+    receiver but distinguishes them from absence; an auditing tool that cannot
+    read a level must not report the level above it as the effective policy.
+    """
+    __slots__ = ()
+
+
+LOOKUP_FAILED = _LookupFailed()
+
+
 def _query_dmarc(domain: str) -> Optional[str]:
     """
     Query for a DMARC TXT record at _dmarc.<domain>.
@@ -174,8 +189,17 @@ def _query_dmarc(domain: str) -> Optional[str]:
         if len(dmarc_records) == 1:
             return dmarc_records[0]
         return None
-    except Exception:
+    except (dns.resolver.NXDOMAIN, dns.resolver.NoAnswer):
+        # An answer: there is no record at this name.
         return None
+    except Exception:
+        # SERVFAIL, REFUSED, timeout, NoNameservers. Nothing was learned, and
+        # RFC 9989 section 4.10.1 draws exactly this line: a set containing no
+        # DMARC Policy Record means "any indication that there is no such
+        # record as opposed to a transient DNS error". Collapsing the two into
+        # None let the walk climb past a level it could not read and then state
+        # the policy it found above as the one that applies.
+        return LOOKUP_FAILED
 
 
 def _parse_dmarc_tags(record: str) -> Dict[str, str]:
@@ -209,6 +233,29 @@ def _domain_exists(domain: str) -> bool:
 
 
 def dmarc_tree_walk(domain: str) -> Dict[str, Any]:
+    """Public entry point. Adds walk_incomplete to whichever result came back.
+
+    Every branch below returns through here, and each records lookup_failed on
+    the step whose query never completed, so the flag is derived from the steps
+    rather than threaded through four separate return paths where it could
+    drift out of sync with them.
+
+    walk_incomplete means: at least one level between the Author Domain and
+    whatever policy this walk reports could not be read. RFC 9989 section
+    4.10.1 draws that line itself, describing a walk that finds no policy
+    record as "any indication that there is no such record as opposed to a
+    transient DNS error". A consumer must not state an inherited policy across
+    a level the walk could not see, because the unread level is exactly where a
+    different policy would live.
+    """
+    result = _dmarc_tree_walk_impl(domain)
+    result["walk_incomplete"] = any(
+        step.get("lookup_failed") for step in result.get("steps", [])
+    )
+    return result
+
+
+def _dmarc_tree_walk_impl(domain: str) -> Dict[str, Any]:
     """
     Perform the DMARC DNS Tree Walk per RFC 9989 Section 4.10.
 
@@ -239,10 +286,18 @@ def dmarc_tree_walk(domain: str) -> Dict[str, Any]:
     # at most 7 more.
     # ------------------------------------------------------------------
     record = _query_dmarc(domain)
+    # A step whose query never completed is not a step that found no record.
+    # walk_incomplete travels with the result so no consumer states a policy
+    # across a level this walk could not read.
+    walk_incomplete = False
+    if record is LOOKUP_FAILED:
+        walk_incomplete = True
+        record = None
     steps.append({
         "domain": domain,
         "query": f"_dmarc.{domain}",
         "record": record,
+        "lookup_failed": walk_incomplete,
         "found": record is not None,
         "level": "author_domain",
         "label": "Author Domain",
@@ -346,6 +401,10 @@ def dmarc_tree_walk(domain: str) -> Dict[str, Any]:
     while len(current_labels) >= 1 and walk_query_count < MAX_TREE_WALK_QUERIES:
         parent = ".".join(current_labels)
         record = _query_dmarc(parent)
+        _step_failed = record is LOOKUP_FAILED
+        if _step_failed:
+            walk_incomplete = True
+            record = None
         walk_query_count += 1
 
         # Display label heuristic for the frontend tree visualization.
@@ -362,6 +421,7 @@ def dmarc_tree_walk(domain: str) -> Dict[str, Any]:
             "domain": parent,
             "query": f"_dmarc.{parent}",
             "record": record,
+            "lookup_failed": _step_failed,
             "found": record is not None,
             "level": "tree_walk",
             "label": level_label,
@@ -566,6 +626,7 @@ def _walk_after_author_hit(
     author_record: str,
     author_policy: str,
     author_psd: str,
+    walk_incomplete: bool = False,
 ) -> Dict[str, Any]:
     """Walk after an Author-Domain hit when the Author record has no psd.
 
@@ -597,6 +658,10 @@ def _walk_after_author_hit(
     while len(current_labels) >= 1 and walk_query_count < MAX_TREE_WALK_QUERIES:
         parent = ".".join(current_labels)
         record = _query_dmarc(parent)
+        _step_failed = record is LOOKUP_FAILED
+        if _step_failed:
+            walk_incomplete = True
+            record = None
         walk_query_count += 1
 
         if len(current_labels) == len(labels) - 1:
@@ -610,6 +675,7 @@ def _walk_after_author_hit(
             "domain": parent,
             "query": f"_dmarc.{parent}",
             "record": record,
+            "lookup_failed": _step_failed,
             "found": record is not None,
             "level": "tree_walk",
             "label": level_label,

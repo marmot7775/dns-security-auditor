@@ -389,3 +389,19 @@ def pytest_configure(config):
     config.addinivalue_line(
         "markers", "allow_network: test binds or connects a real socket on purpose"
     )
+
+
+@pytest.fixture
+def audit_zone():
+    """Run an arbitrary callable with a declared zone patched in.
+
+    The `audit` fixture drives a whole run_full_audit. Some tests need one
+    module's function under the same fake DNS without the rest of the audit.
+    """
+    def _run(zone, fn):
+        if isinstance(zone, dict):
+            zone = FakeZone(zone)
+        with fake_dns(zone):
+            return fn()
+
+    return _run

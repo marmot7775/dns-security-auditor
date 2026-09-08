@@ -676,6 +676,20 @@ def _enrich_dmarc_inheritance(
     if raw_dmarc.get("record"):
         return  # Has its own record, no inheritance needed
 
+    # A walk that could not read one of its levels cannot say which policy
+    # applies: the unread level is exactly where a different one would live.
+    # RFC 9989 section 4.10.1 distinguishes "no such record" from "a transient
+    # DNS error" in as many words, and this is the consumer that has to honour
+    # the distinction. inheritance_lookup_failed is the flag the card, the
+    # roadmap, the plan and the resilience section already read.
+    if tree_walk_result and tree_walk_result.get("walk_incomplete"):
+        _failed = [s.get("query") for s in tree_walk_result.get("steps", [])
+                   if s.get("lookup_failed")]
+        log.info("DMARC tree walk incomplete for %s; unread: %s", domain, _failed)
+        raw_dmarc["inheritance_lookup_failed"] = True
+        raw_dmarc["inheritance_lookup_target"] = _failed[0] if _failed else None
+        return
+
     # -- Try tree walk first (RFC 9989) --
     if (tree_walk_result
         and tree_walk_result.get("policy_source")
