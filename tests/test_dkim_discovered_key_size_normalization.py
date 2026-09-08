@@ -94,6 +94,9 @@ def discover(monkeypatch):
         class _FakeResolver:
             lifetime = 3
 
+            def __init__(self, *args, **kwargs):
+                pass
+
             def resolve(self, name, rdtype):
                 if name == fqdn:
                     return [_FakeAnswer(record)]

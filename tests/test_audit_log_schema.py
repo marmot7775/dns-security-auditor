@@ -77,7 +77,7 @@ def _fake_request(ip="203.0.113.7", ua="pytest-agent", referer=None):
     return Request(scope)
 
 
-def _ok_audit(domain, dkim_selector=None, scope=None, progress_callback=None):
+def _ok_audit(domain, dkim_selector=None, scope=None, progress_callback=None, deadline=None):
     return {
         "domain": domain,
         "checks": [{"id": "dmarc"}, {"id": "spf"}],
@@ -86,7 +86,7 @@ def _ok_audit(domain, dkim_selector=None, scope=None, progress_callback=None):
     }
 
 
-def _boom_audit(domain, dkim_selector=None, scope=None, progress_callback=None):
+def _boom_audit(domain, dkim_selector=None, scope=None, progress_callback=None, deadline=None):
     raise RuntimeError("audit engine exploded")
 
 

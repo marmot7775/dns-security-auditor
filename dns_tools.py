@@ -84,11 +84,23 @@ _DNSSEC_CACHE = BoundedNegativeCache(max_size=1000)
 # record lookups the cache exists for, in favour of names that will never be
 # queried again for any other domain. With 193 unique names a cache buys
 # nothing here.
+#
+# dns.resolver.Resolver() re-reads /etc/resolv.conf from disk on every
+# construction (configure=True by default), and one of these gets built per
+# probe: /etc/resolv.conf opened 241 times in a single audit, counted by
+# patching builtins.open. Read it once at import and hand every probe
+# resolver a copy of the parsed configuration instead of the file.
+_resolv_conf_template = dns.resolver.Resolver()
 
 
 def get_uncached_resolver(timeout: float = 5.0) -> "dns.resolver.Resolver":
     """A resolver that neither reads nor writes the shared answer cache."""
-    resolver = dns.resolver.Resolver()
+    resolver = dns.resolver.Resolver(configure=False)
+    resolver.nameservers = list(_resolv_conf_template.nameservers)
+    resolver.domain = _resolv_conf_template.domain
+    resolver.search = list(_resolv_conf_template.search)
+    resolver.rotate = _resolv_conf_template.rotate
+    resolver.ndots = _resolv_conf_template.ndots
     resolver.timeout = timeout
     resolver.lifetime = timeout * 2
     resolver.cache = None

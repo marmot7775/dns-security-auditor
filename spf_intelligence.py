@@ -10,7 +10,7 @@ import re
 import time
 import dns.resolver
 import dns.exception
-from concurrent.futures import ThreadPoolExecutor, as_completed
+from concurrent.futures import ThreadPoolExecutor, TimeoutError as _FuturesTimeoutError, as_completed
 from typing import List, Dict, Optional, Callable
 
 from dkim_formatter import analyze_dkim_key_strength
@@ -178,31 +178,82 @@ def detect_vendors_from_spf(spf_record: str) -> List[Dict]:
     
     return detected_vendors
 
-def get_prioritized_selectors(spf_record: str, base_selectors: List[str]) -> List[str]:
-    """
-    Generate prioritized DKIM selector list based on SPF analysis.
-    
-    Strategy:
-    1. HIGH PRIORITY: Selectors from vendors detected in SPF (80% hit rate)
-    2. LOW PRIORITY: Remaining base selectors (20% hit rate)
-    
-    This means we find most DKIM records in the first 5-10 tests instead of 20+
-    """
-    vendors = detect_vendors_from_spf(spf_record)
-    
-    # Priority selectors from detected vendors
+
+# MX hostname to vendor name, for the handful of vendors that both receive
+# and sign mail on the same hosted platform (Google Workspace, Microsoft
+# 365), or run as a relay that resigns outbound mail (Proofpoint, Mimecast).
+# Deliberately the same small set advanced_fingerprinting.py's MX matcher
+# uses, keyed to the same vendor names SPF_VENDOR_MAP already has selectors
+# for, so a domain that never mentions its vendor in SPF (self-hosted DNS in
+# front of a hosted mailbox, or an SPF record this audit could not read) can
+# still have its selectors prioritized instead of falling straight to the
+# generic sweep.
+MX_VENDOR_PATTERNS = {
+    'google.com': 'Google Workspace',
+    'outlook.com': 'Microsoft 365',
+    'protection.outlook.com': 'Microsoft 365',
+    'pphosted.com': 'Proofpoint',
+    'mimecast.com': 'Mimecast',
+}
+
+_VENDOR_NAME_TO_INFO = {
+    info['vendor']: info for info in SPF_VENDOR_MAP.values()
+}
+
+
+def detect_vendors_from_mx(mx_hosts: List[str]) -> List[Dict]:
+    """Detect email vendors from MX hostnames, the same way
+    detect_vendors_from_spf detects them from SPF includes."""
+    detected_vendors = []
+    seen_vendors = set()
+
+    for mx_host in mx_hosts or []:
+        mx_lower = (mx_host or "").lower().rstrip(".")
+        for pattern, vendor_name in MX_VENDOR_PATTERNS.items():
+            if mx_lower == pattern or mx_lower.endswith("." + pattern):
+                if vendor_name in seen_vendors:
+                    continue
+                vendor_info = _VENDOR_NAME_TO_INFO.get(vendor_name)
+                if not vendor_info:
+                    continue
+                detected_vendors.append({
+                    'vendor': vendor_name,
+                    'dkim_selectors': vendor_info['dkim_selectors'],
+                    'category': vendor_info['category'],
+                    'mx_host': mx_host,
+                })
+                seen_vendors.add(vendor_name)
+
+    return detected_vendors
+
+
+def _selectors_from_vendors(vendors: List[Dict], base_selectors: List[str]) -> List[str]:
+    """Reorder base_selectors so the selectors named by vendors come first."""
     priority_selectors = []
     for vendor in vendors:
         priority_selectors.extend(vendor['dkim_selectors'])
-    
+
     # Remove duplicates while preserving order
     seen = set()
     priority_selectors = [x for x in priority_selectors if not (x in seen or seen.add(x))]
-    
+
     # Add remaining base selectors
     remaining = [s for s in base_selectors if s not in priority_selectors]
-    
+
     return priority_selectors + remaining
+
+
+def get_prioritized_selectors(spf_record: str, base_selectors: List[str]) -> List[str]:
+    """
+    Generate prioritized DKIM selector list based on SPF analysis.
+
+    Strategy:
+    1. HIGH PRIORITY: Selectors from vendors detected in SPF (80% hit rate)
+    2. LOW PRIORITY: Remaining base selectors (20% hit rate)
+
+    This means we find most DKIM records in the first 5-10 tests instead of 20+
+    """
+    return _selectors_from_vendors(detect_vendors_from_spf(spf_record), base_selectors)
 
 def generate_vendor_intelligence_report(spf_record: str) -> str:
     """Generate report showing what vendors were auto-detected from SPF"""
@@ -239,13 +290,14 @@ def generate_vendor_intelligence_report(spf_record: str) -> str:
     return report
 
 def smart_dkim_check(domain: str, spf_record: Optional[str] = None, max_selectors: int = 40,
+                     mx_hosts: Optional[List[str]] = None,
                      progress_callback: Optional[Callable[[int], None]] = None,
                      executor: Optional[ThreadPoolExecutor] = None) -> Dict:
     """
-    INTELLIGENT DKIM checking using SPF-based vendor detection.
+    INTELLIGENT DKIM checking using SPF- and MX-based vendor detection.
 
     This is the smart version that:
-    1. Analyzes SPF to detect vendors
+    1. Analyzes SPF and MX to detect vendors
     2. Prioritizes relevant DKIM selectors
     3. Finds records faster with fewer DNS queries
     4. Returns vendor context with each found selector
@@ -254,7 +306,9 @@ def smart_dkim_check(domain: str, spf_record: Optional[str] = None, max_selector
         domain: Domain to check
         spf_record: SPF record (optional, will query if not provided)
         max_selectors: Max prioritized selectors to test (default 40, 0 = unlimited).
-            GENERIC_SELECTORS are tested on top of this cap, never inside it.
+        mx_hosts: MX hostnames, for vendors that both receive and sign mail
+            (Google Workspace, Microsoft 365) or resign it as a relay
+            (Proofpoint, Mimecast). Used alongside SPF-detected vendors.
         executor: Pool to run the selector probes on. Defaults to a private
             pool. Callers that already run inside a pool must pass one that is
             not the pool they are running on.
@@ -275,7 +329,7 @@ def smart_dkim_check(domain: str, spf_record: Optional[str] = None, max_selector
         'discovery_method': 'blind_loop',
         'intelligence_report': ''
     }
-    
+
     # Get SPF record if not provided
     if spf_record is None:
         try:
@@ -290,37 +344,55 @@ def smart_dkim_check(domain: str, spf_record: Optional[str] = None, max_selector
                     break
         except (dns.resolver.NXDOMAIN, dns.resolver.NoAnswer, dns.resolver.NoNameservers, dns.exception.DNSException):
             spf_record = None
-    
-    # SMART MODE: Use SPF analysis
+
+    # Combine SPF- and MX-detected vendors, SPF first: a domain naming its
+    # own vendor in SPF is a stronger signal than an MX host pattern match.
+    # A domain hosted at Google Workspace with no SPF include for it (rare,
+    # but SPF can fail to resolve) still gets Google's selectors from MX.
+    vendors = []
+    seen_vendor_names = set()
+    from_spf = False
     if spf_record:
-        vendors = detect_vendors_from_spf(spf_record)
-        result['vendors_detected'] = vendors
-        selectors_to_test = get_prioritized_selectors(spf_record, DKIM_SELECTORS)
-        result['discovery_method'] = 'spf_intelligent'
-        result['intelligence_report'] = generate_vendor_intelligence_report(spf_record)
+        for v in detect_vendors_from_spf(spf_record):
+            if v['vendor'] not in seen_vendor_names:
+                vendors.append(v)
+                seen_vendor_names.add(v['vendor'])
+                from_spf = True
+    for v in detect_vendors_from_mx(mx_hosts or []):
+        if v['vendor'] not in seen_vendor_names:
+            vendors.append(v)
+            seen_vendor_names.add(v['vendor'])
+    result['vendors_detected'] = vendors
+
+    if vendors:
+        priority_selectors = _selectors_from_vendors(vendors, DKIM_SELECTORS)
+        result['discovery_method'] = 'spf_intelligent' if from_spf else 'mx_intelligent'
+        if spf_record:
+            result['intelligence_report'] = generate_vendor_intelligence_report(spf_record)
     else:
-        # FALLBACK: Blind loop through all selectors
-        selectors_to_test = DKIM_SELECTORS
+        # No vendor detected from either signal: the head of the master
+        # list, which is organized by named vendor before it gets to the
+        # sequential/date-based/generic tail, is no more likely to match
+        # than anywhere else. The generic fallback below is what actually
+        # finds these domains (chiefly "default", self-hosted mail's own
+        # convention).
+        priority_selectors = DKIM_SELECTORS
         result['discovery_method'] = 'blind_loop'
-    
-    # Cap the prioritized list, then union the generics in behind it.
-    #
-    # The generics sit at the tail of the master list, behind 358 sequential
-    # and 370 date-based entries, so "default" lands at index 981 and no cap
-    # short of the whole list ever reached it. The effect was that every
-    # domain signing with default._domainkey and naming no recognized vendor
-    # in SPF got "no public keys found": OpenDKIM out of the box, cPanel,
-    # Plesk, most self-hosted mail. Those are precisely the domains with no
-    # vendor to prioritize from, so the cap and the ordering failed together.
-    #
-    # The generics go on top of max_selectors rather than inside it, so
-    # tightening the cap can never push default out of reach again.
+
     if max_selectors > 0:
-        selectors_to_test = selectors_to_test[:max_selectors]
-    _seen = set()
-    selectors_to_test = [
-        s for s in list(selectors_to_test) + list(GENERIC_SELECTORS)
-        if not (s in _seen or _seen.add(s))
+        priority_selectors = priority_selectors[:max_selectors]
+
+    # GENERIC_SELECTORS is a fallback sweep, not a standing addition. Before,
+    # it was unioned into every probe regardless of outcome, so every audit
+    # ran 40 (capped priority) + 156 (generic) = 196 probes even when the
+    # very first vendor-implied selector was going to match. It only runs
+    # now when the priority list -- vendor-implied selectors, or the head of
+    # the master list when no vendor was detected -- finds nothing, which is
+    # the common case for self-hosted mail publishing "default" and the rare
+    # case for everyone else.
+    _seen_priority = set(priority_selectors)
+    fallback_selectors = [
+        s for s in GENERIC_SELECTORS if not (s in _seen_priority or _seen_priority.add(s))
     ]
 
     # Wildcard detection: query a random nonsense selector. If it returns
@@ -354,14 +426,13 @@ def smart_dkim_check(domain: str, spf_record: Optional[str] = None, max_selector
     def _test_selector(selector: str) -> dict | None:
         fqdn = f"{selector}._domainkey.{domain}"
         try:
-            # Built per probe, so with the generics unioned in this ran ~190
-            # times per audit, each one re-reading /etc/resolv.conf from disk.
-            # Uncached on purpose. The prioritized list plus the generics dedupe
-            # to ~193 probes per audit and essentially all are NXDOMAIN. Cached,
-            # one audit evicted about a tenth of the 2000 entry cache and ten
-            # audits flushed it, pushing out the repeated record lookups the
-            # cache exists for in favour of names never queried again for any
-            # other domain. With 193 unique names a cache buys nothing here.
+            # Built per probe, but no longer re-reading /etc/resolv.conf from
+            # disk each time: get_uncached_resolver copies a configuration
+            # read once at import instead of reconfiguring from the file.
+            # Uncached on purpose: with the fallback sweep now conditional,
+            # a typical audit's unique probe names are fewer still, and a
+            # name that resolves once here is not one any other domain's
+            # audit will ever ask again.
             resolver = get_uncached_resolver(3)
             resolver.lifetime = 3
             answers = resolver.resolve(fqdn, 'TXT')
@@ -418,13 +489,22 @@ def smart_dkim_check(domain: str, spf_record: Optional[str] = None, max_selector
     # Callers pass a long-lived pool instead.
     own_pool = executor is None
     pool = executor or ThreadPoolExecutor(max_workers=15)
-    try:
-        futures = {
-            pool.submit(_test_selector, sel): sel
-            for sel in selectors_to_test
-        }
+
+    def _run_wave(selectors: List[str]) -> None:
+        nonlocal timed_out, tested
+        if not selectors or timed_out:
+            return
+        remaining = deadline - time.monotonic()
+        if remaining <= 0:
+            timed_out = True
+            return
+        futures = {pool.submit(_test_selector, sel): sel for sel in selectors}
         try:
-            for future in as_completed(futures):
+            # A timeout passed to as_completed is enforced by the stdlib; the
+            # previous form checked time.monotonic() only after each future
+            # completed, so a slow queue meant the 15s budget was advisory,
+            # observed overshooting to 15.2s.
+            for future in as_completed(futures, timeout=remaining):
                 tested += 1
                 r = future.result()
                 if r:
@@ -433,22 +513,28 @@ def smart_dkim_check(domain: str, spf_record: Optional[str] = None, max_selector
                         progress_callback(len(found))
                     if len(found) >= DKIM_MAX_FOUND:
                         break
-                if time.monotonic() >= deadline:
-                    timed_out = True
-                    break
+        except _FuturesTimeoutError:
+            timed_out = True
         finally:
             # Cancel the stragglers rather than shutting the pool down. The
             # pool may belong to the caller, and shutting a shared pool down
             # from inside one check would take every other check in the
-            # process with it.
+            # process with it. A future still queued (never started) is
+            # actually stopped by cancel(); one already running is not, a
+            # limit of the underlying thread, not of this call.
             for f in futures:
                 f.cancel()
+
+    try:
+        _run_wave(priority_selectors)
+        if not found:
+            _run_wave(fallback_selectors)
     finally:
         if own_pool:
             pool.shutdown(wait=False, cancel_futures=True)
 
-    # Preserve priority order from SPF-based ranking
-    selector_order = {sel: i for i, sel in enumerate(selectors_to_test)}
+    # Preserve priority order: vendor-implied selectors, then generics.
+    selector_order = {sel: i for i, sel in enumerate(priority_selectors + fallback_selectors)}
     found.sort(key=lambda r: selector_order.get(r['selector'], 999))
 
     result['found_selectors'] = found

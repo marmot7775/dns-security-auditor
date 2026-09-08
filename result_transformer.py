@@ -4554,22 +4554,46 @@ def transform_dkim(raw: Dict, domain: str, has_mx: bool = True, non_mail: bool =
             }
 
         # Outcome C: nothing found. Same reasoning, without the retired keys.
+        #
+        # A truncated probe (the discovery deadline hit mid-sweep, usually
+        # DKIM worker starvation under concurrent audits, not slow DNS) is not
+        # the same as a completed sweep that found nothing: selectors the
+        # probe never reached might still hold a key. The same domain audited
+        # alone can find that key; audited alongside seven others it gets
+        # this card instead, and the card must say why rather than reading
+        # like a considered "nothing here".
+        discovery_truncated = bool(raw.get("timed_out"))
         _unknown_details = [
-            {"type": "info", "text": f"Checked {tested} common selectors, no public key found"},
+            {
+                "type": "warning" if discovery_truncated else "info",
+                "text": (
+                    f"Selector discovery did not finish: checked {tested} selectors "
+                    "before running out of time"
+                ) if discovery_truncated else (
+                    f"Checked {tested} common selectors, no public key found"
+                ),
+            },
             {"type": "info", "text": _DKIM_NOT_ENUMERABLE},
         ]
-        if raw.get("timeout_note"):
-            _unknown_details.append({"type": "warning", "text": raw["timeout_note"]})
         _unknown_details.extend(dict(d) for d in _DKIM_HOW_TO_SETTLE)
         for issue in raw.get("issues", []):
             _unknown_details.append(_issue_to_detail(issue))
-        return {
-            "name": "DKIM",
-            "status": "unavailable",
-            "pill_label": "Not confirmed",
-            "verdict": "DKIM could not be confirmed by probing",
-            "record": None,
-            "explanation": (
+        if discovery_truncated:
+            explanation = (
+                "DKIM (<a href=\"https://datatracker.ietf.org/doc/html/rfc6376\" "
+                "target=\"_blank\" rel=\"noopener\">RFC 6376</a>) attaches a "
+                "cryptographic signature to each outgoing message, letting receivers "
+                "verify that it was not altered and came from an authorized sender. "
+                f"This audit's selector probe ran out of time after checking {tested} "
+                "selectors, so this is an incomplete search, not a completed one that "
+                "found nothing. A re-run, especially at a quieter time, may reach a "
+                "selector this one did not. Two things settle it directly: enter the "
+                "selector above for a direct lookup, or read the s= value from the "
+                "DKIM-Signature or Authentication-Results header of a message this "
+                "domain sent."
+            )
+        else:
+            explanation = (
                 "DKIM (<a href=\"https://datatracker.ietf.org/doc/html/rfc6376\" "
                 "target=\"_blank\" rel=\"noopener\">RFC 6376</a>) attaches a "
                 "cryptographic signature to each outgoing message, letting receivers "
@@ -4581,7 +4605,17 @@ def transform_dkim(raw: Dict, domain: str, has_mx: bool = True, non_mail: bool =
                 "its mail. Two things settle it: enter the selector above for a direct "
                 "lookup, or read the s= value from the DKIM-Signature or "
                 "Authentication-Results header of a message this domain sent."
+            )
+        return {
+            "name": "DKIM",
+            "status": "unavailable",
+            "pill_label": "Not confirmed",
+            "verdict": (
+                "DKIM discovery did not finish" if discovery_truncated
+                else "DKIM could not be confirmed by probing"
             ),
+            "record": None,
+            "explanation": explanation,
             "details": _unknown_details,
             "fix": None,
             "fix_records": None,
