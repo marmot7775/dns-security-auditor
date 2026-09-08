@@ -158,7 +158,17 @@ def _lookup_ttl(name: str, rdtype: str = "TXT") -> Optional[int]:
         return None
 
 
-def _lookup_txt(name: str) -> List[str]:
+class LookupFailed(Exception):
+    """The DNS query did not complete: SERVFAIL, REFUSED or a timeout.
+
+    Distinct from an empty result, which means the record is genuinely absent.
+    Collapsing the two made MTA-STS, TLS-RPT and BIMI report "not configured"
+    off a query that never ran, with fix text telling the operator to publish a
+    record they may already have.
+    """
+
+
+def _lookup_txt(name: str, raise_on_failure: bool = False) -> List[str]:
     if not DNS_AVAILABLE:
         return []
     try:
@@ -167,22 +177,41 @@ def _lookup_txt(name: str) -> List[str]:
         records = []
         for rdata in answers:
             parts = []
-            for s in rdata.strings:
-                parts.append(s.decode("utf-8") if isinstance(s, bytes) else str(s))
+            for part in rdata.strings:
+                # errors="replace": a TXT record is bytes, not UTF-8 by
+                # contract. UnicodeDecodeError is not a DNSException, so one
+                # undecodable byte anywhere at _mta-sts, _smtp._tls or
+                # default._bimi escaped every handler here and took the whole
+                # check down with a server-error card. audit_engine._lookup_txt
+                # was fixed for this; this copy was missed.
+                parts.append(
+                    part.decode("utf-8", errors="replace")
+                    if isinstance(part, bytes) else str(part)
+                )
             records.append("".join(parts))
         return records
-    except (dns.resolver.NXDOMAIN, dns.resolver.NoAnswer, dns.resolver.NoNameservers, dns.exception.DNSException):
+    except (dns.resolver.NXDOMAIN, dns.resolver.NoAnswer):
+        return []
+    except dns.exception.DNSException as e:
+        # NoNameservers (SERVFAIL/REFUSED from every nameserver) and Timeout
+        # land here. Nothing was learned.
+        if raise_on_failure:
+            raise LookupFailed(f"{name}: {type(e).__name__}") from e
         return []
 
 
-def _lookup_records(name: str, rdtype: str) -> List[str]:
+def _lookup_records(name: str, rdtype: str, raise_on_failure: bool = False) -> List[str]:
     if not DNS_AVAILABLE:
         return []
     try:
         resolver = _get_resolver()
         answers = resolver.resolve(name, rdtype)
         return [str(rdata).rstrip(".") for rdata in answers]
-    except (dns.resolver.NXDOMAIN, dns.resolver.NoAnswer, dns.resolver.NoNameservers, dns.exception.DNSException):
+    except (dns.resolver.NXDOMAIN, dns.resolver.NoAnswer):
+        return []
+    except dns.exception.DNSException as e:
+        if raise_on_failure:
+            raise LookupFailed(f"{name}: {type(e).__name__}") from e
         return []
 
 
@@ -458,7 +487,16 @@ def check_mta_sts(domain: str) -> Dict[str, Any]:
         return result
 
     txt_name = f"_mta-sts.{domain}"
-    all_txt = _lookup_txt(txt_name)
+    # raise_on_failure: a SERVFAIL or a timeout is not "no record published".
+    # Reporting "not configured" off a query that never completed hands the
+    # operator a fix for a problem they may not have.
+    try:
+        all_txt = _lookup_txt(txt_name, raise_on_failure=True)
+    except LookupFailed:
+        result["status"] = "unavailable"
+        result["unavailable_reason"] = "dns_lookup_failed"
+        result["lookup_target"] = txt_name
+        return result
     sts_records = [r for r in all_txt if r.strip().lower().startswith("v=stsv1")]
 
     if not sts_records:
@@ -648,7 +686,16 @@ def check_tls_rpt(domain: str) -> Dict[str, Any]:
         return result
 
     txt_name = f"_smtp._tls.{domain}"
-    all_txt = _lookup_txt(txt_name)
+    # raise_on_failure: a SERVFAIL or a timeout is not "no record published".
+    # Reporting "not configured" off a query that never completed hands the
+    # operator a fix for a problem they may not have.
+    try:
+        all_txt = _lookup_txt(txt_name, raise_on_failure=True)
+    except LookupFailed:
+        result["status"] = "unavailable"
+        result["unavailable_reason"] = "dns_lookup_failed"
+        result["lookup_target"] = txt_name
+        return result
     rpt_records = [r for r in all_txt if r.strip().lower().startswith("v=tlsrptv1")]
 
     if not rpt_records:
@@ -801,7 +848,16 @@ def check_bimi(domain: str, dmarc_enforcing_override: bool = None, dmarc_found_o
         return result
 
     bimi_name = f"default._bimi.{domain}"
-    all_txt = _lookup_txt(bimi_name)
+    # raise_on_failure: a SERVFAIL or a timeout is not "no record published".
+    # Reporting "not configured" off a query that never completed hands the
+    # operator a fix for a problem they may not have.
+    try:
+        all_txt = _lookup_txt(bimi_name, raise_on_failure=True)
+    except LookupFailed:
+        result["status"] = "unavailable"
+        result["unavailable_reason"] = "dns_lookup_failed"
+        result["lookup_target"] = bimi_name
+        return result
     bimi_records = [r for r in all_txt if r.strip().lower().startswith("v=bimi1")]
 
     if not bimi_records:

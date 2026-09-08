@@ -4850,8 +4850,10 @@ def run_full_audit(domain: str, dkim_selector: Optional[str] = None,
                 _fqdn = f"{_dkim_sel}._domainkey.{domain}"
                 _raw = {"domain": domain, "found_selectors": [], "selector_queried": _dkim_sel}
                 try:
-                    import dns.resolver as _dkim_resolver
-                    answers = _dkim_resolver.resolve(_fqdn, "TXT")
+                    # _get_resolver, not the bare module resolver: this is the
+                    # only DNS call in the audit that skipped the shared answer
+                    # cache and the shared timeout.
+                    answers = _get_resolver().resolve(_fqdn, "TXT")
                     # One joined string per rdata. Joining a record's own
                     # strings is right, that is how a TXT value over 255
                     # bytes is reassembled, but joining across records merges
@@ -4891,8 +4893,21 @@ def run_full_audit(domain: str, dkim_selector: Optional[str] = None,
                                     "give a rotating key its own selector name."
                                 ),
                             })
-                except dns.exception.DNSException:
+                except (dns.resolver.NXDOMAIN, dns.resolver.NoAnswer):
+                    # The name genuinely has no TXT record. "Not found" is a
+                    # true statement about the domain here.
                     _raw["selector_not_found"] = _dkim_sel
+                    _raw["tested_count"] = 1
+                except dns.exception.DNSException:
+                    # SERVFAIL, REFUSED or a timeout. Nothing was learned, so
+                    # "Selector 'x' not found. Verify the selector name is
+                    # correct." was advice drawn from a query that never
+                    # completed. Same distinction _lookup_txt draws with
+                    # raise_on_failure for the apex and _dmarc lookups.
+                    log.info("DKIM selector lookup did not complete for %s", _fqdn)
+                    _raw["status"] = "unavailable"
+                    _raw["unavailable_reason"] = "dns_lookup_failed"
+                    _raw["lookup_target"] = _fqdn
                     _raw["tested_count"] = 1
                 return _raw
             _parallel_checks.append(("dkim", _run_dkim_direct,
@@ -5930,16 +5945,29 @@ def _build_priority_fixes(checks: List[Dict], raw_results: Dict = None, has_mx: 
 # ============================================================
 
 def _timeout_card(name: str) -> Dict:
-    """Generate a card for a check that timed out."""
+    """Generate a card for a check that timed out.
+
+    Status is "unavailable", not "warn". Nothing about the domain was learned,
+    so scoring it as a warning put a finding on the report that the domain did
+    not earn: the PDF cover counted it under Warnings and the front end under
+    its fail/warn tallies. "unavailable" is the state _tally, the executive
+    summary, the roadmap and the front end all already understand, and it keeps
+    the check visible without asserting anything. The pill still says Timeout,
+    which is the part the reader needs.
+    """
     return {
         "name": name,
-        "status": "warn",
+        "status": "unavailable",
         "pill_label": "Timeout",
-        "verdict": f"{name} check timed out",
+        "verdict": "Not checked by this audit",
         "record": None,
-        "explanation": f"The {name} check did not complete within {CHECK_TIMEOUT} seconds. This usually means the domain's DNS server is slow to respond.",
+        "explanation": (
+            f"The {name} check did not complete within {CHECK_TIMEOUT} seconds. This "
+            "usually means the domain's DNS server is slow to respond. Nothing about "
+            "this domain was assessed here, and it does not mean the record is missing."
+        ),
         "details": [
-            {"type": "warning", "text": f"Check timed out after {CHECK_TIMEOUT}s"},
+            {"type": "info", "text": f"Check timed out after {CHECK_TIMEOUT}s"},
         ],
         "fix": "Try running the audit again. If the issue persists, the domain's DNS infrastructure may have connectivity issues.",
     }
@@ -5951,16 +5979,25 @@ def _error_card(name: str, error: Exception) -> Dict:
     The raw exception is intentionally NOT echoed to the user. Callers
     already log it with exc_info=True; including str(error) here has
     leaked filesystem paths and other server-side detail in the past.
+
+    Status is "unavailable", not "fail", for the same reason _timeout_card is.
+    An exception on our side says nothing about the domain, and grading it
+    "fail" counted a server-side problem in the Issues figure on the PDF cover
+    and let it drive the executive summary's verdict.
     """
     return {
         "name": name,
-        "status": "fail",
+        "status": "unavailable",
         "pill_label": "Error",
-        "verdict": "Check failed due to an error",
+        "verdict": "Not checked by this audit",
         "record": None,
-        "explanation": f"An unexpected error occurred while running the {name} check. This may be a temporary DNS issue.",
+        "explanation": (
+            f"The {name} check did not complete: something went wrong while running "
+            "it. Nothing about this domain was assessed here, so this is a gap in the "
+            "audit rather than a finding. It does not mean the record is missing."
+        ),
         "details": [
-            {"type": "error", "text": f"The {name} check could not be completed. Please try again."},
+            {"type": "info", "text": f"The {name} check could not be completed. Please try again."},
         ],
         "fix": "Try running the audit again. If the issue persists, the DNS server may be unresponsive.",
     }

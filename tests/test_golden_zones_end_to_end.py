@@ -398,7 +398,7 @@ def _populated_fields(panel):
 # producer/consumer key mismatch takes, and a field that starts being
 # populated is a deliberate change worth re-reading this list for.
 GOLDEN_DEEP_PANELS = {
-    ("DKIM", "dkim_deep"): {"has_weak", "keys", "rotation_guidance"},
+    ("DKIM", "dkim_deep"): {"has_invalid", "has_weak", "keys", "rotation_guidance"},
     ("SPF", "spf_deep"): {
         "all_explanation", "all_mechanism", "all_severity", "dmarcbis_note",
         "lookup_count", "mechanisms",

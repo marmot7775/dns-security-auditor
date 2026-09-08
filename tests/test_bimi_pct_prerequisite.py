@@ -74,7 +74,7 @@ def test_override_path_pct_none_defaults_to_no_warning():
 def test_standalone_path_pct_below_100_disqualifies_bimi():
     dmarc_record = "v=DMARC1; p=reject; pct=20; rua=mailto:r@example.com"
 
-    def _fake_lookup(name):
+    def _fake_lookup(name, raise_on_failure=False):
         if name == "default._bimi.example.com":
             return [BIMI_RECORD]
         if name == "_dmarc.example.com":
@@ -95,7 +95,7 @@ def test_standalone_path_pct_below_100_disqualifies_bimi():
 def test_standalone_path_pct_absent_does_not_warn():
     dmarc_record = "v=DMARC1; p=reject; rua=mailto:r@example.com"
 
-    def _fake_lookup(name):
+    def _fake_lookup(name, raise_on_failure=False):
         if name == "default._bimi.example.com":
             return [BIMI_RECORD]
         if name == "_dmarc.example.com":

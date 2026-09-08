@@ -50,7 +50,9 @@ def test_error_card_does_not_leak_exception_text():
             f"_error_card leaked {token!r} to the user response: {rendered}"
         )
 
-    assert card["status"] == "fail"
+    # "unavailable", not "fail": an exception on our side says nothing about the
+    # domain, so it is a gap in the audit rather than a finding against it.
+    assert card["status"] == "unavailable"
     assert card["pill_label"] == "Error"
     assert card["details"], "Error card must still surface an actionable message"
 

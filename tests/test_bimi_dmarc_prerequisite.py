@@ -76,7 +76,7 @@ def test_sp_reject_does_not_satisfy_p_enforcement_check():
     exercises the tag parser fix directly."""
     dmarc_record = "v=DMARC1; p=none; sp=reject; rua=mailto:r@example.com"
 
-    def _fake_lookup(name):
+    def _fake_lookup(name, raise_on_failure=False):
         if name == "default._bimi.example.com":
             return [BIMI_RECORD]
         if name == "_dmarc.example.com":

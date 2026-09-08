@@ -54,7 +54,11 @@ def test_pct_zero_is_not_a_pass(policy):
         f"status={card['status']!r} verdict={card['verdict']!r}"
     )
     assert "pct=0" in card["verdict"]
-    assert "switched off" in card["verdict"], (
+    # The verdict must not claim failures are rejected, and must not claim
+    # enforcement is simply off either: RFC 9989 section C.5.2 removed pct, and
+    # the same report warns that RFC 9989 receivers ignore it. Naming both
+    # receiver populations is the only statement that is true of each.
+    assert "9989" in card["verdict"] and "7489" in card["verdict"], (
         f"The verdict has to say enforcement is off rather than claim "
         f"failures are rejected; got {card['verdict']!r}"
     )

@@ -264,10 +264,17 @@ def build_executive_summary(checks: List[Dict], roadmap: Dict) -> Dict:
     configured = 0
     assessed = 0
     for pname in protocol_names:
-        c = check_map.get(pname, {})
+        # A protocol this run never checked is not evidence either way. A scoped
+        # audit produces no card at all, and check_map.get returned an empty
+        # dict whose "" status and "" pill scored as assessed-and-not-configured,
+        # so a dmarc-scope run with one perfect record reported "1/9" and the
+        # About page then said the cover scored nine of a list holding one name.
+        if pname not in check_map:
+            continue
+        c = check_map[pname]
         st = c.get("status", "")
         pill = c.get("pill_label", "")
-        # A lookup that never completed is not evidence either way, so it
+        # A lookup that never completed is not evidence either way either, so it
         # leaves the denominator instead of scoring as "not configured".
         # Otherwise a protocol nobody could read is indistinguishable from
         # one the domain genuinely does not publish.
@@ -362,7 +369,26 @@ def build_executive_summary(checks: List[Dict], roadmap: Dict) -> Dict:
         else:
             deliverability_summary = f"Your configuration has {len(deliverability_issues)} issue{'s' if len(deliverability_issues) != 1 else ''} that may affect inbox placement."
     else:
-        deliverability_summary = "Your configuration looks solid. SPF, DKIM, and DMARC are properly set up, giving you the best chance of reaching inboxes."
+        # Only name the protocols this run actually assessed. The all-clear used
+        # to state that SPF, DKIM and DMARC were properly set up on a scoped
+        # audit that never queried two of them. auth_unavailable below covers the
+        # read-and-failed case; this covers the never-ran case.
+        _assessed_auth = [n for n in ("SPF", "DKIM", "DMARC")
+                          if check_map.get(n, {}).get("status") not in (None, "unavailable")]
+        if len(_assessed_auth) == 3:
+            deliverability_summary = "Your configuration looks solid. SPF, DKIM, and DMARC are properly set up, giving you the best chance of reaching inboxes."
+        elif _assessed_auth:
+            deliverability_summary = (
+                f"No inbox placement issues found in what this audit checked. "
+                f"{_join_names(sorted(_assessed_auth))} "
+                f"{'were' if len(_assessed_auth) > 1 else 'was'} assessed; the rest of "
+                "the email authentication stack was outside the scope of this run."
+            )
+        else:
+            deliverability_summary = (
+                "This audit did not assess email authentication, so it cannot speak to "
+                "inbox placement."
+            )
 
     # A lookup that never completed is not a clean bill of health. Without
     # this, the branch above names SPF, DKIM and DMARC as properly set up on
@@ -466,6 +492,13 @@ def build_security_roadmap(checks: List[Dict], is_no_mail: bool = False) -> Dict
 
     # DKIM weak keys
     dkim_deep = dkim.get("dkim_deep", {})
+    # A key that does not parse is broken now, not weak. has_weak stayed False
+    # for it, so the roadmap said nothing at all about a key failing every
+    # signature it makes.
+    if dkim_deep and dkim_deep.get("has_invalid"):
+        items.append({"priority": "critical", "protocol": "DKIM",
+                      "action": "Republish the unparseable DKIM key",
+                      "impact": "The published key does not parse, so every message signed with that selector fails DKIM."})
     if dkim_deep and dkim_deep.get("has_weak"):
         items.append({"priority": "high", "protocol": "DKIM",
                       "action": "Rotate weak DKIM keys to 2048-bit",
@@ -1420,13 +1453,25 @@ def transform_dmarc(raw: Dict, tree_walk: Optional[Dict] = None, is_no_mail: boo
         pct = raw.get("pct", 100)
         if pct is None:
             pct = 100
+        # pct=0 is not a flat "enforcement is off". RFC 9989 section C.5.2
+        # removed the pct tag, and the same report warns that RFC 9989 receivers
+        # ignore it, so an unqualified claim contradicts the tool's own tag
+        # breakdown and the RFC 9989 Readiness metric on the cover. The split
+        # between receiver populations is the fact; state it.
+        _pct_raw = raw.get("pct")
         if policy == "reject":
             verdict = "p=reject (authentication failures are rejected)"
-            _disabled = "p=reject with pct=0 (enforcement is switched off)"
+            _disabled = (
+                f"p=reject with pct={_pct_raw} (RFC 7489 receivers enforce on no mail; "
+                "RFC 9989 receivers ignore pct and reject in full)"
+            )
             _partial = "p=reject (authentication failures are rejected)"
         else:
             verdict = "p=quarantine (failures sent to spam)"
-            _disabled = "p=quarantine with pct=0 (enforcement is switched off)"
+            _disabled = (
+                f"p=quarantine with pct={_pct_raw} (RFC 7489 receivers enforce on no "
+                "mail; RFC 9989 receivers ignore pct and quarantine in full)"
+            )
             _partial = "p=quarantine (failures sent to spam)"
         # An enforcing policy is only a pass when it applies to all failing
         # mail. pct is what receivers act on, so it decides the status here
@@ -1436,7 +1481,10 @@ def transform_dmarc(raw: Dict, tree_walk: Optional[Dict] = None, is_no_mail: boo
             verdict = _disabled
             status = "fail"
         elif pct < 100:
-            verdict = f"{_partial} (pct={pct}, applied to {pct}% of failing messages)"
+            verdict = (
+                f"{_partial} (pct={pct}: RFC 7489 receivers apply the policy to "
+                f"{pct}% of failing messages, RFC 9989 receivers to all of them)"
+            )
             status = "warn"
         else:
             status = "pass"
@@ -4081,6 +4129,12 @@ def transform_dkim(raw: Dict, domain: str, has_mx: bool = True, non_mail: bool =
     # Lazy import avoids the audit_engine ↔ result_transformer cycle.
     from audit_engine import BUSINESS_RISK
 
+    # The selector lookup never completed. "Selector 'x' not found. Verify the
+    # selector name is correct." would be advice about a name the audit could
+    # not read, and it sends the operator to check a setting that is fine.
+    if raw.get("status") == "unavailable":
+        return _lookup_unavailable_card("DKIM", raw, "DKIM public key")
+
     found = raw.get("found_selectors", [])
     tested = raw.get("tested_count", 0)
 
@@ -4374,6 +4428,7 @@ def _build_dkim_key_analysis(raw: Dict) -> Optional[Dict]:
     keys = []
     has_weak = False
     has_revoked = False
+    has_invalid = False
     all_strong = True
 
     for sel in found:
@@ -4385,8 +4440,34 @@ def _build_dkim_key_analysis(raw: Dict) -> Optional[Dict]:
         key_type = key_analysis.get("key_type", "RSA")
         strength = key_analysis.get("status", "unknown")
 
-        # Key strength rating
-        if key_type.lower() == "ed25519":
+        # Key strength rating.
+        #
+        # "invalid" is tested first and on its own. It used to fall through the
+        # Ed25519 shortcut (green, "modern elliptic curve") or land in the bits
+        # == 0 else branch as amber "could not be determined", so one report
+        # showed three severities for one key: a FAIL card header, an amber row
+        # with a blank Bits column, and "Review key configuration" as the
+        # guidance. A key that does not parse fails every signature it makes.
+        if strength == "invalid":
+            rating = "red"
+            reason = key_analysis.get("reason")
+            if reason == "revoked":
+                rating_label = "Revoked. p= is empty, so every signature from this selector fails."
+            elif reason == "no_key":
+                rating_label = "No p= tag. This record publishes no key."
+            else:
+                rating_label = (
+                    key_analysis.get("warning")
+                    or "Key data does not parse. Every signature from this selector fails."
+                )
+            # An empty p= is a revocation, which is deliberate and already has
+            # its own guidance. Only a key that was meant to work and does not
+            # belongs in has_invalid, or the advice tells an operator to
+            # republish a key they revoked on purpose.
+            if reason != "revoked":
+                has_invalid = True
+            all_strong = False
+        elif key_type.lower() == "ed25519":
             rating = "green"
             rating_label = "Modern elliptic curve. Smaller, faster, more secure."
         elif bits >= 2048:
@@ -4456,6 +4537,8 @@ def _build_dkim_key_analysis(raw: Dict) -> Optional[Dict]:
         # the shared rotation_guidance text below.
         if key_revoked:
             rotation_status = "Revoked"
+        elif strength == "invalid":
+            rotation_status = "Replace"
         elif rating in ("red", "amber"):
             rotation_status = "Rotate"
         else:
@@ -4476,6 +4559,15 @@ def _build_dkim_key_analysis(raw: Dict) -> Optional[Dict]:
     # Rotation guidance
     if all_strong:
         rotation = "Keys meet standards. Best practice: rotate annually."
+    elif has_invalid:
+        _broken = [k["selector"] for k in keys if k["rotation_status"] == "Replace"]
+        rotation = (
+            f"Republish the key for {', '.join(_broken)}. The published p= value does "
+            "not parse as a public key, so every signature made with that selector "
+            "fails verification at every receiver. A DNS provider that truncates a long "
+            "TXT value produces exactly this, so compare the published record against "
+            "the key your mail server holds before regenerating anything."
+        )
     elif has_revoked:
         rotation = "Revoked key detected. Messages signed with this selector fail DKIM."
     elif has_weak:
@@ -4492,6 +4584,7 @@ def _build_dkim_key_analysis(raw: Dict) -> Optional[Dict]:
         "keys": keys,
         "rotation_guidance": rotation,
         "has_weak": has_weak,
+        "has_invalid": has_invalid,
     }
 
 
@@ -4666,6 +4759,10 @@ def transform_mx(raw: Dict) -> Dict:
 
 def transform_mta_sts(raw: Dict, domain: str, has_mx: bool = True, non_mail: bool = False) -> Dict:
     """Only a positive non-mail declaration (RFC 7505 null MX, or a null ``v=spf1 -all`` SPF record) waives this check. Absent MX alone does not: send-only subdomains have no MX and still send real mail."""
+    # The lookup never completed, so "not configured" would be a claim about
+    # the domain that this audit did not establish.
+    if raw.get("status") == "unavailable":
+        return _lookup_unavailable_card("MTA-STS", raw, "MTA-STS policy record")
     raw_status = raw.get("status", "warning")
     status = _map_status(raw_status)
     txt_record = raw.get("txt_record")
@@ -4828,6 +4925,10 @@ def _build_mta_sts_deep(raw: Dict, domain: str) -> Optional[Dict]:
 
 def transform_tls_rpt(raw: Dict, domain: str, has_mx: bool = True, non_mail: bool = False) -> Dict:
     """Only a positive non-mail declaration (RFC 7505 null MX, or a null ``v=spf1 -all`` SPF record) waives this check. Absent MX alone does not: send-only subdomains have no MX and still send real mail."""
+    # The lookup never completed, so "not configured" would be a claim about
+    # the domain that this audit did not establish.
+    if raw.get("status") == "unavailable":
+        return _lookup_unavailable_card("TLS-RPT", raw, "TLS-RPT record")
     status = _map_status(raw.get("status", "warning"))
     record = raw.get("record")
 
@@ -4941,6 +5042,10 @@ def _build_tls_rpt_deep(raw: Dict) -> Optional[Dict]:
 
 def transform_bimi(raw: Dict, domain: str, has_mx: bool = True, non_mail: bool = False) -> Dict:
     """Only a positive non-mail declaration (RFC 7505 null MX, or a null ``v=spf1 -all`` SPF record) waives this check. Absent MX alone does not: send-only subdomains have no MX and still send real mail."""
+    # The lookup never completed, so "not configured" would be a claim about
+    # the domain that this audit did not establish.
+    if raw.get("status") == "unavailable":
+        return _lookup_unavailable_card("BIMI", raw, "BIMI record")
     status = _map_status(raw.get("status", "info"))
     record = raw.get("record")
     records_found = raw.get("records_found", 0)
