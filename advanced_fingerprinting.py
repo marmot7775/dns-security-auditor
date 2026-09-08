@@ -115,16 +115,6 @@ class AdvancedVendorFingerprinter:
                 })
                 if self.verbose:
                     print(f"  ✓ {vendor} (from {inc})")
-
-        # Analyze mechanism complexity
-        mechanisms = re.findall(r'(ip4|ip6|a|mx|include):[^\s]+', txt)
-        if len(mechanisms) > 5:
-            self.signals.append({
-                'technique': 'SPF Complexity',
-                'vendor': 'Multiple Email Systems',
-                'evidence': f'{len(mechanisms)} SPF mechanisms',
-                'confidence': 0.70
-            })
     
     def _fingerprint_mx(self):
         """MX record pattern analysis"""
@@ -180,18 +170,6 @@ class AdvancedVendorFingerprinter:
             if self.verbose:
                 print("  ✗ No DMARC record found")
             return
-
-        # Policy analysis
-        policy_match = re.search(r'p=([^;]+)', record)
-        if policy_match:
-            policy = policy_match.group(1)
-            if policy in ['reject', 'quarantine']:
-                self.signals.append({
-                    'technique': 'DMARC Policy',
-                    'vendor': 'Enterprise Email Security',
-                    'evidence': f'p={policy}',
-                    'confidence': 0.75
-                })
 
         # Reporting destination
         rua_match = re.search(r'rua=mailto:([^;,\s]+)', record)
@@ -264,12 +242,9 @@ class AdvancedVendorFingerprinter:
                 print("  ✗ No MTA-STS policy")
             return
 
-        self.signals.append({
-            'technique': 'MTA-STS',
-            'vendor': 'Enterprise Email Security',
-            'evidence': 'MTA-STS policy present',
-            'confidence': 0.70
-        })
+        # MTA-STS being present says nothing about which vendor is behind
+        # it, so this stops short of a signal. See _fingerprint_bimi below
+        # for the same reasoning.
         if self.verbose:
             print("  ✓ MTA-STS configured")
     
@@ -296,12 +271,8 @@ class AdvancedVendorFingerprinter:
                 print("  ✗ No BIMI record")
             return
 
-        self.signals.append({
-            'technique': 'BIMI',
-            'vendor': 'Enterprise Brand Protection',
-            'evidence': 'BIMI record present',
-            'confidence': 0.75
-        })
+        # BIMI being present says nothing about which vendor is behind it,
+        # so this stops short of a signal.
         if self.verbose:
             print("  ✓ BIMI configured")
     

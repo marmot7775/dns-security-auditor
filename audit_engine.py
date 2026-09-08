@@ -5399,9 +5399,21 @@ def _format_vendors(fp_vendors: List) -> List[Dict]:
     for v in fp_vendors:
         confidence = v.get("confidence", 0)
         if confidence >= 0.5:  # Only show meaningful detections
+            # A vendor authorized in SPF can send as you (outbound) without
+            # ever receiving your mail, and a vendor named in MX receives
+            # your mail (inbound) without necessarily being authorized to
+            # send. Naming just the vendor, with no side, reads as "this
+            # vendor handles your mail" when it may only do one half.
+            techniques = {s.get("technique") for s in v.get("signals", [])}
+            sides = []
+            if "SPF Include" in techniques:
+                sides.append("outbound")
+            if "MX Record" in techniques:
+                sides.append("inbound")
             vendors.append({
                 "name": v["vendor"],
                 "confidence": int(confidence * 100),
+                "detected_via": " + ".join(sides) if sides else None,
             })
 
     # Deduplicate by name, keep highest confidence

@@ -880,9 +880,15 @@ function renderResults(data) {
         data.vendors.forEach(v => {
             const card = document.createElement('div');
             card.className = 'vendor-card';
+            // SPF authorizes a vendor to send as this domain (outbound); MX
+            // names who receives its mail (inbound). Naming the vendor
+            // alone reads as "handles your mail" when it may be one side.
+            const detail = v.detected_via
+                ? `Detected via SPF/MX (${escapeHtml(v.detected_via)})`
+                : 'Detected via DNS records';
             card.innerHTML = `
                 <div class="vendor-name">${escapeHtml(v.name)}</div>
-                <div class="vendor-confidence">Detected via DNS records</div>
+                <div class="vendor-confidence">${detail}</div>
             `;
             vendorsGrid.appendChild(card);
         });

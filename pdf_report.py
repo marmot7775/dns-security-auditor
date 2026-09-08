@@ -1379,17 +1379,23 @@ def _vendors(data, S):
     els = [Spacer(1, 8), Paragraph("Detected Email Services", S["heading2"])]
     header = [
         Paragraph("<b>Provider</b>", S["body_small"]),
+        Paragraph("<b>Detected via</b>", S["body_small"]),
         Paragraph("<b>Confidence</b>", S["body_small"]),
     ]
     rows = [header]
     for v in vs:
         conf = v.get("confidence", 0)
         c_clr = PASS_CLR if conf >= 80 else (WARN_CLR if conf >= 50 else TEXT_SEC)
+        # SPF authorizes a vendor to send as this domain (outbound); MX
+        # names who receives its mail (inbound). Naming the vendor alone
+        # reads as "handles your mail" when it may be only one side.
+        side = v.get("detected_via") or "DNS records"
         rows.append([
             Paragraph(f"<b>{_safe(v.get('name', ''))}</b>", S["body"]),
+            Paragraph(_safe(side), S["body_small"]),
             Paragraph(f'<font color="{c_clr.hexval()}">{conf}%</font>', S["body"]),
         ])
-    vt = Table(rows, colWidths=[4.5*inch, 2.0*inch])
+    vt = Table(rows, colWidths=[3.3*inch, 2.2*inch, 1.0*inch])
     cmds = [
         ("VALIGN", (0,0), (-1,-1), "MIDDLE"),
         ("TOPPADDING", (0,0), (-1,-1), 4),
@@ -1397,7 +1403,7 @@ def _vendors(data, S):
         ("LINEBELOW", (0,0), (-1,0), 0.5, NAVY),
         ("LINEBELOW", (0,1), (-1,-2), 0.3, BORDER),
         ("BACKGROUND", (0,0), (-1,0), SURFACE_BG),
-        ("ALIGN", (1,0), (1,-1), "RIGHT"),
+        ("ALIGN", (2,0), (2,-1), "RIGHT"),
     ]
     _alt_rows(cmds, len(rows))
     vt.setStyle(TableStyle(cmds))
@@ -1862,8 +1868,8 @@ if __name__ == "__main__":
              "fix": "Enable DNSSEC through your domain registrar or DNS hosting provider."},
         ],
         "vendors": [
-            {"name": "Google Workspace", "confidence": 95},
-            {"name": "SendGrid", "confidence": 60},
+            {"name": "Google Workspace", "confidence": 95, "detected_via": "outbound + inbound"},
+            {"name": "SendGrid", "confidence": 60, "detected_via": "outbound"},
         ],
     }
     pdf = generate_pdf(sample)
