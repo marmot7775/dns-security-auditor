@@ -245,8 +245,11 @@ BUSINESS_RISK = {
         "attackers to forge signed mail that appears genuinely from your domain."
     ),
     "DKIM_REVOKED_KEY": (
-        "An empty p= tag means the key is revoked per RFC 6376. Every message "
-        "signed with this selector fails DKIM verification at receivers."
+        "An empty p= tag is how RFC 6376 revokes a key. Leaving the record "
+        "published is the correct way to retire one. A receiver that meets a "
+        "delayed or replayed message then gets an explicit revocation, not a "
+        "missing record. Nothing signs with this selector, and nothing needs "
+        "doing about it."
     ),
     "DKIM_UNDECODABLE_KEY": (
         "The published key does not parse as a public key, which is what a TXT "
@@ -5548,7 +5551,13 @@ def _build_resilience_analysis(
         )
 
     # -- DKIM mechanism status --
-    found_selectors = raw_dkim.get("found_selectors") or []
+    # A selector publishing an empty p= is a retired key, not a working one.
+    # Counting those as detected told a domain with four revoked selectors and
+    # nothing live that it had "broad coverage across multiple email services".
+    from result_transformer import _split_dkim_selectors
+    found_selectors, revoked_selectors = _split_dkim_selectors(
+        raw_dkim.get("found_selectors") or []
+    )
     dkim_tested = "dkim" in raw_results
     dkim_timed_out = raw_dkim.get("timed_out", False) or any(
         c.get("name") == "DKIM" and "timed out" in (c.get("verdict") or "").lower()
@@ -5584,12 +5593,27 @@ def _build_resilience_analysis(
             "Unlike SPF, DKIM survives forwarding because the signature is attached to the message itself, "
             f"not tied to the sending server's IP. {sel_list}"
         )
+    elif revoked_selectors:
+        # Retired keys and nothing live. Not detected, but not absent either:
+        # the probe can only look up names it guessed.
+        dkim_status = "inconclusive"
+        _n = len(revoked_selectors)
+        dkim_note = (
+            f"{_n} selector{'s' if _n != 1 else ''} publish"
+            f"{'' if _n != 1 else 'es'} an empty p=, which is how RFC 6376 retires a "
+            "key, so nothing signs with "
+            f"{'them' if _n != 1 else 'it'} and nothing is wrong with "
+            f"{'them' if _n != 1 else 'it'}. No live key was found. DKIM selector names "
+            "are chosen by each mail service and are not publicly enumerable, so this "
+            "audit cannot say whether the domain signs under a selector it did not test."
+        )
     else:
-        dkim_status = "not_detected"
+        dkim_status = "inconclusive"
         dkim_note = (
             "No DKIM keys were found among common selectors tested. "
             "DKIM selector names are chosen by each mail service and are not publicly enumerable, "
-            "so DKIM may well be configured with selectors this audit did not test."
+            "so DKIM may well be configured with selectors this audit did not test. "
+            "This audit did not establish whether DKIM is in use."
         )
 
     # -- DMARC mechanism status --
@@ -5700,9 +5724,10 @@ def _build_resilience_analysis(
     # -- Derive resilience level and risk text --
     spf_functional = spf_status == "pass"
     dkim_functional = dkim_status == "detected"
-    # "not_detected" means our heuristic didn't find keys, but DKIM may still be
-    # configured with custom selectors. Treat it the same as "inconclusive" so we
-    # never penalize based on a heuristic miss.
+    # Finding no key means the names this audit guessed did not resolve, not
+    # that DKIM is absent, so it never penalizes the level. That branch now
+    # reports "inconclusive" directly; "not_detected" is kept here only so a
+    # stored result from before the change still reads correctly.
     dkim_inconclusive = dkim_status in ("inconclusive", "not_detected")
     dmarc_enforcing = dmarc_status in ("quarantine", "reject")
 

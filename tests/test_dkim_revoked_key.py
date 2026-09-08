@@ -1,7 +1,14 @@
-"""Regression test for a revoked DKIM key (empty p=) passing as valid.
+"""Regression test for a revoked DKIM key (empty p=) being misread.
 
-Bug: per RFC 6376 §3.6.1, an empty p= tag means the key is revoked. Three
-things conspired to hide this:
+Doc 15 revised what "correctly handled" means here. A revoked key is a
+retired key, published the way RFC 6376 says to retire one, so the card must
+not grade it as a failure of the domain. What it still must not do is what
+this test was written for: read an empty p= as a working key. Between those
+two, a revoked-only card is neither pass nor fail. It reports retired keys
+and says no live key was found by probing, which is all the probe established.
+
+The original bug: per RFC 6376 §3.6.1, an empty p= tag means the key is
+revoked. Three things conspired to hide this:
   - dkim_formatter's Ed25519 shortcut returned "strong" before ever
     checking whether p= was empty.
   - For RSA, analyze_dkim_key_strength's "No public key found" check used
@@ -33,23 +40,29 @@ def _card_for_record(record):
     return result_transformer.transform_dkim(raw, "example.com", has_mx=True)
 
 
-def test_revoked_rsa_key_fails_the_card():
+def test_revoked_rsa_key_does_not_pass_the_card():
     card = _card_for_record("v=DKIM1; k=rsa; p=")
-    assert card["status"] == "fail", (
-        f"An empty p= (revoked key, RFC 6376 3.6.1) must fail the DKIM "
-        f"card; got status={card['status']!r}"
+    assert card["status"] != "pass", (
+        f"An empty p= (revoked key, RFC 6376 3.6.1) publishes no usable key, "
+        f"so the card cannot pass; got status={card['status']!r}"
+    )
+    assert card["status"] == "unavailable", (
+        f"Doc 15: a retired key is not a failure of the domain, and no live "
+        f"key was found, so the card is neither pass nor finding; got "
+        f"status={card['status']!r}"
     )
     detail_texts = " ".join(d.get("text", "") for d in card["details"])
-    assert "revoked" in detail_texts.lower() or "invalid" in detail_texts.lower()
+    assert "revoked" in detail_texts.lower() or "retired" in detail_texts.lower()
 
 
-def test_revoked_ed25519_key_fails_the_card():
+def test_revoked_ed25519_key_does_not_pass_the_card():
     card = _card_for_record("v=DKIM1; k=ed25519; p=")
-    assert card["status"] == "fail", (
+    assert card["status"] != "pass", (
         f"An empty p= on an Ed25519 record is still revoked per RFC 6376; "
         f"the Ed25519 shortcut must not bypass the p= check. "
         f"got status={card['status']!r}"
     )
+    assert card["status"] == "unavailable"
 
 
 # A real Ed25519 public key, generated with cryptography and pinned here.

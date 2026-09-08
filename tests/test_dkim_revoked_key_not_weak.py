@@ -14,8 +14,10 @@ bug 17 normalization, so both needed this. The older key_size shape was
 immune by accident: `sel.get("key_size") or sel.get("key_bits")` collapses a
 0 to None and fell through to the key_analysis branch.
 
-There is no remediation step for a revoked key today. The card carries that
-finding, so the fix here is not to describe it as something else.
+There is no remediation step for a revoked key, and Doc 15 settled why: an
+empty p= is how RFC 6376 retires a key, so there is nothing to remediate. The
+card reports the retired selectors and says no live key was found by probing,
+which is neither a pass nor a finding.
 """
 import os
 import sys
@@ -79,9 +81,12 @@ def test_revoked_keys_do_not_produce_the_weak_key_step():
     card = transform_dkim(raw, DOMAIN, has_mx=True)
 
     text = _card_text(card)
-    assert "revoked" in text.lower()
+    assert "revoked" in text.lower() or "retired" in text.lower()
     assert "1024-bit" not in text
-    assert card["status"] == "fail"
+    assert card["status"] == "unavailable", (
+        f"Doc 15: three correctly retired keys are not a failure of the "
+        f"domain; got status={card['status']!r}"
+    )
 
     assert WEAK_STEP not in _titles(raw)
 

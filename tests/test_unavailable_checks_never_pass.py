@@ -110,7 +110,12 @@ def test_an_unavailable_check_counts_as_neither_pass_warn_nor_fail(audit):
     counted = sum(1 for c in checks if c["status"] in ("pass", "warn", "fail"))
     unavailable = [c["name"] for c in checks if c["status"] == "unavailable"]
 
-    assert set(unavailable) == {"Blocklist", "Certificate Transparency"}
+    # DKIM joined these two under Doc 15, by a different route: its lookups
+    # complete and still cannot settle the question, because selectors are not
+    # enumerable from DNS. The zone above publishes no DKIM key, so probing
+    # here finds nothing and the card reports that it could not confirm rather
+    # than asserting an absence it did not establish.
+    assert set(unavailable) == {"Blocklist", "Certificate Transparency", "DKIM"}
     assert counted == len(checks) - len(unavailable)
 
 

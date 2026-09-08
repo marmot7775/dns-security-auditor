@@ -50,11 +50,18 @@ def _is_waived(card):
 
 # --- unit: the transformers no longer waive on has_mx=False alone ---------
 
-def test_transform_dkim_absent_mx_alone_is_a_real_finding():
+def test_transform_dkim_absent_mx_alone_is_not_waived():
+    """The subject here is the waiver, not the grade.
+
+    Doc 15 replaced the grade: probing cannot prove a domain has no DKIM, so
+    an empty result is "not confirmed" rather than warn or fail. What must not
+    happen is the waiver, which asserts positively that DKIM does not apply.
+    """
     card = rt.transform_dkim(NO_DKIM, SEND_ONLY, has_mx=False)
     assert not _is_waived(card), card
     assert card["status"] != "pass"
-    assert card["status"] in ("warn", "fail"), card["status"]
+    assert card["status"] == "unavailable", card["status"]
+    assert card["pill_label"] == "Not confirmed"
     assert "non-mail" not in card["verdict"].lower()
 
 

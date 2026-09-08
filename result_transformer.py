@@ -79,6 +79,11 @@ def _lookup_unavailable_card(name: str, raw: Dict, subject: str) -> Dict:
         ],
         "fix": None,
         "fix_records": None,
+        # Two different things produce status "unavailable" and they need
+        # different prose above the card: a lookup that never completed, and a
+        # lookup that completed but cannot settle the question (DKIM selector
+        # probing). Readers branch on this rather than on the pill text.
+        "unavailable_reason": "lookup_failed",
     }
 
 
@@ -140,12 +145,24 @@ def build_executive_summary(checks: List[Dict], roadmap: Dict) -> Dict:
     # this guard an unavailable check reads as "nothing wrong here" and the
     # summary issues an explicit all clear about records it never read.
     # remediation_planner.py already models this correctly; same guard here.
+    #
+    # DKIM has a second way to arrive at "unavailable": the probe completed and
+    # still could not settle the question, because selectors are not
+    # enumerable from DNS. That is not a lookup that failed, and every sentence
+    # below keyed off `unread` says the lookups did not complete, so it is kept
+    # out of that list and carried separately.
     def _unavailable(name):
-        return check_map.get(name, {}).get("status") == "unavailable"
+        card = check_map.get(name, {})
+        return (card.get("status") == "unavailable"
+                and card.get("unavailable_reason") != "not_enumerable")
+
+    def _unconfirmed(name):
+        return check_map.get(name, {}).get("unavailable_reason") == "not_enumerable"
 
     dmarc_unavailable = _unavailable("DMARC")
     spf_unavailable = _unavailable("SPF")
     dkim_unavailable = _unavailable("DKIM")
+    dkim_unconfirmed = _unconfirmed("DKIM")
     unread = [n for n, u in (("DMARC", dmarc_unavailable),
                              ("SPF", spf_unavailable),
                              ("DKIM", dkim_unavailable)) if u]
@@ -328,7 +345,6 @@ def build_executive_summary(checks: List[Dict], roadmap: Dict) -> Dict:
     has_record_builder = dmarc.get("record_builder") is not None
 
     # ── Part 5: Deliverability summary ────────────────────────
-    dkim_check = check_map.get("DKIM", {})
     spf_check = check_map.get("SPF", {})
     blocklist_check = check_map.get("Blocklist", {})
 
@@ -351,8 +367,10 @@ def build_executive_summary(checks: List[Dict], roadmap: Dict) -> Dict:
     if blocklist_check.get("status") == "fail":
         deliverability_issues.append("domain is listed on a blocklist")
 
-    if dkim_check.get("status") == "warn" and dkim_check.get("pill_label") == "Unknown":
-        pass  # Can't confirm, don't alarm
+    # DKIM that could not be confirmed by probing is not an issue to list: the
+    # domain may well sign under a selector this audit never guessed. It is
+    # also not something to pass over in silence, because the all-clear below
+    # would otherwise read as covering it. It gets a caveat, not a finding.
 
     if deliverability_issues:
         top_issue = deliverability_issues[0]
@@ -375,14 +393,21 @@ def build_executive_summary(checks: List[Dict], roadmap: Dict) -> Dict:
         # read-and-failed case; this covers the never-ran case.
         _assessed_auth = [n for n in ("SPF", "DKIM", "DMARC")
                           if check_map.get(n, {}).get("status") not in (None, "unavailable")]
+        # DKIM that ran and could not be confirmed is not out of scope, and the
+        # caveat appended below already says what happened to it. Naming it here
+        # as well would tell the reader it was never checked.
+        _out_of_scope = [n for n in ("SPF", "DKIM", "DMARC")
+                         if n not in _assessed_auth and not _unconfirmed(n)]
         if len(_assessed_auth) == 3:
             deliverability_summary = "Your configuration looks solid. SPF, DKIM, and DMARC are properly set up, giving you the best chance of reaching inboxes."
         elif _assessed_auth:
             deliverability_summary = (
                 f"No inbox placement issues found in what this audit checked. "
                 f"{_join_names(sorted(_assessed_auth))} "
-                f"{'were' if len(_assessed_auth) > 1 else 'was'} assessed; the rest of "
-                "the email authentication stack was outside the scope of this run."
+                f"{'were' if len(_assessed_auth) > 1 else 'was'} assessed"
+            ) + (
+                "; the rest of the email authentication stack was outside the "
+                "scope of this run." if _out_of_scope else "."
             )
         else:
             deliverability_summary = (
@@ -405,6 +430,16 @@ def build_executive_summary(checks: List[Dict], roadmap: Dict) -> Dict:
                 "could not be assessed. Nothing here says the configuration is good "
                 "or bad, only that it was not read."
             )
+
+    # Said last so it survives whichever branch above ran. Without it the
+    # all-clear reads as covering DKIM, which this audit did not establish
+    # either way.
+    if dkim_unconfirmed:
+        deliverability_summary += (
+            " DKIM could not be confirmed by probing, since a selector cannot be "
+            "enumerated from DNS. Enter your selector above, or read the s= value "
+            "from a message this domain sent, to settle it."
+        )
 
     # Whether biggest_risk actually names a risk. The PDF frames it in fail red
     # unconditionally, which put a red "YOUR BIGGEST RISK RIGHT NOW" box around
@@ -579,10 +614,24 @@ def build_security_roadmap(checks: List[Dict], is_no_mail: bool = False) -> Dict
     # passes through every gate above untouched, and a scoped audit never
     # produces the card at all. Saying "meets all current best practices across
     # all protocols" on either is a claim about protocols this run did not read.
+    #
+    # A third case sits between them: DKIM probing completes and still cannot
+    # settle the question, because selectors are not enumerable from DNS. That
+    # is not a lookup that failed, so it does not belong in `unread`, and
+    # saying "the DKIM lookup did not complete" about it would be untrue.
     _ROADMAP_PROTOCOLS = ("DMARC", "SPF", "DKIM", "MTA-STS", "TLS-RPT", "DANE", "BIMI")
     unread = [n for n in _ROADMAP_PROTOCOLS
-              if check_map.get(n, {}).get("status") == "unavailable"]
+              if check_map.get(n, {}).get("status") == "unavailable"
+              and check_map.get(n, {}).get("unavailable_reason") != "not_enumerable"]
+    unconfirmed = [n for n in _ROADMAP_PROTOCOLS
+                   if check_map.get(n, {}).get("unavailable_reason") == "not_enumerable"]
     not_run = [n for n in _ROADMAP_PROTOCOLS if n not in check_map]
+
+    _unconfirmed_note = (
+        f" {_join_names(unconfirmed)} could not be confirmed by probing, since a "
+        "selector cannot be enumerated from DNS, so nothing here says whether it "
+        "is configured."
+    ) if unconfirmed else ""
 
     total = len(items)
     if total == 0 and unread:
@@ -591,18 +640,24 @@ def build_security_roadmap(checks: List[Dict], is_no_mail: bool = False) -> Dict
             f"{'lookups' if len(unread) > 1 else 'lookup'} did not complete, so "
             f"{'those protocols were' if len(unread) > 1 else 'that protocol was'} "
             "not assessed. This is not an all-clear."
-        )
+        ) + _unconfirmed_note
     elif total == 0 and not_run:
         summary = (
             "No action items across the protocols this audit covered. "
             f"{_join_names(not_run)} "
             f"{'were' if len(not_run) > 1 else 'was'} outside the scope of this "
             "run and not checked."
+        ) + _unconfirmed_note
+    elif total == 0 and unconfirmed:
+        summary = (
+            "No action items across the protocols this audit could assess."
+            + _unconfirmed_note
+            + " This is not an all-clear."
         )
     elif total == 0:
         summary = "Your email security meets all current best practices across all protocols."
     else:
-        summary = f"{total} recommendation{'s' if total != 1 else ''} across {sum(1 for v in tiers.values() if v > 0)} priority tier{'s' if sum(1 for v in tiers.values() if v > 0) != 1 else ''}."
+        summary = f"{total} recommendation{'s' if total != 1 else ''} across {sum(1 for v in tiers.values() if v > 0)} priority tier{'s' if sum(1 for v in tiers.values() if v > 0) != 1 else ''}." + _unconfirmed_note
 
     return {
         "items": items,
@@ -4135,8 +4190,84 @@ def _build_spf_deep_analysis(raw: Dict) -> Optional[Dict]:
 # DKIM
 # ============================================================
 
+# ------------------------------------------------------------
+# DKIM: three outcomes, deliberately kept apart
+# ------------------------------------------------------------
+#
+# RFC 6376 section 3.6.1: "An empty value means that this public key has been
+# revoked." That is how a key is retired, not how one breaks. The record is
+# left in place on purpose so a receiver meeting a delayed or replayed message
+# gets an explicit revocation rather than a missing record, and grading it as a
+# failure of the domain tells an operator to fix something they did correctly.
+#
+# Nothing found is a separate state again. DNS offers no way to enumerate the
+# names under _domainkey; a selector is chosen by the sending service and is
+# learned from the s= tag of a signed message. A probe that finds no live key
+# has established only that the names it guessed did not resolve, so this card
+# reports what it could not confirm rather than asserting an absence.
+
+_DKIM_NOT_ENUMERABLE = (
+    "DKIM selectors cannot be enumerated from DNS: the name is chosen by the "
+    "sending service, so a probe can only look up names it already guessed."
+)
+
+# The two things that actually settle it, in the order a reader can act on them.
+_DKIM_HOW_TO_SETTLE = (
+    {
+        "type": "info",
+        "text": "Enter your selector in the field above for a direct lookup",
+    },
+    {
+        "type": "info",
+        "text": (
+            "The selector is the s= value in the DKIM-Signature or "
+            "Authentication-Results header of any message this domain sent"
+        ),
+    },
+)
+
+
+def _split_dkim_selectors(found: List[Dict]) -> Tuple[List[Dict], List[Dict]]:
+    """Split discovered selectors into live keys and revoked (empty p=) ones.
+
+    Called before anything counts or grades keys, so "3 selectors found"
+    cannot turn out to mean three retired ones.
+    """
+    live, revoked = [], []
+    for sel in found or []:
+        analysis = analyze_dkim_key_strength(sel.get("record", "") or "")
+        (revoked if analysis.get("reason") == "revoked" else live).append(sel)
+    return live, revoked
+
+
+def _dkim_retired_detail(selectors: List[Dict], business_risk) -> List[Dict]:
+    """One info line per retired selector, with the revocation callout once.
+
+    Info rather than error: the callout distinguishes a revocation from an
+    undecodable key, which is a different problem with different advice.
+    """
+    details = []
+    for i, sel in enumerate(selectors):
+        detail = {
+            "type": "info",
+            "text": (
+                f"{sel.get('selector', 'unknown')}: retired key "
+                f"(empty p=, revoked per RFC 6376 section 3.6.1)"
+            ),
+        }
+        if i == 0 and business_risk:
+            detail["business_risk"] = business_risk
+        details.append(detail)
+    return details
+
+
 def transform_dkim(raw: Dict, domain: str, has_mx: bool = True, non_mail: bool = False) -> Dict:
-    """Only a positive non-mail declaration (RFC 7505 null MX, or a null ``v=spf1 -all`` SPF record) waives this check. Absent MX alone does not: send-only subdomains have no MX and still send real mail."""
+    """Only a positive non-mail declaration (RFC 7505 null MX, or a null ``v=spf1 -all`` SPF record) waives this check. Absent MX alone does not: send-only subdomains have no MX and still send real mail.
+
+    Grades a live key. Reports retired keys as correctly retired. Reports
+    finding nothing as not confirmed rather than as absent. See the comment
+    above _DKIM_NOT_ENUMERABLE for why the last two are not the same state.
+    """
     # Lazy import avoids the audit_engine ↔ result_transformer cycle.
     from audit_engine import BUSINESS_RISK
 
@@ -4148,10 +4279,11 @@ def transform_dkim(raw: Dict, domain: str, has_mx: bool = True, non_mail: bool =
 
     found = raw.get("found_selectors", [])
     tested = raw.get("tested_count", 0)
+    live, revoked = _split_dkim_selectors(found)
 
-    if not found:
-        # No DKIM keys found. Only a positive non-mail declaration (null MX
-        # or null SPF) makes that expected. Absent MX alone is not one.
+    if not live:
+        # No live key. Only a positive non-mail declaration (null MX or null
+        # SPF) makes that expected. Absent MX alone is not one.
         if non_mail:
             return {
                 "name": "DKIM",
@@ -4172,7 +4304,9 @@ def transform_dkim(raw: Dict, domain: str, has_mx: bool = True, non_mail: bool =
                 "deliverability": None,
             }
 
-        # User provided a specific selector that wasn't found
+        # User provided a specific selector that wasn't found. The operator
+        # asserted that name, so an empty answer at it is a finding about the
+        # name rather than the unconfirmed state below.
         selector_not_found = raw.get("selector_not_found")
         if selector_not_found:
             _details = [
@@ -4206,47 +4340,86 @@ def transform_dkim(raw: Dict, domain: str, has_mx: bool = True, non_mail: bool =
                 "deliverability": None,
             }
 
+        # Outcome B: retired keys and nothing live. Neither a pass nor a
+        # finding, so it drops out of the pass/warn/fail tallies rather than
+        # padding one of them with something the domain did right.
+        if revoked:
+            _n = len(revoked)
+            _plural = "s" if _n != 1 else ""
+            _names = _join_names([s.get("selector", "unknown") for s in revoked])
+            _retired_details = _dkim_retired_detail(revoked, BUSINESS_RISK.get("DKIM_REVOKED_KEY"))
+            _retired_details.append(
+                {"type": "info", "text": f"Checked {tested} selectors, no live public key found"}
+            )
+            _retired_details.append({"type": "info", "text": _DKIM_NOT_ENUMERABLE})
+            _retired_details.extend(dict(d) for d in _DKIM_HOW_TO_SETTLE)
+            for issue in raw.get("issues", []):
+                _retired_details.append(_issue_to_detail(issue))
+            return {
+                "name": "DKIM",
+                "status": "unavailable",
+                "pill_label": "Not confirmed",
+                "verdict": (
+                    f"{_n} retired selector{_plural} published, no live key found by probing"
+                ),
+                "record": None,
+                "explanation": (
+                    f"This domain publishes <strong>{_n}</strong> DKIM selector{_plural} "
+                    f"({_e(_names)}) whose <strong>p=</strong> tag is empty. Per "
+                    "<a href=\"https://datatracker.ietf.org/doc/html/rfc6376#section-3.6.1\" "
+                    "target=\"_blank\" rel=\"noopener\">RFC 6376 section 3.6.1</a> an empty "
+                    "p= means the key has been revoked, and this is how a retired key is "
+                    "meant to look: the record stays published so a receiver meeting a "
+                    "delayed or replayed message gets an explicit revocation instead of a "
+                    "missing record. Nothing here is misconfigured. This audit found no "
+                    "live key, but DKIM selectors cannot be enumerated from DNS, so it "
+                    "cannot say whether this domain signs mail under a selector it did "
+                    "not guess."
+                ),
+                "details": _retired_details,
+                "fix": None,
+                "fix_records": None,
+                "unavailable_reason": "not_enumerable",
+                "dkim_deep": _build_dkim_key_analysis(raw),
+                "deliverability": None,
+            }
+
+        # Outcome C: nothing found. Same reasoning, without the retired keys.
         _unknown_details = [
-            {
-                "type": "info",
-                "text": f"Checked {tested} common selectors, no public keys found",
-                "business_risk": BUSINESS_RISK.get("DKIM_NO_KEYS_FOUND"),
-            },
-            {"type": "info", "text": "DKIM selectors are private and cannot be enumerated from outside"},
-            {"type": "info", "text": "Enter your specific selector above for a definitive check"},
+            {"type": "info", "text": f"Checked {tested} common selectors, no public key found"},
+            {"type": "info", "text": _DKIM_NOT_ENUMERABLE},
         ]
+        _unknown_details.extend(dict(d) for d in _DKIM_HOW_TO_SETTLE)
         for issue in raw.get("issues", []):
             _unknown_details.append(_issue_to_detail(issue))
         return {
             "name": "DKIM",
-            "status": "warn",
-            "pill_label": "Unknown",
-            "verdict": "DKIM status cannot be determined externally",
+            "status": "unavailable",
+            "pill_label": "Not confirmed",
+            "verdict": "DKIM could not be confirmed by probing",
             "record": None,
             "explanation": (
                 "DKIM (<a href=\"https://datatracker.ietf.org/doc/html/rfc6376\" "
-                "target=\"_blank\" rel=\"noopener\">RFC 6376</a>) is a critical part "
-                "of email authentication. It attaches a cryptographic signature to "
-                "each outgoing message, allowing receivers to verify the message has "
-                "not been altered and that it came from an authorized sender. "
-                "However, DKIM public keys are published under provider-specific "
-                "selectors that cannot be discovered without knowing the selector name. "
-                "This audit checked {tested} common selectors and did not find a match, "
-                "but that does not mean DKIM is not configured. "
-                "To verify, enter your selector in the field above for a direct lookup."
-            ).format(tested=tested),
+                "target=\"_blank\" rel=\"noopener\">RFC 6376</a>) attaches a "
+                "cryptographic signature to each outgoing message, letting receivers "
+                "verify that it was not altered and came from an authorized sender. "
+                f"This audit looked up {tested} common selector names and found no "
+                "public key at any of them. That is not the same as this domain having "
+                "no DKIM: the name is chosen by the sending service and cannot be "
+                "enumerated from DNS, so nothing here says whether the domain signs "
+                "its mail. Two things settle it: enter the selector above for a direct "
+                "lookup, or read the s= value from the DKIM-Signature or "
+                "Authentication-Results header of a message this domain sent."
+            ),
             "details": _unknown_details,
             "fix": None,
             "fix_records": None,
-            "deliverability": (
-                "DKIM is the single most important signal for Gmail's spam filters. "
-                "Without a confirmed DKIM key, your emails are significantly more likely to be "
-                "flagged as spam, even if SPF passes. Most email providers (Google Workspace, "
-                "Microsoft 365, Mailchimp, SendGrid) can set up DKIM for you."
-            ),
+            "unavailable_reason": "not_enumerable",
+            "deliverability": None,
         }
 
-    # Build details for each found key
+    # Outcome A: at least one live key. Graded on the live keys; retired ones
+    # are listed for the reader and count toward nothing.
     details = []
     vendor_names = set()
     weak_keys = []
@@ -4269,24 +4442,35 @@ def transform_dkim(raw: Dict, domain: str, has_mx: bool = True, non_mail: bool =
         if vendor:
             vendor_names.add(vendor)
 
+        # A revoked selector alongside a live one is a key that was rotated
+        # away from, which is the rotation advice working, not a defect.
+        if key_analysis.get("reason") == "revoked":
+            details.extend(
+                _dkim_retired_detail(
+                    [sel],
+                    BUSINESS_RISK.get("DKIM_REVOKED_KEY")
+                    if "DKIM_REVOKED_KEY" not in risks_called_out else None,
+                )
+            )
+            risks_called_out.add("DKIM_REVOKED_KEY")
+            continue
+
         if strength == "invalid":
             invalid_detail = {
                 "type": "error",
                 "text": f"{selector}: {key_analysis.get('warning') or 'invalid key'}{vendor_str}",
             }
-            # "invalid" covers three different conditions and only one of them
-            # is a revocation. Attaching the revoked-key callout to all three
-            # put "an empty p= tag means the key is revoked" next to a detail
-            # line reading "could not decode RSA public key", and the reader
-            # had no way to tell which had happened.
+            # "invalid" covers two remaining conditions and neither is a
+            # revocation. Attaching one callout to both put "the key does not
+            # parse" next to a record that publishes no key at all, and the
+            # reader had no way to tell which had happened.
             risk_key = {
-                "revoked": "DKIM_REVOKED_KEY",
                 "undecodable": "DKIM_UNDECODABLE_KEY",
                 "no_key": "DKIM_NO_KEY",
             }.get(key_analysis.get("reason"))
             # One callout per distinct condition, not one per selector: two
-            # revoked keys do not need the same paragraph twice, but a revoked
-            # key and an undecodable one are different problems.
+            # undecodable keys do not need the same paragraph twice, but an
+            # undecodable key and an empty record are different problems.
             if risk_key and risk_key not in risks_called_out:
                 invalid_detail["business_risk"] = BUSINESS_RISK.get(risk_key)
                 risks_called_out.add(risk_key)
@@ -4326,8 +4510,9 @@ def transform_dkim(raw: Dict, domain: str, has_mx: bool = True, non_mail: bool =
     for issue in raw.get("issues", []):
         details.append(_issue_to_detail(issue))
 
-    # Verdict
-    verdict = f"{len(found)} DKIM public key{'s' if len(found) != 1 else ''} published in DNS"
+    # Verdict. Counts live keys: a retired selector is not a published key
+    # anyone can verify a signature against.
+    verdict = f"{len(live)} DKIM public key{'s' if len(live) != 1 else ''} published in DNS"
 
     # Status
     status = "pass"
@@ -4343,9 +4528,15 @@ def transform_dkim(raw: Dict, domain: str, has_mx: bool = True, non_mail: bool =
 
     # Explanation
     explanation = (
-        f"Found <strong>{len(found)}</strong> DKIM public key{'s' if len(found) != 1 else ''} "
+        f"Found <strong>{len(live)}</strong> live DKIM public key{'s' if len(live) != 1 else ''} "
         f"published in DNS."
     )
+    if revoked:
+        explanation += (
+            f" A further {len(revoked)} selector{'s' if len(revoked) != 1 else ''} "
+            f"publish{'' if len(revoked) != 1 else 'es'} an empty p=, which retires "
+            "that key correctly and is not a fault."
+        )
     if vendor_names:
         explanation += f" Sending providers detected: {', '.join(sorted(vendor_names))}."
     explanation += (
@@ -4378,25 +4569,22 @@ def transform_dkim(raw: Dict, domain: str, has_mx: bool = True, non_mail: bool =
         fix = _first_fix(raw.get("issues", []))
 
     # Deliverability context
-    if found:
-        if weak_keys:
-            _sizes = sorted({bits for _sel, bits in weak_keys if bits})
-            _size_text = (
-                " and ".join(f"{b}-bit" for b in _sizes) if _sizes else "under 2048-bit"
-            )
-            _deliverability = (
-                f"Your DKIM keys work but some are {_size_text}. Google recommends 2048-bit keys. "
-                "While they will not directly hurt deliverability today, upgrading signals "
-                "that you maintain your email infrastructure."
-            )
-        else:
-            _deliverability = (
-                "DKIM signing is active, which helps build your domain's sending reputation. "
-                "Each signed email that recipients engage with (open, reply, mark as not spam) "
-                "strengthens your reputation with that receiver."
-            )
+    if weak_keys:
+        _sizes = sorted({bits for _sel, bits in weak_keys if bits})
+        _size_text = (
+            " and ".join(f"{b}-bit" for b in _sizes) if _sizes else "under 2048-bit"
+        )
+        _deliverability = (
+            f"Your DKIM keys work but some are {_size_text}. Google recommends 2048-bit keys. "
+            "While they will not directly hurt deliverability today, upgrading signals "
+            "that you maintain your email infrastructure."
+        )
     else:
-        _deliverability = None
+        _deliverability = (
+            "DKIM signing is active, which helps build your domain's sending reputation. "
+            "Each signed email that recipients engage with (open, reply, mark as not spam) "
+            "strengthens your reputation with that receiver."
+        )
 
     return {
         "name": "DKIM",
@@ -4469,13 +4657,19 @@ def _build_dkim_key_analysis(raw: Dict) -> Optional[Dict]:
         # with a blank Bits column, and "Review key configuration" as the
         # guidance. A key that does not parse fails every signature it makes.
         if strength == "invalid":
-            rating = "red"
             reason = key_analysis.get("reason")
             if reason == "revoked":
-                rating_label = "Revoked. p= is empty, so every signature from this selector fails."
+                # Neutral, not red. An empty p= is the RFC 6376 section 3.6.1
+                # form for a retired key, so the row reports a fact about the
+                # selector rather than a defect in it. Red here printed a FAIL
+                # colour next to a record the operator published on purpose.
+                rating = "neutral"
+                rating_label = "Retired. p= is empty, the RFC 6376 revocation form."
             elif reason == "no_key":
+                rating = "red"
                 rating_label = "No p= tag. This record publishes no key."
             else:
+                rating = "red"
                 rating_label = (
                     key_analysis.get("warning")
                     or "Key data does not parse. Every signature from this selector fails."
@@ -4483,10 +4677,12 @@ def _build_dkim_key_analysis(raw: Dict) -> Optional[Dict]:
             # An empty p= is a revocation, which is deliberate and already has
             # its own guidance. Only a key that was meant to work and does not
             # belongs in has_invalid, or the advice tells an operator to
-            # republish a key they revoked on purpose.
+            # republish a key they revoked on purpose. It leaves all_strong
+            # alone for the same reason: a retired key is not a key that fell
+            # short of a standard.
             if reason != "revoked":
                 has_invalid = True
-            all_strong = False
+                all_strong = False
         elif key_type.lower() == "ed25519":
             rating = "green"
             rating_label = "Modern elliptic curve. Smaller, faster, more secure."
@@ -4577,8 +4773,25 @@ def _build_dkim_key_analysis(raw: Dict) -> Optional[Dict]:
         })
 
     # Rotation guidance
-    if all_strong:
+    _has_live = any(not k["revoked"] for k in keys)
+    if not _has_live:
+        # Every selector found is retired, so there is no key to rotate and
+        # nothing to fix. Advice framed as a defect here would be advice about
+        # a record the operator published correctly.
+        rotation = (
+            "Every selector found publishes an empty p=, the RFC 6376 section 3.6.1 "
+            "form for a revoked key, so these are retired rather than broken. Nothing "
+            "signs with them and no action is needed. This audit found no live key, "
+            "but selectors cannot be enumerated from DNS, so it cannot rule one out "
+            "either."
+        )
+    elif all_strong and not has_revoked:
         rotation = "Keys meet standards. Best practice: rotate annually."
+    elif all_strong:
+        rotation = (
+            "Live keys meet standards. Best practice: rotate annually. The retired "
+            "selectors carry an empty p= and are correctly published."
+        )
     elif has_invalid:
         _broken = [k["selector"] for k in keys if k["rotation_status"] == "Replace"]
         rotation = (
@@ -4588,8 +4801,6 @@ def _build_dkim_key_analysis(raw: Dict) -> Optional[Dict]:
             "TXT value produces exactly this, so compare the published record against "
             "the key your mail server holds before regenerating anything."
         )
-    elif has_revoked:
-        rotation = "Revoked key detected. Messages signed with this selector fail DKIM."
     elif has_weak:
         weak_selectors = [k["selector"] for k in keys if k["rating"] in ("red", "amber")]
         rotation = (

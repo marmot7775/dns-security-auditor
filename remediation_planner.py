@@ -14,6 +14,8 @@ always appear before the steps that depend on them.
 
 from typing import Dict, List
 
+from dkim_formatter import analyze_dkim_key_strength
+
 
 # ============================================================
 # Types
@@ -139,10 +141,15 @@ def build_remediation_plan(
 
     tls_rpt_record = tls_rpt.get("record") or ""
 
-    # DKIM: look at all found selectors for weak keys
+    # DKIM: look at all found selectors for weak keys.
+    #
+    # A selector publishing an empty p= is a retired key (RFC 6376 3.6.1), not
+    # a working one. Counting those as "has DKIM" scheduled a key rotation for
+    # a domain with no key to rotate and marked it BIMI-eligible, which needs a
+    # live signing key.
     found_selectors = dkim.get("found_selectors") or []
     has_weak_dkim = _has_weak_dkim_keys(found_selectors)
-    has_any_dkim = bool(found_selectors)
+    has_any_dkim = _has_live_dkim_key(found_selectors)
 
     # --------------------------------------------------------
     # IMMEDIATE -- critical security gaps
@@ -441,6 +448,23 @@ def build_remediation_plan(
 # ============================================================
 # Internal helpers
 # ============================================================
+
+def _has_live_dkim_key(found_selectors) -> bool:
+    """Return True if any selector serves a key that is not revoked.
+
+    RFC 6376 section 3.6.1: an empty p= means the key has been revoked. A
+    domain whose only selectors are revoked has no key anyone can verify a
+    signature against, so every step that presupposes one stays off.
+    """
+    if not found_selectors or not isinstance(found_selectors, list):
+        return False
+    for sel in found_selectors:
+        if not isinstance(sel, dict):
+            continue
+        if analyze_dkim_key_strength(sel.get("record", "") or "").get("reason") != "revoked":
+            return True
+    return False
+
 
 def _has_weak_dkim_keys(found_selectors) -> bool:
     """Return True if any selector serves an RSA key of 1024 bits or fewer.
