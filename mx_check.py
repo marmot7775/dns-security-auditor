@@ -343,11 +343,23 @@ def check_mx(domain: str, deep_scan: bool = False) -> Dict[str, Any]:
 
         result["mx_details"].append(mx_detail)
 
-    # Redundancy check
-    if len(raw_mx) == 1:
+    # Redundancy check.
+    #
+    # A single MX at a recognised provider is not a single point of failure:
+    # the provider fans out behind the one hostname it gives you, and
+    # Microsoft's own setup documentation requires exactly one MX record. The
+    # card's explanation already said this ("handle redundancy internally...
+    # does not indicate a single point of failure") while the status stayed
+    # amber and the fix said to add a secondary, so the card argued with
+    # itself and the advice broke the provider's supported configuration.
+    #
+    # Detected with _detect_provider, the same matcher the MX card's own
+    # provider column uses, rather than a second list kept in step by hand.
+    if len(raw_mx) == 1 and not _detect_provider(raw_mx[0][1]):
         result["issues"].append(_make_issue(
             "warning", "Only one MX record (no redundancy)",
-            "If your mail server goes down, all email queues and may bounce.",
+            "If this host becomes unavailable, inbound mail queues at the "
+            "sending server and may eventually bounce.",
             "Single point of failure.",
             "Add a secondary MX record for failover."))
 

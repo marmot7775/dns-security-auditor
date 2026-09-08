@@ -5002,12 +5002,12 @@ def transform_mx(raw: Dict) -> Dict:
     # Record display (all MX records)
     record = "\n".join(records)
 
-    # Detect major providers with internal redundancy
-    _major_mx_providers = {"google", "microsoft", "outlook", "proofpoint", "mimecast", "barracuda", "cloudflare"}
-    _is_major_provider = any(
-        any(major in p.lower() for major in _major_mx_providers)
-        for p in providers
-    ) if providers else False
+    # A recognised provider is one mx_check's MX_PROVIDERS table matched. It
+    # was a second, shorter hardcoded list here, so a domain on Zoho or
+    # Fastmail was told its single MX was a single point of failure while a
+    # domain on Google was not, for no reason either card explained. Any
+    # provider that hands you one hostname is fanning out behind it.
+    _is_major_provider = bool(providers)
 
     # Explanation
     if count >= 2:
@@ -5044,8 +5044,10 @@ def transform_mx(raw: Dict) -> Dict:
         details.append({"type": "good", "text": "Multiple MX hosts provide failover redundancy"})
     elif count == 1 and _is_major_provider:
         details.append({"type": "info", "text": f"Single MX hostname, but {providers[0]} handles redundancy internally"})
-    elif count == 1:
-        details.append({"type": "warning", "text": "Single MX host with no visible failover. If this host is unavailable, inbound email will queue or bounce."})
+    # No hardcoded line for the self-hosted single MX. mx_check raises the
+    # redundancy issue for exactly that case and it flows through the loop
+    # below, so stating it here too printed the same finding twice in slightly
+    # different words.
 
     # Add any issues not already covered
     for issue in raw.get("issues", []):
