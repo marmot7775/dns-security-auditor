@@ -136,6 +136,25 @@ def _join_names(names: List[str]) -> str:
     return ", ".join(names[:-1]) + " and " + names[-1]
 
 
+def _spoofing_detail(vectors: List[Dict]) -> str:
+    """Say which spoofing vectors are not protected, in severity order."""
+    if not vectors:
+        return "No DMARC policy to assess"
+    exposed = [v["name"] for v in vectors if v.get("status") == "exposed"]
+    partial = [v["name"] for v in vectors if v.get("status") == "partial"]
+    # "All" rather than listing every one: at p=none all three are exposed and
+    # naming them fills the tile with a list the panel below already shows.
+    if len(exposed) == len(vectors):
+        return "Every spoofing vector exposed"
+    if exposed:
+        return f"{_join_names(exposed)} exposed"
+    if len(partial) == len(vectors):
+        return "Every spoofing vector only partly protected"
+    if partial:
+        return f"{_join_names(partial)} only partly protected"
+    return "Every spoofing vector protected"
+
+
 def build_executive_summary(checks: List[Dict], roadmap: Dict) -> Dict:
     """Build the executive summary card shown at the very top of results.
 
@@ -270,8 +289,18 @@ def build_executive_summary(checks: List[Dict], roadmap: Dict) -> Dict:
     spoofing_protection = {
         "label": spoof_label,
         "color": spoof_color,
+        # Names what is not protected instead of counting what is.
+        #
+        # "2/3 spoofing vectors protected" hides the difference between a
+        # vector that is partial and one that is exposed, which are very
+        # different domains with the same fraction, and the denominator moves
+        # whenever the vector list changes. The composite grade was removed
+        # from this tool in April 2026 for the same reason: a number flattens
+        # a report whose value is in the specifics. The per-dimension label
+        # survived that removal deliberately and is kept; only the arithmetic
+        # beside it is replaced with the thing it was standing in for.
         "detail": ("DMARC lookup did not complete" if dmarc_unavailable
-                   else f"{protected_count}/{_vector_total} spoofing vectors protected"),
+                   else _spoofing_detail(vectors)),
     }
 
     # Metric 2: RFC 9989 Readiness
