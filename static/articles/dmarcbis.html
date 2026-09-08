@@ -237,6 +237,7 @@
                     </div>
                     <figcaption id="dbis-compare-caption" class="dbis-compare-caption">Same input. Same result. The old path needed an external list. The new path uses the DNS itself.</figcaption>
                 </figure>
+                <p>The walk finds the organizational domain, not the policy directly: a receiver checks the exact From domain for its own record first, and only falls back to the organizational domain's record, found by the walk, when the From domain has none.</p>
                 <p>The DNS itself answers the question no list ever fully could. No download. No cache staleness. No volunteer keeping a text file current at 11pm because a new TLD launched.</p>
                 <p>A DNS-based protocol finally uses DNS to answer its own question. It took a decade to get here.</p>
                 <p>This did not come from theory. The working group incorporated what operators learned in the trenches: inconsistencies in PSL handling, unreliable behavior of deprecated tags like <code>pct=</code>, and gaps like non-existent subdomain spoofing, which the <code>np=</code> tag now addresses.</p>
