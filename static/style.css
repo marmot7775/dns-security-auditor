@@ -175,6 +175,8 @@
 
     /* Status — clear on dark backgrounds */
     --pass: #22c55e;
+    /* Solid fill that carries white text: white on #22c55e is 2.3:1. */
+    --pass-solid: #15803d;
     --pass-bg: rgba(34, 197, 94, 0.1);
     --pass-border: rgba(34, 197, 94, 0.25);
     --warn: #f59e0b;
@@ -1122,7 +1124,7 @@ main {
     flex-shrink: 0;
     width: 22px;
     height: 22px;
-    background: var(--fail);
+    background: var(--fail-solid);
     color: var(--text-inverse);
     border-radius: 50%;
     display: flex;
@@ -1524,7 +1526,7 @@ h3.result-title,
 .error-retry {
     margin-top: 0.75rem;
     padding: 0.5rem 1rem;
-    background: var(--primary);
+    background: var(--primary-solid);
     color: white;
     border: none;
     border-radius: var(--radius);
@@ -1535,7 +1537,10 @@ h3.result-title,
 }
 
 .error-retry:hover {
-    background: var(--primary-hover);
+    /* --primary-hover is a lighter blue meant for text-on-dark use, not a
+       white-text fill (2.5:1); the solid-hover pair keeps it AA on hover
+       the same way the base rule now does at rest. */
+    background: var(--primary-solid-hover);
 }
 
 /* ==========================================================================
@@ -5619,7 +5624,7 @@ body {
 }
 
 .sua-audit-btn:hover {
-    background: var(--primary);
+    background: var(--primary-solid);
     color: #fff;
 }
 
@@ -5692,7 +5697,7 @@ body {
 
 .st-pill-active.st-pill-dmarcbis {
     background: var(--dmarcbis);
-    color: #0a2d28;
+    color: var(--dmarcbis-contrast);
 }
 
 .st-pill-active.st-pill-legacy {
@@ -5803,7 +5808,7 @@ body {
 
 .sv-badge {
     background: var(--dmarcbis);
-    color: #0a2d28;
+    color: var(--dmarcbis-contrast);
     font-size: var(--font-xs);
     font-weight: 700;
     padding: 0.15rem 0.5rem;
@@ -5972,19 +5977,19 @@ body {
 }
 
 .rb-verdict-ready { background: rgba(16, 185, 129, 0.15); }
-.rb-verdict-ready .rb-verdict-label { background: var(--pass); color: #fff; }
+.rb-verdict-ready .rb-verdict-label { background: var(--pass-solid); color: #fff; }
 
 .rb-verdict-compatible { background: var(--primary-subtle); }
-.rb-verdict-compatible .rb-verdict-label { background: var(--primary); color: #fff; }
+.rb-verdict-compatible .rb-verdict-label { background: var(--primary-solid); color: #fff; }
 
 .rb-verdict-monitoring { background: var(--warn-bg); }
-.rb-verdict-monitoring .rb-verdict-label { background: #e67e22; color: #fff; }
+.rb-verdict-monitoring .rb-verdict-label { background: var(--warn); color: var(--warn-contrast); }
 
 .rb-verdict-attention { background: var(--warn-bg); }
 .rb-verdict-attention .rb-verdict-label { background: var(--warn); color: #1a1a1a; }
 
 .rb-verdict-misconfigured { background: var(--fail-bg); }
-.rb-verdict-misconfigured .rb-verdict-label { background: var(--fail); color: #fff; }
+.rb-verdict-misconfigured .rb-verdict-label { background: var(--fail-solid); color: #fff; }
 
 /* Tag rows */
 .rb-tags {
@@ -6198,7 +6203,7 @@ body {
 .rb-bis-note-label {
     font-weight: 700;
     font-size: var(--font-xs);
-    color: var(--text-inverse);
+    color: var(--dmarcbis-contrast);
     background: var(--dmarcbis);
     padding: 0.05rem 0.35rem;
     border-radius: 3px;
@@ -6351,7 +6356,7 @@ body {
 .mw-step-num {
     width: 1.6rem;
     height: 1.6rem;
-    background: var(--primary);
+    background: var(--primary-solid);
     color: var(--text-inverse);
     border-radius: 50%;
     display: flex;
@@ -6469,7 +6474,7 @@ body {
 
 .dbis-badge {
     background: var(--dmarcbis);
-    color: #0a2d28;
+    color: var(--dmarcbis-contrast);
     font-size: var(--font-xs);
     font-weight: 700;
     padding: 0.15rem 0.5rem;
@@ -6718,7 +6723,7 @@ body {
 }
 
 .rcb-badge-ready {
-    background: var(--pass);
+    background: var(--pass-solid);
     color: #fff;
 }
 
@@ -6898,7 +6903,7 @@ body {
 
 .rcb-result-record .copy-btn {
     background: var(--dmarcbis);
-    color: #111;
+    color: var(--dmarcbis-contrast);
     border-color: var(--dmarcbis);
     font-weight: 700;
 }
@@ -7378,6 +7383,7 @@ body {
         --primary-subtle: rgba(37, 99, 235, 0.08);
         --primary-border: rgba(37, 99, 235, 0.2);
         --pass: #137436;
+        --pass-solid: #137436;
         --pass-bg: rgba(19, 116, 54, 0.06);
         --pass-border: rgba(19, 116, 54, 0.2);
         --warn: #a84d08;
@@ -7441,16 +7447,20 @@ body {
         color: #1e40af;
     }
 
+    /* rec-safe/neutral/warn/muted and copy-btn used to carry their own
+       independent hex values instead of the tokens below, so when --pass
+       and --warn were darkened for AA these six quietly fell out of sync
+       and dropped under 4.5:1 on their own light backgrounds. */
     :where(html:not([data-theme="dark"])) .rec-safe {
-        color: #16a34a;
+        color: var(--pass);
     }
 
     :where(html:not([data-theme="dark"])) .rec-neutral {
-        color: #d97706;
+        color: var(--warn);
     }
 
     :where(html:not([data-theme="dark"])) .rec-warn {
-        color: #ea580c;
+        color: var(--warn);
     }
 
     :where(html:not([data-theme="dark"])) .rec-danger {
@@ -7458,13 +7468,13 @@ body {
     }
 
     :where(html:not([data-theme="dark"])) .rec-muted {
-        color: #94a3b8;
+        color: var(--text-secondary);
     }
 
     :where(html:not([data-theme="dark"])) .copy-btn {
         background: #f1f5f9;
         border-color: var(--border);
-        color: #64748b;
+        color: var(--text-secondary);
     }
 
     :where(html:not([data-theme="dark"])) .copy-btn:hover {
@@ -7494,12 +7504,19 @@ body {
 
     :where(html:not([data-theme="dark"])) .spfd-cost-zero {
         background: #f1f5f9;
-        color: #94a3b8;
+        color: var(--text-secondary);
     }
 
     :where(html:not([data-theme="dark"])) .site-footer {
         background: #f1f5f9;
         border-top-color: var(--border);
+    }
+
+    /* Pre-existing since f57332f, not part of the theme/AA commits: #9ca3af
+       on this footer's #f1f5f9 is 2.3:1, under the 3:1 floor for a UI
+       icon. */
+    :where(html:not([data-theme="dark"])) .footer-linkedin {
+        color: var(--text-tertiary);
     }
 
     :where(html:not([data-theme="dark"])) .scope-btn {
@@ -7639,6 +7656,7 @@ body {
     --primary-subtle: rgba(37, 99, 235, 0.08);
     --primary-border: rgba(37, 99, 235, 0.2);
     --pass: #137436;
+    --pass-solid: #137436;
     --pass-bg: rgba(19, 116, 54, 0.06);
     --pass-border: rgba(19, 116, 54, 0.2);
     --warn: #a84d08;
@@ -7703,15 +7721,15 @@ body {
 }
 
 :where(html[data-theme="light"]) .rec-safe {
-    color: #16a34a;
+    color: var(--pass);
 }
 
 :where(html[data-theme="light"]) .rec-neutral {
-    color: #d97706;
+    color: var(--warn);
 }
 
 :where(html[data-theme="light"]) .rec-warn {
-    color: #ea580c;
+    color: var(--warn);
 }
 
 :where(html[data-theme="light"]) .rec-danger {
@@ -7719,13 +7737,13 @@ body {
 }
 
 :where(html[data-theme="light"]) .rec-muted {
-    color: #94a3b8;
+    color: var(--text-secondary);
 }
 
 :where(html[data-theme="light"]) .copy-btn {
     background: #f1f5f9;
     border-color: var(--border);
-    color: #64748b;
+    color: var(--text-secondary);
 }
 
 :where(html[data-theme="light"]) .copy-btn:hover {
@@ -7755,12 +7773,18 @@ body {
 
 :where(html[data-theme="light"]) .spfd-cost-zero {
     background: #f1f5f9;
-    color: #94a3b8;
+    color: var(--text-secondary);
 }
 
 :where(html[data-theme="light"]) .site-footer {
     background: #f1f5f9;
     border-top-color: var(--border);
+}
+
+/* Pre-existing since f57332f, not part of the theme/AA commits: #9ca3af
+   on this footer's #f1f5f9 is 2.3:1, under the 3:1 floor for a UI icon. */
+:where(html[data-theme="light"]) .footer-linkedin {
+    color: var(--text-tertiary);
 }
 
 :where(html[data-theme="light"]) .scope-btn {
@@ -8397,7 +8421,7 @@ body {
     transform: translateX(-50%);
     z-index: 9999;
     padding: 0.75rem 1.5rem;
-    background: var(--primary);
+    background: var(--primary-solid);
     color: var(--text-inverse);
     font-weight: 600;
     border-radius: 0 0 var(--radius) var(--radius);
@@ -8725,6 +8749,11 @@ body {
     border: 1px solid var(--dmarcbis-border);
 }
 .dbis-compare-step-found:hover { background: var(--dmarcbis-bg); }
+/* .dbis-compare-num already gets its own --dmarcbis-bg fill inside
+   .dbis-compare-new; stacked on the row's own --dmarcbis-bg here, the two
+   translucent layers compound into a darker tint the num's text color
+   was never sized against. Drop to one layer, the row's. */
+.dbis-compare-step-found .dbis-compare-num { background: transparent; }
 .dbis-compare-step-found .dbis-compare-action { color: var(--text-primary); font-weight: 600; }
 .dbis-compare-caption {
     margin: 1.25rem 0 0;
@@ -9071,11 +9100,23 @@ body {
     }
 
     .footer-linkedin {
+        /* No negative margin: that only cancels the layout footprint, not
+           the hit-test box, so the 44px target bled into the row above.
+           footer-attribution sits in its own flex row with .footer-right's
+           row gap between it and footer-trust, so growing it to 44px here
+           grows that row instead of overlapping the one before it. */
         width: 44px;
         height: 44px;
         align-items: center;
         justify-content: center;
-        margin: -15px -15px;
+    }
+
+    /* .back-to-top is fixed at bottom:16px, height 44px, so at the true
+       bottom of the page (footer visible, scrolled past the button's
+       reveal threshold) it can sit on top of footer-nav's rightmost link.
+       This clears the whole 60px it can occupy, with a small buffer. */
+    .site-footer {
+        padding-bottom: calc(var(--space-xl) + 44px);
     }
 
     .selector-toggle {
