@@ -655,6 +655,17 @@ def build_security_roadmap(checks: List[Dict], is_no_mail: bool = False) -> Dict
                       "action": action,
                       "impact": "An issue with your existing BIMI setup may prevent your logo from displaying."})
 
+    # np= at an enforcing policy. Not a gap: an absent np inherits from p=,
+    # so subdomains are already covered. Worth a low-priority note only
+    # because an explicit np= is one less thing for a reader of the record
+    # to infer, not because anything is unprotected without it.
+    if _assessed(dmarc) and dmarc.get("record"):
+        _dmarc_tags = _parse_record_tags(dmarc["record"])
+        if _dmarc_tags.get("p", "").lower() in ("reject", "quarantine") and "np" not in _dmarc_tags:
+            items.append({"priority": "low", "protocol": "DMARC",
+                          "action": "Consider adding an explicit np= tag",
+                          "impact": "Purely optional. Subdomains already inherit your enforcing policy without it."})
+
     # Count by tier
     tiers = {"critical": 0, "high": 0, "medium": 0, "low": 0}
     for item in items:
@@ -3169,14 +3180,14 @@ def _calculate_dmarcbis_health(tags: Dict[str, str], policy: str, config_warning
     advisory = [w for w in config_warnings if w["level"] == "advisory"]
 
     deprecated_present = [t for t in ("pct", "rf", "ri") if t in tags]
-    np_present = "np" in tags
     # RFC 9989 section 4.7 makes psd= OPTIONAL with a default of "u", and
     # publishing psd=n on a name that is not the Organizational Domain
     # actively changes relaxed-alignment scope and external rua
-    # authorization. It is not a readiness criterion.
+    # authorization. It is not a readiness criterion. np and sp are
+    # likewise both OPTIONAL and inherit from p= when absent, so neither
+    # is read here; see the Ready/Compatible branches below.
     t_val = tags.get("t")
     rua = tags.get("rua")
-    sp = tags.get("sp")
 
     # ── Misconfigured (red) ─────────────────────────────────
     # Critical issues that actively undermine the record
@@ -3228,10 +3239,12 @@ def _calculate_dmarcbis_health(tags: Dict[str, str], policy: str, config_warning
         }
 
     # ── RFC 9989 Ready (green) ──────────────────────────────
-    # Clean record, fully compliant
+    # Clean record, fully compliant. np and sp are unset here on purpose in
+    # plenty of Ready records: both are OPTIONAL, and an absent tag inherits
+    # from p= rather than leaving anything unprotected, so neither belongs
+    # in a readiness gate.
     if (policy in ("reject", "quarantine")
             and not deprecated_present
-            and np_present
             and t_val != "y"
             and rua
             and not critical):
@@ -3244,14 +3257,11 @@ def _calculate_dmarcbis_health(tags: Dict[str, str], policy: str, config_warning
         }
 
     # ── RFC 9989 Compatible (blue) ──────────────────────────
-    # Valid with minor gaps
+    # Valid with minor gaps. np and sp being unset is not one of them (see
+    # above), so neither appears here either.
     reasons = []
     if deprecated_present:
         reasons.append(f"Deprecated tags: {', '.join(deprecated_present)}")
-    if not np_present:
-        reasons.append("np= not set")
-    if sp is None and policy in ("reject", "quarantine"):
-        reasons.append("sp= not set (inherits correctly)")
 
     improvements = ". ".join(reasons) if reasons else "Minor improvements available"
 
