@@ -6,9 +6,29 @@ result_transformer and spf_intelligence use it to grade a selector's key.
 """
 
 from typing import Dict, Optional
+import base64
 import re
 
 from dkim_tag_analyzer import _decode_rsa_key_bits
+
+# RFC 8463 section 3: the Ed25519 public key is 32 raw bytes. Some generators
+# publish the 44-byte DER SubjectPublicKeyInfo wrapper around it instead.
+ED25519_RAW_LEN = 32
+ED25519_SPKI_LEN = 44
+
+
+def _tag_value(dkim_record: str, tag: str) -> Optional[str]:
+    """Return a tag's value lowercased, or None when the tag is absent.
+
+    A substring test for "k=ed25519" also matched the string appearing inside
+    some other tag's value, e.g. a note tag. Tags are split the way
+    DKIMValidator._parse_tags splits them.
+    """
+    for part in dkim_record.split(";"):
+        key, sep, value = part.partition("=")
+        if sep and key.strip().lower() == tag:
+            return value.strip().lower()
+    return None
 
 
 def _extract_p_tag(dkim_record: str) -> Optional[str]:
@@ -64,11 +84,38 @@ def analyze_dkim_key_strength(dkim_record: str) -> Dict:
         result['warning'] = 'Empty public key (p=): this key is revoked'
         return result
 
-    # Check Ed25519 (all records have a non-empty p= at this point)
-    if 'k=ed25519' in dkim_record.lower():
+    # Check Ed25519 (all records have a non-empty p= at this point).
+    #
+    # The key data is decoded, not assumed. Returning 256 bits on the presence
+    # of the k= tag alone graded four bytes of junk as a healthy key, which is
+    # the same defect the RSA path was fixed for: a DER length header, or here a
+    # k= tag, is a claim about what follows, not a guarantee. RFC 8463 section 3
+    # publishes the Ed25519 public key as the 32 raw bytes; some generators
+    # publish the 44-byte SPKI wrapper instead, so both are accepted.
+    if _tag_value(dkim_record, 'k') == 'ed25519':
         result['key_type'] = 'Ed25519'
-        result['key_bits'] = 256
-        result['status'] = 'strong'
+        try:
+            raw_bytes = base64.b64decode(key_data, validate=False)
+        except Exception:
+            raw_bytes = b''
+        if len(raw_bytes) in (ED25519_RAW_LEN, ED25519_SPKI_LEN):
+            result['key_bits'] = 256
+            result['status'] = 'strong'
+            return result
+        # A record that says ed25519 but carries RSA key data is a type
+        # mismatch, not an odd size. dkim_tag_analyzer reports the same thing.
+        rsa_bits = _decode_rsa_key_bits(key_data)
+        result['status'] = 'invalid'
+        result['reason'] = 'undecodable'
+        if rsa_bits:
+            result['warning'] = (
+                f'Record says k=ed25519 but the key data is a {rsa_bits}-bit RSA key'
+            )
+        else:
+            result['warning'] = (
+                f'Not a valid Ed25519 public key ({len(raw_bytes)} bytes, '
+                f'expected {ED25519_RAW_LEN} raw or {ED25519_SPKI_LEN} SPKI)'
+            )
         return result
 
     # RSA (default key type per RFC 6376)

@@ -2306,6 +2306,11 @@ def _raw_check_spf(domain: str) -> Dict[str, Any]:
     # ── Step 2: Multiple records = permerror (RFC 7208) ─────────
     if len(spf_records) > 1:
         result["status"] = "error"
+        # Named explicitly. The card layer keyed "no SPF record" off an empty
+        # record field, so this branch, which returns with record still None,
+        # rendered as "No SPF record published" with fix text telling the
+        # operator to publish the record they had published twice.
+        result["multiple_records"] = spf_records
         _add_issue(
             "error",
             f"Multiple SPF records ({len(spf_records)})",
@@ -3702,17 +3707,26 @@ def _raw_check_dane(domain: str, raw_results: Dict[str, Any]) -> Dict[str, Any]:
         result["status"] = "ok"
         return result
 
-    # DNSSEC status: query directly rather than relying on raw_results,
-    # because DNSSEC and DANE run as parallel Phase 2 checks so the
-    # DNSSEC result may not be available in the raw_results snapshot.
+    # DNSSEC status. run_full_audit hoists the DNSSEC check ahead of the Phase 2
+    # batch precisely so this is already here; the fallback covers a caller that
+    # did not.
+    #
+    # dnssec_validated is three-state, not a boolean. The hoist records a stub
+    # carrying lookup_failed when the DNSSEC check times out or raises, and
+    # reading that stub's has_dnssec=False as a fact told a signed domain with
+    # working DANE to "enable DNSSEC", off the back of one slow DNSKEY query.
+    # None means the audit does not know, and every claim below is suppressed.
     raw_dnssec = raw_results.get("dnssec")
     if raw_dnssec is None:
         raw_dnssec = _raw_check_dnssec(domain)
-    dnssec_ok = (
-        raw_dnssec.get("has_dnssec", False)
-        and raw_dnssec.get("has_ds", False)
-        and raw_dnssec.get("chain_valid") is not False
-    )
+    if raw_dnssec.get("lookup_failed"):
+        dnssec_ok = None
+    else:
+        dnssec_ok = (
+            raw_dnssec.get("has_dnssec", False)
+            and raw_dnssec.get("has_ds", False)
+            and raw_dnssec.get("chain_valid") is not False
+        )
     result["dnssec_validated"] = dnssec_ok
 
     resolver = _get_dnssec_resolver()
@@ -3782,8 +3796,21 @@ def _raw_check_dane(domain: str, raw_results: Dict[str, Any]) -> Dict[str, Any]:
 
         result["tlsa_records"].append(host_result)
 
-    # Cross-check: TLSA without DNSSEC
-    if result["has_tlsa"] and not dnssec_ok:
+    # Cross-check: TLSA without DNSSEC. Only when the DNSSEC state was actually
+    # established. dnssec_ok is None when the DNSSEC lookup did not complete,
+    # and "your DNSSEC is not enabled" is then a claim this audit cannot make.
+    if result["has_tlsa"] and dnssec_ok is None:
+        _add_issue(
+            "info",
+            "DNSSEC state could not be determined",
+            "TLSA records are published for this domain, but the DNSSEC check did "
+            "not complete, so this audit cannot say whether DANE is effective. "
+            "DANE requires DNSSEC (RFC 7672 Section 2.2). Nothing here says DNSSEC "
+            "is missing, only that it was not read on this run.",
+            "Re-run the audit. If the DNSSEC check keeps timing out, verify the "
+            "domain's nameservers are answering DNSKEY queries.",
+        )
+    elif result["has_tlsa"] and not dnssec_ok:
         _add_issue(
             "error",
             "TLSA records found but DNSSEC is not enabled",
@@ -4736,18 +4763,22 @@ def run_full_audit(domain: str, dkim_selector: Optional[str] = None,
             raw_results["dnssec"] = _dnssec_raw
         except FuturesTimeoutError:
             _dnssec_error = "timeout"
-            # Recorded rather than left absent, so DANE reads "no DNSSEC"
-            # from here instead of taking its guard branch and running the
-            # whole check a second time after it has already blown the budget.
+            # Recorded rather than left absent, so DANE does not take its guard
+            # branch and run the whole check a second time after the budget has
+            # already blown. lookup_failed is what stops DANE reading these
+            # False values as facts: nothing was learned, so "has_dnssec: False"
+            # here means "not established", not "not published".
             raw_results["dnssec"] = {
                 "check": "DNSSEC", "domain": domain, "has_dnssec": False,
                 "has_ds": False, "chain_valid": None, "timed_out": True,
+                "lookup_failed": True,
             }
         except Exception as e:
             _dnssec_error = e
             raw_results["dnssec"] = {
                 "check": "DNSSEC", "domain": domain, "has_dnssec": False,
                 "has_ds": False, "chain_valid": None, "error": str(e),
+                "lookup_failed": True,
             }
 
     # Define each independent check as (key, run_func, transform_func, label, extra_kwargs)
@@ -4887,10 +4918,17 @@ def run_full_audit(domain: str, dkim_selector: Optional[str] = None,
 
     if _should_include("blacklist", scope_set):
         _bl_raw = dict(raw_results)
+        # The label has to be the card's own name. It is what _timeout_card and
+        # _error_card put in "name", and every consumer (the PDF's
+        # _protocol_details, build_executive_summary, the front end) looks the
+        # card up by name. With "Blacklist" here a timed-out blocklist check was
+        # counted on the PDF cover and rendered nowhere in the body, because
+        # _get_check(data, "Blocklist") missed it. The internal key stays
+        # "blacklist" since raw_results and _CARD_ORDER are keyed on it.
         _parallel_checks.append(("blacklist",
             lambda: _raw_check_blacklist(domain, _bl_raw),
             lambda raw: transform_blacklist(raw, domain),
-            "Blacklist"))
+            "Blocklist"))
 
     # Submit all Phase 2 checks in parallel
     _p2_futures = {}

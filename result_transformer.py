@@ -422,6 +422,14 @@ def build_security_roadmap(checks: List[Dict], is_no_mail: bool = False) -> Dict
                       "action": "Publish an SPF record",
                       "impact": "No SPF record means receivers cannot verify your authorized mail servers."})
 
+    # More than one v=spf1 record is a PermError for every message, so it belongs
+    # at the same tier as having none. It reaches the roadmap under its own pill
+    # rather than "Missing", which is why it used to contribute nothing here.
+    if spf.get("pill_label") == "Multiple records":
+        items.append({"priority": "critical", "protocol": "SPF",
+                      "action": "Merge the duplicate SPF records into one",
+                      "impact": "Receivers return PermError and evaluate neither record. SPF fails for every message."})
+
     # +all in SPF
     if spf.get("record") and "+all" in (spf.get("record") or ""):
         items.append({"priority": "critical", "protocol": "SPF",
@@ -471,17 +479,25 @@ def build_security_roadmap(checks: List[Dict], is_no_mail: bool = False) -> Dict
                       "impact": "Exceeding 10 lookups causes SPF to fail entirely."})
 
     # ── Medium ──────────────────────────────────────────────
-    if mta_sts.get("pill_label") == "Not configured":
+    # Every gate below reads a pill_label or a count, and an absent card returns
+    # the default for both. A scoped audit that never ran MTA-STS, TLS-RPT, DANE
+    # or BIMI therefore produced "configure this" advice about checks it did not
+    # perform. A check whose lookup failed is excluded for the same reason.
+    def _assessed(card):
+        return bool(card) and card.get("status") != "unavailable"
+
+    if _assessed(mta_sts) and mta_sts.get("pill_label") == "Not configured":
         items.append({"priority": "medium", "protocol": "MTA-STS",
                       "action": "Configure MTA-STS for TLS enforcement",
                       "impact": "Without MTA-STS, email encryption can be silently stripped."})
 
-    if tls_rpt.get("status") == "fail" or tls_rpt.get("pill_label") == "Not configured":
+    if _assessed(tls_rpt) and (tls_rpt.get("status") == "fail"
+                               or tls_rpt.get("pill_label") == "Not configured"):
         items.append({"priority": "medium", "protocol": "TLS-RPT",
                       "action": "Configure TLS-RPT for failure visibility",
                       "impact": "TLS downgrade attacks go undetected."})
 
-    if dane.get("pill_label") == "Not configured":
+    if _assessed(dane) and dane.get("pill_label") == "Not configured":
         items.append({"priority": "medium", "protocol": "DANE",
                       "action": "Consider DANE TLSA records",
                       "impact": "DANE provides CA-independent certificate verification."})
@@ -495,7 +511,9 @@ def build_security_roadmap(checks: List[Dict], is_no_mail: bool = False) -> Dict
 
     # ── Low ─────────────────────────────────────────────────
     bimi = check_map.get("BIMI", {})
-    if bimi.get("records_found", 0) == 0:
+    if not _assessed(bimi):
+        pass  # BIMI was not part of this run, so it gets no recommendation.
+    elif bimi.get("records_found", 0) == 0:
         if bimi.get("status") != "pass":  # "pass" here means N/A (no-mail domain)
             items.append({"priority": "low", "protocol": "BIMI",
                           "action": "Consider adding BIMI for brand visibility",
@@ -511,8 +529,33 @@ def build_security_roadmap(checks: List[Dict], is_no_mail: bool = False) -> Dict
     for item in items:
         tiers[item["priority"]] = tiers.get(item["priority"], 0) + 1
 
+    # A roadmap with no items is only an all-clear when every protocol was
+    # actually examined. Two things produce an empty list that is not good news:
+    # a check whose lookup never completed carries status "unavailable" and
+    # passes through every gate above untouched, and a scoped audit never
+    # produces the card at all. Saying "meets all current best practices across
+    # all protocols" on either is a claim about protocols this run did not read.
+    _ROADMAP_PROTOCOLS = ("DMARC", "SPF", "DKIM", "MTA-STS", "TLS-RPT", "DANE", "BIMI")
+    unread = [n for n in _ROADMAP_PROTOCOLS
+              if check_map.get(n, {}).get("status") == "unavailable"]
+    not_run = [n for n in _ROADMAP_PROTOCOLS if n not in check_map]
+
     total = len(items)
-    if total == 0:
+    if total == 0 and unread:
+        summary = (
+            f"No action items, but the {_join_names(unread)} "
+            f"{'lookups' if len(unread) > 1 else 'lookup'} did not complete, so "
+            f"{'those protocols were' if len(unread) > 1 else 'that protocol was'} "
+            "not assessed. This is not an all-clear."
+        )
+    elif total == 0 and not_run:
+        summary = (
+            "No action items across the protocols this audit covered. "
+            f"{_join_names(not_run)} "
+            f"{'were' if len(not_run) > 1 else 'was'} outside the scope of this "
+            "run and not checked."
+        )
+    elif total == 0:
         summary = "Your email security meets all current best practices across all protocols."
     else:
         summary = f"{total} recommendation{'s' if total != 1 else ''} across {sum(1 for v in tiers.values() if v > 0)} priority tier{'s' if sum(1 for v in tiers.values() if v > 0) != 1 else ''}."
@@ -522,6 +565,8 @@ def build_security_roadmap(checks: List[Dict], is_no_mail: bool = False) -> Dict
         "tiers": tiers,
         "total": total,
         "summary": summary,
+        "unread_protocols": unread,
+        "unscoped_protocols": not_run,
     }
 
 
@@ -3483,6 +3528,49 @@ def transform_spf(raw: Dict, has_mx: bool = True) -> Dict:
     if raw.get("status") == "unavailable":
         return _lookup_unavailable_card("SPF", raw, "SPF record")
 
+    # More than one v=spf1 record at the name. RFC 7208 section 4.5 makes that a
+    # PermError for the whole evaluation. The record field is empty on this path
+    # because there is no single record to show, and the branches below read an
+    # empty record as absence, so this has to be handled before them.
+    _multiple = raw.get("multiple_records")
+    if _multiple:
+        _n = len(_multiple)
+        _details = [
+            {"type": "error", "text": f"{_n} v=spf1 records published at this domain"},
+        ]
+        for _rec in _multiple:
+            _details.append({"type": "info", "text": _rec})
+        for _issue in raw.get("issues", []):
+            _details.append(_issue_to_detail(_issue))
+        return {
+            "name": "SPF",
+            "status": "fail",
+            "pill_label": "Multiple records",
+            "verdict": f"{_n} SPF records published (RFC 7208 requires exactly one)",
+            "record": None,
+            "explanation": (
+                f"This domain publishes <strong>{_n}</strong> separate v=spf1 records. "
+                "<a href=\"https://datatracker.ietf.org/doc/html/rfc7208\" target=\"_blank\" rel=\"noopener\">RFC 7208</a> "
+                "section 4.5 requires exactly one, and a receiver that finds more than one "
+                "returns PermError and evaluates neither. The effect is the same as having "
+                "no SPF record at all, except that it is harder to spot: the records are "
+                "published and look correct in isolation."
+            ),
+            "details": _details,
+            "fix": (
+                "Merge these into a single v=spf1 record. Combine every authorized IP "
+                "address and include into one record, keep one <strong>all</strong> "
+                "mechanism at the end, and delete the others. Watch the 10-lookup limit "
+                "while merging."
+            ),
+            "fix_records": None,
+            "deliverability": (
+                "Every message from this domain currently fails SPF with a PermError, so "
+                "SPF cannot contribute to DMARC alignment. Expect spam folder placement at "
+                "receivers that weight SPF, until the records are merged."
+            ),
+        }
+
     status = _map_status(raw.get("status", "error"))
     record = raw.get("record")
     pill_label = None
@@ -5249,6 +5337,8 @@ def transform_caa(raw: Dict, domain: str) -> Dict:
 
 def transform_dane(raw: Dict, domain: str) -> Dict:
     has_tlsa = raw.get("has_tlsa", False)
+    # Three-state. None means the DNSSEC check did not complete, so this card
+    # may not say DNSSEC is missing, and may not say the DANE chain is valid.
     dnssec_ok = raw.get("dnssec_validated", False)
     mx_checked = raw.get("mx_hosts_checked", 0)
     mx_with_tlsa = raw.get("mx_hosts_with_tlsa", 0)
@@ -5271,6 +5361,42 @@ def transform_dane(raw: Dict, domain: str) -> Dict:
             "details": [{"type": "info", "text": "No MX hosts. DANE check not applicable"}],
             "fix": None,
             "fix_records": None,
+        }
+
+    # Has TLSA, DNSSEC state never established
+    if has_tlsa and dnssec_ok is None:
+        details = []
+        for hr in tlsa_records:
+            if hr.get("found"):
+                for rec in hr.get("records", []):
+                    details.append({
+                        "type": "info",
+                        "text": f"{hr['mx_host']}: {rec['usage_name']}, {rec['selector_name']}, {rec['matching_type_name']}"
+                    })
+        details.append({
+            "type": "info",
+            "text": "The DNSSEC check did not complete, so DANE effectiveness was not assessed"
+        })
+        for issue in issues:
+            details.append(_issue_to_detail(issue))
+        return {
+            "name": "DANE",
+            "status": "warn",
+            "pill_label": "Partly checked",
+            "verdict": "TLSA records published, DNSSEC state not confirmed",
+            "record": None,
+            "explanation": (
+                "TLSA records are published for this domain's MX hosts. DANE "
+                "(<a href=\"https://datatracker.ietf.org/doc/html/rfc7672\" target=\"_blank\" rel=\"noopener\">RFC 7672</a>) "
+                "requires DNSSEC to be effective, and the DNSSEC check did not complete on "
+                "this run, so this audit cannot say whether these records are trusted by "
+                "sending servers. This is a gap in the audit, not a finding about the domain."
+            ),
+            "details": details,
+            "fix": None,
+            "fix_records": None,
+            "dane_deep": _build_dane_deep(tlsa_records, dnssec_ok),
+            "ttl_info": format_ttl(raw.get("ttl")),
         }
 
     # Has TLSA but no DNSSEC
@@ -5368,6 +5494,8 @@ def transform_dane(raw: Dict, domain: str) -> Dict:
     ]
     if dnssec_ok:
         details.append({"type": "good", "text": "DNSSEC is enabled and ready for DANE deployment"})
+    elif dnssec_ok is None:
+        details.append({"type": "info", "text": "DNSSEC is also required for DANE to work. The DNSSEC check did not complete on this run"})
     else:
         details.append({"type": "info", "text": "DNSSEC is also required for DANE to work"})
 
@@ -5384,7 +5512,7 @@ def transform_dane(raw: Dict, domain: str) -> Dict:
         "<strong>3.</strong> TLSA records must be updated every time you rotate your mail server's TLS certificate, "
         "or use DANE-TA (usage 2) to pin the CA certificate instead."
     ]
-    if not dnssec_ok:
+    if dnssec_ok is False:
         fix_parts.insert(0, "<strong>Prerequisite:</strong> DNSSEC is not enabled. DANE cannot function without it.<br><br>")
 
     fix = "".join(fix_parts)
@@ -5438,7 +5566,12 @@ def _build_dane_deep(tlsa_records: List[Dict], dnssec_ok: bool) -> Optional[Dict
         return None
 
     # DNSSEC gate
-    if dnssec_ok and any(r.get("found") for r in tlsa_records):
+    if dnssec_ok is None and any(r.get("found") for r in tlsa_records):
+        dnssec_status = {"status": "info", "text": (
+            "TLSA records are published. The DNSSEC check did not complete, so "
+            "whether DANE is effective here was not established."
+        )}
+    elif dnssec_ok and any(r.get("found") for r in tlsa_records):
         dnssec_status = {"status": "pass", "text": "DANE fully functional."}
     elif not dnssec_ok and any(r.get("found") for r in tlsa_records):
         dnssec_status = {"status": "fail", "text": (
