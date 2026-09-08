@@ -1595,6 +1595,13 @@ def transform_dmarc(raw: Dict, tree_walk: Optional[Dict] = None, is_no_mail: boo
         elif pct < 100:
             verdict = f"{_partial} ({_partial_note})"
             status = "warn"
+        elif not raw.get("rua"):
+            # Amber, not green and not red. The policy is enforcing and the
+            # record is compliant, since rua is OPTIONAL in RFC 7489 section
+            # 6.3 and RFC 9989, so this is not a failure. But the owner cannot
+            # see what their own policy is doing, and a green card would say
+            # there is nothing to look at.
+            status = "warn"
         else:
             status = "pass"
     elif policy == "none":

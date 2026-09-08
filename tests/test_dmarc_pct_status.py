@@ -101,9 +101,17 @@ def test_full_enforcement_is_still_a_pass(policy):
 
 
 @pytest.mark.parametrize("policy", ["reject", "quarantine"])
-def test_missing_rua_does_not_downgrade_a_fully_enforcing_policy(policy):
-    """The comment the branch was written around still holds: the engine may
-    flag a warning for an absent rua, but the policy itself is correct."""
+def test_missing_rua_is_not_graded_as_a_pct_problem(policy):
+    """This file's subject is that pct decides the status. That still holds.
+
+    It used to assert a green card, on the reasoning that the policy itself is
+    correct. It is correct, and rua is OPTIONAL in RFC 7489 section 6.3 and
+    RFC 9989, so this is not a failure. But the owner cannot see what their own
+    enforcing policy is doing, and a green card says there is nothing to look
+    at. Doc 17 item 3 settled it at amber. What must not happen, and is what
+    this file guards, is the missing rua being described as a coverage problem:
+    the verdict still says the policy applies to everything.
+    """
     record = f"v=DMARC1; p={policy}"
     raw = _raw(record, policy, rua=None)
     raw["issues"] = [{
@@ -111,7 +119,14 @@ def test_missing_rua_does_not_downgrade_a_fully_enforcing_policy(policy):
         "issue": "No aggregate reporting (rua) configured",
         "plain_english": "You have no visibility into authentication results.",
     }]
-    assert transform_dmarc(raw)["status"] == "pass"
+    card = transform_dmarc(raw)
+
+    assert card["status"] == "warn"
+    assert card["status"] != "fail", "an optional tag cannot fail a record"
+    assert "pct" not in card["verdict"], (
+        f"the verdict must not describe this as partial coverage: "
+        f"{card['verdict']!r}"
+    )
 
 
 def test_card_and_attack_surface_agree_on_pct_zero(audit):

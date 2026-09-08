@@ -61,6 +61,11 @@ def test_an_enforcing_policy_without_rua_does_not_fail(audit, policy):
         f"p={policy} with no rua is a compliant, enforcing record. rua is "
         f"OPTIONAL in RFC 7489 6.3 and RFC 9989. Got {card['status']!r}"
     )
+    assert card["status"] == "warn", (
+        f"amber, not green: the policy is enforcing and the record is "
+        f"compliant, but the owner cannot see what it is doing. Got "
+        f"{card['status']!r}"
+    )
 
 
 @pytest.mark.parametrize("policy", ["quarantine", "reject"])
