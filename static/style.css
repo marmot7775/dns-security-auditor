@@ -181,6 +181,12 @@
     --pass-border: rgba(34, 197, 94, 0.25);
     --warn: #f59e0b;
     --warn-contrast: #1a1a1a;
+    /* Record syntax highlighting has four steps: safe, caution, warn,
+       danger. Caution needs its own colour, not --warn: it marks ~all and
+       p=quarantine, and --warn marks ?all and p=none. Painting an
+       enforcing policy the same as no policy is the one distinction this
+       tool exists to draw. */
+    --rec-caution: #e3b341;
     --warn-bg: rgba(245, 158, 11, 0.1);
     --warn-border: rgba(245, 158, 11, 0.25);
     --fail: #ef4444;
@@ -1463,7 +1469,7 @@ h3.result-title,
 }
 
 .rec-neutral {
-    color: #e3b341;
+    color: var(--rec-caution);
 }
 
 .rec-warn {
@@ -7390,6 +7396,7 @@ body {
         --pass-bg: rgba(19, 116, 54, 0.06);
         --pass-border: rgba(19, 116, 54, 0.2);
         --warn: #a84d08;
+        --rec-caution: #856d0f;
         --warn-contrast: #ffffff;
         --warn-bg: rgba(168, 77, 8, 0.08);
         --warn-border: rgba(168, 77, 8, 0.2);
@@ -7458,10 +7465,6 @@ body {
        and dropped under 4.5:1 on their own light backgrounds. */
     :where(html:not([data-theme="dark"])) .rec-safe {
         color: var(--pass);
-    }
-
-    :where(html:not([data-theme="dark"])) .rec-neutral {
-        color: var(--warn);
     }
 
     :where(html:not([data-theme="dark"])) .rec-warn {
@@ -7665,6 +7668,7 @@ body {
     --pass-bg: rgba(19, 116, 54, 0.06);
     --pass-border: rgba(19, 116, 54, 0.2);
     --warn: #a84d08;
+    --rec-caution: #856d0f;
     --warn-contrast: #ffffff;
     --warn-bg: rgba(168, 77, 8, 0.08);
     --warn-border: rgba(168, 77, 8, 0.2);
@@ -7729,10 +7733,6 @@ body {
 
 :where(html[data-theme="light"]) .rec-safe {
     color: var(--pass);
-}
-
-:where(html[data-theme="light"]) .rec-neutral {
-    color: var(--warn);
 }
 
 :where(html[data-theme="light"]) .rec-warn {
