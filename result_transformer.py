@@ -4444,6 +4444,12 @@ def transform_dkim(raw: Dict, domain: str, has_mx: bool = True, non_mail: bool =
                 {"type": "info", "text": f"Checked {tested} selectors, no live public key found"}
             )
             _retired_details.append({"type": "info", "text": _DKIM_NOT_ENUMERABLE})
+            # Surfaced here as well as in the graded outcome. Discovery cut
+            # short by its own deadline searched fewer names than it meant to,
+            # and "no live key found" reads differently when the sweep did not
+            # finish. The resilience section says so; this card said nothing.
+            if raw.get("timeout_note"):
+                _retired_details.append({"type": "warning", "text": raw["timeout_note"]})
             _retired_details.extend(dict(d) for d in _DKIM_HOW_TO_SETTLE)
             for issue in raw.get("issues", []):
                 _retired_details.append(_issue_to_detail(issue))
@@ -4481,6 +4487,8 @@ def transform_dkim(raw: Dict, domain: str, has_mx: bool = True, non_mail: bool =
             {"type": "info", "text": f"Checked {tested} common selectors, no public key found"},
             {"type": "info", "text": _DKIM_NOT_ENUMERABLE},
         ]
+        if raw.get("timeout_note"):
+            _unknown_details.append({"type": "warning", "text": raw["timeout_note"]})
         _unknown_details.extend(dict(d) for d in _DKIM_HOW_TO_SETTLE)
         for issue in raw.get("issues", []):
             _unknown_details.append(_issue_to_detail(issue))
@@ -5811,7 +5819,13 @@ def transform_dane(raw: Dict, domain: str) -> Dict:
             details.append(_issue_to_detail(issue))
         return {
             "name": "DANE",
-            "status": "warn",
+            # Not "warn". The explanation below says this is a gap in the audit
+            # and not a finding about the domain, and a warn contradicted it by
+            # counting on the PDF cover and in the front end's tallies. Every
+            # other check that reaches this state answers "unavailable", which
+            # is neither a pass nor a finding. The pill still says what was and
+            # was not established, which is the part the reader needs.
+            "status": "unavailable",
             "pill_label": "Partly checked",
             "verdict": "TLSA records published, DNSSEC state not confirmed",
             "record": None,
@@ -7136,9 +7150,18 @@ def _check_domain_features(raw_results: Dict, checks: List[Dict]) -> Dict[str, s
     result = {}
     check_map = {(c.get("name") or "").upper(): c for c in checks}
 
-    # DKIM 2048-bit: check if any found key is >= 2048 bits
+    # DKIM 2048-bit: check if any found key is >= 2048 bits.
+    #
+    # Live keys only. A revoked selector (empty p=, RFC 6376 3.6.1) yields no
+    # bit length, so counting one as "has DKIM" scored the domain "no" on this
+    # row: an assertion that its keys fall short of 2048 bits, about a domain
+    # with no keys. google.com published five revoked selectors and nothing
+    # live, and this row contradicted its own DKIM card two sections above.
+    # Same expression, same fix as remediation_planner._has_live_dkim_key.
     dkim_raw = raw_results.get("dkim", {})
-    found_selectors = dkim_raw.get("found_selectors", []) or []
+    found_selectors, _revoked = _split_dkim_selectors(
+        dkim_raw.get("found_selectors", []) or []
+    )
     has_2048 = False
     has_any_dkim = bool(found_selectors)
     for sel in found_selectors:

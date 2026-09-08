@@ -16,6 +16,21 @@ from dkim_tag_analyzer import _decode_rsa_key_bits
 ED25519_RAW_LEN = 32
 ED25519_SPKI_LEN = 44
 
+# The SPKI wrapper is a fixed 12-byte header, so it is checked rather than
+# assumed from the length. Any 32 bytes is a well-formed raw Ed25519 point and
+# there is nothing further to verify without curve arithmetic, but 44 bytes is
+# a structured encoding, and accepting the length alone graded 44 bytes of
+# zeroes as a healthy 256-bit key. That is the same defect this branch was
+# hardened for once already: a length, like a k= tag, is a claim about what
+# follows.
+#
+#   30 2a                 SEQUENCE, 42 bytes
+#      30 05              SEQUENCE, 5 bytes (AlgorithmIdentifier)
+#         06 03 2b 65 70  OID 1.3.101.112, id-Ed25519 (RFC 8410 section 3)
+#      03 21 00           BIT STRING, 33 bytes, 0 unused
+#         <32 key bytes>
+ED25519_SPKI_PREFIX = bytes.fromhex("302a300506032b6570032100")
+
 
 def _tag_value(dkim_record: str, tag: str) -> Optional[str]:
     """Return a tag's value lowercased, or None when the tag is absent.
@@ -91,14 +106,18 @@ def analyze_dkim_key_strength(dkim_record: str) -> Dict:
     # the same defect the RSA path was fixed for: a DER length header, or here a
     # k= tag, is a claim about what follows, not a guarantee. RFC 8463 section 3
     # publishes the Ed25519 public key as the 32 raw bytes; some generators
-    # publish the 44-byte SPKI wrapper instead, so both are accepted.
+    # publish the 44-byte SPKI wrapper instead, so both are accepted, the
+    # wrapper on its actual header rather than on its length.
     if _tag_value(dkim_record, 'k') == 'ed25519':
         result['key_type'] = 'Ed25519'
         try:
             raw_bytes = base64.b64decode(key_data, validate=False)
         except Exception:
             raw_bytes = b''
-        if len(raw_bytes) in (ED25519_RAW_LEN, ED25519_SPKI_LEN):
+        if len(raw_bytes) == ED25519_RAW_LEN or (
+            len(raw_bytes) == ED25519_SPKI_LEN
+            and raw_bytes.startswith(ED25519_SPKI_PREFIX)
+        ):
             result['key_bits'] = 256
             result['status'] = 'strong'
             return result
@@ -110,6 +129,11 @@ def analyze_dkim_key_strength(dkim_record: str) -> Dict:
         if rsa_bits:
             result['warning'] = (
                 f'Record says k=ed25519 but the key data is a {rsa_bits}-bit RSA key'
+            )
+        elif len(raw_bytes) == ED25519_SPKI_LEN:
+            result['warning'] = (
+                'Not a valid Ed25519 public key: 44 bytes, but not the DER '
+                'SubjectPublicKeyInfo wrapper for id-Ed25519'
             )
         else:
             result['warning'] = (
