@@ -84,9 +84,16 @@ def test_small_logo_roadmap_item_is_about_resizing_not_adding_bimi():
     )
 
 
-def test_no_bimi_record_still_recommends_adding_it():
-    """Control: the normal 'consider adding BIMI' path must still fire
-    when no record is published at all."""
+def test_no_bimi_record_produces_no_roadmap_item():
+    """Absent BIMI is information, not a recommendation.
+
+    This asserted the opposite: that "consider adding BIMI" fires when no
+    record is published. BIMI is optional brand display, so declining it is
+    not a security finding, and the item competed for roadmap space with
+    things the domain can act on. The gate this file exists to test, that a
+    published-but-broken record still produces an item, is unchanged and is
+    covered by the tests below.
+    """
     with patch.object(checks_extra, "_lookup_txt", return_value=[]):
         raw = checks_extra.check_bimi("example.com", dmarc_enforcing_override=True,
                                        dmarc_found_override=True)
@@ -95,8 +102,7 @@ def test_no_bimi_record_still_recommends_adding_it():
 
     roadmap = result_transformer.build_security_roadmap([card])
     bimi_items = [i for i in roadmap["items"] if i["protocol"] == "BIMI"]
-    assert len(bimi_items) == 1
-    assert "adding bimi" in bimi_items[0]["action"].lower()
+    assert not bimi_items, f"absent BIMI is not a roadmap item: {bimi_items}"
 
 
 def test_clean_bimi_record_produces_no_roadmap_item():

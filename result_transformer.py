@@ -622,10 +622,10 @@ def build_security_roadmap(checks: List[Dict], is_no_mail: bool = False) -> Dict
     if not _assessed(bimi):
         pass  # BIMI was not part of this run, so it gets no recommendation.
     elif bimi.get("records_found", 0) == 0:
-        if bimi.get("status") != "pass":  # "pass" here means N/A (no-mail domain)
-            items.append({"priority": "low", "protocol": "BIMI",
-                          "action": "Consider adding BIMI for brand visibility",
-                          "impact": "BIMI displays your logo in supported email clients."})
+        # No item. BIMI is optional branding, so "you have not adopted an
+        # optional feature" is not a security recommendation, and it competed
+        # for roadmap space with findings the domain can act on.
+        pass
     elif bimi.get("status") != "pass":
         action = bimi.get("fix") or "Review your BIMI configuration"
         items.append({"priority": "low", "protocol": "BIMI",
@@ -5459,7 +5459,14 @@ def transform_bimi(raw: Dict, domain: str, has_mx: bool = True, non_mail: bool =
         # using the [RFC5322]-compliant header 'BIMI-Selector'".
         return {
             "name": "BIMI",
-            "status": "warn",
+            # BIMI is optional brand display, not a security control, and a
+            # domain that has not adopted it has done nothing wrong. A warning
+            # is a thing the owner should act on; this is a thing they may
+            # choose to. Kept out of the warnings tally with the same
+            # pass-with-a-pill idiom used elsewhere for "nothing to answer for
+            # here", rather than a fifth status the front end and the PDF would
+            # both have to learn. The wording is unchanged from 08e6ac3.
+            "status": "pass",
             "pill_label": "Not configured",
             "verdict": "No BIMI record at the default selector",
             "record": None,

@@ -215,7 +215,10 @@ class TestBimiWithoutDmarc:
         result = detect_anomalies(raw, has_mx=False)
         a = find(result, "BIMI")
         assert a is not None
-        assert a["severity"] == "high"
+        # Medium, not high. The record is published and no client will show the
+        # logo, which is worth surfacing, but the cost is a logo not displaying
+        # and no security property is weakened by it. BIMI is optional branding.
+        assert a["severity"] == "medium"
 
     def test_bimi_with_no_dmarc_record(self):
         raw = {

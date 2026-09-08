@@ -179,7 +179,9 @@ def detect_anomalies(raw_results: dict, has_mx: bool, is_defensive: bool = False
                     "not quarantine or reject. Mail clients will not display the "
                     "BIMI logo because DMARC enforcement is required."
                 ).format(dmarc_policy or "none"),
-                "severity": "high",
+                # Medium at most. The logo does not display, which is the
+                # cost, and no security property is weakened by it.
+                "severity": "medium",
                 "recommendation": (
                     "Set DMARC policy to at least quarantine (p=quarantine) "
                     "before expecting mail clients to honour the BIMI logo."
