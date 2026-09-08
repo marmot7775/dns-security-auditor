@@ -67,7 +67,7 @@ def build_remediation_plan(
     if is_defensive:
         dnssec = raw_results.get("dnssec") or {}
         caa = raw_results.get("caa") or {}
-        if not bool(dnssec.get("has_dnssec")):
+        if not bool(dnssec.get("has_dnssec")) and not dnssec.get("lookup_failed"):
             long_term.append({
                 "title": "Enable DNSSEC",
                 "description": (
@@ -109,6 +109,10 @@ def build_remediation_plan(
     dmarc_unavailable = (
         dmarc.get("status") == "unavailable" or bool(dmarc.get("inheritance_lookup_failed"))
     )
+    # DNSSEC's raw check keeps "status" for severity (ok/warning/error) and
+    # signals a failed lookup with lookup_failed instead, so this can't reuse
+    # the status == "unavailable" check above.
+    dnssec_unavailable = bool(dnssec.get("lookup_failed"))
 
     spf_record = spf.get("record") or ""
     # _raw_check_spf leaves "record" None when a domain publishes more than one
@@ -377,8 +381,11 @@ def build_remediation_plan(
             "check": "DKIM",
         })
 
-    # Enable DNSSEC (not currently enabled, or no DS record)
-    if not dnssec_enabled or not dnssec_has_ds:
+    # Enable DNSSEC (not currently enabled, or no DS record). Not when the
+    # lookup itself failed: has_dnssec=False then is a failed query, not a
+    # real negative answer, and turning it into a task tells the operator
+    # to do something they may have already done.
+    if (not dnssec_enabled or not dnssec_has_ds) and not dnssec_unavailable:
         # Only suggest if chain is not already broken (broken chain is immediate)
         if not (dnssec_enabled and dnssec_chain_valid is False):
             long_term.append({

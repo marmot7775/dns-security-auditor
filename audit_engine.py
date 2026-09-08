@@ -2928,6 +2928,9 @@ def _raw_check_dnssec(domain: str) -> Dict[str, Any]:
                     )
         except dns.exception.DNSException:
             result["has_dnssec"] = False
+            # Nothing was learned on either attempt, not a real negative
+            # answer. Downstream must not report this as "not configured".
+            result["lookup_failed"] = True
             should_probe_bogus = True
             _add_issue(
                 "warning",
@@ -2939,6 +2942,10 @@ def _raw_check_dnssec(domain: str) -> Dict[str, Any]:
             )
     except dns.exception.DNSException as e:
         result["has_dnssec"] = False
+        # SERVFAIL, REFUSED, NoNameservers and similar mean the query never
+        # completed, not that DNSSEC is absent. Downstream must not report
+        # this as "not configured".
+        result["lookup_failed"] = True
         should_probe_bogus = True
         _add_issue(
             "warning",
@@ -3262,6 +3269,12 @@ def _raw_check_caa(domain: str) -> Dict[str, Any]:
     # is a false alarm.
     answers = None
     caa_source = None
+    # NoAnswer and NXDOMAIN are real answers: no CAA published at that
+    # level, so the walk continues up the tree. A SERVFAIL/NoNameservers
+    # here means that level was never actually checked, so a walk that
+    # completes without ever finding a record cannot say the whole tree
+    # published nothing, since the level that failed might have.
+    any_lookup_failed = False
     for _candidate in _caa_tree(domain):
         try:
             answers = resolver.resolve(_candidate, "CAA")
@@ -3283,7 +3296,11 @@ def _raw_check_caa(domain: str) -> Dict[str, Any]:
             continue
         except dns.exception.DNSException:
             answers = None
+            any_lookup_failed = True
             continue
+
+    if answers is None and any_lookup_failed:
+        result["lookup_failed"] = True
 
     result["caa_source"] = caa_source
     result["inherited"] = bool(caa_source) and caa_source != _queried
@@ -3779,6 +3796,11 @@ def _raw_check_dane(domain: str, raw_results: Dict[str, Any]) -> Dict[str, Any]:
             and raw_dnssec.get("chain_valid") is not False
         )
     result["dnssec_validated"] = dnssec_ok
+    # dnssec_ok collapses "no DNSSEC at all" and "signed but no DS at the
+    # parent" to the same False, so DANE told an operator with a published
+    # DNSKEY and no DS record to "enable DNSSEC", a step already done.
+    # dnssec_state carries which one it actually was.
+    result["dnssec_state"] = raw_dnssec.get("dnssec_state")
 
     resolver = _get_dnssec_resolver()
     result["mx_hosts_checked"] = len(mx_hosts)
