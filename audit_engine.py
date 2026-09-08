@@ -3964,7 +3964,10 @@ def _raw_check_ct_uncached(domain: str, raw_results: Dict[str, Any]) -> Dict[str
     try:
         resp = requests.get(
             "https://crt.sh/",
-            params={"q": f"%.{domain}", "output": "json"},
+            # exclude=expired keeps a domain with a long certificate history
+            # from burying every currently-valid cert under thousands of
+            # expired rows before the 200-cert cap below ever sees them.
+            params={"q": f"%.{domain}", "output": "json", "exclude": "expired"},
             timeout=10,
             headers={"User-Agent": "dns-audit.com/1.0"},
             allow_redirects=False,
@@ -4014,8 +4017,10 @@ def _raw_check_ct_uncached(domain: str, raw_results: Dict[str, Any]) -> Dict[str
             seen_serials.add(serial)
         unique_certs.append(cert)
 
-    # Limit to most recent 200 certs for analysis
-    unique_certs.sort(key=lambda c: c.get("not_before", ""), reverse=True)
+    # Cap at 200 for analysis, ordered by expiry so a domain with a long
+    # history keeps its longest-valid certs first rather than whichever
+    # 200 rows happened to sort first by issuance date.
+    unique_certs.sort(key=lambda c: c.get("not_after", ""), reverse=True)
     unique_certs = unique_certs[:200]
 
     now = datetime.now(timezone.utc)
@@ -4078,7 +4083,10 @@ def _raw_check_ct_uncached(domain: str, raw_results: Dict[str, Any]) -> Dict[str
 
         # Recently expired (within 90 days). "not active" now also covers
         # not-yet-valid certs, whose not_after is in the future, so test the
-        # expiry directly rather than inferring it from is_active.
+        # expiry directly rather than inferring it from is_active. The
+        # exclude=expired query param above means crt.sh itself now filters
+        # these out before we ever see them, so this rarely finds anything;
+        # it stays in case crt.sh's own definition of "expired" lags ours.
         if not_after and not_after <= now:
             days_expired = (now - not_after).days
             if days_expired <= 90:

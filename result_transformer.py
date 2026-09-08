@@ -6547,6 +6547,11 @@ def transform_ct(raw: Dict, domain: str) -> Dict:
     elif expiring:
         status = "warn"
         pill_label = "Expiring"
+    elif active == 0:
+        # Certificates exist in CT logs but none are currently active. A
+        # domain with no valid certificate on record is not a pass.
+        status = "warn"
+        pill_label = "No active certs"
     else:
         pill_label = f"{active} cert{'s' if active != 1 else ''}"
 
@@ -6570,7 +6575,10 @@ def transform_ct(raw: Dict, domain: str) -> Dict:
 
     # Details
     details = []
-    details.append({"type": "good", "text": f"{active} active certificates from {len(issuers)} issuer{'s' if len(issuers) != 1 else ''}"})
+    details.append({
+        "type": "good" if active else "warning",
+        "text": f"{active} active certificates from {len(issuers)} issuer{'s' if len(issuers) != 1 else ''}",
+    })
 
     # Issuer breakdown
     issuer_parts = []
