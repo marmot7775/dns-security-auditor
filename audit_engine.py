@@ -1512,10 +1512,11 @@ def _raw_check_dmarc(domain: str) -> Dict[str, Any]:
         _add_issue(
             "warning",
             "DMARC policy is none (monitoring only)",
-            "Policy p=none instructs receivers to deliver all email normally, "
-            "even when authentication fails. This is the correct first step because "
-            "it lets you collect data via aggregate reports, but it provides "
-            "no protection against spoofing. Failed emails still reach inboxes.",
+            "Policy p=none requests no action from receivers when authentication "
+            "fails; each receiver decides independently what to do with the "
+            "message. This is the correct first step because it lets you collect "
+            "data via aggregate reports, but it provides no protection against "
+            "spoofing.",
             "Review aggregate reports to identify all legitimate senders, then "
             "upgrade to p=quarantine, and ultimately p=reject.",
             business_risk_key="DMARC_P_NONE",
@@ -1527,8 +1528,9 @@ def _raw_check_dmarc(domain: str) -> Dict[str, Any]:
                 "warning",
                 f"DMARC pct={pct}% (partial enforcement)",
                 f"Only {pct}% of messages that fail authentication are quarantined. "
-                f"The remaining {100 - pct}% are still delivered normally, as if "
-                "the policy were p=none.",
+                f"For the remaining {100 - pct}%, receivers apply no DMARC action, "
+                "as if the policy were p=none; each receiver's own filtering still "
+                "applies independently.",
                 "Increase pct to 100 once you've confirmed legitimate mail is passing.",
                 business_risk_key="DMARC_PCT_LOW",
             )

@@ -233,7 +233,7 @@ def build_executive_summary(checks: List[Dict], roadmap: Dict) -> Dict:
         else:
             verdict = "Your domain has no DMARC record. SPF alone cannot prevent email spoofing."
     elif health_status == "monitoring":
-        verdict = "Your domain is monitoring email authentication but not yet enforcing it. Spoofed email is still delivered."
+        verdict = "Your domain is monitoring email authentication but not yet enforcing it. This requests no action from receivers, who each decide independently what to do with mail that fails."
     elif protected_count == 4:
         if health_status == "ready":
             verdict = "Your domain is well-protected against email spoofing across all attack vectors."
@@ -421,7 +421,7 @@ def build_executive_summary(checks: List[Dict], roadmap: Dict) -> Dict:
         if "no DMARC" in top_issue:
             deliverability_summary = "Without DMARC, your business emails may be landing in spam. Gmail and Yahoo now require DMARC for reliable delivery."
         elif "p=none" in top_issue:
-            deliverability_summary = "Your DMARC policy is monitoring only (p=none). Gmail, Yahoo, and Outlook may treat your email with more suspicion until you enforce."
+            deliverability_summary = "Your DMARC policy is monitoring only (p=none), which requests no action from receivers. It provides visibility, not protection, until you move to p=quarantine or p=reject."
         elif "no SPF" in top_issue:
             deliverability_summary = "Without SPF, receivers cannot verify your sending servers. This is a common cause of emails going to spam."
         elif "SPF lookup" in top_issue:
@@ -586,7 +586,7 @@ def build_security_roadmap(checks: List[Dict], is_no_mail: bool = False) -> Dict
     if health.get("status") == "monitoring":
         items.append({"priority": "high", "protocol": "DMARC",
                       "action": "Progress from p=none to enforcement",
-                      "impact": "Domain is in monitoring mode. Spoofed mail is still delivered."})
+                      "impact": "Domain is in monitoring mode, requesting no action from receivers, who each decide independently what to do with failing mail."})
 
     # DKIM weak keys
     dkim_deep = dkim.get("dkim_deep", {})
@@ -1742,10 +1742,10 @@ def transform_dmarc(raw: Dict, tree_walk: Optional[Dict] = None, is_no_mail: boo
     elif policy == "none":
         explanation = (
             "Your DMARC policy is set to <strong>p=none</strong> (monitoring mode). "
-            "Your record is technically valid, but it provides no active protection. "
-            "Receivers deliver all mail normally, even when authentication fails. "
-            "While p=none is a necessary starting point for collecting aggregate report data, "
-            "modern security compliance views this as a pre-deployment state. "
+            "Your record is technically valid, but it provides no active protection: it "
+            "requests no action from receivers when authentication fails, and each receiver "
+            "decides independently what to do with the message. "
+            "p=none is a necessary starting point for collecting aggregate report data. "
             "To protect deliverability and prevent spoofing, move toward an enforcement policy "
             "(<strong>p=quarantine</strong> or <strong>p=reject</strong>) once your legitimate "
             "mail streams are aligned."

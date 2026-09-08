@@ -253,7 +253,7 @@ def build_remediation_plan(
         short_term.append({
             "title": "Upgrade DMARC to p=quarantine",
             "description": (
-                "DMARC p=none is monitoring-only; unauthenticated mail is still delivered. "
+                "DMARC p=none is monitoring-only and requests no action from receivers. "
                 "Once your SPF and DKIM pass rates look healthy in reports, advance to p=quarantine."
             ),
             "effort": "low",

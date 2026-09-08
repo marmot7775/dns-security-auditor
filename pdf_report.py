@@ -1670,13 +1670,13 @@ if __name__ == "__main__":
             "spoofing_protection": {"label": "Partial", "color": "amber", "detail": "2/4 vectors protected"},
             "dmarcbis_readiness": {"label": "In Progress", "color": "amber"},
             "protocol_coverage": {"configured": 5, "total": 9, "color": "amber"},
-            "biggest_risk": "Domain is in monitoring mode (p=none). Spoofed email is still delivered to recipients.",
+            "biggest_risk": "Domain is in monitoring mode (p=none), requesting no action from receivers, who each decide independently what to do with failing mail.",
             "has_record_builder": True,
         },
         "security_roadmap": {
             "items": [
                 {"priority": "critical", "protocol": "DMARC", "action": "Progress from p=none to enforcement",
-                 "impact": "Domain is in monitoring mode. Spoofed mail is still delivered."},
+                 "impact": "Domain is in monitoring mode, requesting no action from receivers, who each decide independently what to do with failing mail."},
                 {"priority": "high", "protocol": "DKIM", "action": "Rotate weak DKIM keys to 2048-bit",
                  "impact": "These keys are below current recommendations and should be rotated."},
                 {"priority": "medium", "protocol": "MTA-STS", "action": "Configure MTA-STS for TLS enforcement",
