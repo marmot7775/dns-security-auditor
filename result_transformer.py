@@ -4926,6 +4926,13 @@ def _build_dkim_key_analysis(raw: Dict) -> Optional[Dict]:
 # ============================================================
 
 def transform_mx(raw: Dict) -> Dict:
+    # The MX query never completed. "No MX records exist for this domain" is a
+    # claim about the domain, and every other check in this report already
+    # distinguishes a failed lookup from an absent record. MX did not, and it
+    # is the check the most others are derived from.
+    if raw.get("status") == "unavailable":
+        return _lookup_unavailable_card("MX Records", raw, "MX records")
+
     status = _map_status(raw.get("status", "error"))
     records = raw.get("records", [])
     providers = raw.get("providers", [])
@@ -5408,12 +5415,27 @@ def transform_bimi(raw: Dict, domain: str, has_mx: bool = True, non_mail: bool =
                 "deliverability": None,
             }
 
-        # BIMI is optional, so "not found" is a soft warning, not a failure
+        # BIMI is optional, so "not found" is a soft warning, not a failure.
+        #
+        # The verdict names the selector actually queried. This audit looks up
+        # default._bimi and nothing else, and a domain may publish under any
+        # selector: the BIMI specification lets a message name one in a
+        # BIMI-Selector header field, and receivers then query
+        # <selector>._bimi.<domain> instead. "No BIMI record found" therefore
+        # asserted more than the query established, and the fix text told an
+        # operator using a custom selector to publish a record they already
+        # have. This is GitHub issue 26.
+        #
+        # Verified against draft-brand-indicators-for-message-identification-14
+        # (the current Internet-Draft, May 2026; BIMI is not an RFC): the
+        # default selector is "default", and a Domain Owner "may override the
+        # use of the default selector and specify the use of an alternative
+        # using the [RFC5322]-compliant header 'BIMI-Selector'".
         return {
             "name": "BIMI",
             "status": "warn",
             "pill_label": "Not configured",
-            "verdict": "No BIMI record found",
+            "verdict": "No BIMI record at the default selector",
             "record": None,
             "records_found": 0,
             "explanation": (
@@ -5421,16 +5443,25 @@ def transform_bimi(raw: Dict, domain: str, has_mx: bool = True, non_mail: bool =
                 "It is a brand recognition feature that displays your logo next to emails in "
                 "supporting clients (Gmail, Apple Mail, Yahoo Mail). "
                 "BIMI is currently a draft standard, not a published RFC. "
-                "It requires DMARC at p=quarantine or p=reject as a prerequisite."
+                "It requires DMARC at p=quarantine or p=reject as a prerequisite. "
+                f"This audit queried <strong>default._bimi.{_e(domain)}</strong> and found no "
+                "record there. That is the name receivers use unless a message names another "
+                "one, so if this domain publishes under a custom selector, mail carrying a "
+                "BIMI-Selector header may still display a logo."
             ),
             "details": [
                 {"type": "info", "text": "BIMI is about brand recognition, not security"},
+                {"type": "info", "text": f"Queried default._bimi.{_e(domain)}, the selector receivers use by default"},
+                {"type": "info", "text": "A custom selector cannot be discovered from DNS. It is named by the BIMI-Selector header on a sent message, and receivers query <selector>._bimi instead"},
                 {"type": "info", "text": "Requires DMARC policy of p=quarantine or p=reject"},
                 {"type": "info", "text": "Gmail accepts a VMC (Verified Mark Certificate) or CMC (Common Mark Certificate). Apple Mail does not require either."},
             ],
             "fix": (
-                f"BIMI requires DMARC at p=quarantine or p=reject, an SVG logo in Tiny P/S format "
-                f"hosted at a public URL, and a BIMI TXT record at <strong>default._bimi.{_e(domain)}</strong>. "
+                f"If this domain already publishes BIMI under a custom selector, no change is "
+                f"needed: check the s= value of the BIMI-Selector header on a message it sent. "
+                f"To publish at the default selector, BIMI requires DMARC at p=quarantine or "
+                f"p=reject, an SVG logo in Tiny P/S format hosted at a public URL, and a BIMI "
+                f"TXT record at <strong>default._bimi.{_e(domain)}</strong>. "
                 f"Gmail requires a VMC (registered trademark) or CMC (domain-validated) certificate."
             ),
             "fix_records": None,
@@ -5782,6 +5813,12 @@ def transform_dane(raw: Dict, domain: str) -> Dict:
     mx_with_tlsa = raw.get("mx_hosts_with_tlsa", 0)
     tlsa_records = raw.get("tlsa_records", [])
     issues = raw.get("issues", [])
+
+    # The MX lookup never completed, so "no MX hosts" was never established.
+    # This branch used to answer pass / "N/A" / "No MX hosts to check": a green
+    # card asserting something about the domain that no query supported.
+    if raw.get("mx_unavailable"):
+        return _lookup_unavailable_card("DANE", raw, "MX records, which DANE is keyed on")
 
     # No MX hosts to check
     if mx_checked == 0:

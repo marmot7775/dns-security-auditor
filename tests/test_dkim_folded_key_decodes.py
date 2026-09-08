@@ -30,7 +30,6 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 import result_transformer
 from dkim_formatter import analyze_dkim_key_strength
-from dkim_tag_analyzer import validate_dkim
 
 
 def _b64(bits):
@@ -99,19 +98,6 @@ def test_folded_key_does_not_render_a_failed_card(label):
     detail_texts = " ".join(d.get("text", "") for d in card["details"]).lower()
     assert "could not decode" not in detail_texts
     assert "2048-bit" in detail_texts
-
-
-@pytest.mark.parametrize("label", sorted(FOLDS))
-def test_both_modules_agree_about_a_folded_key(label):
-    """The validator always handled folding. The formatter now matches it."""
-    formatter = analyze_dkim_key_strength(FOLDS[label])
-    validator = validate_dkim("example.com", "sel", record=FOLDS[label])
-
-    assert formatter["key_bits"] == validator["key_bits"] == 2048, (
-        f"{label}: dkim_formatter says {formatter['key_bits']} bits, "
-        f"dkim_tag_analyzer says {validator['key_bits']}"
-    )
-    assert validator["status"] == "PASS"
 
 
 def test_a_tag_after_a_folded_key_is_not_swallowed():

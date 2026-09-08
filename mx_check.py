@@ -257,10 +257,21 @@ def check_mx(domain: str, deep_scan: bool = False) -> Dict[str, Any]:
             "Verify the domain name is correct."))
         return result
     except dns.exception.DNSException as e:
-        result["status"] = "error"
+        # SERVFAIL, REFUSED, timeout, NoNameservers. NXDOMAIN and NoAnswer are
+        # answers and are handled above; this is the case where nothing was
+        # learned. Reported as "unavailable" rather than "error", because the
+        # card built from an error status said "No MX records exist for this
+        # domain", which is a claim about the domain that this query did not
+        # establish. MX is also what has_mx is derived from, so an invented
+        # absence here propagates into the checks that depend on it.
+        result["status"] = "unavailable"
+        result["unavailable_reason"] = "dns_lookup_failed"
+        result["lookup_target"] = domain
         result["issues"].append(_make_issue(
-            "error", f"DNS query failed: {str(e)[:200]}",
-            "Could not query MX records.", "", "Check DNS connectivity."))
+            "info", "MX lookup did not complete",
+            "The nameserver returned a failure or stopped responding, so this "
+            "audit did not learn whether MX records exist.", "",
+            "Re-run the audit once the nameservers are answering."))
         return result
 
     if not raw_mx:

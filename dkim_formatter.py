@@ -36,8 +36,8 @@ def _tag_value(dkim_record: str, tag: str) -> Optional[str]:
     """Return a tag's value lowercased, or None when the tag is absent.
 
     A substring test for "k=ed25519" also matched the string appearing inside
-    some other tag's value, e.g. a note tag. Tags are split the way
-    DKIMValidator._parse_tags splits them.
+    some other tag's value, e.g. a note tag. Tags are split on ';' and then on
+    the first '=', per RFC 6376 section 3.2.
     """
     for part in dkim_record.split(";"):
         key, sep, value = part.partition("=")
@@ -49,10 +49,10 @@ def _tag_value(dkim_record: str, tag: str) -> Optional[str]:
 def _extract_p_tag(dkim_record: str) -> Optional[str]:
     """Return the p= value with all whitespace stripped, or None if absent.
 
-    Split on ';' the way DKIMValidator._parse_tags does. RFC 6376 §3.6.1
-    permits folding whitespace inside the base64 and long keys are routinely
-    published folded, so a regex that stops at the first space silently
-    truncates a valid key and it fails to decode.
+    Split on ';' per RFC 6376 section 3.2. Section 3.6.1 permits folding
+    whitespace inside the base64 and long keys are routinely published folded,
+    so a regex that stops at the first space silently truncates a valid key and
+    it fails to decode.
     """
     for part in dkim_record.split(";"):
         key, sep, value = part.partition("=")

@@ -3697,6 +3697,12 @@ def _raw_check_dane(domain: str, raw_results: Dict[str, Any]) -> Dict[str, Any]:
     raw_mx = raw_results.get("mx", {})
     mx_details = raw_mx.get("mx_details", [])
     mx_hosts = [d["hostname"] for d in mx_details if d.get("hostname") and d.get("resolved")]
+    # An MX lookup that never completed leaves mx_hosts empty for a reason that
+    # is not "this domain has no MX hosts". DANE is keyed entirely on that list,
+    # so the distinction has to travel with it.
+    if raw_mx.get("status") == "unavailable":
+        result["mx_unavailable"] = True
+        result["lookup_target"] = raw_mx.get("lookup_target") or domain
     if not mx_hosts:
         # Fall back to raw records list
         for rec in raw_mx.get("records", []):

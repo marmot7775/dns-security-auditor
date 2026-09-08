@@ -31,7 +31,7 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 import result_transformer
 from audit_engine import BUSINESS_RISK
 from dkim_formatter import analyze_dkim_key_strength
-from dkim_tag_analyzer import _decode_rsa_key_bits, validate_dkim
+from dkim_tag_analyzer import _decode_rsa_key_bits
 
 
 def _b64_2048():
@@ -77,30 +77,38 @@ def test_truncated_key_does_not_decode(n):
 
 @pytest.mark.parametrize("n", TRUNCATIONS + (40,))
 def test_truncated_key_never_reports_a_size_or_passes(n):
-    report = validate_dkim("example.com", "sel", record=f"v=DKIM1; k=rsa; p={FULL_B64[:n]}")
+    """Same assertion, against the path that ships.
 
-    assert report["status"] != "PASS", (
-        f"a key truncated to {n} characters was graded {report['status']}; "
+    This ran through dkim_tag_analyzer.validate_dkim, which nothing in the
+    audit called. analyze_dkim_key_strength is the live grader.
+    """
+    result = analyze_dkim_key_strength(f"v=DKIM1; k=rsa; p={FULL_B64[:n]}")
+
+    assert result["status"] != "strong", (
+        f"a key truncated to {n} characters was graded {result['status']}; "
         f"every signature it makes fails verification"
     )
-    assert report["key_bits"] != 2048, (
+    assert result["key_bits"] != 2048, (
         f"a key truncated to {n} characters reported 2048 bits"
     )
-    assert report["key_bits"] != 1024, (
+    assert result["key_bits"] != 1024, (
         f"a key truncated to {n} characters reported 1024 bits, which is the "
         f"base64 length estimate guessing at a key that does not exist"
     )
-    assert report["key_bits"] is None, (
-        f"no size can be confirmed for an unparseable key; got {report['key_bits']!r}"
+    assert result["key_bits"] == 0, (
+        f"no size can be confirmed for an unparseable key; got {result['key_bits']!r}"
     )
-
-    titles = " ".join(i["title"] for i in report["issues"]).lower()
-    assert "rsa subjectpublickeyinfo" in titles, (
-        f"the unparseable key must be named as the problem; got issues {titles!r}"
+    assert result["reason"] == "undecodable", (
+        f"an unparseable key is not a revocation and not a missing p=; got "
+        f"reason={result['reason']!r}"
     )
-    assert "rotate to 2048" not in " ".join(
-        (i.get("fix") or "") for i in report["issues"]
-    ), "operator told to rotate a key that was never published"
+    assert "decode" in (result["warning"] or "").lower(), (
+        f"the unparseable key must be named as the problem; got "
+        f"{result['warning']!r}"
+    )
+    assert "rotate" not in (result["warning"] or "").lower(), (
+        "operator told to rotate a key that was never published"
+    )
 
 
 @pytest.mark.parametrize("n", TRUNCATIONS)
@@ -134,18 +142,18 @@ def test_complete_key_still_passes():
     record = f"v=DKIM1; k=rsa; p={FULL_B64}"
 
     assert analyze_dkim_key_strength(record)["key_bits"] == 2048
-    assert validate_dkim("example.com", "sel", record=record)["status"] == "PASS"
     assert _card_for_record(record)["status"] == "pass"
 
 
-def test_both_modules_agree_about_a_truncated_key():
-    """dkim_formatter and dkim_tag_analyzer must not contradict each other."""
+def test_a_truncated_key_is_undecodable_not_revoked():
+    """Was a cross-module agreement test against dkim_tag_analyzer's validator,
+    which nothing in the audit called and which has been removed. The half that
+    covers shipping behaviour is the distinction between an unparseable key and
+    a revoked one, since they carry different advice."""
     record = f"v=DKIM1; k=rsa; p={FULL_B64[:100]}"
 
     formatter = analyze_dkim_key_strength(record)
-    validator = validate_dkim("example.com", "sel", record=record)
 
     assert formatter["status"] == "invalid"
     assert formatter["reason"] == "undecodable"
-    assert validator["status"] == "FAIL"
-    assert validator["key_bits"] is None
+    assert formatter["key_bits"] == 0

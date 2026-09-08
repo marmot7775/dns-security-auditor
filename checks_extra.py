@@ -863,10 +863,14 @@ def check_bimi(domain: str, dmarc_enforcing_override: bool = None, dmarc_found_o
     if not bimi_records:
         result["status"] = "info"
         result["records_found"] = 0
+        # Names the selector queried. A domain may publish under any selector,
+        # named per message by the BIMI-Selector header field, and only the
+        # default is discoverable from DNS. See GitHub issue 26.
         result["issues"].append(_make_issue(
-            "info", "No BIMI record found",
-            f"No BIMI TXT record at 'default._bimi.{domain}'.",
-            "No brand logo in recipients' inboxes.",
+            "info", "No BIMI record at the default selector",
+            f"No BIMI TXT record at 'default._bimi.{domain}'. A custom selector "
+            f"cannot be discovered from DNS.",
+            "No brand logo in recipients' inboxes, unless a custom selector is in use.",
             f"Add TXT at 'default._bimi.{domain}': v=BIMI1; l=https://yourdomain.com/logo.svg;",
         ))
         return result
