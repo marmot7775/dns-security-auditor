@@ -406,12 +406,23 @@ def build_executive_summary(checks: List[Dict], roadmap: Dict) -> Dict:
                 "or bad, only that it was not read."
             )
 
+    # Whether biggest_risk actually names a risk. The PDF frames it in fail red
+    # unconditionally, which put a red "YOUR BIGGEST RISK RIGHT NOW" box around
+    # "No urgent risks found" and around the neutral could-not-read message.
+    if auth_unavailable and not _urgent:
+        biggest_risk_severity = "unknown"
+    elif roadmap_items:
+        biggest_risk_severity = top.get("priority", "medium")
+    else:
+        biggest_risk_severity = "none"
+
     return {
         "verdict": verdict,
         "spoofing_protection": spoofing_protection,
         "dmarcbis_readiness": dmarcbis_readiness,
         "protocol_coverage": protocol_coverage,
         "biggest_risk": biggest_risk,
+        "biggest_risk_severity": biggest_risk_severity,
         "has_record_builder": has_record_builder,
         "deliverability_summary": deliverability_summary,
     }
@@ -4291,7 +4302,7 @@ def transform_dkim(raw: Dict, domain: str, has_mx: bool = True, non_mail: bool =
             if not weak_keys:
                 weak_detail["business_risk"] = BUSINESS_RISK.get("DKIM_WEAK_KEY")
             details.append(weak_detail)
-            weak_keys.append(selector)
+            weak_keys.append((selector, bits))
         elif strength == "strong":
             details.append({
                 "type": "good",
@@ -4351,10 +4362,15 @@ def transform_dkim(raw: Dict, domain: str, has_mx: bool = True, non_mail: bool =
     if raw.get("syntax_errors"):
         fix = _first_fix(raw.get("syntax_errors", []))
     elif weak_keys:
-        selectors_str = ", ".join(weak_keys)
+        # Name the sizes actually measured. This said "use 1024-bit keys"
+        # whatever the real size was, so a card whose own detail line read
+        # "1536-bit RSA key" carried fix text calling it 1024-bit.
+        _sized = ", ".join(
+            f"{sel} ({bits}-bit)" if bits else sel for sel, bits in weak_keys
+        )
         fix = (
-            f"The following selectors use 1024-bit keys, which are below current recommendations: "
-            f"<strong>{_e(selectors_str)}</strong>. "
+            f"The following selectors use RSA keys below the 2048-bit minimum: "
+            f"<strong>{_e(_sized)}</strong>. "
             f"Key rotation is provider-specific. Check your email provider's documentation "
             f"for how to generate and publish a new 2048-bit or Ed25519 key pair."
         )
@@ -4364,9 +4380,13 @@ def transform_dkim(raw: Dict, domain: str, has_mx: bool = True, non_mail: bool =
     # Deliverability context
     if found:
         if weak_keys:
+            _sizes = sorted({bits for _sel, bits in weak_keys if bits})
+            _size_text = (
+                " and ".join(f"{b}-bit" for b in _sizes) if _sizes else "under 2048-bit"
+            )
             _deliverability = (
-                "Your DKIM keys work but some use 1024-bit strength. Google recommends 2048-bit keys. "
-                "While 1024-bit keys will not directly hurt deliverability today, upgrading signals "
+                f"Your DKIM keys work but some are {_size_text}. Google recommends 2048-bit keys. "
+                "While they will not directly hurt deliverability today, upgrading signals "
                 "that you maintain your email infrastructure."
             )
         else:

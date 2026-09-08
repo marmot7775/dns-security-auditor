@@ -68,6 +68,15 @@ TEAL_ACCENT = colors.HexColor("#2dd4bf")
 SURFACE_BG  = colors.HexColor("#f8fafc")
 LIGHT_BLUE_BG = colors.HexColor("#eff6ff")
 
+# The order _protocol_details renders protocol cards in, and the shorter names
+# the table of contents uses for two of them. Both read from here so the
+# contents page cannot promise a section the body does not contain.
+PROTOCOL_SECTION_ORDER = [
+    "Blocklist", "SPF", "DKIM", "MTA-STS", "TLS-RPT", "DANE", "DNSSEC",
+    "CAA", "MX Records", "Nameservers", "BIMI", "Certificate Transparency",
+]
+PROTOCOL_TOC_LABELS = {"MX Records": "MX"}
+
 STATUS_CLR = {"pass": PASS_CLR, "warn": WARN_CLR, "fail": FAIL_CLR}
 STATUS_BG  = {"pass": PASS_BG,  "warn": WARN_BG,  "fail": FAIL_BG}
 STATUS_LBL = {"pass": "PASS",   "warn": "WARNING", "fail": "FAIL",
@@ -356,16 +365,20 @@ def _cover_page(data, S):
     els.append(metrics)
     els.append(Spacer(1, 20))
 
-    # Table of contents
+    # Table of contents. Section 5's list is built from the checks this report
+    # actually contains, in the order _protocol_details renders them. Hardcoding
+    # all twelve promised sections that a scoped audit does not produce.
     els.append(Paragraph("Table of Contents", S["subheading"]))
     els.append(Spacer(1, 4))
+    _present = {c.get("name") for c in checks if c.get("name")}
+    _rendered = [n for n in PROTOCOL_SECTION_ORDER if n in _present]
+    _protocols = ", ".join(PROTOCOL_TOC_LABELS.get(n, n) for n in _rendered)
     toc_items = [
         "1. Executive Summary",
         "2. Email Security Roadmap",
         "3. DMARC Deep Dive",
         "4. Attack Surface Analysis",
-        "5. Protocol Details (Blocklist, SPF, DKIM, MTA-STS, TLS-RPT, DANE, "
-        "DNSSEC, CAA, MX, Nameservers, BIMI, Certificate Transparency)",
+        f"5. Protocol Details ({_protocols})" if _protocols else "5. Protocol Details",
         "6. Migration Path",
         "7. About This Report",
     ]
@@ -432,17 +445,34 @@ def _executive_summary_page(data, S):
         els.append(vt)
         els.append(Spacer(1, 12))
 
-    # Biggest risk callout
+    # Biggest risk callout. Framed in fail red only when it names a risk: the
+    # unconditional red box read "YOUR BIGGEST RISK RIGHT NOW: No urgent risks
+    # found", and wrapped the neutral could-not-read message the same way.
     biggest_risk = es.get("biggest_risk", "")
+    _severity = es.get("biggest_risk_severity", "critical")
+    if _severity == "none":
+        _risk_glyph, _risk_title = "\u2713", "NO URGENT RISKS FOUND"
+        _risk_bg, _risk_rule = PASS_BG, PASS_CLR
+    elif _severity == "unknown":
+        _risk_glyph, _risk_title = "\u2022", "BIGGEST RISK NOT ESTABLISHED"
+        _risk_bg, _risk_rule = SURFACE_BG, TEXT_TER
+    elif _severity in ("medium", "low"):
+        _risk_glyph, _risk_title = "\u26A0", "YOUR BIGGEST RISK RIGHT NOW"
+        _risk_bg, _risk_rule = WARN_BG, WARN_CLR
+    else:
+        _risk_glyph, _risk_title = "\u26A0", "YOUR BIGGEST RISK RIGHT NOW"
+        _risk_bg, _risk_rule = FAIL_BG, FAIL_CLR
     if biggest_risk:
         risk_content = [
-            [Paragraph("\u26A0  YOUR BIGGEST RISK RIGHT NOW", S["callout"]),],
+            [Paragraph(
+                f'<font color="{_risk_rule.hexval()}">{_risk_glyph}  {_risk_title}</font>',
+                S["callout"]),],
             [Paragraph(_safe(biggest_risk), S["callout_body"])],
         ]
         rt = Table(risk_content, colWidths=[6.5*inch])
         rt.setStyle(TableStyle([
-            ("BACKGROUND", (0,0), (-1,-1), FAIL_BG),
-            ("LINEBEFORE", (0,0), (0,-1), 3, FAIL_CLR),
+            ("BACKGROUND", (0,0), (-1,-1), _risk_bg),
+            ("LINEBEFORE", (0,0), (0,-1), 3, _risk_rule),
             ("TOPPADDING", (0,0), (-1,0), 10),
             ("TOPPADDING", (0,1), (-1,1), 2),
             ("BOTTOMPADDING", (0,-1), (-1,-1), 10),
@@ -1306,7 +1336,10 @@ def _dkim_deep_section(dkim_deep, S):
             r_clr = {"green": PASS_CLR, "amber": WARN_CLR, "red": FAIL_CLR}.get(k.get("rating", ""), TEXT_SEC)
             rows.append([
                 Paragraph(f"<font name='Courier' size='8'>{_safe(k.get('selector', ''))}</font>", S["body_small"]),
-                Paragraph(_safe(k.get("vendor") or "-"), S["body_small"]),
+                # _build_dkim_key_analysis emits this as "provider". Reading
+                # "vendor" rendered every row as "-" even when the provider was
+                # identified and shown elsewhere in the same report.
+                Paragraph(_safe(k.get("provider") or k.get("vendor") or "-"), S["body_small"]),
                 Paragraph(_safe(k.get("key_type", "")), S["body_small"]),
                 Paragraph(str(k.get("bits", "") or ""), S["body_small"]),
                 Paragraph(f'<font color="{r_clr.hexval()}">{_safe(k.get("rating_label", ""))}</font>', S["body_small"]),
@@ -1495,13 +1528,22 @@ def _about_page(data, S):
     # rather than hardcoded: a scoped audit runs fewer than the full set, and
     # a fixed list would keep claiming all of them.
     els.append(Paragraph("Report Details", S["subheading"]))
-    check_names = [c.get("name", "") for c in data.get("checks", []) or [] if c.get("name")]
+    _cards = [c for c in data.get("checks", []) or [] if c.get("name")]
+    # A check whose lookup never completed is in the report but was not
+    # performed. Listing it flat under "Checks performed" contradicted the
+    # cover's own "not checked" figure on the same document.
+    _performed = [c["name"] for c in _cards if c.get("status") != "unavailable"]
+    _not_checked = [c["name"] for c in _cards if c.get("status") == "unavailable"]
     details = [
         ("Domain audited", domain),
         ("Date and time", now),
         ("Audit type", "Comprehensive DNS Security Audit"),
-        ("Checks performed", ", ".join(check_names) if check_names else "None"),
+        ("Checks performed", ", ".join(_performed) if _performed else "None"),
     ]
+    if _not_checked:
+        details.append(
+            ("Not checked", ", ".join(_not_checked) + " (the lookup did not complete)")
+        )
     for label, value in details:
         els.append(Paragraph(f"<b>{_safe(label)}:</b>  {_safe(value)}", S["body"]))
 
@@ -1510,13 +1552,13 @@ def _about_page(data, S):
     # denominator is read from the metric itself so the two cannot drift.
     es = data.get("executive_summary", {}) or {}
     pc_total = (es.get("protocol_coverage") or {}).get("total")
-    if check_names and pc_total:
+    if _performed and pc_total:
         els.append(Spacer(1, 4))
         els.append(Paragraph(
-            f"The Protocol Coverage figure on the cover scores {pc_total} of these, "
-            "the ones a domain owner configures. The rest observe what is already "
-            "published rather than something to switch on, so they are reported "
-            "here but not scored.", S["body_small"]
+            f"The Protocol Coverage figure on the cover scores {pc_total} of the "
+            f"{len(_performed)} checks performed, the ones a domain owner configures. "
+            "The rest observe what is already published rather than something to "
+            "switch on, so they are reported here but not scored.", S["body_small"]
         ))
     els.append(Spacer(1, 14))
 

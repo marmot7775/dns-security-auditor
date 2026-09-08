@@ -4293,7 +4293,25 @@ def _raw_check_blacklist(domain: str, raw_results: Dict[str, Any]) -> Dict[str, 
 # Main Audit Orchestrator
 # ============================================================
 
-_shared_executor = ThreadPoolExecutor(max_workers=20)
+# Sized against the load the audit can actually place on it, not a round
+# number. Phase 2 submits one task per check and blocks on as_completed with a
+# CHECK_TIMEOUT + 5 budget, and Future.result counts queue wait, so a check can
+# report "timed out" having issued no DNS query at all. At 20 workers and the
+# 8-audit concurrency cap, 8 audits times a ~10 check Phase 2 is 80 tasks
+# queued on 20 workers, and the tail of that queue exhausts the budget on wait
+# alone: warnings on the report caused by server load rather than by the
+# domain. That is the same failure the subdomain probe pool was split out to
+# fix, one level up. The threads are idle DNS waits, so the cost of the
+# headroom is address space, not CPU, and ThreadPoolExecutor only creates them
+# on demand.
+# config has no project imports, so this cannot introduce a cycle.
+from config import MAX_CONCURRENT_AUDITS as _MAX_CONCURRENT_AUDITS
+
+_PHASE2_WIDTH = 10  # mta_sts, tls_rpt, bimi, dnssec, caa, nameservers, dane, dkim, ct, blacklist
+_shared_executor = ThreadPoolExecutor(
+    max_workers=max(20, _MAX_CONCURRENT_AUDITS * _PHASE2_WIDTH),
+    thread_name_prefix="audit",
+)
 
 # Subdomain probing gets its own pool. _audit_subdomains is itself submitted to
 # _shared_executor and then blocks waiting on the probes it submits, so running

@@ -723,6 +723,17 @@ async def audit_domain(
         # otherwise cancel the shared result for the leader and every other
         # follower.
         shared = await asyncio.shield(_audit_future)
+        # The leader can exit without a result: it returns 503 when the
+        # concurrency budget is full, before _payload is ever set. Followers
+        # then received the generic error dict with HTTP 200, telling them the
+        # audit failed rather than that the server was busy and worth a retry.
+        _status = shared.pop("_http_status", 200)
+        if _status != 200:
+            return JSONResponse(
+                status_code=_status,
+                content={"detail": shared.get("error_message", "Audit failed")},
+                headers={"Retry-After": "5"} if _status == 503 else None,
+            )
         return JSONResponse(content={**shared, "request_id": request_id, "coalesced": True})
 
     # Reserve a concurrent-audit slot atomically (DoS protection).
@@ -734,6 +745,15 @@ async def audit_domain(
     try:
         with _active_audits_lock:
             if _active_audits >= _MAX_CONCURRENT_AUDITS:
+                # Hand the followers the same answer, not the generic
+                # "Audit could not complete" that _release_inflight substitutes
+                # for a missing payload. Busy is retryable; failed is not.
+                _payload = {
+                    "checks": [], "priority_fixes": [], "vendors": [],
+                    "error": "server_busy",
+                    "error_message": "Server is busy. Please try again in a moment.",
+                    "_http_status": 503,
+                }
                 return JSONResponse(
                     status_code=503,
                     content={"detail": "Server is busy. Please try again in a moment."},
