@@ -182,8 +182,19 @@ def build_executive_summary(checks: List[Dict], roadmap: Dict) -> Dict:
     dmarc_status = dmarc.get("status", "")
     spf_status = check_map.get("SPF", {}).get("status", "")
 
-    # Count protected vectors
-    vectors = (attack_surface or {}).get("vectors", [])
+    # Count protected vectors.
+    #
+    # "Reporting Intelligence" is one of the four vectors and it is not a
+    # spoofing vector: it describes whether you can see what your policy is
+    # doing, not whether an attacker can send as you. Counting it in a metric
+    # labelled Spoofing Protection meant a missing rua cost a domain a
+    # spoofing point, so a domain rejecting every failing message scored 2 of 4
+    # and one quarantining every failing message scored 0 of 4. rua is OPTIONAL
+    # in RFC 7489 section 6.3 and in RFC 9989. It stays in the panel, where it
+    # belongs; it is out of this count.
+    _all_vectors = (attack_surface or {}).get("vectors", [])
+    vectors = [v for v in _all_vectors if v.get("name") != "Reporting Intelligence"]
+    _vector_total = len(vectors)
     protected_count = sum(1 for v in vectors if v.get("status") == "protected")
     exposed_count = sum(1 for v in vectors if v.get("status") == "exposed")
     partial_count = sum(1 for v in vectors if v.get("status") == "partial")
@@ -236,14 +247,16 @@ def build_executive_summary(checks: List[Dict], roadmap: Dict) -> Dict:
     # Metric 1: Spoofing Protection
     if dmarc_unavailable:
         spoof_label, spoof_color = "Not assessed", "neutral"
-    elif protected_count == 4:
+    elif _vector_total and protected_count == _vector_total:
         spoof_label, spoof_color = "Full", "green"
-    elif protected_count == 3:
+    elif protected_count == _vector_total - 1 and _vector_total > 1:
         spoof_label, spoof_color = "Strong", "green"
-    elif protected_count == 2:
+    elif protected_count >= 1 and partial_count:
         spoof_label, spoof_color = "Partial", "amber"
-    elif protected_count == 1:
+    elif protected_count >= 1:
         spoof_label, spoof_color = "Weak", "red"
+    elif partial_count:
+        spoof_label, spoof_color = "Partial", "amber"
     else:
         spoof_label, spoof_color = "None", "red"
 
@@ -252,12 +265,13 @@ def build_executive_summary(checks: List[Dict], roadmap: Dict) -> Dict:
     if not attack_surface and not dmarc_unavailable:
         spoof_label, spoof_color = "None", "red"
         protected_count = 0
+        _vector_total = 0
 
     spoofing_protection = {
         "label": spoof_label,
         "color": spoof_color,
         "detail": ("DMARC lookup did not complete" if dmarc_unavailable
-                   else f"{protected_count}/4 vectors protected"),
+                   else f"{protected_count}/{_vector_total} spoofing vectors protected"),
     }
 
     # Metric 2: RFC 9989 Readiness
@@ -513,15 +527,25 @@ def build_security_roadmap(checks: List[Dict], is_no_mail: bool = False) -> Dict
                       "action": "Remove +all from your SPF record",
                       "impact": "+all authorizes every server on the internet to send as your domain."})
 
-    # No rua at any policy
+    # No rua at any policy.
+    #
+    # Not critical. rua is OPTIONAL in RFC 7489 section 6.3 and in RFC 9989, so
+    # a record without it is compliant, and at an enforcing policy the domain
+    # is doing the thing that stops spoofing. Ranking it critical put "Add
+    # aggregate reporting" in the biggest-risk slot of a domain rejecting every
+    # failing message, ahead of anything about the spoofing the report is
+    # supposed to be about. It is a real gap and it stays on the roadmap; it is
+    # a high, and it does not outrank a policy that is not enforcing.
     tb = dmarc.get("tag_breakdown", {})
     if tb:
         cw = tb.get("config_warnings", [])
         for w in cw:
             if w.get("level") == "critical" and w.get("title") == "No aggregate reporting":
-                items.append({"priority": "critical", "protocol": "DMARC",
+                items.append({"priority": "high", "protocol": "DMARC",
                               "action": "Add aggregate reporting (rua=)",
-                              "impact": "Zero visibility into email authentication results."})
+                              "impact": "You cannot see who is sending as your domain or "
+                                        "whether their mail is passing authentication, so a "
+                                        "legitimate sender that starts failing goes unnoticed."})
                 break
 
     # ── High ────────────────────────────────────────────────

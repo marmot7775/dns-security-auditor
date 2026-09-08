@@ -1561,9 +1561,21 @@ def _raw_check_dmarc(domain: str) -> Dict[str, Any]:
             business_risk_key="DMARC_TEST_MODE",
         )
 
-    # Missing rua — critical visibility gap
+    # Missing rua — a real visibility gap, but not a failure of the record.
+    #
+    # rua is OPTIONAL in both RFC 7489 section 6.3 and RFC 9989. A record with
+    # p=quarantine or p=reject and no rua is compliant and is enforcing: the
+    # spoofing protection it provides is exactly what the policy says. Grading
+    # it "error" made transform_dmarc fail the card (an engine error forces
+    # fail there), which then named the missing report address as the domain's
+    # biggest risk at critical and scored spoofing protection 0 of 4 on a
+    # domain quarantining every failing message.
+    #
+    # Warning at every policy. The severity no longer varies, because the
+    # thing being reported is the same at each: you cannot see what your own
+    # policy is doing. What changes is the consequence, which the text says.
     if not result["rua"]:
-        severity = "error" if policy in ("quarantine", "reject") else "warning"
+        severity = "warning"
         if policy in ("quarantine", "reject"):
             plain = (
                 f"You are enforcing DMARC at p={policy} with no aggregate reporting. "
