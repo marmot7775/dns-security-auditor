@@ -4,7 +4,7 @@ DNS Security Auditor - FastAPI Server
 GET  /api/audit?domain=example.com   -- run full audit (JSON)
 GET  /api/audit/stream?domain=...    -- audit progress (SSE)
 GET  /api/audit/{domain}/pdf         -- download PDF report
-GET  /api/health                     -- health check (verifies DNS resolution)
+GET  /api/health                     -- health check (DNS resolution, running commit)
 GET  /                               -- serve frontend
 GET  /static/*                       -- serve static assets
 
@@ -52,7 +52,7 @@ from config import (
     RATE_LIMIT_MAX, RATE_LIMIT_WINDOW, RATE_LIMIT_MAX_IPS,
     MAX_CONCURRENT_AUDITS, CORS_ORIGINS,
     DOMAIN_PATTERN, SELECTOR_PATTERN,
-    TRUSTED_PROXY_IPS,
+    TRUSTED_PROXY_IPS, BUILD_SHA,
 )
 from dns_tools import normalize_domain
 from ua_classify import is_bot, ua_summary
@@ -1254,6 +1254,13 @@ async def health():
     """
     Health check endpoint for monitoring and load balancers.
     Returns 200 if the application and DNS resolution are functional.
+
+    ``version`` is the short commit SHA of the running process, so a deploy
+    can be confirmed from outside. Asset URLs cannot do that job: a commit
+    that touches only Python leaves ?v= on the previous build, and a skipped
+    systemctl restart then looks exactly like a successful one. Reported on
+    the error response too, because knowing which build is unhealthy is the
+    point of asking.
     """
     with _health_cache_lock:
         verdict = _health_cache["ok"] if time.time() < _health_cache["expires"] else None
@@ -1275,9 +1282,9 @@ async def health():
             _health_cache["expires"] = time.time() + _HEALTH_TTL
 
     if verdict:
-        return {"status": "ok", "dns_resolution": "working"}
+        return {"status": "ok", "dns_resolution": "working", "version": BUILD_SHA}
     return JSONResponse(
-        content={"status": "error"},
+        content={"status": "error", "version": BUILD_SHA},
         status_code=500,
     )
 

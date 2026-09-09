@@ -169,7 +169,7 @@ static/
 GET /api/audit?domain=example.com              JSON response
 GET /api/audit/stream?domain=example.com       SSE streaming
 GET /api/audit/{domain}/pdf                    PDF download
-GET /api/health                                Health check (verifies DNS resolution)
+GET /api/health                                Health check (DNS resolution, running commit)
 ```
 
 Optional parameters: `selector`, `scope`.
@@ -178,7 +178,10 @@ Rate limited to 10 requests per IP per minute. Results cached for 5 minutes.
 
 ## Self-Hosting
 
-Python 3.8+. No external services or databases.
+Python 3.10 or newer. Six of the pinned dependencies, dnspython and
+fastapi among them, declare `Requires-Python >=3.10`, so `pip install -r
+requirements.txt` fails outright on anything older. CI runs the suite on
+3.11 and 3.12. No external services or databases.
 
 ```bash
 pip install -r requirements.txt
@@ -186,6 +189,13 @@ uvicorn server:app --host 127.0.0.1 --port 8000
 ```
 
 All DNS resolution via dnspython. No API keys needed.
+
+`/api/health` reports `version`, the short commit SHA of the running
+process, so a deploy can be confirmed from outside. Static asset `?v=`
+strings cannot do that: they are rewritten only when a file under
+`static/` changes, so a Python-only commit leaves them on the previous
+build and a skipped restart looks like a successful one. Set `BUILD_SHA`
+to override it where the deploy ships no working tree.
 
 Run it behind a reverse proxy that terminates TLS, and bind it to loopback as
 above so it never accepts connections directly. If you expose it on 0.0.0.0

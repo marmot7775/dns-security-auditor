@@ -1,5 +1,5 @@
 # DNS Security Auditor - Requirements
-# Python 3.8+
+# Python 3.10+ (see README, six of the pins below require it)
 
 # Core Dependencies
 dnspython==2.8.0

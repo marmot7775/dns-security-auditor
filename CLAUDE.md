@@ -106,6 +106,13 @@ requirements.txt automatically, so a new or bumped dependency (e.g.
 cryptography, added for DNSSEC/RSA key generation) installs fine in a
 fresh CI venv but crash-loops the live service if this step is skipped.
 
+Confirm the restart took: `curl -s https://dns-audit.com/api/health` reports
+`version`, the short commit SHA of the running process. The cache-busting
+`?v=` strings cannot answer this. They are rewritten only when a file under
+`static/` changes, so a commit that touches only Python leaves every asset URL
+on the previous build and a skipped restart is indistinguishable from a
+successful one from outside.
+
 ## Cache-busting
 After any change to `static/style.css`, `static/app.js`, `static/articles.js` or `static/theme.js`, run this command before committing, OR include it as the final step of your commit. It handles any alphanumeric version string and rewrites both CSS and JS references across every static HTML page:
 
