@@ -100,6 +100,31 @@ class _CaaRdata:
         )
 
 
+class _DnskeyRdata:
+    """Only .algorithm is read on the success path this harness exercises;
+    chain validation (dns.dnssec.key_id/make_ds) needs a real cryptographic
+    key and isn't reproducible with a fake rdata, but it only runs when a DS
+    record was also found, which the signed_unanchored fixtures never do."""
+
+    def __init__(self, value):
+        self.algorithm = int(value)
+
+    def __str__(self):
+        return f"256 3 {self.algorithm} AAAA=="
+
+
+class _TlsaRdata:
+    def __init__(self, value):
+        usage, selector, mtype, cert = value
+        self.usage = int(usage)
+        self.selector = int(selector)
+        self.mtype = int(mtype)
+        self.cert = bytes.fromhex(cert) if isinstance(cert, str) else cert
+
+    def __str__(self):
+        return f"{self.usage} {self.selector} {self.mtype} {self.cert.hex()}"
+
+
 _RDATA_BY_TYPE = {
     "TXT": _TxtRdata,
     "SPF": _TxtRdata,
@@ -110,6 +135,8 @@ _RDATA_BY_TYPE = {
     "CNAME": _TargetRdata,
     "PTR": _TargetRdata,
     "CAA": _CaaRdata,
+    "TLSA": _TlsaRdata,
+    "DNSKEY": _DnskeyRdata,
 }
 
 
@@ -163,7 +190,7 @@ class FakeZone:
 
     def add(self, name, rtype, values):
         if not isinstance(values, (list, tuple)) or (
-            rtype.upper() in ("MX", "CAA") and values and not isinstance(values[0], (list, tuple))
+            rtype.upper() in ("MX", "CAA", "TLSA") and values and not isinstance(values[0], (list, tuple))
         ):
             values = [values]
         self._records[self._key(name, rtype)] = list(values)

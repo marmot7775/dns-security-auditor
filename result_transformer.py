@@ -46,7 +46,7 @@ def _map_status(raw_status: str) -> str:
     return mapping.get(raw_status.lower(), "warn")
 
 
-def _lookup_unavailable_card(name: str, raw: Dict, subject: str) -> Dict:
+def _lookup_unavailable_card(name: str, raw: Dict, subject: str, pill_label: str = "Not checked") -> Dict:
     """Card for a check whose DNS query never completed.
 
     NXDOMAIN and NoAnswer mean the record is absent and are reported as
@@ -64,7 +64,7 @@ def _lookup_unavailable_card(name: str, raw: Dict, subject: str) -> Dict:
     return {
         "name": name,
         "status": "unavailable",
-        "pill_label": "Not checked",
+        "pill_label": pill_label,
         "verdict": "Not checked by this audit",
         "record": None,
         "explanation": (
@@ -4554,22 +4554,46 @@ def transform_dkim(raw: Dict, domain: str, has_mx: bool = True, non_mail: bool =
             }
 
         # Outcome C: nothing found. Same reasoning, without the retired keys.
+        #
+        # A truncated probe (the discovery deadline hit mid-sweep, usually
+        # DKIM worker starvation under concurrent audits, not slow DNS) is not
+        # the same as a completed sweep that found nothing: selectors the
+        # probe never reached might still hold a key. The same domain audited
+        # alone can find that key; audited alongside seven others it gets
+        # this card instead, and the card must say why rather than reading
+        # like a considered "nothing here".
+        discovery_truncated = bool(raw.get("timed_out"))
         _unknown_details = [
-            {"type": "info", "text": f"Checked {tested} common selectors, no public key found"},
+            {
+                "type": "warning" if discovery_truncated else "info",
+                "text": (
+                    f"Selector discovery did not finish: checked {tested} selectors "
+                    "before running out of time"
+                ) if discovery_truncated else (
+                    f"Checked {tested} common selectors, no public key found"
+                ),
+            },
             {"type": "info", "text": _DKIM_NOT_ENUMERABLE},
         ]
-        if raw.get("timeout_note"):
-            _unknown_details.append({"type": "warning", "text": raw["timeout_note"]})
         _unknown_details.extend(dict(d) for d in _DKIM_HOW_TO_SETTLE)
         for issue in raw.get("issues", []):
             _unknown_details.append(_issue_to_detail(issue))
-        return {
-            "name": "DKIM",
-            "status": "unavailable",
-            "pill_label": "Not confirmed",
-            "verdict": "DKIM could not be confirmed by probing",
-            "record": None,
-            "explanation": (
+        if discovery_truncated:
+            explanation = (
+                "DKIM (<a href=\"https://datatracker.ietf.org/doc/html/rfc6376\" "
+                "target=\"_blank\" rel=\"noopener\">RFC 6376</a>) attaches a "
+                "cryptographic signature to each outgoing message, letting receivers "
+                "verify that it was not altered and came from an authorized sender. "
+                f"This audit's selector probe ran out of time after checking {tested} "
+                "selectors, so this is an incomplete search, not a completed one that "
+                "found nothing. A re-run, especially at a quieter time, may reach a "
+                "selector this one did not. Two things settle it directly: enter the "
+                "selector above for a direct lookup, or read the s= value from the "
+                "DKIM-Signature or Authentication-Results header of a message this "
+                "domain sent."
+            )
+        else:
+            explanation = (
                 "DKIM (<a href=\"https://datatracker.ietf.org/doc/html/rfc6376\" "
                 "target=\"_blank\" rel=\"noopener\">RFC 6376</a>) attaches a "
                 "cryptographic signature to each outgoing message, letting receivers "
@@ -4581,7 +4605,17 @@ def transform_dkim(raw: Dict, domain: str, has_mx: bool = True, non_mail: bool =
                 "its mail. Two things settle it: enter the selector above for a direct "
                 "lookup, or read the s= value from the DKIM-Signature or "
                 "Authentication-Results header of a message this domain sent."
+            )
+        return {
+            "name": "DKIM",
+            "status": "unavailable",
+            "pill_label": "Not confirmed",
+            "verdict": (
+                "DKIM discovery did not finish" if discovery_truncated
+                else "DKIM could not be confirmed by probing"
             ),
+            "record": None,
+            "explanation": explanation,
             "details": _unknown_details,
             "fix": None,
             "fix_records": None,
@@ -5626,6 +5660,13 @@ def transform_bimi(raw: Dict, domain: str, has_mx: bool = True, non_mail: bool =
 # ============================================================
 
 def transform_dnssec(raw: Dict, domain: str = "") -> Dict:
+    # The DNSKEY query never completed (SERVFAIL, NoNameservers, or a
+    # timeout on both attempts), so has_dnssec=False here is not a real
+    # negative answer. Reporting it as "not configured" told a signed and
+    # anchored domain it had no DNSSEC, off the back of one failed query.
+    if raw.get("lookup_failed"):
+        return _lookup_unavailable_card("DNSSEC", raw, "DNSSEC records", pill_label="Not confirmed")
+
     has_dnssec = raw.get("has_dnssec", False)
     dnssec_state = raw.get("dnssec_state", "insecure")
     algorithms = raw.get("algorithms", [])
@@ -5789,6 +5830,14 @@ def transform_dnssec(raw: Dict, domain: str = "") -> Dict:
 # ============================================================
 
 def transform_caa(raw: Dict, domain: str) -> Dict:
+    # At least one level of the CAA tree walk (RFC 8659 section 3) never
+    # completed, so the walk cannot say the tree published nothing: the
+    # level that failed might have carried a CAA record. Reporting "any CA
+    # can issue" from an incomplete walk is a claim about the whole parent
+    # chain that no query supported.
+    if raw.get("lookup_failed"):
+        return _lookup_unavailable_card("CAA", raw, "CAA records")
+
     record_count = raw.get("record_count", 0)
     records = raw.get("records", [])
     authorized_cas = raw.get("authorized_cas", [])
@@ -5976,8 +6025,13 @@ def transform_dane(raw: Dict, domain: str) -> Dict:
             "ttl_info": format_ttl(raw.get("ttl")),
         }
 
-    # Has TLSA but no DNSSEC
+    # Has TLSA but no DNSSEC. Not-enabled and signed-but-unanchored both
+    # collapse to dnssec_ok == False, but they are different domain states
+    # with different fixes: an unanchored zone already has DNSKEY published,
+    # so "enable DNSSEC" is a step already done. The missing piece is the DS
+    # record at the registrar.
     if has_tlsa and not dnssec_ok:
+        signed_unanchored = raw.get("dnssec_state") == "signed_unanchored"
         details = []
         for hr in tlsa_records:
             if hr.get("found"):
@@ -5988,11 +6042,36 @@ def transform_dane(raw: Dict, domain: str) -> Dict:
                     })
         details.append({
             "type": "error",
-            "text": "TLSA records found but DNSSEC is not enabled, so DANE is ineffective"
+            "text": (
+                "TLSA records found but DNSSEC is signed and not anchored at the "
+                "parent, so DANE is ineffective"
+                if signed_unanchored else
+                "TLSA records found but DNSSEC is not enabled, so DANE is ineffective"
+            )
         })
         for issue in issues:
             if "dnssec" not in (issue.get("issue") or "").lower():
                 details.append(_issue_to_detail(issue))
+
+        if signed_unanchored:
+            return {
+                "name": "DANE",
+                "status": "warn",
+                "verdict": "TLSA found but DNSSEC unanchored",
+                "record": None,
+                "explanation": (
+                    "DANE TLSA records are published for your MX hosts, and DNSSEC keys are "
+                    "published for your domain, but no DS record was found at the parent "
+                    "zone. DANE requires DNSSEC (<a href=\"https://datatracker.ietf.org/doc/html/rfc7672\" target=\"_blank\" rel=\"noopener\">RFC 7672</a> Section 2.2) to be anchored to the "
+                    "global trust chain. Without the DS record, validating resolvers treat "
+                    "this zone as unsigned, so an attacker can forge or strip TLSA records, "
+                    "completely defeating the authentication."
+                ),
+                "details": details,
+                "fix": "Add a DS record for your domain at your registrar, pointing to your published DNSKEY. Once the chain is anchored, your existing TLSA records will become effective.",
+                "fix_records": None,
+                "ttl_info": format_ttl(raw.get("ttl")),
+            }
 
         return {
             "name": "DANE",

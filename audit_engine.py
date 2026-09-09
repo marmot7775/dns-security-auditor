@@ -24,10 +24,18 @@ log = logging.getLogger(__name__)
 CHECK_TIMEOUT = 15
 
 # CT (crt.sh) result cache -- 24-hour TTL because CT data rarely changes
-# and crt.sh is frequently slow or unavailable.
+# and crt.sh is frequently slow or unavailable. Expired entries are kept
+# deliberately (see _get_stale_ct), so this is the one cache in the process
+# that isn't bounded by its own TTL. Every other container here is
+# capped -- _cache at CACHE_MAX_SIZE, _rate_limits at 10000 IPs,
+# dns_tools's _PLAIN_CACHE and _DNSSEC_CACHE at 2000 and 1000 -- and this
+# one grew without limit: a crawler walking a domain list, or organic
+# traffic over time, holds every distinct domain it has ever seen until
+# the process restarts.
 _ct_cache = {}
 _ct_cache_lock = _ct_threading.Lock()
 CT_CACHE_TTL = 86400  # 24 hours
+CT_CACHE_MAX_SIZE = 2000
 
 
 def _get_cached_ct(domain):
@@ -50,6 +58,14 @@ def _get_stale_ct(domain):
 def _set_cached_ct(domain, data):
     with _ct_cache_lock:
         _ct_cache[domain] = {'data': data, 'timestamp': time.time()}
+        # Evict the oldest entries once over the cap. Staleness is not
+        # eviction here (see the module comment): an entry surviving under
+        # the cap stays available to _get_stale_ct however old it is, the
+        # same as before this cap existed.
+        if len(_ct_cache) > CT_CACHE_MAX_SIZE:
+            oldest_keys = sorted(_ct_cache, key=lambda k: _ct_cache[k]['timestamp'])[:100]
+            for key in oldest_keys:
+                _ct_cache.pop(key, None)
 
 
 import dns.resolver
@@ -130,6 +146,7 @@ from result_transformer import (
     build_change_detection,
     build_consistency_findings,
     _build_provider_intelligence,
+    _lookup_unavailable_card,
 )
 from dns_snapshots import store_audit_snapshots, get_all_history, purge_old_snapshots, get_first_seen
 
@@ -2928,6 +2945,9 @@ def _raw_check_dnssec(domain: str) -> Dict[str, Any]:
                     )
         except dns.exception.DNSException:
             result["has_dnssec"] = False
+            # Nothing was learned on either attempt, not a real negative
+            # answer. Downstream must not report this as "not configured".
+            result["lookup_failed"] = True
             should_probe_bogus = True
             _add_issue(
                 "warning",
@@ -2939,6 +2959,10 @@ def _raw_check_dnssec(domain: str) -> Dict[str, Any]:
             )
     except dns.exception.DNSException as e:
         result["has_dnssec"] = False
+        # SERVFAIL, REFUSED, NoNameservers and similar mean the query never
+        # completed, not that DNSSEC is absent. Downstream must not report
+        # this as "not configured".
+        result["lookup_failed"] = True
         should_probe_bogus = True
         _add_issue(
             "warning",
@@ -3262,6 +3286,12 @@ def _raw_check_caa(domain: str) -> Dict[str, Any]:
     # is a false alarm.
     answers = None
     caa_source = None
+    # NoAnswer and NXDOMAIN are real answers: no CAA published at that
+    # level, so the walk continues up the tree. A SERVFAIL/NoNameservers
+    # here means that level was never actually checked, so a walk that
+    # completes without ever finding a record cannot say the whole tree
+    # published nothing, since the level that failed might have.
+    any_lookup_failed = False
     for _candidate in _caa_tree(domain):
         try:
             answers = resolver.resolve(_candidate, "CAA")
@@ -3283,7 +3313,11 @@ def _raw_check_caa(domain: str) -> Dict[str, Any]:
             continue
         except dns.exception.DNSException:
             answers = None
+            any_lookup_failed = True
             continue
+
+    if answers is None and any_lookup_failed:
+        result["lookup_failed"] = True
 
     result["caa_source"] = caa_source
     result["inherited"] = bool(caa_source) and caa_source != _queried
@@ -3779,6 +3813,11 @@ def _raw_check_dane(domain: str, raw_results: Dict[str, Any]) -> Dict[str, Any]:
             and raw_dnssec.get("chain_valid") is not False
         )
     result["dnssec_validated"] = dnssec_ok
+    # dnssec_ok collapses "no DNSSEC at all" and "signed but no DS at the
+    # parent" to the same False, so DANE told an operator with a published
+    # DNSKEY and no DS record to "enable DNSSEC", a step already done.
+    # dnssec_state carries which one it actually was.
+    result["dnssec_state"] = raw_dnssec.get("dnssec_state")
 
     resolver = _get_dnssec_resolver()
     result["mx_hosts_checked"] = len(mx_hosts)
@@ -4215,6 +4254,8 @@ def _raw_check_ct_uncached(domain: str, raw_results: Dict[str, Any]) -> Dict[str
 # on demand.
 # config has no project imports, so this cannot introduce a cycle.
 from config import MAX_CONCURRENT_AUDITS as _MAX_CONCURRENT_AUDITS
+# Neither does comprehensive_selectors; it is pure data, no imports of its own.
+from comprehensive_selectors import GENERIC_SELECTORS as _GENERIC_SELECTORS
 
 _PHASE2_WIDTH = 9  # mta_sts, tls_rpt, bimi, dnssec, caa, nameservers, dane, dkim, ct
 _shared_executor = ThreadPoolExecutor(
@@ -4228,7 +4269,16 @@ _shared_executor = ThreadPoolExecutor(
 # the 8 audit concurrency cap that leaves 8 of 20 workers held by blocked
 # parents and 160 probes queued behind them, and at 20 parents no probe runs at
 # all. No task may submit into the pool it is running on.
-_probe_executor = ThreadPoolExecutor(max_workers=20)
+#
+# Sized the same way _shared_executor is, off the concurrency cap: a fixed 20
+# was fine for one audit at a time, but 8 concurrent audits each probing
+# len(_SUBDOMAIN_PREFIXES) subdomains queues far more than 20 workers can hold,
+# so the tail waits out its own timeout budget before a probe ever runs.
+_PROBE_WIDTH = 20  # len(_SUBDOMAIN_PREFIXES), defined below
+_probe_executor = ThreadPoolExecutor(
+    max_workers=max(20, _MAX_CONCURRENT_AUDITS * _PROBE_WIDTH),
+    thread_name_prefix="probe",
+)
 
 # DKIM selector discovery gets its own pool for the same reason. smart_dkim_check
 # runs as a Phase 2 task on _shared_executor and then blocks on the selector
@@ -4236,7 +4286,19 @@ _probe_executor = ThreadPoolExecutor(max_workers=20)
 # queue it is holding a worker in. Before this it built a private
 # ThreadPoolExecutor(15) per call, which is 15 fresh threads per audit and up
 # to 120 at the concurrency cap; one long-lived pool replaces all of them.
-_dkim_executor = ThreadPoolExecutor(max_workers=20)
+#
+# Also sized off the concurrency cap, for the same reason as _probe_executor:
+# a fixed 20 workers under 8 concurrent audits each submitting up to
+# max_selectors (40) plus every GENERIC_SELECTORS entry is the starvation this
+# doc exists to fix. The threads are idle DNS waits; ThreadPoolExecutor only
+# creates them on demand, so sizing for the worst case costs address space,
+# not CPU, even though most audits use a fraction of it after the selector-set
+# reduction below.
+_DKIM_PROBE_WIDTH = 40 + len(_GENERIC_SELECTORS)
+_dkim_executor = ThreadPoolExecutor(
+    max_workers=max(20, _MAX_CONCURRENT_AUDITS * _DKIM_PROBE_WIDTH),
+    thread_name_prefix="dkim",
+)
 
 
 # ============================================================
@@ -4495,7 +4557,8 @@ def _build_suggested_spf(current_spf: str, missing_includes: List[str],
 
 def run_full_audit(domain: str, dkim_selector: Optional[str] = None,
                    scope: Optional[str] = None,
-                   progress_callback=None) -> Dict[str, Any]:
+                   progress_callback=None,
+                   deadline: Optional[float] = None) -> Dict[str, Any]:
     """
     Run all security checks and return the complete audit result
     in the format expected by the frontend.
@@ -4505,11 +4568,25 @@ def run_full_audit(domain: str, dkim_selector: Optional[str] = None,
 
     If progress_callback is provided, it is called after each check with:
         progress_callback(step_name: str, completed: int, total: int)
+
+    deadline: an optional time.monotonic() value. The six serial per-check
+        timeouts in Phase 1 alone sum to well over a minute in the worst
+        case, on top of the Phase 2 batch, fingerprinting and subdomain
+        probing, so a caller with its own wall-clock budget (e.g. the 90s
+        an HTTP request can hold open before its own proxy or load balancer
+        gives up) needs to bound the whole audit, not just one check.
+        Past the deadline, remaining phases are skipped rather than run, and
+        any check that never got to run is marked unavailable rather than
+        silently missing from the result -- the same "did not complete" that
+        a single check's own timeout already reports, not a new state.
     """
     start_time = datetime.now(timezone.utc)
     checks = []
     raw_results = {}
     errors = []
+
+    def _time_up() -> bool:
+        return deadline is not None and time.monotonic() >= deadline
 
     # Resolve scope to a set of check keys (None = run everything)
     if scope and scope not in SCOPE_CHECKS:
@@ -4535,7 +4612,7 @@ def run_full_audit(domain: str, dkim_selector: Optional[str] = None,
     # --- DMARC Tree Walk (RFC 9989 Section 4.10) ---
     # Run before DMARC card so inherited policy can inform the card
     tree_walk_result = None
-    if needs_dmarc:
+    if needs_dmarc and not _time_up():
         try:
             tree_walk_result = _run_with_timeout(dmarc_tree_walk, domain)
         except Exception as e:
@@ -4545,7 +4622,7 @@ def run_full_audit(domain: str, dkim_selector: Optional[str] = None,
 
     # --- 1. DMARC ---
     report_auth = None
-    if needs_dmarc:
+    if needs_dmarc and not _time_up():
         try:
             raw_dmarc = _run_with_timeout(_raw_check_dmarc, domain)
             # Enrich with inherited policy (tree walk first, PSL fallback)
@@ -4590,7 +4667,7 @@ def run_full_audit(domain: str, dkim_selector: Optional[str] = None,
         _notify("DMARC")
 
     # --- 2. MX Records (run before SPF so we know if domain sends mail) ---
-    if needs_mx:
+    if needs_mx and not _time_up():
         try:
             raw_mx = _run_with_timeout(check_mx, domain)
             raw_results["mx"] = raw_mx
@@ -4611,7 +4688,7 @@ def run_full_audit(domain: str, dkim_selector: Optional[str] = None,
 
     # --- 3. SPF ---
     spf_record = None
-    if needs_spf:
+    if needs_spf and not _time_up():
         try:
             raw_spf = _run_with_timeout(_raw_check_spf, domain)
             raw_results["spf"] = raw_spf
@@ -4682,7 +4759,7 @@ def run_full_audit(domain: str, dkim_selector: Optional[str] = None,
     # another task in the same pool.
     _dnssec_raw = None
     _dnssec_error = None
-    if _should_include("dnssec", scope_set) or _should_include("dane", scope_set):
+    if (_should_include("dnssec", scope_set) or _should_include("dane", scope_set)) and not _time_up():
         try:
             _dnssec_raw = _run_with_timeout(_raw_check_dnssec, domain, timeout=CHECK_TIMEOUT)
             raw_results["dnssec"] = _dnssec_raw
@@ -4841,11 +4918,21 @@ def run_full_audit(domain: str, dkim_selector: Optional[str] = None,
                 lambda raw: transform_dkim(raw, domain, has_mx=has_mx, non_mail=non_mail), "DKIM"))
         else:
             _spf_rec = spf_record  # capture
+            # A hosted mailbox provider (Google Workspace, Microsoft 365) or a
+            # resigning relay (Proofpoint, Mimecast) both receive and sign
+            # mail on the same platform, so its MX hostnames imply the same
+            # DKIM selectors an SPF include for it would. Already resolved in
+            # Phase 1, so this costs no extra lookup.
+            _mx_hosts = [
+                d["hostname"] for d in raw_results.get("mx", {}).get("mx_details", [])
+                if d.get("hostname")
+            ]
             def _dkim_progress(found_count):
                 if progress_callback:
                     progress_callback(f"DKIM:{found_count}", completed, total_checks)
             def _run_dkim_smart():
-                _raw = smart_dkim_check(domain, _spf_rec, progress_callback=_dkim_progress,
+                _raw = smart_dkim_check(domain, _spf_rec, mx_hosts=_mx_hosts,
+                                        progress_callback=_dkim_progress,
                                         executor=_dkim_executor)
                 return _raw
             _parallel_checks.append(("dkim", _run_dkim_smart,
@@ -4859,11 +4946,16 @@ def run_full_audit(domain: str, dkim_selector: Optional[str] = None,
             "Certificate Transparency"))
 
 
-    # Submit all Phase 2 checks in parallel
+    # Submit all Phase 2 checks in parallel. None if the deadline already
+    # passed in Phase 1: every one of these would need the same "did not
+    # complete" stub the individual per-check timeout already produces, and
+    # skipping the submission does that in one place instead of one per
+    # check.
     _p2_futures = {}
-    for key, run_fn, transform_fn, label in _parallel_checks:
-        future = _shared_executor.submit(run_fn)
-        _p2_futures[future] = (key, transform_fn, label)
+    if not _time_up():
+        for key, run_fn, transform_fn, label in _parallel_checks:
+            future = _shared_executor.submit(run_fn)
+            _p2_futures[future] = (key, transform_fn, label)
 
     # Desired card ordering (DKIM inserted at position 2 later)
     _CARD_ORDER = ["mta_sts", "tls_rpt", "bimi", "dnssec", "caa",
@@ -5163,7 +5255,7 @@ def run_full_audit(domain: str, dkim_selector: Optional[str] = None,
     # --- Vendor Fingerprinting (only useful for email scopes) ---
     fp_vendors = []
     _email_checks = {"dmarc", "spf", "dkim", "mx"}
-    if scope_set is None or bool(scope_set & _email_checks):
+    if (scope_set is None or bool(scope_set & _email_checks)) and not _time_up():
         # Seven of the eight probes re-queried a record this audit already
         # holds, strictly sequentially, on the module default resolver with no
         # timeout above them: worst case roughly 50 seconds bolted onto every
@@ -5309,7 +5401,7 @@ def run_full_audit(domain: str, dkim_selector: Optional[str] = None,
 
     # --- Subdomain Discovery & Audit ---
     subdomain_raw = None
-    if needs_dmarc and not raw_results.get("dmarc", {}).get("is_subdomain"):
+    if needs_dmarc and not raw_results.get("dmarc", {}).get("is_subdomain") and not _time_up():
         try:
             subdomain_raw = _run_with_timeout(_audit_subdomains, domain, timeout=CHECK_TIMEOUT)
         except Exception as e:
@@ -5356,6 +5448,33 @@ def run_full_audit(domain: str, dkim_selector: Optional[str] = None,
 
     # Build consistency findings (Part 4)
     consistency = build_consistency_findings(raw_results, checks)
+
+    # A deadline that ran out skips whole phases rather than raising, so a
+    # scoped-in check can reach here having never run at all -- not timed
+    # out, just never attempted. That is still "did not complete", the same
+    # state a single check's own timeout produces, so it gets the same card
+    # rather than silently missing from the result.
+    if _time_up():
+        _present = {c.get("name") for c in checks}
+        _stub_subjects = [
+            ("dmarc", "DMARC", "DMARC record"),
+            ("mx", "MX Records", "MX records"),
+            ("spf", "SPF", "SPF record"),
+            ("dkim", "DKIM", "DKIM public key"),
+            ("mta_sts", "MTA-STS", "MTA-STS policy record"),
+            ("tls_rpt", "TLS-RPT", "TLS-RPT record"),
+            ("bimi", "BIMI", "BIMI record"),
+            ("dnssec", "DNSSEC", "DNSSEC records"),
+            ("caa", "CAA", "CAA records"),
+            ("nameservers", "Nameservers", "nameserver records"),
+            ("dane", "DANE", "MX records, which DANE is keyed on"),
+            ("ct", "Certificate Transparency", "certificate transparency logs"),
+        ]
+        for check_key, display_name, subject in _stub_subjects:
+            if _should_include(check_key, scope_set) and display_name not in _present:
+                checks.append(_lookup_unavailable_card(
+                    display_name, {"domain": domain}, subject,
+                ))
 
     # --- Assemble final response ---
     elapsed = (datetime.now(timezone.utc) - start_time).total_seconds()

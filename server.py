@@ -403,6 +403,12 @@ _active_audits = 0
 _active_audits_lock = threading.Lock()
 _MAX_CONCURRENT_AUDITS = MAX_CONCURRENT_AUDITS
 
+# Shared by /api/audit and /api/audit/stream, so a slow domain gets the same
+# ceiling either way. Cloudflare's origin timeout is 100s; giving the audit
+# itself the whole budget below that leaves it holding a concurrency slot
+# for those extra seconds while the client has already been given up on.
+AUDIT_WALL_CLOCK_BUDGET = 90
+
 # Audits currently running, keyed on cache_key, each holding an asyncio.Future
 # that resolves to the audit result. Share a link and five people can click
 # inside the twenty seconds before the first audit populates the cache: all
@@ -776,6 +782,13 @@ async def audit_domain(
         # Run audit (offloaded -- this is fully synchronous and would otherwise
         # block the event loop, stalling every other request on this worker).
         start = time.time()
+        # The engine's own budgets sum far higher than this across a full
+        # audit (six serial per-check timeouts, the Phase 2 batch,
+        # fingerprinting, subdomain probing), so without this the request
+        # could hold its slot well past the SSE endpoint's 90s cap on the
+        # same domain -- and past Cloudflare's 100s origin timeout, meaning
+        # the browser gets a 524 while this held the slot open regardless.
+        audit_deadline = time.monotonic() + AUDIT_WALL_CLOCK_BUDGET
         try:
             # Pre-flight DNS check (offloaded -- this does blocking socket I/O).
             # It runs inside the reservation so a domain whose nameservers
@@ -789,7 +802,8 @@ async def audit_domain(
 
             try:
                 result = await anyio.to_thread.run_sync(
-                    functools.partial(run_full_audit, domain, dkim_selector=selector, scope=scope)
+                    functools.partial(run_full_audit, domain, dkim_selector=selector, scope=scope,
+                                      deadline=audit_deadline)
                 )
             except Exception as e:
                 log.error("Audit failed for %s: %s", domain, str(e)[:200], exc_info=True)
@@ -987,8 +1001,8 @@ async def audit_stream(
             last_yield = time.time()
             try:
                 while True:
-                    if time.time() - sse_start_time > 90:
-                        log.warning("SSE stream exceeded 90s limit: %s", domain)
+                    if time.time() - sse_start_time > AUDIT_WALL_CLOCK_BUDGET:
+                        log.warning("SSE stream exceeded %ds limit: %s", AUDIT_WALL_CLOCK_BUDGET, domain)
                         cancel_event.set()
                         timeout_result = {
                             "domain": domain,
@@ -997,7 +1011,7 @@ async def audit_stream(
                             "priority_fixes": [],
                             "vendors": [],
                             "error": "timeout",
-                            "error_message": "Audit exceeded the 90 second time limit. Please try again.",
+                            "error_message": f"Audit exceeded the {AUDIT_WALL_CLOCK_BUDGET} second time limit. Please try again.",
                         }
                         _log_audit(request, domain, scope, 90.0, 0, source="sse",
                                    status="timeout", error="timeout")

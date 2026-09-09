@@ -27,6 +27,7 @@ report says so rather than drawing a conclusion from silence.
 import os
 import sys
 
+import dns.resolver
 import pytest
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
@@ -184,3 +185,78 @@ def test_no_part_of_the_summary_claims_the_domain_is_healthy(audit, dead_apex):
             f"the summary layer claims {claim!r} about a domain whose apex and "
             f"_dmarc lookups both failed"
         )
+
+
+# ---------------------------------------------------------------
+# Doc 20: a failed DNSSEC or CAA lookup must not read as a finding
+# one level up either, in the roadmap and the coverage denominator
+# ---------------------------------------------------------------
+
+DNSSEC_DOMAIN = "dnssec-summary.test"
+_DNSSEC_BASE = {
+    DNSSEC_DOMAIN: {
+        "MX": [(10, "mail." + DNSSEC_DOMAIN)],
+        "TXT": ["v=spf1 mx -all"],
+        "A": ["203.0.113.80"],
+        "NS": ["ns1." + DNSSEC_DOMAIN],
+    },
+    f"_dmarc.{DNSSEC_DOMAIN}": {"TXT": ["v=DMARC1; p=reject; rua=mailto:d@" + DNSSEC_DOMAIN]},
+    "mail." + DNSSEC_DOMAIN: {"A": ["203.0.113.81"]},
+    "ns1." + DNSSEC_DOMAIN: {"A": ["203.0.113.53"]},
+}
+
+
+def _plan_items(result):
+    plan = result.get("remediation_plan") or {}
+    return plan.get("immediate", []) + plan.get("short_term", []) + plan.get("long_term", [])
+
+
+def test_dnssec_servfail_gets_no_remediation_item_and_leaves_the_denominator(audit):
+    zone = FakeZone(dict(_DNSSEC_BASE)).fail(DNSSEC_DOMAIN, "DNSKEY").fail(DNSSEC_DOMAIN, "DS")
+    result = audit(zone, DNSSEC_DOMAIN)
+
+    dnssec_items = [i["title"] for i in _plan_items(result) if i.get("check") == "DNSSEC"]
+    assert dnssec_items == [], (
+        f"a failed DNSSEC lookup produced a remediation task: {dnssec_items!r}"
+    )
+    pc = _summary(result)["protocol_coverage"]
+    assert pc["total"] < 9, (
+        f"DNSSEC stayed in the coverage denominator despite the lookup failing: {pc!r}"
+    )
+
+
+def test_dnssec_double_timeout_gets_no_remediation_item(audit):
+    zone = FakeZone(dict(_DNSSEC_BASE)).fail(DNSSEC_DOMAIN, "DNSKEY", dns.resolver.LifetimeTimeout())
+    result = audit(zone, DNSSEC_DOMAIN)
+
+    dnssec_items = [i["title"] for i in _plan_items(result) if i.get("check") == "DNSSEC"]
+    assert dnssec_items == [], (
+        f"a DNSKEY query timing out on both attempts produced a remediation task: {dnssec_items!r}"
+    )
+
+
+def test_caa_servfail_at_every_level_leaves_the_coverage_denominator(audit):
+    zone = FakeZone(dict(_DNSSEC_BASE)).fail(DNSSEC_DOMAIN, "CAA")
+    result = audit(zone, DNSSEC_DOMAIN)
+
+    pc = _summary(result)["protocol_coverage"]
+    assert pc["total"] < 9, (
+        f"CAA stayed in the coverage denominator despite every level of the "
+        f"tree walk failing: {pc!r}"
+    )
+
+
+def test_signed_unanchored_dane_does_not_read_as_dnssec_missing_in_the_summary(audit):
+    zone = FakeZone(dict(_DNSSEC_BASE))
+    zone.add(DNSSEC_DOMAIN, "DNSKEY", 13)
+    zone.add("_25._tcp.mail." + DNSSEC_DOMAIN, "TLSA", (3, 1, 1, "aa" * 32))
+    # No DS record for DNSSEC_DOMAIN -> a real signed_unanchored answer.
+
+    result = audit(zone, DNSSEC_DOMAIN)
+    es = _summary(result)
+    prose = " ".join([es["verdict"], es["deliverability_summary"], es["biggest_risk"]]).lower()
+
+    assert "dnssec is not enabled" not in prose, (
+        f"a signed but unanchored zone is being described as having no "
+        f"DNSSEC in the executive summary: {prose!r}"
+    )
