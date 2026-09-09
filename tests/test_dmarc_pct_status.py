@@ -68,13 +68,30 @@ def test_pct_zero_is_not_a_pass(policy):
         f"{card['status']!r} verdict={card['verdict']!r}"
     )
     assert "pct=0" in card["verdict"]
-    # The verdict must not claim failures are rejected, and must not claim
-    # enforcement is simply off either: RFC 9989 section C.5.2 removed pct, and
-    # the same report warns that RFC 9989 receivers ignore it. Naming both
-    # receiver populations is the only statement that is true of each.
-    assert "9989" in card["verdict"] and "7489" in card["verdict"], (
-        f"The verdict has to say enforcement is off rather than claim "
-        f"failures are rejected; got {card['verdict']!r}"
+
+    # The verdict states the weaker of the two receiver populations, which is
+    # the coverage the operator can count on: quarantine for reject, nothing
+    # for quarantine. It must not claim failures are rejected.
+    if policy == "reject":
+        assert "quarantined" in card["verdict"], card["verdict"]
+        assert "is rejected" not in card["verdict"], card["verdict"]
+
+    # Both populations still have to be named, because RFC 9989 section C.5.2
+    # removed pct and the same report warns that RFC 9989 receivers ignore it.
+    # That belongs in a detail row rather than the verdict: carrying it inline
+    # ran the verdict to 132 characters against roughly 45 for every other
+    # verdict on this card.
+    _pct_rows = [d for d in card["details"] if "pct=0" in d["text"]]
+    assert _pct_rows, (
+        f"no detail row explains pct=0; details={card['details']!r}"
+    )
+    _row = _pct_rows[0]["text"]
+    assert "7489" in _row and "9989" in _row, (
+        f"the detail row has to name both receiver populations; got {_row!r}"
+    )
+    assert len(card["verdict"]) < 90, (
+        f"the verdict is back to carrying the whole receiver split: "
+        f"{card['verdict']!r}"
     )
 
 
@@ -88,6 +105,16 @@ def test_partial_pct_is_a_warning(policy):
         f"status={card['status']!r}"
     )
     assert "pct=25" in card["verdict"]
+    assert len(card["verdict"]) < 90, card["verdict"]
+
+    # Same split as pct=0: the number is in the verdict, the reason for it is
+    # in a detail row. That row used to read "policy applied to only 25% of
+    # failing messages" for both policies, which is wrong for reject. RFC 7489
+    # section 6.6.4 sends the unselected fraction to quarantine, not nowhere.
+    _row = next(d["text"] for d in card["details"] if "pct=25" in d["text"])
+    assert "7489" in _row and "9989" in _row, _row
+    if policy == "reject":
+        assert "quarantine the rest" in _row, _row
 
 
 @pytest.mark.parametrize("policy", ["reject", "quarantine"])

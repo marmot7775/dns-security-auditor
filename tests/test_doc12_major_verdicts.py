@@ -319,13 +319,22 @@ def test_pct_zero_verdict_names_both_receiver_populations(policy):
         "policy": policy, "pct": 0, "rua": "mailto:a@example.com", "issues": [],
     })
     assert card["status"] == ("fail" if policy == "quarantine" else "warn")
-    assert "7489" in card["verdict"] and "9989" in card["verdict"]
+
+    # Both populations are still named, in the detail row rather than the
+    # verdict. Carrying the split inline ran the verdict to 132 characters
+    # against roughly 45 for every other verdict on this card, so the verdict
+    # now states the weaker population and the row gives the reason.
+    row = next(d["text"] for d in card["details"] if "pct=0" in d["text"])
+    assert "7489" in row and "9989" in row, row
+    assert "9989" in card["explanation"] or "9989" in row
+
     if policy == "reject":
         # RFC 7489 section 6.6.4 quarantines the unselected fraction of a
         # reject policy. "enforce on no mail" was the original wording and it
         # is the one thing those receivers do not do.
         assert "quarantine" in card["verdict"].lower(), card["verdict"]
         assert "no mail" not in card["verdict"].lower(), card["verdict"]
+        assert "quarantine all failing messages" in row, row
 
 
 def test_out_of_range_pct_is_not_quoted_as_zero():
@@ -337,3 +346,8 @@ def test_out_of_range_pct_is_not_quoted_as_zero():
     })
     assert "pct=-5" in card["verdict"]
     assert "pct=0" not in card["verdict"]
+    # And no detail row does percentage arithmetic on an impossible value.
+    # The engine's own "pct value out of range" issue is what speaks here.
+    assert not [d for d in card["details"] if "-5% of failing" in d["text"]], (
+        card["details"]
+    )
