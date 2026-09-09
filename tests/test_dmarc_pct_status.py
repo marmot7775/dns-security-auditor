@@ -45,15 +45,18 @@ def _raw(record, policy, pct=None, rua="mailto:d@pct.example.test"):
 
 @pytest.mark.parametrize("policy", ["reject", "quarantine"])
 def test_pct_zero_is_not_a_pass(policy):
-    """Not a pass, and for reject not a fail either.
+    """Not a pass, and with rua present not a fail either.
 
     "pct=0 applies the policy to no mail at all" was the premise here and it is
     wrong for reject. RFC 7489 section 6.6.4: mail not subject to the reject
     policy is treated "as though the 'quarantine' policy applies", so p=reject
     with pct=0 is full quarantine on RFC 7489 receivers and full reject on RFC
     9989 ones. Every failing message is acted on, which is not a failure.
-    Quarantine is the policy that really does degrade to nothing, since the
-    same section sends its unselected fraction to local classification.
+    Quarantine is the policy that really does degrade to nothing on RFC 7489
+    receivers, since the same section sends its unselected fraction to local
+    classification. RFC 9989 receivers ignore pct and quarantine all of it, so
+    the record is never less protective than p=none. It grades like p=none:
+    warn with rua, fail without. See the no-rua test below for the fail.
     """
     record = f"v=DMARC1; p={policy}; pct=0; rua=mailto:d@{DOMAIN}"
     card = transform_dmarc(_raw(record, policy, pct=0))
@@ -62,9 +65,8 @@ def test_pct_zero_is_not_a_pass(policy):
         f"a green card tells the client pct=0 is full enforcement. Got "
         f"status={card['status']!r} verdict={card['verdict']!r}"
     )
-    _expected = "fail" if policy == "quarantine" else "warn"
-    assert card["status"] == _expected, (
-        f"p={policy} with pct=0: expected {_expected!r}, got "
+    assert card["status"] == "warn", (
+        f"p={policy} with pct=0 and rua: expected 'warn', got "
         f"{card['status']!r} verdict={card['verdict']!r}"
     )
     assert "pct=0" in card["verdict"]
@@ -93,6 +95,30 @@ def test_pct_zero_is_not_a_pass(policy):
         f"the verdict is back to carrying the whole receiver split: "
         f"{card['verdict']!r}"
     )
+
+
+def test_quarantine_pct_zero_without_rua_grades_like_p_none():
+    """p=quarantine with pct=0 is p=none's protection level on RFC 7489
+    receivers and better on RFC 9989 ones, so it takes p=none's grading:
+    warn with rua, fail without. It used to be fail regardless of rua, which
+    put a redder card on the stronger of the two records."""
+    record = "v=DMARC1; p=quarantine; pct=0"
+    card = transform_dmarc(_raw(record, "quarantine", pct=0, rua=None))
+    assert card["status"] == "fail", card
+
+    none_card = transform_dmarc(_raw("v=DMARC1; p=none", "none", rua=None))
+    assert none_card["status"] == card["status"]
+
+    with_rua = transform_dmarc(_raw(record, "quarantine", pct=0))
+    none_with_rua = transform_dmarc(_raw("v=DMARC1; p=none", "none"))
+    assert with_rua["status"] == none_with_rua["status"] == "warn"
+
+
+def test_reject_pct_zero_without_rua_stays_warn():
+    """Full p=reject without rua is warn, so p=reject with pct=0 and no rua
+    is warn too: every receiver still acts on every failing message."""
+    card = transform_dmarc(_raw("v=DMARC1; p=reject; pct=0", "reject", pct=0, rua=None))
+    assert card["status"] == "warn", card
 
 
 @pytest.mark.parametrize("policy", ["reject", "quarantine"])

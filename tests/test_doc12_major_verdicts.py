@@ -318,7 +318,9 @@ def test_pct_zero_verdict_names_both_receiver_populations(policy):
         "record": f"v=DMARC1; p={policy}; pct=0; rua=mailto:a@example.com",
         "policy": policy, "pct": 0, "rua": "mailto:a@example.com", "issues": [],
     })
-    assert card["status"] == ("fail" if policy == "quarantine" else "warn")
+    # Both have rua, so both are warn. Quarantine grades like p=none here:
+    # never less protective than it, and better on RFC 9989 receivers.
+    assert card["status"] == "warn"
 
     # Both populations are still named, in the detail row rather than the
     # verdict. Carrying the split inline ran the verdict to 132 characters

@@ -1641,9 +1641,23 @@ def transform_dmarc(raw: Dict, tree_walk: Optional[Dict] = None, is_no_mail: boo
         # acts on every failing message, one quarantining where the other
         # rejects. Grading that a failure put a red card on a domain whose
         # failing mail is universally enforced against.
+        #
+        # p=quarantine with pct=0 grades the way p=none does, warn with rua
+        # and fail without, because it is never less protective than p=none.
+        # RFC 7489 receivers do nothing for either. RFC 9989 receivers ignore
+        # pct and quarantine everything, so it is better there. This branch
+        # used to grade it fail unconditionally, which put a redder card on
+        # the strictly stronger of the two records and never looked at rua.
+        # The colour is a protection grade on every other row of this card,
+        # and the pct detail row now says exactly what each receiver does, so
+        # the colour does not have to carry "you think you are enforcing" on
+        # its own.
         if pct <= 0:
             verdict = _disabled
-            status = "fail" if policy == "quarantine" else "warn"
+            if policy == "reject" or raw.get("rua"):
+                status = "warn"
+            else:
+                status = "fail"
         elif pct < 100:
             verdict = _partial
             status = "warn"
