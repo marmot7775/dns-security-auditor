@@ -650,6 +650,9 @@ function renderResults(data) {
     document.getElementById('summary-unavailable-card')
         .classList.toggle('is-hidden', unavailableCount === 0);
 
+    // Prompt 26: quiet contact note, shown only when there is something to hand off.
+    _renderContactNote(failCount, warnCount);
+
     // Tab title with issue summary
     if (failCount > 0) {
         document.title = `(${failCount} issue${failCount > 1 ? 's' : ''}) ${data.domain} | DNS Audit`;
@@ -3743,6 +3746,24 @@ function _renderCacheBadge(data) {
         badge.className = 'cache-status-badge fresh';
         badge.innerHTML = '<span>Fresh result</span>';
         badge.style.display = 'inline-flex';
+    }
+}
+
+// ============================================================
+// Contact note (Prompt 26)
+// ============================================================
+
+function _renderContactNote(failCount, warnCount) {
+    const note = document.getElementById('results-contact-note');
+    if (!note) return;
+    if (failCount > 0 || warnCount > 0) {
+        note.innerHTML = 'Some of these are a five minute DNS change. Some are not. ' +
+            'If you want a second opinion on which is which, this is what I do for a living. ' +
+            '<a href="mailto:neil@dns-audit.com">neil@dns-audit.com</a>';
+        note.classList.remove('is-hidden');
+    } else {
+        note.innerHTML = '';
+        note.classList.add('is-hidden');
     }
 }
 

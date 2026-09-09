@@ -3177,6 +3177,13 @@ details.st-node>summary:hover {
     align-items: center;
     gap: 0.35em;
 }
+.footer-email {
+    color: var(--text-muted);
+    text-decoration: underline;
+}
+.footer-email:hover {
+    color: var(--primary-light);
+}
 .footer-linkedin {
     color: #9ca3af;
     opacity: 1;
@@ -8939,6 +8946,24 @@ body {
 
 /* Audit form privacy note */
 .audit-privacy-note { font-family: var(--font-body); font-size: var(--font-sm); color: var(--text-muted); text-align: center; margin: 0.875rem 0 0; line-height: 1.5; }
+
+/* Prompt 26: quiet contact note under the results, shown only when the
+   audit found something. Deliberately not a call-to-action: no border, no
+   accent colour, same muted tone as .audit-privacy-note above, sized to the
+   results column it sits in rather than to its own content. */
+.results-contact-note {
+    font-size: var(--font-sm);
+    color: var(--text-muted);
+    line-height: 1.5;
+    margin: var(--space-lg) 0 0;
+}
+.results-contact-note a {
+    color: var(--text-muted);
+    text-decoration: underline;
+}
+.results-contact-note a:hover {
+    color: var(--text-secondary);
+}
 
 /* Responsive */
 @media (max-width: 600px) {
