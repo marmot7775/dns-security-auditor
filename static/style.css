@@ -3211,6 +3211,19 @@ details.st-node>summary:hover {
     gap: 0.45rem;
 }
 
+.scope-desc {
+    /* At 640px and below .scope-selector is itself a flex row, so this has
+       to claim the full width or it lands beside the buttons. */
+    flex: 1 0 100%;
+    margin: 0.6rem 0 0;
+    font-size: var(--font-sm);
+    line-height: 1.5;
+    color: var(--text-secondary);
+    /* One line of space is always reserved, so switching between a short
+       description and a long one moves the input below by at most a line. */
+    min-height: 1.5em;
+}
+
 .scope-btn {
     display: inline-flex;
     align-items: center;

@@ -35,6 +35,17 @@ const loadingSection = document.getElementById('loading-section');
 const resultsSection = document.getElementById('results-section');
 
 // -- Scope selector --
+// The visible line under the buttons and the hover tooltip are the same
+// text, read from the active button's title. A title alone never shows on a
+// touch screen, so a phone visitor had no way to learn what the six scopes
+// meant.
+function syncScopeDesc() {
+    const desc = document.getElementById('scope-desc');
+    const active = document.querySelector('.scope-btn.active');
+    if (desc && active) desc.textContent = active.getAttribute('title') || '';
+}
+syncScopeDesc();
+
 document.querySelectorAll('.scope-btn').forEach(btn => {
     btn.addEventListener('click', () => {
         document.querySelectorAll('.scope-btn').forEach(b => {
@@ -46,6 +57,7 @@ document.querySelectorAll('.scope-btn').forEach(btn => {
         btn.setAttribute('aria-checked', 'true');
         btn.setAttribute('tabindex', '0');
         currentScope = btn.dataset.scope;
+        syncScopeDesc();
     });
 });
 
@@ -67,6 +79,7 @@ document.getElementById('scope-selector').addEventListener('keydown', (e) => {
     btns[next].setAttribute('tabindex', '0');
     btns[next].focus();
     currentScope = btns[next].dataset.scope;
+    syncScopeDesc();
 });
 
 // -- DKIM selector toggle --
@@ -108,6 +121,7 @@ document.addEventListener('DOMContentLoaded', () => {
         document.querySelectorAll('.scope-btn').forEach(b => {
             b.classList.toggle('active', b.dataset.scope === scope);
         });
+        syncScopeDesc();
     }
     if (domain) {
         const normalized = normalizeDomain(domain);
