@@ -5215,12 +5215,53 @@ def transform_mx(raw: Dict) -> Dict:
 # MTA-STS
 # ============================================================
 
+def _malformed_version_tag_card(name: str, raw: Dict, record: str,
+                                consequence: str, fix: str) -> Dict:
+    """Card for a record whose version tag misses, so receivers ignore it.
+
+    Reported as a failure rather than an absence. The operator published
+    something and can see it in their zone, so "no record found" reads as a
+    tool that cannot see their DNS, and they go looking for the wrong problem.
+    Naming the record and the exact reason is the whole value here.
+    """
+    return {
+        "name": name,
+        "status": "fail",
+        "pill_label": "Malformed",
+        "verdict": f"{name} record published but ignored by receivers",
+        "record": record,
+        "explanation": (
+            f"A TXT record is published, but its version tag does not match "
+            f"what the specification requires, so it is discarded before "
+            f"anything else in it is read. {consequence}"
+        ),
+        "details": [_issue_to_detail(i) for i in raw.get("issues", [])],
+        "fix": fix,
+        "fix_records": None,
+    }
+
+
 def transform_mta_sts(raw: Dict, domain: str, has_mx: bool = True, non_mail: bool = False) -> Dict:
     """Only a positive non-mail declaration (RFC 7505 null MX, or a null ``v=spf1 -all`` SPF record) waives this check. Absent MX alone does not: send-only subdomains have no MX and still send real mail."""
     # The lookup never completed, so "not configured" would be a claim about
     # the domain that this audit did not establish.
     if raw.get("status") == "unavailable":
         return _lookup_unavailable_card("MTA-STS", raw, "MTA-STS policy record")
+
+    # A record is published at _mta-sts but its version tag does not conform,
+    # so every sender discards it. Neither of the branches below fits: "no
+    # record found" contradicts what the operator can see in their zone, and
+    # the has-record branch narrates a policy that is not in force.
+    if raw.get("malformed_record"):
+        return _malformed_version_tag_card(
+            "MTA-STS", raw, raw["malformed_record"],
+            "Senders ignore it and deliver without the policy, so the "
+            "downgrade protection MTA-STS exists to provide is not in place.",
+            f"Republish the TXT record at <strong>_mta-sts.{_e(domain)}</strong> "
+            f"starting with exactly <strong>v=STSv1;</strong>, keeping the "
+            f"<strong>id=</strong> tag.",
+        )
+
     raw_status = raw.get("status", "warning")
     status = _map_status(raw_status)
     txt_record = raw.get("txt_record")
@@ -5389,6 +5430,20 @@ def transform_tls_rpt(raw: Dict, domain: str, has_mx: bool = True, non_mail: boo
     # the domain that this audit did not establish.
     if raw.get("status") == "unavailable":
         return _lookup_unavailable_card("TLS-RPT", raw, "TLS-RPT record")
+
+    # See the same branch in transform_mta_sts. A near miss is neither an
+    # absence nor a working record, and saying it is either one is a false
+    # statement about the domain.
+    if raw.get("malformed_record"):
+        return _malformed_version_tag_card(
+            "TLS-RPT", raw, raw["malformed_record"],
+            "No aggregate reports are sent, and reports that never arrive "
+            "look exactly like having nothing to report.",
+            f"Republish the TXT record at <strong>_smtp._tls.{_e(domain)}</strong> "
+            f"starting with exactly <strong>v=TLSRPTv1;</strong>, keeping the "
+            f"<strong>rua=</strong> tag.",
+        )
+
     status = _map_status(raw.get("status", "warning"))
     record = raw.get("record")
 

@@ -125,7 +125,12 @@ except ImportError:
     tldextract = None
     _tld_extract = None
 from spf_intelligence import smart_dkim_check
-from dns_tools import get_resolver, get_dnssec_resolver
+from dns_tools import (
+    get_resolver,
+    get_dnssec_resolver,
+    is_dmarc_version_tag,
+    version_tag_deviations,
+)
 
 from result_transformer import (
     transform_dmarc,
@@ -512,7 +517,7 @@ def _check_report_authorization(domain: str, raw_dmarc: Dict, tree_walk_result: 
             try:
                 txt_records = _lookup_txt(auth_fqdn, raise_on_failure=True)
                 dest["authorized"] = any(
-                    r.strip().startswith("v=DMARC1") for r in txt_records
+                    is_dmarc_version_tag(r) for r in txt_records
                 )
             except dns.exception.DNSException:
                 # The lookup itself failed (SERVFAIL, REFUSED, timeout).
@@ -736,7 +741,7 @@ def _enrich_dmarc_inheritance(
         raw_dmarc["inheritance_lookup_target"] = f"_dmarc.{org_domain}"
         return
 
-    org_dmarc = [r for r in org_recs if r.strip().startswith("v=DMARC1")]
+    org_dmarc = [r for r in org_recs if is_dmarc_version_tag(r)]
     if len(org_dmarc) != 1:
         return  # No valid record (zero or multiple)
 
@@ -921,12 +926,19 @@ def _raw_check_dmarc(domain: str) -> Dict[str, Any]:
         result["lookup_target"] = dmarc_fqdn
         return result
 
-    # Pre-check: lowercase v=dmarc1 is invalid per RFC 7489 S6.3 (case-sensitive).
-    # Detect BEFORE the strict v=DMARC1 filter so the syntax error is captured
-    # even though the record is excluded from the count.
+    # Pre-check: lowercase v=dmarc1 is invalid per RFC 9989 S5.4, which writes
+    # the version value as %s"DMARC1" and so makes it case sensitive. Detect
+    # BEFORE the strict filter so the syntax error is captured even though the
+    # record is excluded from the count.
+    #
+    # version_tag_deviations returns None for a TXT record that is not a DMARC
+    # record at all, and an empty list for one that conforms. Only a near miss
+    # comes back with reasons, and case is the only one DMARC can have, since
+    # its ABNF already permits *WSP around the equals sign.
     for _r in dmarc_recs:
-        _stripped = _r.strip()
-        if _stripped.lower().startswith("v=dmarc1") and not _stripped.startswith("v=DMARC1"):
+        if version_tag_deviations(
+            _r, "DMARC1", allow_whitespace=True, case_sensitive=True
+        ):
             _add_syntax(
                 "Lowercase v=dmarc1 detected",
                 "Lowercase v=dmarc1 detected. RFC 7489 requires uppercase. "
@@ -934,15 +946,19 @@ def _raw_check_dmarc(domain: str) -> Dict[str, Any]:
                 "Change to v=DMARC1 (uppercase).",
             )
 
-    dmarc_records = [r for r in dmarc_recs if r.strip().startswith("v=DMARC1")]
+    dmarc_records = [r for r in dmarc_recs if is_dmarc_version_tag(r)]
 
     # Note any non-DMARC TXT records at the _dmarc subdomain.
-    # Lowercase v=dmarc1 records are excluded here because the pre-check above
-    # already reports them via a dedicated syntax error.
+    # version_tag_deviations returns None only for a record that is not a
+    # DMARC record under any reading, which is exactly the set meant here. A
+    # near miss such as v=dmarc1 is excluded because the pre-check above
+    # already reports it via a dedicated syntax error, and calling it an
+    # unrelated TXT record would hand the operator a different fix.
     non_dmarc_txt = [
         r for r in dmarc_recs
-        if not r.strip().startswith("v=DMARC1")
-        and not r.strip().lower().startswith("v=dmarc1")
+        if version_tag_deviations(
+            r, "DMARC1", allow_whitespace=True, case_sensitive=True
+        ) is None
     ]
     if non_dmarc_txt:
         result["non_dmarc_txt_count"] = len(non_dmarc_txt)
@@ -4364,6 +4380,10 @@ def _probe_subdomain(subdomain: str) -> Dict[str, Any]:
         txt_ans = resolver.resolve(subdomain, "TXT")
         for rdata in txt_ans:
             txt = b"".join(rdata.strings).decode("utf-8", errors="replace")
+            # Case insensitive on purpose. RFC 7208 S12 writes the version
+            # as a plain "v=spf1" literal with no %s prefix, which RFC 7405
+            # S2 makes case insensitive. The DMARC line below looks identical
+            # and is not: RFC 9989 writes %s"DMARC1". Do not unify them.
             if txt.lower().startswith("v=spf1"):
                 result["has_spf"] = True
                 result["spf_record"] = txt
@@ -4378,7 +4398,13 @@ def _probe_subdomain(subdomain: str) -> Dict[str, Any]:
         txt_ans = resolver.resolve(dmarc_name, "TXT")
         for rdata in txt_ans:
             txt = b"".join(rdata.strings).decode("utf-8", errors="replace")
-            if txt.lower().startswith("v=dmarc1"):
+            # Same matcher as the apex path in _raw_check_dmarc. These two
+            # used to disagree: this line lowercased, so it counted a
+            # v=dmarc1 record the apex reports as a syntax error, and it had
+            # no whitespace tolerance, so it missed the v = DMARC1 the apex
+            # accepts. The subdomain answer feeds the spoofable-subdomain
+            # finding, so the two must read a record the same way.
+            if is_dmarc_version_tag(txt):
                 result["has_dmarc"] = True
                 result["dmarc_record"] = txt
                 break

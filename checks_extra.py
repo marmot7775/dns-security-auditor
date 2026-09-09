@@ -136,7 +136,15 @@ try:
 except ImportError:
     DNS_AVAILABLE = False
 
-from dns_tools import get_resolver
+from dns_tools import (
+    get_resolver,
+    is_bimi_version_tag,
+    is_dmarc_version_tag,
+    is_mta_sts_version_tag,
+    is_tls_rpt_version_tag,
+    mta_sts_version_deviations,
+    tls_rpt_version_deviations,
+)
 
 
 def _get_resolver(timeout: float = 5.0):
@@ -497,9 +505,37 @@ def check_mta_sts(domain: str) -> Dict[str, Any]:
         result["unavailable_reason"] = "dns_lookup_failed"
         result["lookup_target"] = txt_name
         return result
-    sts_records = [r for r in all_txt if r.strip().lower().startswith("v=stsv1")]
+    # RFC 8461 S3.1 writes sts-version = %s"v=STSv1". The %s prefix makes it
+    # case sensitive per RFC 7405 S2, and the literal leaves no room for
+    # whitespace around the equals sign. This used to lowercase, so a domain
+    # publishing V=STSV1 got a clean pass while conforming senders ignored the
+    # record and kept delivering without the policy.
+    sts_records = [r for r in all_txt if is_mta_sts_version_tag(r)]
 
     if not sts_records:
+        # A near miss is not the same as nothing published. Whoever wrote
+        # V=STSV1 at _mta-sts meant to turn MTA-STS on, and "no record found"
+        # sends them looking for a record that is already there.
+        near_misses = [
+            (r, mta_sts_version_deviations(r)) for r in all_txt
+        ]
+        near_misses = [(r, d) for r, d in near_misses if d]
+        if near_misses:
+            record, reasons = near_misses[0]
+            result["status"] = "error"
+            result["malformed_record"] = record
+            result["issues"].append(_make_issue(
+                "error", "MTA-STS TXT record is malformed and will be ignored",
+                f"The TXT record at '_mta-sts.{domain}' is '{record}', but "
+                + ", and ".join(reasons) + ". RFC 8461 section 3.1 defines the "
+                "version tag as case sensitive with no space around the "
+                "equals sign, so senders discard this record.",
+                "Senders ignore the record and deliver without the policy, "
+                "exactly as if MTA-STS were not configured.",
+                "Republish the record starting with exactly 'v=STSv1;'.",
+            ))
+            result["ttl"] = _lookup_ttl(txt_name)
+            return result
         result["status"] = "warning"
         result["issues"].append(_make_issue(
             "warning", "No MTA-STS TXT record found",
@@ -696,9 +732,35 @@ def check_tls_rpt(domain: str) -> Dict[str, Any]:
         result["unavailable_reason"] = "dns_lookup_failed"
         result["lookup_target"] = txt_name
         return result
-    rpt_records = [r for r in all_txt if r.strip().lower().startswith("v=tlsrptv1")]
+    # RFC 8460 S3 writes tlsrpt-version = %s"v=TLSRPTv1". The %s prefix makes
+    # it case sensitive per RFC 7405 S2, and the literal leaves no room for
+    # whitespace around the equals sign. This used to lowercase, so V=TLSRPTV1
+    # earned a green card while conforming receivers discarded the record and
+    # sent no reports. The operator's only symptom is reports that never
+    # arrive, which looks exactly like having nothing to report.
+    rpt_records = [r for r in all_txt if is_tls_rpt_version_tag(r)]
 
     if not rpt_records:
+        # A near miss is not the same as nothing published. Say why it is
+        # inert rather than reporting an absence the operator can see is wrong.
+        near_misses = [(r, tls_rpt_version_deviations(r)) for r in all_txt]
+        near_misses = [(r, d) for r, d in near_misses if d]
+        if near_misses:
+            record, reasons = near_misses[0]
+            result["status"] = "error"
+            result["malformed_record"] = record
+            result["issues"].append(_make_issue(
+                "error", "TLS-RPT record is malformed and will be ignored",
+                f"The TXT record at '_smtp._tls.{domain}' is '{record}', but "
+                + ", and ".join(reasons) + ". RFC 8460 section 3 defines the "
+                "version tag as case sensitive with no space around the "
+                "equals sign, so receivers discard this record.",
+                "No TLS reports are sent, and the silence is indistinguishable "
+                "from having nothing to report.",
+                "Republish the record starting with exactly 'v=TLSRPTv1;'.",
+            ))
+            result["ttl"] = _lookup_ttl(txt_name)
+            return result
         result["status"] = "warning"
         result["issues"].append(_make_issue(
             "warning", "No TLS-RPT record found",
@@ -725,7 +787,7 @@ def check_tls_rpt(domain: str) -> Dict[str, Any]:
 
     # MTA-STS synergy check
     mta_sts_txt = _lookup_txt(f"_mta-sts.{domain}")
-    has_mta_sts = any(r.strip().lower().startswith("v=stsv1") for r in mta_sts_txt)
+    has_mta_sts = any(is_mta_sts_version_tag(r) for r in mta_sts_txt)
     if not has_mta_sts:
         result["issues"].append(_make_issue(
             "info", "TLS-RPT configured but MTA-STS is not",
@@ -858,7 +920,13 @@ def check_bimi(domain: str, dmarc_enforcing_override: bool = None, dmarc_found_o
         result["unavailable_reason"] = "dns_lookup_failed"
         result["lookup_target"] = bimi_name
         return result
-    bimi_records = [r for r in all_txt if r.strip().lower().startswith("v=bimi1")]
+    # The BIMI draft S4.2 writes bimi-version = "v" *WSP "=" *WSP "BIMI1", so
+    # whitespace around the equals sign is permitted, as it also is by the
+    # RFC 6376 S3.2 tag-spec the draft adopts. This used to require the equals
+    # sign to be tight against both sides, so a record written v = BIMI1 was
+    # not assessed at all. The literal carries no %s prefix, so unlike DMARC,
+    # MTA-STS and TLS-RPT the value stays case insensitive per RFC 7405 S2.
+    bimi_records = [r for r in all_txt if is_bimi_version_tag(r)]
 
     if not bimi_records:
         result["status"] = "info"
@@ -907,7 +975,14 @@ def check_bimi(domain: str, dmarc_enforcing_override: bool = None, dmarc_found_o
         dmarc_enforcing = False
         dmarc_pct = 100
         for rec in dmarc_records:
-            if rec.strip().lower().startswith("v=dmarc1"):
+            # The same matcher audit_engine uses at the apex and per
+            # subdomain. This is BIMI's own fallback, reached only when the
+            # orchestrator passes no overrides, and it held the third opinion
+            # in this codebase about what a DMARC record is: it lowercased, so
+            # it counted a v=dmarc1 record the DMARC card calls a syntax
+            # error, and it had no whitespace tolerance, so it missed the
+            # v = DMARC1 that RFC 9989 S5.4 permits.
+            if is_dmarc_version_tag(rec):
                 dmarc_found = True
                 dmarc_policy = _parse_dmarc_tag(rec, "p")
                 dmarc_enforcing = dmarc_policy in ("quarantine", "reject")
