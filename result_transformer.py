@@ -1544,6 +1544,21 @@ def transform_dmarc(raw: Dict, tree_walk: Optional[Dict] = None, is_no_mail: boo
     # it cannot support.
     if raw.get("status") == "unavailable":
         return _lookup_unavailable_card("DMARC", raw, "DMARC record")
+
+    # A record is published at _dmarc but its version tag does not conform,
+    # so every receiver discards it. Neither of the branches below fits: "no
+    # record found" contradicts what the operator can see in their zone, and
+    # the has-record branch narrates a policy that is not in force.
+    if raw.get("malformed_record"):
+        return _malformed_version_tag_card(
+            "DMARC", raw, raw["malformed_record"],
+            "Receivers ignore it and treat the domain as having no DMARC "
+            "protection, so the anti-spoofing coverage DMARC exists to "
+            "provide is not in place.",
+            f"Republish the TXT record at <strong>_dmarc.{_e(raw.get('domain', ''))}</strong> "
+            f"starting with exactly <strong>v=DMARC1;</strong>.",
+        )
+
     if not raw.get("record") and raw.get("inheritance_lookup_failed"):
         return _lookup_unavailable_card(
             "DMARC",

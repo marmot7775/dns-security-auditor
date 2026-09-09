@@ -697,6 +697,14 @@ def _enrich_dmarc_inheritance(
     if raw_dmarc.get("record"):
         return  # Has its own record, no inheritance needed
 
+    # A malformed record at this exact name is not "nothing published": RFC
+    # 7489 section 6.6.3 inheritance applies when the TXT record set is
+    # empty, not when it exists and fails the version gate. Falling through
+    # to the org domain here would tell the operator their broken record
+    # inherited a policy from a parent it never consulted.
+    if raw_dmarc.get("malformed_record"):
+        return
+
     # A walk that could not read one of its levels cannot say which policy
     # applies: the unread level is exactly where a different one would live.
     # RFC 9989 section 4.10.1 distinguishes "no such record" from "a transient
@@ -868,6 +876,7 @@ def _raw_check_dmarc(domain: str) -> Dict[str, Any]:
         "syntax_errors": [],
         "recommendations": [],
         "policy_recovery_applied": False,
+        "malformed_record": None,
     }
 
     def _add_issue(severity, issue, plain_english, fix, business_risk_key=None):
@@ -988,6 +997,37 @@ def _raw_check_dmarc(domain: str) -> Dict[str, Any]:
 
     if not dmarc_records:
         result["status"] = "error"
+        # A near miss is not the same as nothing published. Whoever wrote
+        # v=dmarc1 at _dmarc meant to turn DMARC on, and "no record found"
+        # sends them looking for a record that is already there. Mirrors the
+        # malformed_record handling in check_mta_sts/check_tls_rpt. Recomputed
+        # here rather than reusing the pre-check loop above: that loop runs
+        # over every record regardless of whether a valid one also exists, so
+        # capturing malformed_record there would misfire this early-return
+        # path even when dmarc_records is non-empty elsewhere.
+        near_misses = [
+            (r, version_tag_deviations(
+                r, "DMARC1", allow_whitespace=True, case_sensitive=True
+            ))
+            for r in dmarc_recs
+        ]
+        near_misses = [(r, d) for r, d in near_misses if d]
+        if near_misses:
+            record, reasons = near_misses[0]
+            result["malformed_record"] = record
+            _add_issue(
+                "error",
+                "DMARC TXT record is malformed and will be ignored",
+                f"The TXT record at '_dmarc.{domain}' is '{record}', but "
+                + ", and ".join(reasons) + ". RFC 9989 section 5.4 defines the "
+                "version tag value as case sensitive, so receivers discard "
+                "this record and treat the domain as having no DMARC "
+                "protection, exactly as if nothing were published.",
+                "Republish the record starting with exactly 'v=DMARC1;'.",
+                business_risk_key="DMARC_NO_RECORD",
+            )
+            result["ttl"] = _lookup_ttl(dmarc_fqdn, "TXT")
+            return result
         _add_issue(
             "error",
             "No DMARC record found",
