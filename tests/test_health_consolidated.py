@@ -25,5 +25,9 @@ def test_api_health_verifies_dns_resolution(monkeypatch):
     response = client.get("/api/health")
 
     assert response.status_code == 200
-    assert response.json() == {"status": "ok", "dns_resolution": "working"}
+    assert response.json() == {
+        "status": "ok",
+        "dns_resolution": "working",
+        "version": server_module.BUILD_SHA,
+    }
     assert calls.get("called") is True

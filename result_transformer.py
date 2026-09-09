@@ -1604,29 +1604,34 @@ def transform_dmarc(raw: Dict, tree_walk: Optional[Dict] = None, is_no_mail: boo
         # reject on RFC 9989 ones. Only quarantine degrades to nothing, where
         # the same section sends the unselected fraction to "local message
         # classification as normal".
+        # The verdict leads with what happens to failing mail and states the
+        # weaker of the two receiver populations, because that is the coverage
+        # the operator can actually count on. The RFC 7489 against RFC 9989
+        # split is the reason for the number, not the verdict, so it goes to a
+        # detail row where there is room to say it. The old verdict carried the
+        # whole split inline and ran to 132 characters against roughly 45 for
+        # every other verdict on this card.
         _pct_raw = raw.get("pct")
         if policy == "reject":
             verdict = "p=reject (authentication failures are rejected)"
             _disabled = (
-                f"p=reject with pct={_pct_raw} (RFC 7489 receivers quarantine all "
-                "failing mail; RFC 9989 receivers ignore pct and reject in full)"
+                f"p=reject with pct={_pct_raw} (failing mail is quarantined, "
+                "not rejected)"
             )
-            _partial_note = (
-                f"pct={pct}: RFC 7489 receivers reject {pct}% and quarantine the rest, "
-                "RFC 9989 receivers reject all of them"
+            _partial = (
+                f"p=reject with pct={pct} ({pct}% of failing mail is rejected, "
+                "the rest quarantined)"
             )
-            _partial = "p=reject (authentication failures are rejected)"
         else:
             verdict = "p=quarantine (failures sent to spam)"
             _disabled = (
-                f"p=quarantine with pct={_pct_raw} (RFC 7489 receivers enforce on no "
-                "mail; RFC 9989 receivers ignore pct and quarantine in full)"
+                f"p=quarantine with pct={_pct_raw} (failing mail is not "
+                "quarantined)"
             )
-            _partial_note = (
-                f"pct={pct}: RFC 7489 receivers apply the policy to {pct}% of failing "
-                "messages, RFC 9989 receivers to all of them"
+            _partial = (
+                f"p=quarantine with pct={pct} ({pct}% of failing mail is "
+                "quarantined, the rest is not)"
             )
-            _partial = "p=quarantine (failures sent to spam)"
         # An enforcing policy is only a pass when it applies to all failing
         # mail. pct is what receivers act on, so it decides the status here
         # and is not merely appended to the sentence. A missing rua still
@@ -1636,11 +1641,25 @@ def transform_dmarc(raw: Dict, tree_walk: Optional[Dict] = None, is_no_mail: boo
         # acts on every failing message, one quarantining where the other
         # rejects. Grading that a failure put a red card on a domain whose
         # failing mail is universally enforced against.
+        #
+        # p=quarantine with pct=0 grades the way p=none does, warn with rua
+        # and fail without, because it is never less protective than p=none.
+        # RFC 7489 receivers do nothing for either. RFC 9989 receivers ignore
+        # pct and quarantine everything, so it is better there. This branch
+        # used to grade it fail unconditionally, which put a redder card on
+        # the strictly stronger of the two records and never looked at rua.
+        # The colour is a protection grade on every other row of this card,
+        # and the pct detail row now says exactly what each receiver does, so
+        # the colour does not have to carry "you think you are enforcing" on
+        # its own.
         if pct <= 0:
             verdict = _disabled
-            status = "fail" if policy == "quarantine" else "warn"
+            if policy == "reject" or raw.get("rua"):
+                status = "warn"
+            else:
+                status = "fail"
         elif pct < 100:
-            verdict = f"{_partial} ({_partial_note})"
+            verdict = _partial
             status = "warn"
         elif not raw.get("rua"):
             # Amber, not green and not red. The policy is enforcing and the
@@ -1881,8 +1900,31 @@ def transform_dmarc(raw: Dict, tree_walk: Optional[Dict] = None, is_no_mail: boo
                 details.append({"type": "info", "text": f"Subdomain policy: sp={sp_val}"})
 
         pct = raw.get("pct")
-        if pct is not None and pct < 100:
-            details.append({"type": "warning", "text": f"pct={pct}: policy applied to only {pct}% of failing messages (pct is removed in RFC 9989)"})
+        if pct is not None and 0 <= pct < 100:
+            # This row is where the two receiver populations get named. It used
+            # to read "policy applied to only N% of failing messages" for both
+            # policies, which is wrong for reject: RFC 7489 section 6.6.4 sends
+            # the unselected fraction to quarantine rather than to nothing.
+            if policy == "reject":
+                _seven = (
+                    f"reject {pct}% of failing messages and quarantine the rest"
+                    if pct else "quarantine all failing messages"
+                )
+                _nine = "ignore pct and reject all of them"
+            else:
+                _seven = (
+                    f"apply the policy to {pct}% of failing messages and leave "
+                    "the rest to local filtering"
+                    if pct else "enforce on no mail at all"
+                )
+                _nine = "ignore pct and quarantine all of them"
+            details.append({
+                "type": "warning",
+                "text": (
+                    f"pct={pct}: RFC 7489 receivers {_seven}. RFC 9989 receivers "
+                    f"{_nine}, because pct is removed in RFC 9989."
+                ),
+            })
 
         # Append all issues from the audit engine (syntax_errors already merged into issues)
         for issue in raw.get("issues", []):

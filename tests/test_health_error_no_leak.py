@@ -22,5 +22,5 @@ def test_health_failure_does_not_leak_resolver_detail(monkeypatch):
 
     assert response.status_code == 500
     body = response.json()
-    assert body == {"status": "error"}
+    assert body == {"status": "error", "version": server_module.BUILD_SHA}
     assert sensitive_detail not in response.text
