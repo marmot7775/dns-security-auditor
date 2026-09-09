@@ -550,6 +550,13 @@ main {
     color: var(--text-secondary);
     margin-bottom: 0.65rem;
     line-height: 1.55;
+    max-width: 64ch;
+}
+
+@media (min-width: 768px) {
+    .audit-title {
+        font-size: 2.25rem;
+    }
 }
 
 .audit-subtitle-link {
@@ -570,6 +577,7 @@ main {
 
 .audit-form {
     width: 100%;
+    margin-top: var(--space-lg);
     display: flex;
     flex-direction: column;
     align-items: center;
@@ -636,8 +644,9 @@ main {
     padding: 0;
     font: inherit;
     font-size: var(--font-sm);
-    color: var(--text-tertiary);
-    text-decoration: none;
+    color: var(--primary-light);
+    text-decoration: underline;
+    text-underline-offset: 3px;
     cursor: pointer;
     transition: color var(--duration) var(--ease);
 }
@@ -3200,7 +3209,7 @@ details.st-node>summary:hover {
    SCOPE SELECTOR
    ========================================================================== */
 .scope-selector {
-    margin-bottom: var(--space-lg);
+    margin-top: var(--space-lg);
 }
 
 .scope-label {
@@ -3229,6 +3238,7 @@ details.st-node>summary:hover {
     /* One line of space is always reserved, so switching between a short
        description and a long one moves the input below by at most a line. */
     min-height: 1.5em;
+    max-width: 64ch;
 }
 
 .scope-btn {
