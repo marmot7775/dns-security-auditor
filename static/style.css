@@ -2726,6 +2726,9 @@ details.st-node>summary:hover {
 /* Detail items (sub-findings) */
 .detail-item {
     display: flex;
+    /* Wrap stays: .business-risk-callout is a third child that relies on it
+       to drop onto its own line (flex: 1 0 100%). The text span below is
+       what must never wrap as a whole. */
     flex-wrap: wrap;
     align-items: flex-start;
     gap: 0.55rem;
@@ -2738,6 +2741,17 @@ details.st-node>summary:hover {
     flex-shrink: 0;
     margin-top: 0.18rem;
     font-size: var(--font-sm);
+}
+
+/* The text beside the icon. With a flex-basis of 0 it never asks for more
+   than the line has left, so it fills the space beside the icon and wraps
+   inside itself. Without this, any text too long to fit on the icon's line
+   wrapped to the next line as a whole and left the icon alone on a line of
+   its own: 56 of 85 detail rows on a phone. */
+.detail-icon + span {
+    flex: 1 1 0;
+    min-width: 0;
+    overflow-wrap: anywhere;
 }
 
 .detail-item.pass-item { color: var(--pass); }
