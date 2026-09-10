@@ -180,3 +180,41 @@ def test_app_js_share_text_and_strict_count_pluralize_on_one():
     )
     assert "five minute DNS change" not in src
     assert "five-minute DNS change" in src
+
+
+# ---------------------------------------------------------------------------
+# Doc 33: with a domain supplied, no generated string shows yourdomain.com
+# ---------------------------------------------------------------------------
+
+def test_no_generated_string_shows_the_placeholder_domain_when_one_was_supplied():
+    import json
+    import checks_extra
+    from result_transformer import _build_dmarc_tag_breakdown
+
+    dom = "example.com"
+    blobs = []
+    # np=none at p=reject, and np absent at a non-reject fallback: both np
+    # warnings in the tag decoder, and the np gap in the combination checks.
+    for record in ("v=DMARC1; p=reject; np=none; rua=mailto:a@example.com",
+                   "v=DMARC1; p=none; sp=none; rua=mailto:a@example.com"):
+        blobs.append(json.dumps(_build_dmarc_tag_breakdown(record, {"domain": dom})))
+    blobs.append(json.dumps(_detect_dangerous_combinations(
+        {"v": "DMARC1", "p": "reject", "np": "none"}, "reject", domain=dom)))
+    # MTA-STS policy with no mx lines, TLS-RPT record with no rua.
+    _, mta_issues = checks_extra._validate_mta_sts_policy(
+        "version: STSv1\nmode: enforce\nmax_age: 604800\n", dom)
+    blobs.append(json.dumps(mta_issues))
+    _, tls_issues = checks_extra._validate_tls_rpt_record("v=TLSRPTv1", dom)
+    blobs.append(json.dumps(tls_issues))
+
+    blob = "\n".join(blobs)
+    assert "yourdomain.com" not in blob, blob
+    assert f"secure-login.{dom}" in blob
+    assert f"mail.{dom}" in blob
+    assert f"tls-reports@{dom}" in blob
+
+    # check_bimi needs DNS, so pin its fix string at the source instead.
+    with open(os.path.join(REPO_ROOT, "checks_extra.py"), encoding="utf-8") as f:
+        src = f.read()
+    assert "l=https://yourdomain.com" not in src
+    assert "l=https://{domain}/logo.svg" in src
