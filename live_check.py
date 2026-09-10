@@ -36,7 +36,7 @@ DOMAINS = ["google.com", "dns-audit.com", "ietf.org", "proton.me"]
 CARD_ORDER = [
     "DMARC", "SPF", "DKIM", "MX Records", "MTA-STS", "TLS-RPT",
     "DANE", "DNSSEC", "CAA", "BIMI", "Nameservers",
-    "Certificate Transparency", "Blocklist",
+    "Certificate Transparency",
 ]
 
 DEFAULT_BASE = "https://dns-audit.com"

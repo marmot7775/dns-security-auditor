@@ -4,7 +4,7 @@
 
 If you discover a security vulnerability in dns-security-auditor, please report it responsibly.
 
-**Email:** nta345@icloud.com
+**Email:** neil@dns-audit.com
 
 **What to include:**
 - Description of the vulnerability
@@ -36,4 +36,4 @@ If you discover a security vulnerability in dns-security-auditor, please report 
 
 ## Responsible Disclosure
 
-Please do not publicly disclose vulnerabilities until a fix has been released. We are committed to addressing security issues promptly and will credit reporters in the fix commit unless they prefer anonymity.
+Please hold off on public disclosure until a fix is released. I credit reporters in the fix commit unless they would rather stay anonymous.
