@@ -1039,7 +1039,7 @@ def _raw_check_dmarc(domain: str) -> Dict[str, Any]:
                 "error",
                 "DMARC TXT record is malformed and will be ignored",
                 f"The TXT record at '_dmarc.{domain}' is '{record}', but "
-                + ", and ".join(reasons) + ". RFC 9989 section 5.4 defines the "
+                + ", and ".join(reasons) + ". RFC 9989 section 4.7 defines the "
                 "version tag value as case sensitive, so receivers discard "
                 "this record and treat the domain as having no DMARC "
                 "protection, exactly as if nothing were published.",

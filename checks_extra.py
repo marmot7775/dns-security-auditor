@@ -310,10 +310,12 @@ def _validate_mta_sts_txt(record: str) -> Tuple[Dict[str, str], List[Dict]]:
     for key in tags:
         if key not in valid_tags:
             issues.append(_make_issue(
-                "warning", f"Unknown MTA-STS TXT tag: '{key}'",
-                "Valid MTA-STS TXT tags are: v, id.",
-                "This tag will be ignored.",
-                f"Remove '{key}' from the record.",
+                "info", f"Unknown MTA-STS TXT tag: '{key}'",
+                f"'{key}' is not a tag defined in RFC 8461 section 3.1. The record "
+                "format allows extension fields, so senders ignore it rather than "
+                "reject the record.",
+                "Senders that do not recognize this tag ignore it.",
+                f"Remove '{key}' only if it was a typo for v or id.",
             ))
 
     return tags, issues
@@ -754,7 +756,8 @@ def check_tls_rpt(domain: str) -> Dict[str, Any]:
                 f"The TXT record at '_smtp._tls.{domain}' is '{record}', but "
                 + ", and ".join(reasons) + ". RFC 8460 section 3 defines the "
                 "version tag as case sensitive with no space around the "
-                "equals sign, so receivers discard this record.",
+                "equals sign, so sending mail servers discard this record and "
+                "never generate a report.",
                 "No TLS reports are sent, and the silence is indistinguishable "
                 "from having nothing to report.",
                 "Republish the record starting with exactly 'v=TLSRPTv1;'.",

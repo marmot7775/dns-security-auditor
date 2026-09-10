@@ -234,7 +234,8 @@ def build_executive_summary(checks: List[Dict], roadmap: Dict) -> Dict:
     health = (dmarc.get("tag_breakdown") or {}).get("health", {})
     health_status = health.get("status", "")
     dmarc_status = dmarc.get("status", "")
-    spf_status = check_map.get("SPF", {}).get("status", "")
+    spf_check = check_map.get("SPF", {})
+    spf_status = spf_check.get("status", "")
 
     # Count protected vectors.
     #
@@ -263,13 +264,17 @@ def build_executive_summary(checks: List[Dict], roadmap: Dict) -> Dict:
             "report cannot say whether those records exist."
         )
     elif dmarc_status == "fail" and dmarc.get("pill_label") == "Missing":
-        if spf_status == "fail":
-            verdict = "Your domain has no email authentication. Anyone on the internet can send email pretending to be you."
+        if spf_check.get("pill_label") == "Missing":
+            verdict = (
+                "Your domain publishes neither an SPF record nor a DMARC record. "
+                "Receivers have no way to tell your mail from mail that only claims "
+                "to be yours, and no policy to apply when it fails."
+            )
         else:
             verdict = "Your domain has no DMARC record. SPF alone cannot prevent email spoofing."
     elif health_status == "monitoring":
         verdict = "Your domain is monitoring email authentication but not yet enforcing it. This requests no action from receivers, who each decide independently what to do with mail that fails."
-    elif protected_count == 4:
+    elif _vector_total and protected_count == _vector_total:
         if health_status == "ready":
             verdict = "Your domain is well-protected against email spoofing across all attack vectors."
         else:
@@ -438,8 +443,6 @@ def build_executive_summary(checks: List[Dict], roadmap: Dict) -> Dict:
     has_record_builder = dmarc.get("record_builder") is not None
 
     # ── Part 5: Deliverability summary ────────────────────────
-    spf_check = check_map.get("SPF", {})
-
     deliverability_issues = []
     if dmarc_status == "fail" and dmarc.get("pill_label") == "Missing":
         deliverability_issues.append("no DMARC record")
@@ -464,7 +467,13 @@ def build_executive_summary(checks: List[Dict], roadmap: Dict) -> Dict:
     if deliverability_issues:
         top_issue = deliverability_issues[0]
         if "no DMARC" in top_issue:
-            deliverability_summary = "Without DMARC, your business emails may be landing in spam. Gmail and Yahoo now require DMARC for reliable delivery."
+            deliverability_summary = (
+                "Without DMARC, receivers have no instruction for mail that fails "
+                "authentication, and you get no reports about who is sending as you. "
+                "Google and Yahoo require DMARC of bulk senders (Google's threshold "
+                "is 5,000 messages a day to Gmail); below that it is optional but "
+                "still the only way to see what is being sent in your name."
+            )
         elif "p=none" in top_issue:
             deliverability_summary = "Your DMARC policy is monitoring only (p=none), which requests no action from receivers. It provides visibility, not protection, until you move to p=quarantine or p=reject."
         elif "no SPF" in top_issue:
@@ -2741,6 +2750,10 @@ def _build_tag_entry(tag: str, value: str, present: bool, tags: Dict, policy: st
                 "0": (
                     "Reports only when BOTH SPF and DKIM fail. You miss most failures. "
                     "Set fo=1 for broader visibility."
+                ) if tags.get("ruf") else (
+                    "Reports only when BOTH SPF and DKIM fail. This has no effect: "
+                    "RFC 9989 section 4.7 requires a ruf= tag for fo to do anything, "
+                    "and this record does not set one."
                 ),
                 "1": "Reports when either mechanism fails. Recommended.",
                 "d": "Reports on DKIM failure regardless of alignment.",
@@ -3507,6 +3520,7 @@ def _build_migration_path(tags: Dict[str, str], policy: str, health_status: str,
     sp = tags.get("sp")
     np_val = tags.get("np")
     fo = tags.get("fo", "0")
+    has_ruf = bool(tags.get("ruf"))
     deprecated = [t for t in ("pct", "rf", "ri") if t in tags]
 
     # Build the current record for before/after
@@ -3589,13 +3603,20 @@ def _build_migration_path(tags: Dict[str, str], policy: str, health_status: str,
             "tags_changed": ["sp"],
         })
 
-    # Step: Set fo=1 if needed
-    if fo == "0" or "fo" not in tags:
+    # Step: Set fo=1 if needed. RFC 9989 section 4.7: "This tag's content
+    # MUST be ignored if a ruf tag is not also specified", so this step only
+    # applies when the current record already sets ruf. Without ruf, fo has
+    # no effect regardless of its value.
+    if has_ruf and (fo == "0" or "fo" not in tags):
         step_num += 1
         steps.append({
             "step": step_num,
             "action": "Set fo=1 for full failure visibility",
-            "why": "fo=0 only reports when both SPF and DKIM fail. fo=1 captures all failures.",
+            "why": (
+                "fo=0 reports only when every mechanism fails. fo=1 reports when "
+                "either SPF or DKIM fails. The tag has no effect unless ruf= is "
+                "also set."
+            ),
             "tags_changed": ["fo"],
         })
 
@@ -3625,8 +3646,14 @@ def _build_migration_path(tags: Dict[str, str], policy: str, health_status: str,
             "tags_changed": deprecated,
         })
 
-    # Final target record
-    target = f"v=DMARC1; p=reject; sp=reject; np=reject; fo=1; rua={rua_placeholder}"
+    # Final target record. fo=1 is only meaningful alongside ruf= (RFC 9989
+    # section 4.7); this migration path does not add ruf, so fo=1 is only
+    # included when the current record already has it.
+    _target_parts = ["v=DMARC1", "p=reject", "sp=reject", "np=reject"]
+    if has_ruf:
+        _target_parts.append("fo=1")
+    _target_parts.append(f"rua={rua_placeholder}")
+    target = "; ".join(_target_parts)
 
     return {
         "status": "migration",
@@ -3662,7 +3689,9 @@ def _build_record_builder(
     # ── No existing record ─────────────────────────────────────
     if not has_record:
         safe_domain = domain or "yourdomain.com"
-        rec = f"v=DMARC1; p=none; fo=1; rua=mailto:dmarc@{safe_domain}"
+        # No fo=1 here: RFC 9989 section 4.7 requires a ruf= tag for fo to
+        # have any effect, and this starter record does not add one.
+        rec = f"v=DMARC1; p=none; rua=mailto:dmarc@{safe_domain}"
         return {
             "mode": "first_record",
             "current_record": None,
@@ -3670,9 +3699,6 @@ def _build_record_builder(
             "changes": [{
                 "tag": "p", "action": "added", "value": "none",
                 "reason": "Start with monitoring to review aggregate reports before enforcing.",
-            }, {
-                "tag": "fo", "action": "added", "value": "1",
-                "reason": "Captures all authentication failures for full visibility.",
             }, {
                 "tag": "rua", "action": "added", "value": f"mailto:dmarc@{safe_domain}",
                 "reason": "Aggregate reporting address. Replace with your actual address.",
@@ -3743,16 +3769,20 @@ def _build_record_builder(
             "reason": "Closes non-existent subdomain gap. Matches root policy.",
         })
 
-    # 4. Fix fo
-    cur_fo = rec_tags.get("fo", "")
-    if cur_fo != "1":
-        old_val = cur_fo if cur_fo else "(not set)"
-        rec_tags["fo"] = "1"
-        changes.append({
-            "tag": "fo", "action": "changed" if cur_fo else "added",
-            "old": old_val, "value": "1",
-            "reason": "Captures all authentication failures, not just complete failures.",
-        })
+    # 4. Fix fo. RFC 9989 section 4.7: "This tag's content MUST be ignored
+    # if a ruf tag is not also specified." This builder does not add ruf,
+    # so setting fo=1 only does something when the current record already
+    # has ruf.
+    if rec_tags.get("ruf"):
+        cur_fo = rec_tags.get("fo", "")
+        if cur_fo != "1":
+            old_val = cur_fo if cur_fo else "(not set)"
+            rec_tags["fo"] = "1"
+            changes.append({
+                "tag": "fo", "action": "changed" if cur_fo else "added",
+                "old": old_val, "value": "1",
+                "reason": "Reports when either SPF or DKIM fails, not just when both do.",
+            })
 
     # 5. (removed) psd= is not injected. RFC 9989 section 4.7 makes it
     # OPTIONAL with a default of "u", and psd=n declares this exact name the
@@ -3994,8 +4024,10 @@ def transform_spf(raw: Dict, has_mx: bool = True) -> Dict:
                 f" <strong>Critical:</strong> This SPF record has a PermError because it requires "
                 f"{lookups} DNS lookups, exceeding the 10-lookup limit "
                 f"(<a href=\"https://datatracker.ietf.org/doc/html/rfc7208#section-4.6.4\" target=\"_blank\" rel=\"noopener\">RFC 7208 Section 4.6.4</a>). "
-                f"Receiving servers treat an SPF PermError as if no SPF record exists, which "
-                f"damages sender reputation. Audit your includes and remove services you no longer use."
+                f"Receivers must return PermError once the limit is exceeded "
+                f"(RFC 7208 section 4.6.4). A PermError is not a pass, so SPF cannot "
+                f"satisfy DMARC alignment for any message from this domain. Audit your "
+                f"includes and remove services you no longer use."
             )
         elif lookups and lookups > 8:
             explanation += (

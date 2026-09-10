@@ -646,8 +646,11 @@ def _roadmap_page(data, S):
         _alt_rows(cmds, len(rows))
         rt.setStyle(TableStyle(cmds))
         els.append(rt)
-    else:
-        els.append(Paragraph("No action items. Your email security meets all current best practices.", S["body"]))
+    # No else branch: roadmap["summary"], printed above, already covers an
+    # empty items list for every case (a real all-clear, a scoped run that
+    # names what did not run, and a failed lookup that says "this is not an
+    # all-clear"). A hardcoded line here either repeated that or contradicted
+    # it on the same page.
 
     # Priority fixes (legacy format)
     fixes = data.get("priority_fixes", [])
