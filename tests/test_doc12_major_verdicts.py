@@ -193,7 +193,7 @@ def _es(checks):
 
 
 DMARC_CLEAN = {
-    "name": "DMARC", "status": "pass", "pill_label": "Enforcing",
+    "name": "DMARC", "status": "pass", "pill_label": "Enforcing", "configured": True,
     "tag_breakdown": {"health": {"status": "ready"}, "config_warnings": []},
     "attack_surface": {"vectors": [{"name": "v", "status": "protected"}] * 4},
 }

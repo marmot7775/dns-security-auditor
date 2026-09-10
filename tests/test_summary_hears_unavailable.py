@@ -260,3 +260,60 @@ def test_signed_unanchored_dane_does_not_read_as_dnssec_missing_in_the_summary(a
         f"a signed but unanchored zone is being described as having no "
         f"DNSSEC in the executive summary: {prose!r}"
     )
+
+
+# ---------------------------------------------------------------
+# Doc 27 item 3: a scoped audit must not assert findings from checks
+# it never ran
+# ---------------------------------------------------------------
+#
+# scope=dns_infra and scope=transport never run DMARC, SPF or DKIM at all,
+# so those checks are absent from check_map entirely rather than marked
+# "unavailable". build_executive_summary's _unavailable() only tested
+# status == "unavailable", so an absent check fell through to the same
+# "Your domain has email authentication configured" verdict a check that
+# ran and found nothing clean would get, from a check that never queried
+# DNS.
+
+SCOPED_DOMAIN = "scoped-summary.test"
+_SCOPED_BASE = {
+    SCOPED_DOMAIN: {
+        "MX": [(10, "mail." + SCOPED_DOMAIN)],
+        "A": ["203.0.113.90"],
+        "NS": ["ns1." + SCOPED_DOMAIN],
+    },
+    "mail." + SCOPED_DOMAIN: {"A": ["203.0.113.91"]},
+    "ns1." + SCOPED_DOMAIN: {"A": ["203.0.113.53"]},
+}
+
+
+def test_dns_infra_scope_does_not_assert_email_authentication_is_configured(audit):
+    result = audit(FakeZone(dict(_SCOPED_BASE)), SCOPED_DOMAIN, scope="dns_infra")
+    es = _summary(result)
+
+    verdict = es["verdict"].lower()
+    assert "has email authentication configured" not in verdict, (
+        f"a scope that never queried DMARC, SPF or DKIM still claims email "
+        f"authentication is configured: {verdict!r}"
+    )
+    assert "not assessed" in verdict or "did not" in verdict, (
+        f"the verdict does not say email authentication was out of scope: {verdict!r}"
+    )
+    assert es["spoofing_protection"]["color"] == "neutral", (
+        f"spoofing protection printed a colour verdict for a scope that never "
+        f"ran DMARC: {es['spoofing_protection']!r}"
+    )
+    assert es["dmarcbis_readiness"]["label"] != "Action Needed", (
+        f"a DMARC check that never ran must not read as 'Action Needed': "
+        f"{es['dmarcbis_readiness']!r}"
+    )
+    assert es["dmarcbis_readiness"]["color"] == "neutral"
+
+
+def test_transport_scope_does_not_assert_email_authentication_is_configured(audit):
+    result = audit(FakeZone(dict(_SCOPED_BASE)), SCOPED_DOMAIN, scope="transport")
+    verdict = _summary(result)["verdict"].lower()
+
+    assert "has email authentication configured" not in verdict, (
+        f"scope=transport never runs DMARC, SPF or DKIM either: {verdict!r}"
+    )
