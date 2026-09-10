@@ -258,11 +258,36 @@ def build_executive_summary(checks: List[Dict], roadmap: Dict) -> Dict:
     # cannot say the domain is healthy or that a record is absent. Saying
     # either would be a claim the audit did not establish.
     if auth_unassessed:
-        verdict = (
+        # Two different facts share this branch and must not share a
+        # sentence. A lookup that failed is a DNS event; a check that was
+        # out of scope never queried DNS at all, and telling the reader DNS
+        # "did not answer" about it is false.
+        _scoped = [n for n in ("DMARC", "SPF", "DKIM") if _scoped_out(n)]
+        _failed_sentence = (
             "Parts of this domain's DNS did not answer, so its email authentication "
-            f"was not assessed. The {unassessed_names} {unassessed_verb} not complete, and this "
+            f"was not assessed. The {unread_names} {unread_verb} not complete, and this "
             "report cannot say whether those records exist."
         )
+        if len(_scoped) == 3:
+            _scoped_sentence = (
+                "This run did not check email authentication. DMARC, SPF, and DKIM "
+                "were outside its scope, so this report makes no claim about them. "
+                "Run the Complete Audit or Email Security scope for that."
+            )
+        else:
+            _scoped_sentence = (
+                f"This run did not check {_join_names(_scoped)}, which "
+                f"{'were' if len(_scoped) > 1 else 'was'} outside its scope, so this "
+                "report makes no claim about "
+                f"{'them' if len(_scoped) > 1 else 'it'}. Run the Complete Audit or "
+                "Email Security scope for that."
+            )
+        if unread and _scoped:
+            verdict = f"{_failed_sentence} {_scoped_sentence}"
+        elif _scoped:
+            verdict = _scoped_sentence
+        else:
+            verdict = _failed_sentence
     elif dmarc_status == "fail" and dmarc.get("pill_label") == "Missing":
         if spf_check.get("pill_label") == "Missing":
             verdict = (
@@ -339,7 +364,8 @@ def build_executive_summary(checks: List[Dict], roadmap: Dict) -> Dict:
         # a report whose value is in the specifics. The per-dimension label
         # survived that removal deliberately and is kept; only the arithmetic
         # beside it is replaced with the thing it was standing in for.
-        "detail": ("DMARC lookup did not complete" if dmarc_unassessed
+        "detail": ("Not in this run's scope." if _scoped_out("DMARC")
+                   else "DMARC lookup did not complete" if dmarc_unavailable
                    else _spoofing_detail(vectors)),
     }
 
@@ -719,6 +745,13 @@ def build_security_roadmap(checks: List[Dict], is_no_mail: bool = False) -> Dict
             items.append({"priority": "low", "protocol": "DMARC",
                           "action": "Consider adding an explicit np= tag",
                           "impact": "Purely optional. Subdomains already inherit your enforcing policy without it."})
+
+    # Items were appended in check order, which put a HIGH DMARC item above
+    # a CRITICAL DKIM one while the tier counts above the table said
+    # otherwise. Stable sort by rank so the web roadmap and the PDF agree
+    # with their own counts; ties keep check order.
+    _rank = {"critical": 0, "high": 1, "medium": 2, "low": 3}
+    items.sort(key=lambda i: _rank.get(i.get("priority"), 4))
 
     # Count by tier
     tiers = {"critical": 0, "high": 0, "medium": 0, "low": 0}
@@ -3556,8 +3589,12 @@ def _build_migration_path(tags: Dict[str, str], policy: str, health_status: str,
         step_num += 1
         steps.append({
             "step": step_num,
-            "action": "Review aggregate reports for 2-4 weeks",
-            "why": "Identify all legitimate senders and fix their SPF/DKIM alignment before enforcing.",
+            "action": "Review aggregate reports until the sender inventory is stable",
+            "why": (
+                "Identify every legitimate sender and fix their SPF or DKIM alignment "
+                "before enforcing. Move on when a full reporting cycle shows no new "
+                "legitimate sources, not on a date."
+            ),
             "tags_changed": [],
         })
 
