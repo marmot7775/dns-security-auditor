@@ -10,13 +10,13 @@ Built for engineers, email administrators, and security consultants who need to 
 
 ---
 
-## 13 Security Checks
+## 12 Security Checks
 
 ### Authentication
 
 | Check | What It Does |
 |-------|-------------|
-| **DMARC + RFC 9989** | RFC 9989-strict record validation (16 layered checks), tag-by-tag decoder with RFC 9989 education notes, dangerous combination detection (21 checks across 3 severity levels), 5-state RFC 9989 health verdict, personalized migration wizard, attack surface visualization (4 spoofing vectors), RFC 7489 vs RFC 9989 spec mode toggle with delta view, "Why RFC 9989?" education section. Implements the RFC 9989 DNS Tree Walk ([RFC 9989](https://www.rfc-editor.org/rfc/rfc9989.html), Section 4.10) for hierarchical policy discovery with animated visualization. |
+| **DMARC + RFC 9989** | Validation against RFC 9989 and against RFC 7489, side by side, with a per-tag decoder, dangerous-combination detection, and the DNS Tree Walk of [RFC 9989 Section 4.10](https://www.rfc-editor.org/rfc/rfc9989.html#section-4.10) for hierarchical policy discovery. Full detail under RFC 9989 Checker below. |
 | **SPF** | Syntax validation, mechanism analysis, recursive evaluation with full lookup chain tracing, void lookup detection, and vendor-labeled include tree visualization. Flags `+all`, `?all`, missing `all`, `redirect`+`all` conflicts, deprecated `ptr`, overly broad CIDRs, and invalid IPs. |
 | **DKIM** | Selector discovery across 1,100+ common patterns using SPF-based vendor fingerprinting. Key strength analysis for RSA (1024/2048/4096) and Ed25519. Direct lookup of user-supplied selectors. Wildcard DNS detection prevents false positives. |
 
@@ -33,17 +33,16 @@ Built for engineers, email administrators, and security consultants who need to 
 
 | Check | What It Does |
 |-------|-------------|
-| **DNSSEC** | `DNSKEY` presence, `DS` record validation at parent zone (recursive + direct parent NS query), algorithm analysis per RFC 8624, chain of trust verification via `AD` flag and `DS`-to-`DNSKEY` digest matching. |
+| **DNSSEC** | `DNSKEY` presence, `DS` record validation at parent zone (recursive + direct parent NS query), algorithm analysis against the IANA DNSSEC algorithm registries, which RFC 9904 made the canonical source in place of RFC 8624, chain of trust verification via `AD` flag and `DS`-to-`DNSKEY` digest matching. |
 | **CAA** | Certificate Authority Authorization records, issuer restrictions (`issue`), wildcard policy (`issuewild`), incident reporting (`iodef`). |
 | **DANE** | `TLSA` record lookup for each MX host, usage/selector/matching type analysis, DNSSEC dependency enforcement per RFC 7672. |
 
-### Infrastructure and Reputation
+### Infrastructure and Certificates
 
 | Check | What It Does |
 |-------|-------------|
 | **Nameservers** | NS count, resolution and authoritative response verification, `SOA` serial consistency, IPv6 support, network diversity across /24 ranges, provider identification. |
 | **Certificate Transparency** | CT log query via crt.sh, issuer breakdown, CAA mismatch detection, expiring certificate alerts, subdomain discovery. |
-| **Blocklist** | Domain reputation check against Spamhaus DBL with return code interpretation (spam, phishing, malware, botnet C&C). |
 
 ---
 
@@ -59,7 +58,7 @@ There are no letter grades and no numeric score. Results open with three summary
 
 Below the summary, each check reports pass, warning, or fail with the specific finding and a copy-paste fix where one applies. A prioritized roadmap orders the fixes by impact.
 
-*Note: DKIM selectors cannot be enumerated via DNS. For best results, provide your selector directly.* Domains where selectors could not be detected are not marked down for it, since selectors are private and cannot be verified from outside.
+*Note: DKIM selectors cannot be enumerated via DNS. For best results, provide your selector directly.* Domains where selectors could not be detected are not marked down for it, since DNS gives no way to list the names under `_domainkey` and an undetected selector is not evidence of a missing one.
 
 ---
 
@@ -81,9 +80,9 @@ Tree walk results are displayed alongside RFC 7489 lookups, because publication 
 
 RFC 9989 addresses several architectural limitations in RFC 7489 that carry real security and sustainability implications for email authentication. The original spec was published in 2015 as an Informational RFC, not a formal Internet standard, and carried no conformance requirements. Receivers were free to interpret it however they chose, and they did. A decade of deployment exposed problems that could not be patched within the original framework.
 
-The most significant change is replacing the Public Suffix List, a community-maintained external dependency, with the DNS Tree Walk, a DNS-native mechanism that lets domain owners control their own domain boundaries. RFC 7489 also only performs two lookups (the exact Author Domain and the Organizational Domain), leaving no way for intermediate subdomains to govern their own branch of the tree. For a domain like `notifications.app.services.example.com`, the only two lookups are at that exact subdomain and at `example.com`. There is no way for `services.example.com` to independently govern its own branch. The tree walk queries each level of the hierarchy, enabling decentralized policy management. RFC 9989 also introduces the `np` tag to set separate policies for non-existent subdomains, closing a gap that allowed attackers to spoof fabricated subdomains like `ceo.example.com`, and replaces the widely misunderstood `pct` tag with `t`, a cleaner binary signal for testing mode.
+The most significant change is replacing the Public Suffix List, a community-maintained external dependency, with the DNS Tree Walk, a DNS-native mechanism that lets domain owners control their own domain boundaries. RFC 7489 also only performs two lookups (the exact Author Domain and the Organizational Domain), leaving no way for intermediate subdomains to govern their own branch of the tree. For a domain like `notifications.app.services.example.com`, the only two lookups are at that exact subdomain and at `example.com`. There is no way for `services.example.com` to independently govern its own branch. The tree walk queries each level of the hierarchy, enabling decentralized policy management. RFC 9989 also brings in the `np` tag from RFC 9091, which sets a policy for non-existent subdomains separately from real ones. Under RFC 7489 a fabricated subdomain like `ceo.example.com` already inherited `sp`, or `p` when `sp` was absent, so the two moved together. With `np` you can hold `sp=none` while a real subdomain is still being aligned and reject fabricated ones at the same time.
 
-DMARC is now three documents, all published 19 May 2026 as Proposed Standards. RFC 9989 is the core protocol, RFC 9990 is aggregate reporting, RFC 9991 is failure reporting. All three obsolete RFC 7489. RFC 9989 also obsoletes RFC 9091 (PSD DMARC), and RFC 9991 updates RFC 6591. Receiver deployment is gradual, so this tool analyzes the current specification alongside RFC 7489 behavior and shows domain owners where their records stand under each.
+DMARC is now three documents, all published May 2026 as Proposed Standards. RFC 9989 is the core protocol, RFC 9990 is aggregate reporting, RFC 9991 is failure reporting. All three obsolete RFC 7489. RFC 9989 also obsoletes RFC 9091 (PSD DMARC), and RFC 9991 updates RFC 6591. Receiver deployment is gradual, so this tool analyzes the current specification alongside RFC 7489 behavior and shows domain owners where their records stand under each.
 
 ### SPF Evaluation Trace
 
@@ -109,12 +108,12 @@ One-click branded PDF with executive summary (summary metrics, priority fixes, d
 
 | Scope | Checks |
 |-------|--------|
-| Complete Audit | All 13 checks |
-| Email Security | DMARC, SPF, DKIM, MX, MTA-STS, TLS-RPT, BIMI, Blocklist |
+| Complete Audit | All 12 checks |
+| Email Security | DMARC, SPF, DKIM, MX, MTA-STS, TLS-RPT, BIMI |
 | DMARC Check | DMARC, SPF, DKIM |
 | Transport Security | MTA-STS, TLS-RPT, DANE, MX |
 | DNS Infrastructure | DNSSEC, CAA, DANE, Nameservers, Certificate Transparency |
-| Security Scan | DMARC, SPF, DKIM, DNSSEC, DANE, CT, Blocklist, CAA, MTA-STS |
+| Security Scan | DMARC, SPF, DKIM, DNSSEC, DANE, CT, CAA, MTA-STS |
 
 ### Vendor Detection
 
@@ -127,11 +126,11 @@ Validates DMARC records against RFC 9989:
 - **Strict Record Validator**: 16 layered checks across tokenization, grammar, and semantics. Catches missing `mailto:` prefixes, duplicate tags, invalid URIs, and other issues that legacy tools silently accept.
 - **Spec Mode Toggle**: Switch between RFC 7489 (legacy) and RFC 9989 (strict) validation to see exactly what changes. The delta view shows which issues RFC 9989 flags that RFC 7489 accepted.
 - **Tag Decoder with RFC 9989 Education**: Every tag explained with security consequences and a RFC 9989 note explaining what changed from RFC 7489 and why.
-- **Dangerous Combination Detection**: 21 checks for dangerous tag interactions (`sp=none` + `p=reject` policy gaps, contradictory policies, test mode weakening enforcement).
+- **Dangerous Combination Detection**: 20 checks for dangerous tag interactions (`sp=none` + `p=reject` policy gaps, contradictory policies, test mode weakening enforcement).
 - **Health Verdict**: 5-state classification (RFC 9989 Ready, Compatible, Monitoring, Needs Attention, Misconfigured) with specific findings.
 - **Migration Wizard**: Personalized step-by-step path from current state to RFC 9989 Ready, with before/after DNS records at every step and a copy-to-clipboard target record.
 - **Attack Surface View**: 4-vector spoofing risk map (direct domain, subdomain, non-existent subdomain, reporting leakage) with concrete attack scenarios.
-- **Email Security Roadmap**: Cross-protocol prioritized action plan synthesizing findings across all 13 checks.
+- **Email Security Roadmap**: Cross-protocol prioritized action plan synthesizing findings across all 12 checks.
 
 ### Email Security Roadmap
 
@@ -141,7 +140,7 @@ Synthesizes findings across all protocols into one prioritized action plan with 
 
 ## Architecture
 
-Stateless single-page application with a FastAPI backend. No database, no user accounts, no tracking.
+Single-page application with a FastAPI backend. No user accounts and no tracking. The only stored state is a SQLite table of DNS records seen during past audits, used for change detection and pruned after 90 days.
 
 ```
 server.py                  FastAPI, SSE streaming, rate limiting, caching, PDF endpoint
