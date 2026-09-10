@@ -1067,9 +1067,9 @@ def check_bimi(domain: str, dmarc_enforcing_override: bool = None, dmarc_found_o
                         if len(svg_bytes) > 1_048_576:
                             result["issues"].append(_make_issue(
                                 "warning", "BIMI logo exceeds 1MB",
-                                "The SVG file is larger than 1MB, which may cause delivery issues.",
-                                "Large logos slow down email rendering.",
-                                "Optimize the SVG to reduce file size below 1MB.",
+                                "The SVG file is larger than 1MB.",
+                                "Some mailbox providers will not fetch a logo this large, so it may not display.",
+                                "Reduce the SVG below 1MB. Removing embedded raster images and unused paths usually does it.",
                             ))
                             break
                     resp.close()

@@ -1512,7 +1512,7 @@ function renderSpecToggle(comparison) {
         futureHtml = `
             <div class="st-future spec-dmarcbis">
                 <div class="st-future-title">This record passes under the obsolete RFC 7489 but has issues under RFC 9989</div>
-                <div class="st-future-subtitle">${comparison.dmarcbis_only_count} problem${comparison.dmarcbis_only_count !== 1 ? 's' : ''} found that only appear under strict RFC 9989 validation. RFC 9989 replaced RFC 7489 in May 2026, so these are problems with the record today, not problems it will have later.</div>
+                <div class="st-future-subtitle">${comparison.dmarcbis_only_count} problem${comparison.dmarcbis_only_count !== 1 ? 's' : ''} found that only appear${comparison.dmarcbis_only_count !== 1 ? '' : 's'} under strict RFC 9989 validation. RFC 9989 replaced RFC 7489 in May 2026, so these are problems with the record today, not problems it will have later.</div>
                 ${itemsHtml}
             </div>`;
     }
@@ -3213,7 +3213,7 @@ function _initShareDropdown() {
             const checks = d?.checks || [];
             const passCount = checks.filter(c => c.status === 'pass').length;
             const failCount = checks.filter(c => c.status === 'fail').length;
-            const text = `DNS security audit for ${domain}: ${passCount} passing, ${failCount} issues`;
+            const text = `DNS security audit for ${domain}: ${passCount} passing, ${failCount} issue${failCount !== 1 ? 's' : ''}`;
             const url = _getShareUrl();
             window.open('https://twitter.com/intent/tweet?text=' + encodeURIComponent(text) + '&url=' + encodeURIComponent(url), '_blank', 'noopener');
             removeDropdown();
@@ -3757,7 +3757,7 @@ function _renderContactNote(failCount, warnCount) {
     const note = document.getElementById('results-contact-note');
     if (!note) return;
     if (failCount > 0 || warnCount > 0) {
-        note.innerHTML = 'Some of these are a five minute DNS change. Some are not. ' +
+        note.innerHTML = 'Some of these are a five-minute DNS change. Some are not. ' +
             'If you want a second opinion on which is which, this is what I do for a living. ' +
             '<a href="mailto:neil@dns-audit.com">neil@dns-audit.com</a>';
         note.classList.remove('is-hidden');

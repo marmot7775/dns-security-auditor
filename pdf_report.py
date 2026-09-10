@@ -188,10 +188,10 @@ def _findings_summary(passes, warns, fails, unavailable=0):
     label = ParagraphStyle("FSL", fontName="Helvetica", fontSize=9, textColor=TEXT_TER, leading=12)
     els = [
         Paragraph(f'<font color="{TEXT_PRI.hexval()}" size="22"><b>{total}</b></font>', line),
-        Paragraph("checks total", label),
+        Paragraph(f"check{'s' if total != 1 else ''} total", label),
         Spacer(1, 6),
-        Paragraph(f'<font color="{FAIL_CLR.hexval()}"><b>{fails}</b></font> issues', line),
-        Paragraph(f'<font color="{WARN_CLR.hexval()}"><b>{warns}</b></font> warnings', line),
+        Paragraph(f'<font color="{FAIL_CLR.hexval()}"><b>{fails}</b></font> issue{"s" if fails != 1 else ""}', line),
+        Paragraph(f'<font color="{WARN_CLR.hexval()}"><b>{warns}</b></font> warning{"s" if warns != 1 else ""}', line),
         Paragraph(f'<font color="{PASS_CLR.hexval()}"><b>{passes}</b></font> passing', line),
     ]
     if unavailable:
@@ -1500,7 +1500,9 @@ def _migration_page(data, S):
         return els
 
     total_steps = migration.get("total_steps", len(steps))
-    els.append(Paragraph(f"{total_steps} steps to reach RFC 9989 Ready status:", S["body"]))
+    els.append(Paragraph(
+        f"{total_steps} step{'s' if total_steps != 1 else ''} to reach RFC 9989 Ready status:",
+        S["body"]))
     els.append(Spacer(1, 8))
 
     for step in steps:
