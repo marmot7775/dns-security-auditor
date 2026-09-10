@@ -2863,8 +2863,8 @@ function renderDmarcEvaluation(ev) {
         <div class="dmarc-eval de-animated">
             <div class="se-header-row">
                 <div class="se-header">DMARC Evaluation</div>
-                <a class="tw-spec-badge" href="https://datatracker.ietf.org/doc/html/rfc7489"
-                   target="_blank" rel="noopener">rfc7489</a>
+                <a class="tw-spec-badge" href="https://datatracker.ietf.org/doc/html/rfc9989"
+                   target="_blank" rel="noopener">rfc9989</a>
             </div>
             <div class="de-intro">${escapeHtml(ev.explanation)}</div>
             <div class="de-rows">
@@ -2912,8 +2912,8 @@ function renderReportChain(rc) {
         <div class="report-chain rc-animated">
             <div class="se-header-row">
                 <div class="se-header">DMARC Report Delivery Chain</div>
-                <a class="tw-spec-badge" href="https://datatracker.ietf.org/doc/html/rfc7489#section-7.1"
-                   target="_blank" rel="noopener">rfc7489 &sect;7.1</a>
+                <a class="tw-spec-badge" href="https://datatracker.ietf.org/doc/html/rfc9990#section-4"
+                   target="_blank" rel="noopener">rfc9990 &sect;4</a>
             </div>
             <div class="${introClass}">${escapeHtml(introText)}</div>
             <div class="rc-dests">`;
@@ -2991,7 +2991,7 @@ function renderSpfTree(tree) {
                 <div class="st-budget-track">
                     <div class="st-budget-fill ${barClass}" data-fill-width="${pct}%"></div>
                 </div>
-                <div class="st-budget-note">RFC 7208 limits SPF to 10 DNS-querying mechanisms (include, a, mx, redirect, exists). Exceeding this causes a PermError.</div>
+                <div class="st-budget-note">RFC 7208 caps SPF at 10 terms that cause a DNS query: the include, a, mx, ptr, and exists mechanisms, and the redirect modifier. Past the cap, receivers return PermError.</div>
             </div>
             <div class="st-tree-label">Include hierarchy: each include costs 1 lookup plus any nested lookups</div>`;
 
