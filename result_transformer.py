@@ -2669,7 +2669,7 @@ def _build_tag_entry(tag: str, value: str, present: bool, tags: Dict, policy: st
                     "text": (
                         "Critical gap. Non-existent subdomains have no enforcement while your root "
                         "domain rejects. Attackers can invent subdomains like "
-                        "secure-login.yourdomain.com and spoof mail from them."
+                        f"secure-login.{_dom} and spoof mail from them."
                     ),
                 })
             return e
@@ -2695,7 +2695,7 @@ def _build_tag_entry(tag: str, value: str, present: bool, tags: Dict, policy: st
                     "level": "warning",
                     "text": (
                         f"Attackers can invent non-existent subdomains like "
-                        f"secure-login.yourdomain.com. Without np=, the policy for these is "
+                        f"secure-login.{_dom}. Without np=, the policy for these is "
                         f"{resolved_via}={resolved}. Consider adding np=reject."
                     ),
                 })
@@ -3078,7 +3078,7 @@ def _detect_dangerous_combinations(tags: Dict[str, str], policy: str, is_no_mail
             "title": "Non-existent subdomain gap",
             "text": (
                 "Non-existent subdomain gap. Invented subdomains like "
-                "secure-login.yourdomain.com have no enforcement while your root domain rejects."
+                f"secure-login.{_dom} have no enforcement while your root domain rejects."
             ),
             "tags": ["np", "p"],
         })

@@ -437,7 +437,7 @@ def _validate_mta_sts_policy(policy_text: str, domain: str) -> Tuple[Dict[str, A
     if not policy["mx_patterns"]:
         issues.append(_make_issue("error", "No 'mx' entries in policy file",
             "The policy file must list at least one MX hostname pattern.", "",
-            "Add mx lines, e.g., 'mx: mail.yourdomain.com'."))
+            f"Add mx lines, e.g., 'mx: mail.{domain}'."))
     if policy["max_age"] is None:
         issues.append(_make_issue("error", "Missing 'max_age' in policy file",
             "max_age is required.", "", "Add 'max_age: 604800'."))
@@ -654,9 +654,10 @@ def check_mta_sts(domain: str) -> Dict[str, Any]:
 _TLSRPT_VALID_TAGS = {"v", "rua"}
 
 
-def _validate_tls_rpt_record(record: str) -> Tuple[Dict[str, str], List[Dict]]:
+def _validate_tls_rpt_record(record: str, domain: str = "") -> Tuple[Dict[str, str], List[Dict]]:
     issues = []
     tags = {}
+    _dom = domain or "yourdomain.com"
     parts = [p.strip() for p in record.split(";") if p.strip()]
 
     for part in parts:
@@ -686,7 +687,7 @@ def _validate_tls_rpt_record(record: str) -> Tuple[Dict[str, str], List[Dict]]:
     if "rua" not in tags:
         issues.append(_make_issue("error", "Missing required 'rua' tag",
             "TLS-RPT must specify where to send reports.", "",
-            "Add rua=mailto:tls-reports@yourdomain.com"))
+            f"Add rua=mailto:tls-reports@{_dom}"))
     else:
         uris = [u.strip() for u in tags["rua"].split(",") if u.strip()]
         for uri in uris:
@@ -781,7 +782,7 @@ def check_tls_rpt(domain: str) -> Dict[str, Any]:
 
     record = rpt_records[0]
     result["record"] = record
-    tags, tag_issues = _validate_tls_rpt_record(record)
+    tags, tag_issues = _validate_tls_rpt_record(record, domain)
     result["tags"] = tags
     result["issues"].extend(tag_issues)
 
@@ -942,7 +943,7 @@ def check_bimi(domain: str, dmarc_enforcing_override: bool = None, dmarc_found_o
             f"No BIMI TXT record at 'default._bimi.{domain}'. A custom selector "
             f"cannot be discovered from DNS.",
             "No brand logo in recipients' inboxes, unless a custom selector is in use.",
-            f"Add TXT at 'default._bimi.{domain}': v=BIMI1; l=https://yourdomain.com/logo.svg;",
+            f"Add TXT at 'default._bimi.{domain}': v=BIMI1; l=https://{domain}/logo.svg;",
         ))
         return result
 
