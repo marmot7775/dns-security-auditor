@@ -437,7 +437,7 @@ def build_executive_summary(checks: List[Dict], roadmap: Dict) -> Dict:
             top = risk_candidates[0]
             biggest_risk = top.get("impact", top.get("action", ""))
         else:
-            biggest_risk = "No urgent risks found. See the roadmap below for optimization opportunities."
+            biggest_risk = "No urgent risks found. The roadmap below lists smaller improvements."
 
     # ── Part 4: has_record_builder flag ──────────────────────
     has_record_builder = dmarc.get("record_builder") is not None
@@ -2067,7 +2067,8 @@ def transform_dmarc(raw: Dict, tree_walk: Optional[Dict] = None, is_no_mail: boo
                 k, _, v = part.partition("=")
                 _parsed[k.strip().lower()] = v.strip()
         _pol = _parsed.get("p", "").lower()
-        config_warnings = _detect_dangerous_combinations(_parsed, _pol, is_no_mail=is_no_mail)
+        config_warnings = _detect_dangerous_combinations(
+            _parsed, _pol, is_no_mail=is_no_mail, domain=raw.get("domain", ""))
         health = _calculate_dmarcbis_health(_parsed, _pol, config_warnings)
         _domain = raw.get("domain", "")
         migration = _build_migration_path(_parsed, _pol, health["status"], domain=_domain)
@@ -2389,7 +2390,11 @@ def _build_attack_surface(raw: Dict, record: Optional[str], is_no_mail: bool = F
     else:
         gap_note = ""
         if sp == "none" and policy in ("reject", "quarantine"):
-            gap_note = " Your root domain is protected but subdomains are not. Attackers will use subdomains to bypass your policy."
+            gap_note = (
+                " Your root domain is protected but subdomains are not, so mail "
+                f"claiming to be from a subdomain of {domain} is delivered as if "
+                "the policy did not exist."
+            )
         v2 = {
             "name": "Subdomain Spoofing",
             "status": "exposed",
@@ -2579,15 +2584,18 @@ def _build_dmarc_tag_breakdown(record: str, raw: Dict) -> Optional[List[Dict]]:
         present = tag_name in tags
         value = tags.get(tag_name, "")
 
-        entry = _build_tag_entry(tag_name, value, present, tags, policy)
+        entry = _build_tag_entry(tag_name, value, present, tags, policy,
+                                 domain=raw.get("domain", ""))
         if entry:
             breakdown.append(entry)
 
     return breakdown
 
 
-def _build_tag_entry(tag: str, value: str, present: bool, tags: Dict, policy: str) -> Optional[Dict]:
+def _build_tag_entry(tag: str, value: str, present: bool, tags: Dict, policy: str,
+                     domain: str = "") -> Optional[Dict]:
     """Build a single tag entry with explanation, warnings, and RFC 9989 notes."""
+    _dom = domain or "yourdomain.com"
 
     # ── v= ──────────────────────────────────────────────────
     if tag == "v":
@@ -2633,8 +2641,9 @@ def _build_tag_entry(tag: str, value: str, present: bool, tags: Dict, policy: st
                 e["warnings"].append({
                     "level": "warning",
                     "text": (
-                        "Your subdomains have weaker enforcement than your root domain. "
-                        "Attackers will spoof subdomains like mail.yourdomain.com to bypass your policy."
+                        "Your subdomains have weaker enforcement than your root domain, so "
+                        f"mail claiming to be from mail.{_dom} is delivered as if the "
+                        "policy did not exist."
                     ),
                 })
             return e
@@ -2993,10 +3002,12 @@ def _entry(tag: str, value, is_default: bool, is_absent: bool,
 # Dangerous Combination Detection (Prompt 2)
 # ============================================================
 
-def _detect_dangerous_combinations(tags: Dict[str, str], policy: str, is_no_mail: bool = False) -> List[Dict]:
+def _detect_dangerous_combinations(tags: Dict[str, str], policy: str, is_no_mail: bool = False,
+                                   domain: str = "") -> List[Dict]:
     """Check for dangerous tag combinations. Returns a list of warnings
     with level ("critical" or "advisory"), title, and text."""
     warnings: List[Dict] = []
+    _dom = domain or "yourdomain.com"
     sp = tags.get("sp")
     np_val = tags.get("np")
     np_present = "np" in tags
@@ -3054,7 +3065,8 @@ def _detect_dangerous_combinations(tags: Dict[str, str], policy: str, is_no_mail
             "title": "Subdomain policy gap",
             "text": (
                 "Subdomain policy gap. Your root domain rejects spoofed mail but subdomains allow "
-                "it through. Attackers will target subdomains like mail.yourdomain.com to bypass your policy."
+                f"it through, so mail claiming to be from mail.{_dom} is delivered as if the "
+                "policy did not exist."
             ),
             "tags": ["sp", "p"],
         })
@@ -3105,8 +3117,8 @@ def _detect_dangerous_combinations(tags: Dict[str, str], policy: str, is_no_mail
             "level": "critical",
             "title": "Contradictory np vs p policy",
             "text": (
-                "Stricter policy on non-existent subdomains than the root domain. This is "
-                "contradictory: attackers will spoof the root domain directly."
+                "np=reject is stricter than p=none, so invented subdomains are protected "
+                "while the root domain is not. The root domain is the easier target."
             ),
             "tags": ["np", "p"],
         })
@@ -3485,15 +3497,12 @@ def _build_why_dmarcbis(tags: Dict[str, str], policy: str, health_status: str, d
     sections.append({
         "title": "Why does this matter?",
         "content": (
-            "Email authentication isn't just a technical checkbox. When your domain can be spoofed, "
-            "attackers can send phishing, malware, and fraudulent messages that appear to come from "
-            "your organization. Recipients, your customers, partners, and employees, receive malicious "
-            "email that carries your name. This damages your domain's sending reputation (causing "
-            "legitimate email to bounce or land in spam), erodes trust with the people you do business "
-            "with, and in the worst case can lead to ransomware, data breaches, or financial fraud "
-            "traced back to your brand. RFC 9989 closes gaps that RFC 7489 left open, especially "
-            "around non-existent subdomain spoofing and inconsistent receiver behavior, making "
-            "enforcement more reliable and complete."
+            "When your domain can be spoofed, someone else can send phishing and fraud that "
+            "appears to come from you. Your customers, partners, and employees see your name "
+            "on it. That costs you twice: the recipients who were fooled, and the sending "
+            "reputation you need for your own mail to reach inboxes. RFC 9989 closes gaps "
+            "RFC 7489 left open, particularly around non-existent subdomains and inconsistent "
+            "receiver behavior."
         ),
     })
 
@@ -4523,6 +4532,11 @@ def transform_dkim(raw: Dict, domain: str, has_mx: bool = True, non_mail: bool =
 
     found = raw.get("found_selectors", [])
     tested = raw.get("tested_count", 0)
+    # tested_count is 1 whenever the user supplied a selector, and that name
+    # was the one they typed, not a "common" one this audit guessed.
+    _sel_count = f"{tested} selector" + ("" if tested == 1 else "s")
+    _user_supplied = bool(raw.get("selector_queried"))
+    _common = "" if _user_supplied else "common "
     live, revoked = _split_dkim_selectors(found)
 
     if not live:
@@ -4645,7 +4659,7 @@ def transform_dkim(raw: Dict, domain: str, has_mx: bool = True, non_mail: bool =
             _names = _join_names([s.get("selector", "unknown") for s in revoked])
             _retired_details = _dkim_retired_detail(revoked, BUSINESS_RISK.get("DKIM_REVOKED_KEY"))
             _retired_details.append(
-                {"type": "info", "text": f"Checked {tested} selectors, no live public key found"}
+                {"type": "info", "text": f"Checked {_sel_count}, no live public key found"}
             )
             _retired_details.append({"type": "info", "text": _DKIM_NOT_ENUMERABLE})
             # Surfaced here as well as in the graded outcome. Discovery cut
@@ -4701,10 +4715,11 @@ def transform_dkim(raw: Dict, domain: str, has_mx: bool = True, non_mail: bool =
             {
                 "type": "warning" if discovery_truncated else "info",
                 "text": (
-                    f"Selector discovery did not finish: checked {tested} selectors "
+                    f"Selector discovery did not finish: checked {_sel_count} "
                     "before running out of time"
                 ) if discovery_truncated else (
-                    f"Checked {tested} common selectors, no public key found"
+                    f"Checked {tested} {_common}selector{'' if tested == 1 else 's'}, "
+                    "no public key found"
                 ),
             },
             {"type": "info", "text": _DKIM_NOT_ENUMERABLE},
@@ -4718,8 +4733,8 @@ def transform_dkim(raw: Dict, domain: str, has_mx: bool = True, non_mail: bool =
                 "target=\"_blank\" rel=\"noopener\">RFC 6376</a>) attaches a "
                 "cryptographic signature to each outgoing message, letting receivers "
                 "verify that it was not altered and came from an authorized sender. "
-                f"This audit's selector probe ran out of time after checking {tested} "
-                "selectors, so this is an incomplete search, not a completed one that "
+                f"This audit's selector probe ran out of time after checking {_sel_count}, "
+                "so this is an incomplete search, not a completed one that "
                 "found nothing. A re-run, especially at a quieter time, may reach a "
                 "selector this one did not. Two things settle it directly: enter the "
                 "selector above for a direct lookup, or read the s= value from the "
@@ -4727,13 +4742,21 @@ def transform_dkim(raw: Dict, domain: str, has_mx: bool = True, non_mail: bool =
                 "domain sent."
             )
         else:
+            _looked_up = (
+                "This audit looked up the selector you supplied and found no public "
+                "key at it. "
+            ) if _user_supplied else (
+                f"This audit looked up {tested} common selector "
+                f"name{'' if tested == 1 else 's'} and found no public key at "
+                f"{'it' if tested == 1 else 'any of them'}. "
+            )
             explanation = (
                 "DKIM (<a href=\"https://datatracker.ietf.org/doc/html/rfc6376\" "
                 "target=\"_blank\" rel=\"noopener\">RFC 6376</a>) attaches a "
                 "cryptographic signature to each outgoing message, letting receivers "
                 "verify that it was not altered and came from an authorized sender. "
-                f"This audit looked up {tested} common selector names and found no "
-                "public key at any of them. That is not the same as this domain having "
+                + _looked_up +
+                "That is not the same as this domain having "
                 "no DKIM: the name is chosen by the sending service and cannot be "
                 "enumerated from DNS, so nothing here says whether the domain signs "
                 "its mail. Two things settle it: enter the selector above for a direct "
@@ -4849,7 +4872,7 @@ def transform_dkim(raw: Dict, domain: str, has_mx: bool = True, non_mail: bool =
         for sel in live if sel.get("record")
     )
 
-    details.append({"type": "info", "text": f"Tested {tested} selectors"})
+    details.append({"type": "info", "text": f"Tested {_sel_count}"})
 
     if raw.get("timeout_note"):
         details.append({"type": "warning", "text": raw["timeout_note"]})
@@ -6906,7 +6929,7 @@ def transform_ct(raw: Dict, domain: str) -> Dict:
     details = []
     details.append({
         "type": "good" if active else "warning",
-        "text": f"{active} active certificates from {len(issuers)} issuer{'s' if len(issuers) != 1 else ''}",
+        "text": f"{active} active cert{'s' if active != 1 else ''} from {len(issuers)} issuer{'s' if len(issuers) != 1 else ''}",
     })
 
     # Issuer breakdown
@@ -6929,9 +6952,14 @@ def transform_ct(raw: Dict, domain: str) -> Dict:
 
     # Expiring
     for exp in expiring[:3]:
+        _days = exp["days_left"]
+        if _days == 0:
+            _when = "Expiring today"
+        else:
+            _when = f"Expiring in {_days} day{'s' if _days != 1 else ''}"
         details.append({
             "type": "warning",
-            "text": f"Expiring in {exp['days_left']} days: {exp['common_name']}",
+            "text": f"{_when}: {exp['common_name']}",
         })
 
     # Recently expired. The CT check has always collected these; nothing
