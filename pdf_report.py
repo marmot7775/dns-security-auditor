@@ -30,6 +30,8 @@ import tempfile
 from collections import Counter
 from datetime import datetime, timezone
 
+from audit_engine import SCOPE_CHECKS, SCOPE_LABELS, ALL_SCOPE_CHECK_KEYS
+
 from reportlab.lib import colors
 from reportlab.lib.enums import TA_CENTER
 from reportlab.lib.pagesizes import letter
@@ -386,6 +388,23 @@ def _cover_page(data, S):
         els.append(Paragraph(item, S["toc"]))
     els.append(Spacer(1, 12))
 
+    # Scope line. A scoped report that does not say it is scoped implies
+    # coverage the reader has no way to know is missing: dns_infra runs five
+    # of twelve checks and says nothing about email authentication, so the
+    # verdict above reads "not assessed" with no explanation of why unless
+    # this line names what was and was not run.
+    scope = data.get("scope") or "complete"
+    if scope != "complete":
+        scope_keys = SCOPE_CHECKS.get(scope) or set()
+        scope_label = SCOPE_LABELS.get(scope, scope)
+        els.append(Paragraph(
+            f"Scope: {_safe(scope_label)} ({len(scope_keys)} of "
+            f"{len(ALL_SCOPE_CHECK_KEYS)} checks). This report covers only "
+            "the checks listed above and makes no claim about the rest.",
+            S["body_small"],
+        ))
+        els.append(Spacer(1, 4))
+
     # Audit date line
     els.append(Paragraph(f"Audit performed: {now}", S["body_small"]))
 
@@ -693,6 +712,44 @@ def _dmarc_deep_dive(data, S):
     if record:
         els.append(Paragraph("Current Record", S["subheading"]))
         els.extend(_record_block(record, S))
+
+    # Findings and fix, the same way _protocol_card renders every other
+    # check. DMARC has no _protocol_card pass (it renders here instead, not
+    # in _protocol_details), so without this the per-tag findings this check
+    # computed (a broken reporting destination, a missing record, a syntax
+    # error) never reach the document at all.
+    details = dmarc.get("details", [])
+    for d in details:
+        dt = d.get("type", "info")
+        icon = DETAIL_ICON.get(dt, "•")
+        sk = f"d_{dt}" if f"d_{dt}" in S else "d_info"
+        els.append(Paragraph(f"{icon}  {_safe(d.get('text', ''))}", S[sk]))
+
+    explanation = dmarc.get("explanation", "")
+    if explanation:
+        exp_text = _strip_html(explanation)
+        if exp_text and exp_text != verdict:
+            els.append(Spacer(1, 2))
+            els.append(Paragraph(_safe(exp_text), S["body_small"]))
+
+    fix = dmarc.get("fix", "")
+    if fix and status in ("warn", "fail"):
+        fp = _strip_html(fix)
+        fs = _safe(fp).replace("\n", "<br/>")
+        fc = [Paragraph("<b>RECOMMENDED FIX</b>", S["fix_label"]),
+              Paragraph(fs, S["fix_text"])]
+        ft = Table([[fc]], colWidths=[6.5*inch])
+        ft.setStyle(TableStyle([
+            ("BACKGROUND", (0,0), (-1,-1), FIX_BG),
+            ("TOPPADDING", (0,0), (-1,-1), 8),
+            ("BOTTOMPADDING", (0,0), (-1,-1), 8),
+            ("LEFTPADDING", (0,0), (-1,-1), 10),
+            ("RIGHTPADDING", (0,0), (-1,-1), 10),
+            ("LINEBEFORE", (0,0), (0,-1), 2.5, FIX_BORDER),
+            ("ROUNDEDCORNERS", [0,4,4,0]),
+        ]))
+        els.append(Spacer(1, 6))
+        els.append(ft)
 
     # RFC 9989 Health Verdict
     tb = dmarc.get("tag_breakdown") or {}

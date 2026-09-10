@@ -19,7 +19,7 @@ import result_transformer
 
 def _not_configured_card(name):
     """Shape matches real "not configured" cards, e.g. transform_mta_sts."""
-    return {"name": name, "status": "warn", "pill_label": "Not configured"}
+    return {"name": name, "status": "warn", "pill_label": "Not configured", "configured": False}
 
 
 def test_zero_configured_protocols_gives_zero_of_nine_red():
@@ -43,8 +43,8 @@ def test_actually_configured_warn_card_still_counts():
     """A warn card that IS configured (e.g. a real config warning, not a
     missing one) must still count -- the fix must not just zero out warn."""
     checks = [
-        {"name": "DMARC", "status": "warn", "pill_label": "Needs attention"},
-        {"name": "SPF", "status": "pass", "pill_label": "Configured"},
+        {"name": "DMARC", "status": "warn", "pill_label": "Needs attention", "configured": True},
+        {"name": "SPF", "status": "pass", "pill_label": "Configured", "configured": True},
     ]
     summary = result_transformer.build_executive_summary(checks, {"items": []})
     assert summary["protocol_coverage"]["configured"] == 2

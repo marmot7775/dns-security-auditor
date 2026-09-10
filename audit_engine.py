@@ -297,6 +297,26 @@ SCOPE_CHECKS = {
     "security_scan": {"dmarc", "spf", "dkim", "dnssec", "dane", "ct", "caa", "mta_sts"},
 }
 
+# Display name for each scope, matching the button labels in
+# static/index.html's scope selector.
+SCOPE_LABELS = {
+    "complete":      "Complete Audit",
+    "email_full":    "Email Security",
+    "dmarc":         "DMARC Check",
+    "transport":     "Transport Security",
+    "dns_infra":     "DNS Infrastructure",
+    "security_scan": "Security Scan",
+}
+
+# Every check key any scope can run. A literal union, not derived at import
+# time from SCOPE_CHECKS.values(), so the PDF cover's "N of TOTAL checks"
+# line has a fixed denominator that does not shift if a scope's check set
+# changes without a new check being added.
+ALL_SCOPE_CHECK_KEYS = {
+    "dmarc", "spf", "dkim", "mx", "mta_sts", "tls_rpt", "bimi",
+    "dnssec", "caa", "dane", "nameservers", "ct",
+}
+
 # Checks that depend on MX raw results
 _MX_DEPENDENTS = {"spf", "dkim", "mta_sts", "tls_rpt", "bimi", "dane"}
 # Checks that depend on SPF raw results
@@ -3544,6 +3564,12 @@ def _raw_check_nameservers(domain: str) -> Dict[str, Any]:
         result["status"] = "error"
         return result
     except dns.exception.DNSException as e:
+        # SERVFAIL, NoNameservers and a timeout mean the query never
+        # completed, not that the domain has no nameservers. Downstream must
+        # not report this as a missing-NS finding. NXDOMAIN and NoAnswer are
+        # handled above and stay real findings; this is the catch-all for
+        # everything else dnspython raises.
+        result["lookup_failed"] = True
         _add_issue(
             "error",
             f"NS lookup failed: {str(e)[:100]}",

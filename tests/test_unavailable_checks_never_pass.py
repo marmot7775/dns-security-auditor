@@ -139,6 +139,27 @@ def test_caa_servfail_at_every_level_is_not_reported_as_no_records(audit):
     )
 
 
+def test_nameservers_nonameservers_is_not_reported_as_missing(audit):
+    """Doc 27 item 4: _raw_check_nameservers's generic DNSException handler
+    set status "error" with no lookup_failed flag, so a SERVFAIL,
+    NoNameservers, or a timeout was indistinguishable from a real negative
+    answer. The DNSSEC and CAA cards were already fixed for this in 28c644c;
+    nameservers reached the same failure mode through a different handler
+    and was missed."""
+    zone = FakeZone(dict(BASE)).fail(DOMAIN, "NS")
+    result = audit(zone, DOMAIN)
+    card = _card(result, "Nameservers")
+
+    assert card["status"] == "unavailable", (
+        f"an NS lookup that never completed cannot report a configuration "
+        f"state: got status={card['status']!r} pill={card.get('pill_label')!r}"
+    )
+    assert "no nameservers found" not in card["verdict"].lower()
+    assert card.get("fix") is None, (
+        "a card that asserted nothing about the domain must not hand out a fix"
+    )
+
+
 def test_signed_unanchored_dnssec_reaches_the_dane_card_correctly(audit):
     """DNSKEY published, no DS at the parent: a real, common mid-deployment
     state, not a lookup failure. The DNSSEC and DANE cards must agree, and
