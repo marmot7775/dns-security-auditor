@@ -18,13 +18,20 @@
 
 ## Rules
 - NEVER use em-dashes (—) or double-hyphens ( -- ) in user-facing text. Rewrite the sentence instead.
-- Fail color is #ef4444 (clear red) for fills, borders and icons. Text in
-  the fail colour uses --fail-text (dark #f87171, light #b91c1c) because
-  #ef4444 on the card surface is 3.9:1. Same pattern for the other surfaces
-  that carry white text: --primary-solid, --fail-solid, --warn-contrast and
-  --dmarcbis-contrast exist so white-on-blue, white-on-red, text-on-amber
-  and text-on-teal all clear 4.5:1 in both themes. Dark theme default, light
-  mode via prefers-color-scheme.
+- Fail color is --fail (dark #e5484d, light #c93a3f) for fills, borders and
+  icons. Doc 35 moved it off #ef4444: the stock red-500 was chosen for
+  clarity in isolation and fought the rest of the palette once the greens
+  and ambers were calmed down; #e5484d reads just as clearly and sits
+  inside the same family. Text in the fail colour uses --fail-text (dark
+  #f0767a, light #b3282d) because the fill colour on the card surface is
+  under 4.5:1. Same pattern for the other surfaces that carry white text:
+  --primary-solid, --pass-solid, --fail-solid, --warn-contrast and
+  --dmarcbis-contrast exist so white-on-blue, white-on-green, white-on-red,
+  text-on-amber and text-on-teal all clear 4.5:1 in both themes.
+  tests/test_doc35_palette_contrast.py computes every one of these pairs
+  from style.css and fails the build if any drops below 4.5:1, and checks
+  that the two light-theme token blocks carry identical values. Dark theme
+  default, light mode via prefers-color-scheme.
   A header toggle (static/theme.js, loaded in <head> on every page) saves a
   choice under the localStorage key `theme` and sets data-theme on <html>,
   which overrides prefers-color-scheme. The light-mode rules in style.css
