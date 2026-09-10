@@ -18,17 +18,29 @@
     <header class="site-header">
         <div class="container header-inner">
             <a href="/" class="logo">
-                <span class="logo-text">dns<span class="logo-accent">-audit</span>.com</span>
+                <div class="logo-terminal">
+                    <div class="logo-titlebar">
+                        <span class="logo-dot logo-dot-red"></span>
+                        <span class="logo-dot logo-dot-yellow"></span>
+                        <span class="logo-dot logo-dot-green"></span>
+                    </div>
+                    <div class="logo-cmd">
+                        <span class="logo-prompt">$</span> <span class="logo-bin">dns-audit</span> <span class="logo-flag">--dmarc</span>
+                    </div>
+                </div>
+                <span class="logo-text"><span class="logo-accent">dns</span>-audit</span>
             </a>
-            <nav class="site-nav">
-                <a href="/" class="nav-link">Home</a>
-                <a href="/articles/" class="nav-link">Articles</a>
-                <a href="/about" class="nav-link">About</a>
-                <button type="button" class="theme-toggle" id="theme-toggle" aria-label="Switch theme" title="Switch theme">
-                    <svg class="theme-icon-sun" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.93 4.93l1.41 1.41M17.66 17.66l1.41 1.41M2 12h2M20 12h2M6.34 17.66l-1.41 1.41M19.07 4.93l-1.41 1.41"/></svg>
-                    <svg class="theme-icon-moon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3a6 6 0 0 0 9 9 9 9 0 1 1-9-9Z"/></svg>
-                </button>
-            </nav>
+            <div class="header-right">
+                <nav class="site-nav" aria-label="Main navigation">
+                    <a href="/" class="nav-link">Home</a>
+                    <a href="/articles/" class="nav-link">Articles</a>
+                    <a href="/about" class="nav-link">About</a>
+                    <button type="button" class="theme-toggle" id="theme-toggle" aria-label="Switch theme" title="Switch theme">
+                        <svg class="theme-icon-sun" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.93 4.93l1.41 1.41M17.66 17.66l1.41 1.41M2 12h2M20 12h2M6.34 17.66l-1.41 1.41M19.07 4.93l-1.41 1.41"/></svg>
+                        <svg class="theme-icon-moon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3a6 6 0 0 0 9 9 9 9 0 1 1-9-9Z"/></svg>
+                    </button>
+                </nav>
+            </div>
         </div>
     </header>
 
