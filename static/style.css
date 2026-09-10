@@ -556,6 +556,10 @@ main {
 @media (min-width: 768px) {
     .audit-title {
         font-size: 2.25rem;
+        /* At 2.25rem the headline broke with "DNS" alone on the second
+           line. Balancing evens the two lines out. Ignored by browsers
+           that do not support it, which just get the greedy wrap. */
+        text-wrap: balance;
     }
 }
 

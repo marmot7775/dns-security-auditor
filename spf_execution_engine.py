@@ -615,7 +615,7 @@ def build_dmarc_roadmap(raw_dmarc: Dict, raw_spf: Dict, raw_dkim: Dict,
         "dns_record": None,
         "prerequisites": ["Configure rua reporting first"] if not has_rua and not step4_blocked else (["Publish DMARC record first"] if step4_blocked else None),
         "warnings": (
-            ["Report destination not authorized -- reports will be dropped"]
+            ["Report destination not authorized, so reports will be dropped"]
             if has_rua and not rua_authorized else None
         ),
         "estimated_duration": "2-4 weeks",

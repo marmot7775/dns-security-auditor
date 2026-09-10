@@ -220,6 +220,7 @@ error at start-up if it detects more than one.
 
 ## Author
 
-**[Neil Anuskiewicz](https://www.linkedin.com/in/neilanuskiewicz/)** -- DNS, email security, and deliverability specialist.
+**[Neil Anuskiewicz](https://www.linkedin.com/in/neilanuskiewicz/)**
+DNS, email security, and deliverability specialist.
 
 [LinkedIn](https://www.linkedin.com/in/neilanuskiewicz/) | [GitHub](https://github.com/marmot7775) | [dns-audit.com](https://dns-audit.com)

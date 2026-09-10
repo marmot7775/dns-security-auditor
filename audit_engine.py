@@ -1391,9 +1391,9 @@ def _raw_check_dmarc(domain: str) -> Dict[str, Any]:
                     "record containing p=none was retrieved and "
                     "continue processing. RFC 7489 has no such "
                     "recovery rule; older receivers may instead "
-                    "ignore the record entirely. Interop hazard — "
-                    "fix the value rather than relying on this "
-                    "fallback.",
+                    "ignore the record entirely. This is an interop "
+                    "hazard: fix the value rather than relying on "
+                    "this fallback.",
                     f"Set {rec_tag_name}= to one of: none, quarantine, "
                     f"reject. Do not rely on the RFC 9989 recovery "
                     f"fallback to mask the invalid value.",
@@ -1406,8 +1406,8 @@ def _raw_check_dmarc(domain: str) -> Dict[str, Any]:
                     "p= tag is recoverable only when rua= contains at "
                     "least one syntactically valid mailto: URI. This "
                     "record has neither, so receivers apply no DMARC "
-                    "processing to messages — equivalent to having no "
-                    "DMARC record at all.",
+                    "processing to messages, which leaves the domain as "
+                    "exposed as having no DMARC record at all.",
                     "Add a policy tag. Start with p=none for "
                     "monitoring, and add rua=mailto:dmarc-reports@"
                     "yourdomain.com to receive aggregate reports.",
