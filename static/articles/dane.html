@@ -31,7 +31,7 @@
         "url": "https://dns-audit.com/articles/dane",
         "author": { "@type": "Person", "name": "Neil Anuskiewicz" },
         "datePublished": "2026-05-13",
-        "dateModified": "2026-05-13"
+        "dateModified": "2026-09-09"
     }
     </script>
 </head>
@@ -70,7 +70,7 @@
             <p class="dbis-article-sub">You read that DANE failed. You were half right.</p>
             <p class="dbis-lede">DANE for browsers and DANE for SMTP got buried in the same obituary, and only one of them was actually dead.</p>
             <p class="dbis-lede">The version meant to put TLS keys in DNS for browsers, supplementing or replacing certificate authorities, is gone. Chrome never shipped it. Firefox never shipped it. Adam Langley <a href="https://www.imperialviolet.org/2015/01/17/notdane.html" target="_blank" rel="noopener">wrote the obituary in 2015</a> and the obituary stuck.</p>
-            <p class="dbis-lede">The other version, DANE for SMTP (<a href="https://datatracker.ietf.org/doc/html/rfc7672" target="_blank" rel="noopener">RFC 7672</a>), now covers <a href="https://www.zivver.com/blog/use-of-email-security-standards-in-the-netherlands-september-2025-only-14-dane-6-mta-sts" target="_blank" rel="noopener">about a quarter of inbound email by volume to Dutch mailboxes</a>, with a much smaller share by domain count. Microsoft turned on DANE for Exchange Online in two stages. Outbound rolled out through 2022. Inbound went GA in <a href="https://techcommunity.microsoft.com/blog/exchange/announcing-general-availability-of-inbound-smtp-dane-with-dnssec-for-exchange-on/4281292" target="_blank" rel="noopener">October 2024</a>. Most "DANE is dead" posts collapse the two protocols into one story and end up wrong on both halves.</p>
+            <p class="dbis-lede">The other version, DANE for SMTP (<a href="https://datatracker.ietf.org/doc/html/rfc7672" target="_blank" rel="noopener">RFC 7672</a>), now reaches a serious share of Dutch mail. In a <a href="https://www.zivver.com/blog/use-of-email-security-standards-in-the-netherlands-september-2025-only-14-dane-6-mta-sts" target="_blank" rel="noopener">September 2025 sample of the 10,000 domains most often emailed by Zivver's Dutch customers</a>, 12.6% of domains published TLSA records, but those domains took 25% of the mail by volume. Big receivers are doing it; small ones are not. Microsoft turned on DANE for Exchange Online in two stages. Outbound rolled out through 2022. Inbound went GA in <a href="https://techcommunity.microsoft.com/blog/exchange/announcing-general-availability-of-inbound-smtp-dane-with-dnssec-for-exchange-on/4281292" target="_blank" rel="noopener">October 2024</a>. Most "DANE is dead" posts collapse the two protocols into one story and end up wrong on both halves.</p>
             <section class="dbis-section">
                 <h2>Why the web case was impossible</h2>
                 <p>The Chrome story is the cleanest to tell because the people involved wrote it down. Langley's arguments came down to three structural realities that haven't changed.</p>
@@ -91,8 +91,8 @@
             <section class="dbis-section">
                 <h2>The state of play in 2026</h2>
                 <p>SMTP DANE is real, useful, and regionally dominant. It has also produced a split over trust models.</p>
-                <p>Google <a href="https://www.captaindns.com/en/blog/dane-tlsa-complete-guide" target="_blank" rel="noopener">does outbound DANE validation</a>, but won't publish TLSA records for Google Workspace domains and prefers MTA-STS for inbound. MTA-STS fetches a transport policy over HTTPS and pins the receiver's identity through the web PKI, with CT logs as the auditable backstop. Google's position is that the web PKI is more accountable than the DNS root for cryptographic identity, and that trusting the DNS hierarchy for transport keys is a step back.</p>
-                <p>That isn't stubbornness. It's a position. And it produces a provider lottery. If your inbound mail lands at Microsoft or a European provider, you have DANE on the wire. If you're a Google Workspace shop, you don't, unless you front it with a secure email gateway like Proofpoint or Mimecast. Plenty of enterprises now do exactly that. They get DANE protection at the gateway hop even when their mailbox provider won't publish TLSA records.</p>
+                <p>Google publishes no TLSA records for Google Workspace domains and points senders at MTA-STS instead. MTA-STS fetches a transport policy over HTTPS and validates the receiver's certificate through the web PKI, with CT logs as the auditable backstop. Google's position is that the web PKI is more accountable than the DNS hierarchy for transport keys.</p>
+                <p>That isn't stubbornness. It's a position. And it produces a provider lottery. If your inbound mail lands at a European provider that publishes TLSA records, you have DANE on the wire. Microsoft 365 can do it, but not on its own: outbound DANE validation is on by default, while inbound is opt-in per domain. An admin has to enable DNSSEC for the domain, swap the MX record for the one Exchange Online hands back, and turn on inbound DANE. Until someone does that, a Microsoft 365 tenant publishes no TLSA records. If you're a Google Workspace shop, you don't have inbound DANE either, unless you front it with a secure email gateway like Proofpoint or Mimecast. Plenty of enterprises now do exactly that. They get DANE protection at the gateway hop even when their mailbox provider won't publish TLSA records.</p>
             </section>
             <section class="dbis-section">
                 <h2>The operational trap, and what changed it</h2>
