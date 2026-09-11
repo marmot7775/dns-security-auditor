@@ -3759,7 +3759,7 @@ function _renderContactNote(failCount, warnCount) {
     if (failCount > 0 || warnCount > 0) {
         note.innerHTML = 'Some of these are a five-minute DNS change. Some are not. ' +
             'If you want a second opinion on which is which, this is what I do for a living. ' +
-            '<a href="mailto:neil@dns-audit.com">neil@dns-audit.com</a>';
+            '<a href="https://www.linkedin.com/in/neilanuskiewicz/" target="_blank" rel="noopener">Message me on LinkedIn</a>.';
         note.classList.remove('is-hidden');
     } else {
         note.innerHTML = '';
