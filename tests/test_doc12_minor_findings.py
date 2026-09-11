@@ -89,11 +89,14 @@ def test_pdf_dkim_table_reads_the_field_the_analysis_emits():
 # ---------------------------------------------------------------------------
 
 def _toc_protocols(checks):
-    els = pdf_report._cover_page({"domain": "example.com", "checks": checks,
-                                  "executive_summary": {}}, pdf_report._styles())
-    for el in els:
-        text = getattr(el, "text", "") or ""
-        if text.startswith("5. Protocol Details"):
+    # Doc 34 item 8: the contents list is built from the sections actually
+    # emitted and numbered consecutively, so Protocol Details is no longer
+    # always "5.". Match the title, not the number.
+    toc_items, _ = pdf_report._build_sections(
+        {"domain": "example.com", "checks": checks, "executive_summary": {}},
+        pdf_report._styles())
+    for text in toc_items:
+        if re.match(r"\d+\. Protocol Details", text):
             inner = re.search(r"\((.*)\)", text)
             return [p.strip() for p in inner.group(1).split(",")] if inner else []
     raise AssertionError("no protocol details line in the contents")

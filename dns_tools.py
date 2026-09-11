@@ -4,8 +4,9 @@ DNS Security Auditor - Core DNS Tools
 Domain normalization and audit entry point.
 """
 
+import re
 import time
-from typing import Any, Dict, Optional
+from typing import Any, Dict, List, Optional
 
 import dns.flags
 import dns.resolver
@@ -134,6 +135,142 @@ def get_dnssec_resolver(timeout: float = 8.0) -> "dns.resolver.Resolver":
     resolver.use_edns(0, dns.flags.DO, 4096)
     resolver.cache = _DNSSEC_CACHE
     return resolver
+
+
+# ============================================================
+# Record version tags
+# ============================================================
+#
+# Five TXT record types are found by a leading version tag, and their five
+# specs define that tag differently on purpose. Two properties vary, and
+# normalizing them to one rule is exactly the mistake this module exists to
+# prevent, so both are arguments rather than a choice baked in here.
+#
+# Case. RFC 7405 section 2 defines the %s prefix as case sensitive and states
+# that a literal with no prefix "is case insensitive and is equivalent to
+# having the %i prefix". So a version string is case sensitive if and only if
+# its own spec writes %s.
+#
+# Whitespace. Some specs put *WSP on both sides of the equals sign and some
+# write the whole tag as one literal with no room for it.
+#
+#   DMARC    RFC 9989 section 5.4 (obsoletes RFC 7489 section 6.4)
+#              equals        = *WSP "=" *WSP
+#              dmarc-version = "v" equals %s"DMARC1"
+#            case sensitive, whitespace allowed
+#
+#   BIMI     draft-brand-indicators-for-message-identification section 4.2
+#              bimi-version = "v" *WSP "=" *WSP "BIMI1"
+#            no %s prefix, so case insensitive; whitespace allowed. BIMI
+#            assertion records follow the RFC 6376 section 3.2 tag-value
+#            syntax, whose tag-spec also permits [FWS] around the equals.
+#
+#   SPF      RFC 7208 section 12
+#              version = "v=spf1"
+#            no %s prefix, so case insensitive; no whitespace. Section 4.6.1
+#            confirms mechanism and modifier names are case insensitive too.
+#
+#   MTA-STS  RFC 8461 section 3.1
+#              sts-version = %s"v=STSv1"
+#            case sensitive, no whitespace
+#
+#   TLS-RPT  RFC 8460 section 3
+#              tlsrpt-version = %s"v=TLSRPTv1"
+#            case sensitive, no whitespace
+#
+# SPF deliberately has no wrapper below. Its two call sites in audit_engine
+# are correct as written and routing them through here would change what they
+# accept after the version value, which is a separate question this helper is
+# not asking.
+
+_TAG_GAP = r"[ \t]*"
+
+
+def _version_tag_pattern(value: str, allow_whitespace: bool) -> str:
+    """Anchored pattern for a leading version tag, capturing the value."""
+    gap = _TAG_GAP if allow_whitespace else ""
+    return rf"^v{gap}={gap}({re.escape(value)})\b"
+
+
+def matches_version_tag(record: str, value: str, *,
+                        allow_whitespace: bool, case_sensitive: bool) -> bool:
+    """True when ``record`` opens with this version tag, as its spec defines it.
+
+    ``allow_whitespace`` permits *WSP around the equals sign. ``case_sensitive``
+    requires the version value to be spelled exactly. Pass both from the record
+    type's own ABNF; there is no defensible default.
+    """
+    flags = 0 if case_sensitive else re.IGNORECASE
+    pattern = _version_tag_pattern(value, allow_whitespace)
+    return re.match(pattern, record.strip(), flags) is not None
+
+
+def version_tag_deviations(record: str, value: str, *,
+                           allow_whitespace: bool,
+                           case_sensitive: bool) -> Optional[List[str]]:
+    """Why a near-miss record will be ignored, for a record plainly meant to be one.
+
+    Returns None when ``record`` does not carry this version tag even under the
+    loosest reading, so it is some other TXT record and none of our business.
+    Otherwise returns the reasons it deviates from the spec, empty when it
+    conforms. A domain that published a near miss meant to turn the protocol
+    on, and telling it why the record is inert beats reporting nothing at all.
+    """
+    stripped = record.strip()
+    loose = re.match(_version_tag_pattern(value, True), stripped, re.IGNORECASE)
+    if not loose:
+        return None
+
+    reasons = []
+    if case_sensitive and loose.group(1) != value:
+        reasons.append(
+            f"the version value is written '{loose.group(1)}' and must be "
+            f"spelled exactly '{value}'"
+        )
+    # Probed case insensitively on purpose: a record that is wrong on both
+    # axes should be told about both, not have the case error mask the
+    # whitespace one.
+    if not allow_whitespace and not re.match(
+        _version_tag_pattern(value, False), stripped, re.IGNORECASE
+    ):
+        reasons.append("there is whitespace around the equals sign")
+    return reasons
+
+
+def is_dmarc_version_tag(record: str) -> bool:
+    """RFC 9989 section 5.4: case sensitive DMARC1, *WSP around the equals."""
+    return matches_version_tag(record, "DMARC1",
+                               allow_whitespace=True, case_sensitive=True)
+
+
+def is_bimi_version_tag(record: str) -> bool:
+    """BIMI draft section 4.2: plain literal, so case insensitive, *WSP allowed."""
+    return matches_version_tag(record, "BIMI1",
+                               allow_whitespace=True, case_sensitive=False)
+
+
+def is_mta_sts_version_tag(record: str) -> bool:
+    """RFC 8461 section 3.1: case sensitive STSv1, no whitespace."""
+    return matches_version_tag(record, "STSv1",
+                               allow_whitespace=False, case_sensitive=True)
+
+
+def mta_sts_version_deviations(record: str) -> Optional[List[str]]:
+    """Reasons an intended MTA-STS record at _mta-sts is not one. See above."""
+    return version_tag_deviations(record, "STSv1",
+                                  allow_whitespace=False, case_sensitive=True)
+
+
+def is_tls_rpt_version_tag(record: str) -> bool:
+    """RFC 8460 section 3: case sensitive TLSRPTv1, no whitespace."""
+    return matches_version_tag(record, "TLSRPTv1",
+                               allow_whitespace=False, case_sensitive=True)
+
+
+def tls_rpt_version_deviations(record: str) -> Optional[List[str]]:
+    """Reasons an intended TLS-RPT record at _smtp._tls is not one. See above."""
+    return version_tag_deviations(record, "TLSRPTv1",
+                                  allow_whitespace=False, case_sensitive=True)
 
 
 def normalize_domain(value: str) -> str:

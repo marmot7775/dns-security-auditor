@@ -11,6 +11,9 @@ Each card looks like:
     "pill_label": optional override for the status pill text,
     "verdict": "one-line summary for the collapsed card header",
     "record": "the raw DNS record string (shown in monospace block)",
+    "configured": True | False,  # this protocol has something published, decided
+        # from the check result rather than from pill_label text
+        # (see build_executive_summary's Protocol Coverage metric)
     "explanation": "HTML-safe plain-English explanation",
     "details": [
         {"type": "error|warning|info|good", "text": "..."}
@@ -67,6 +70,7 @@ def _lookup_unavailable_card(name: str, raw: Dict, subject: str, pill_label: str
         "pill_label": pill_label,
         "verdict": "Not checked by this audit",
         "record": None,
+        "configured": False,
         "explanation": (
             f"The DNS query for this domain's {subject}{where} did not complete. "
             "The nameserver returned a failure or stopped responding, so this "
@@ -180,6 +184,17 @@ def build_executive_summary(checks: List[Dict], roadmap: Dict) -> Dict:
         return (card.get("status") == "unavailable"
                 and card.get("unavailable_kind") != "not_enumerable")
 
+    def _scoped_out(name):
+        """This run's scope never queried this check at all.
+
+        scope=dns_infra and scope=transport never run DMARC/SPF/DKIM, so
+        those checks are absent from check_map entirely rather than marked
+        "unavailable". Falling through to the else branch below asserted
+        "Your domain has email authentication configured" from checks that
+        never queried DNS.
+        """
+        return name not in check_map
+
     def _unconfirmed(name):
         return check_map.get(name, {}).get("unavailable_kind") == "not_enumerable"
 
@@ -194,12 +209,33 @@ def build_executive_summary(checks: List[Dict], roadmap: Dict) -> Dict:
     unread_names = _join_names(unread)
     unread_verb = "lookups did" if len(unread) > 1 else "lookup did"
 
+    # Unavailable (a lookup ran and failed) and scoped out (this run never
+    # queried it) are different facts, but the same one for a verdict: the
+    # audit did not read the record and cannot make a claim about it. Used
+    # for the verdict and the two metrics computed from the DMARC record.
+    # Kept separate from unread/auth_unavailable above, which the
+    # deliverability summary and the biggest-risk section below use with
+    # their original, narrower meaning: deliverability already names a
+    # scoped-out check with its own "outside the scope of this run"
+    # sentence, and conflating the two here made this block's generic
+    # "lookup did not complete" caveat overwrite that sentence.
+    dmarc_unassessed = dmarc_unavailable or _scoped_out("DMARC")
+    spf_unassessed = spf_unavailable or _scoped_out("SPF")
+    dkim_unassessed = dkim_unavailable or _scoped_out("DKIM")
+    unassessed = [n for n, u in (("DMARC", dmarc_unassessed),
+                                 ("SPF", spf_unassessed),
+                                 ("DKIM", dkim_unassessed)) if u]
+    auth_unassessed = bool(unassessed)
+    unassessed_names = _join_names(unassessed)
+    unassessed_verb = "lookups did" if len(unassessed) > 1 else "lookup did"
+
     # ── Part 1: One-sentence verdict ─────────────────────────
     attack_surface = dmarc.get("attack_surface")
     health = (dmarc.get("tag_breakdown") or {}).get("health", {})
     health_status = health.get("status", "")
     dmarc_status = dmarc.get("status", "")
-    spf_status = check_map.get("SPF", {}).get("status", "")
+    spf_check = check_map.get("SPF", {})
+    spf_status = spf_check.get("status", "")
 
     # Count protected vectors.
     #
@@ -221,20 +257,49 @@ def build_executive_summary(checks: List[Dict], roadmap: Dict) -> Dict:
     # Ahead of every other branch: if a lookup never completed, this report
     # cannot say the domain is healthy or that a record is absent. Saying
     # either would be a claim the audit did not establish.
-    if auth_unavailable:
-        verdict = (
+    if auth_unassessed:
+        # Two different facts share this branch and must not share a
+        # sentence. A lookup that failed is a DNS event; a check that was
+        # out of scope never queried DNS at all, and telling the reader DNS
+        # "did not answer" about it is false.
+        _scoped = [n for n in ("DMARC", "SPF", "DKIM") if _scoped_out(n)]
+        _failed_sentence = (
             "Parts of this domain's DNS did not answer, so its email authentication "
             f"was not assessed. The {unread_names} {unread_verb} not complete, and this "
             "report cannot say whether those records exist."
         )
+        if len(_scoped) == 3:
+            _scoped_sentence = (
+                "This run did not check email authentication. DMARC, SPF, and DKIM "
+                "were outside its scope, so this report makes no claim about them. "
+                "Run the Complete Audit or Email Security scope for that."
+            )
+        else:
+            _scoped_sentence = (
+                f"This run did not check {_join_names(_scoped)}, which "
+                f"{'were' if len(_scoped) > 1 else 'was'} outside its scope, so this "
+                "report makes no claim about "
+                f"{'them' if len(_scoped) > 1 else 'it'}. Run the Complete Audit or "
+                "Email Security scope for that."
+            )
+        if unread and _scoped:
+            verdict = f"{_failed_sentence} {_scoped_sentence}"
+        elif _scoped:
+            verdict = _scoped_sentence
+        else:
+            verdict = _failed_sentence
     elif dmarc_status == "fail" and dmarc.get("pill_label") == "Missing":
-        if spf_status == "fail":
-            verdict = "Your domain has no email authentication. Anyone on the internet can send email pretending to be you."
+        if spf_check.get("pill_label") == "Missing":
+            verdict = (
+                "Your domain publishes neither an SPF record nor a DMARC record. "
+                "Receivers have no way to tell your mail from mail that only claims "
+                "to be yours, and no policy to apply when it fails."
+            )
         else:
             verdict = "Your domain has no DMARC record. SPF alone cannot prevent email spoofing."
     elif health_status == "monitoring":
         verdict = "Your domain is monitoring email authentication but not yet enforcing it. This requests no action from receivers, who each decide independently what to do with mail that fails."
-    elif protected_count == 4:
+    elif _vector_total and protected_count == _vector_total:
         if health_status == "ready":
             verdict = "Your domain is well-protected against email spoofing across all attack vectors."
         else:
@@ -254,7 +319,7 @@ def build_executive_summary(checks: List[Dict], roadmap: Dict) -> Dict:
 
     # Check if enforcement exists but no reporting. Skipped when something
     # went unread, so this cannot overwrite the verdict set above.
-    if not auth_unavailable and health_status in ("ready", "compatible", "attention"):
+    if not auth_unassessed and health_status in ("ready", "compatible", "attention"):
         tb = dmarc.get("tag_breakdown") or {}
         cw = tb.get("config_warnings", [])
         has_no_rua = any(w.get("title") == "No aggregate reporting" for w in cw)
@@ -264,7 +329,7 @@ def build_executive_summary(checks: List[Dict], roadmap: Dict) -> Dict:
     # ── Part 2: Three key metrics ────────────────────────────
 
     # Metric 1: Spoofing Protection
-    if dmarc_unavailable:
+    if dmarc_unassessed:
         spoof_label, spoof_color = "Not assessed", "neutral"
     elif _vector_total and protected_count == _vector_total:
         spoof_label, spoof_color = "Full", "green"
@@ -281,7 +346,7 @@ def build_executive_summary(checks: List[Dict], roadmap: Dict) -> Dict:
 
     # No attack surface means no DMARC record, unless the DMARC lookup is the
     # thing that failed, in which case zero vectors is not a finding.
-    if not attack_surface and not dmarc_unavailable:
+    if not attack_surface and not dmarc_unassessed:
         spoof_label, spoof_color = "None", "red"
         protected_count = 0
         _vector_total = 0
@@ -299,7 +364,8 @@ def build_executive_summary(checks: List[Dict], roadmap: Dict) -> Dict:
         # a report whose value is in the specifics. The per-dimension label
         # survived that removal deliberately and is kept; only the arithmetic
         # beside it is replaced with the thing it was standing in for.
-        "detail": ("DMARC lookup did not complete" if dmarc_unavailable
+        "detail": ("Not in this run's scope." if _scoped_out("DMARC")
+                   else "DMARC lookup did not complete" if dmarc_unavailable
                    else _spoofing_detail(vectors)),
     }
 
@@ -311,7 +377,7 @@ def build_executive_summary(checks: List[Dict], roadmap: Dict) -> Dict:
         "attention": ("In Progress", "amber"),
         "misconfigured": ("Action Needed", "red"),
     }
-    if dmarc_unavailable:
+    if dmarc_unassessed:
         # "Action Needed" would be advice drawn from a record never read.
         rd_label, rd_color = "Not assessed", "neutral"
     elif health_status and health_status in readiness_map:
@@ -338,7 +404,6 @@ def build_executive_summary(checks: List[Dict], roadmap: Dict) -> Dict:
             continue
         c = check_map[pname]
         st = c.get("status", "")
-        pill = c.get("pill_label", "")
         # A lookup that never completed is not evidence either way either, so it
         # leaves the denominator instead of scoring as "not configured".
         # Otherwise a protocol nobody could read is indistinguishable from
@@ -346,10 +411,14 @@ def build_executive_summary(checks: List[Dict], roadmap: Dict) -> Dict:
         if st == "unavailable":
             continue
         assessed += 1
-        # Consider configured if not missing/not-configured/fail-with-missing
-        if st == "pass":
-            configured += 1
-        elif st in ("warn", "fail") and pill not in ("Missing", "Not configured", ""):
+        # "configured" is set by the transform layer from the check result
+        # itself (a record was found), not guessed here from pill_label text.
+        # Testing pill_label against a hardcoded allowlist missed every label
+        # meaning "nothing published" that wasn't in the allowlist ("Not
+        # found", "Not enabled", "No mail", "None", "N/A"), and separately let
+        # a pass-status card with no record (BIMI, DANE "N/A"/"Not configured")
+        # count as configured without looking at the pill at all.
+        if c.get("configured"):
             configured += 1
 
     total_protocols = assessed
@@ -394,14 +463,12 @@ def build_executive_summary(checks: List[Dict], roadmap: Dict) -> Dict:
             top = risk_candidates[0]
             biggest_risk = top.get("impact", top.get("action", ""))
         else:
-            biggest_risk = "No urgent risks found. See the roadmap below for optimization opportunities."
+            biggest_risk = "No urgent risks found. The roadmap below lists smaller improvements."
 
     # ── Part 4: has_record_builder flag ──────────────────────
     has_record_builder = dmarc.get("record_builder") is not None
 
     # ── Part 5: Deliverability summary ────────────────────────
-    spf_check = check_map.get("SPF", {})
-
     deliverability_issues = []
     if dmarc_status == "fail" and dmarc.get("pill_label") == "Missing":
         deliverability_issues.append("no DMARC record")
@@ -426,7 +493,13 @@ def build_executive_summary(checks: List[Dict], roadmap: Dict) -> Dict:
     if deliverability_issues:
         top_issue = deliverability_issues[0]
         if "no DMARC" in top_issue:
-            deliverability_summary = "Without DMARC, your business emails may be landing in spam. Gmail and Yahoo now require DMARC for reliable delivery."
+            deliverability_summary = (
+                "Without DMARC, receivers have no instruction for mail that fails "
+                "authentication, and you get no reports about who is sending as you. "
+                "Google and Yahoo require DMARC of bulk senders (Google's threshold "
+                "is 5,000 messages a day to Gmail); below that it is optional but "
+                "still the only way to see what is being sent in your name."
+            )
         elif "p=none" in top_issue:
             deliverability_summary = "Your DMARC policy is monitoring only (p=none), which requests no action from receivers. It provides visibility, not protection, until you move to p=quarantine or p=reject."
         elif "no SPF" in top_issue:
@@ -672,6 +745,13 @@ def build_security_roadmap(checks: List[Dict], is_no_mail: bool = False) -> Dict
             items.append({"priority": "low", "protocol": "DMARC",
                           "action": "Consider adding an explicit np= tag",
                           "impact": "Purely optional. Subdomains already inherit your enforcing policy without it."})
+
+    # Items were appended in check order, which put a HIGH DMARC item above
+    # a CRITICAL DKIM one while the tier counts above the table said
+    # otherwise. Stable sort by rank so the web roadmap and the PDF agree
+    # with their own counts; ties keep check order.
+    _rank = {"critical": 0, "high": 1, "medium": 2, "low": 3}
+    items.sort(key=lambda i: _rank.get(i.get("priority"), 4))
 
     # Count by tier
     tiers = {"critical": 0, "high": 0, "medium": 0, "low": 0}
@@ -1544,6 +1624,21 @@ def transform_dmarc(raw: Dict, tree_walk: Optional[Dict] = None, is_no_mail: boo
     # it cannot support.
     if raw.get("status") == "unavailable":
         return _lookup_unavailable_card("DMARC", raw, "DMARC record")
+
+    # A record is published at _dmarc but its version tag does not conform,
+    # so every receiver discards it. Neither of the branches below fits: "no
+    # record found" contradicts what the operator can see in their zone, and
+    # the has-record branch narrates a policy that is not in force.
+    if raw.get("malformed_record"):
+        return _malformed_version_tag_card(
+            "DMARC", raw, raw["malformed_record"],
+            "Receivers ignore it and treat the domain as having no DMARC "
+            "protection, so the anti-spoofing coverage DMARC exists to "
+            "provide is not in place.",
+            f"Republish the TXT record at <strong>_dmarc.{_e(raw.get('domain', ''))}</strong> "
+            f"starting with exactly <strong>v=DMARC1;</strong>.",
+        )
+
     if not raw.get("record") and raw.get("inheritance_lookup_failed"):
         return _lookup_unavailable_card(
             "DMARC",
@@ -1604,29 +1699,34 @@ def transform_dmarc(raw: Dict, tree_walk: Optional[Dict] = None, is_no_mail: boo
         # reject on RFC 9989 ones. Only quarantine degrades to nothing, where
         # the same section sends the unselected fraction to "local message
         # classification as normal".
+        # The verdict leads with what happens to failing mail and states the
+        # weaker of the two receiver populations, because that is the coverage
+        # the operator can actually count on. The RFC 7489 against RFC 9989
+        # split is the reason for the number, not the verdict, so it goes to a
+        # detail row where there is room to say it. The old verdict carried the
+        # whole split inline and ran to 132 characters against roughly 45 for
+        # every other verdict on this card.
         _pct_raw = raw.get("pct")
         if policy == "reject":
             verdict = "p=reject (authentication failures are rejected)"
             _disabled = (
-                f"p=reject with pct={_pct_raw} (RFC 7489 receivers quarantine all "
-                "failing mail; RFC 9989 receivers ignore pct and reject in full)"
+                f"p=reject with pct={_pct_raw} (failing mail is quarantined, "
+                "not rejected)"
             )
-            _partial_note = (
-                f"pct={pct}: RFC 7489 receivers reject {pct}% and quarantine the rest, "
-                "RFC 9989 receivers reject all of them"
+            _partial = (
+                f"p=reject with pct={pct} ({pct}% of failing mail is rejected, "
+                "the rest quarantined)"
             )
-            _partial = "p=reject (authentication failures are rejected)"
         else:
             verdict = "p=quarantine (failures sent to spam)"
             _disabled = (
-                f"p=quarantine with pct={_pct_raw} (RFC 7489 receivers enforce on no "
-                "mail; RFC 9989 receivers ignore pct and quarantine in full)"
+                f"p=quarantine with pct={_pct_raw} (failing mail is not "
+                "quarantined)"
             )
-            _partial_note = (
-                f"pct={pct}: RFC 7489 receivers apply the policy to {pct}% of failing "
-                "messages, RFC 9989 receivers to all of them"
+            _partial = (
+                f"p=quarantine with pct={pct} ({pct}% of failing mail is "
+                "quarantined, the rest is not)"
             )
-            _partial = "p=quarantine (failures sent to spam)"
         # An enforcing policy is only a pass when it applies to all failing
         # mail. pct is what receivers act on, so it decides the status here
         # and is not merely appended to the sentence. A missing rua still
@@ -1636,11 +1736,25 @@ def transform_dmarc(raw: Dict, tree_walk: Optional[Dict] = None, is_no_mail: boo
         # acts on every failing message, one quarantining where the other
         # rejects. Grading that a failure put a red card on a domain whose
         # failing mail is universally enforced against.
+        #
+        # p=quarantine with pct=0 grades the way p=none does, warn with rua
+        # and fail without, because it is never less protective than p=none.
+        # RFC 7489 receivers do nothing for either. RFC 9989 receivers ignore
+        # pct and quarantine everything, so it is better there. This branch
+        # used to grade it fail unconditionally, which put a redder card on
+        # the strictly stronger of the two records and never looked at rua.
+        # The colour is a protection grade on every other row of this card,
+        # and the pct detail row now says exactly what each receiver does, so
+        # the colour does not have to carry "you think you are enforcing" on
+        # its own.
         if pct <= 0:
             verdict = _disabled
-            status = "fail" if policy == "quarantine" else "warn"
+            if policy == "reject" or raw.get("rua"):
+                status = "warn"
+            else:
+                status = "fail"
         elif pct < 100:
-            verdict = f"{_partial} ({_partial_note})"
+            verdict = _partial
             status = "warn"
         elif not raw.get("rua"):
             # Amber, not green and not red. The policy is enforcing and the
@@ -1881,8 +1995,31 @@ def transform_dmarc(raw: Dict, tree_walk: Optional[Dict] = None, is_no_mail: boo
                 details.append({"type": "info", "text": f"Subdomain policy: sp={sp_val}"})
 
         pct = raw.get("pct")
-        if pct is not None and pct < 100:
-            details.append({"type": "warning", "text": f"pct={pct}: policy applied to only {pct}% of failing messages (pct is removed in RFC 9989)"})
+        if pct is not None and 0 <= pct < 100:
+            # This row is where the two receiver populations get named. It used
+            # to read "policy applied to only N% of failing messages" for both
+            # policies, which is wrong for reject: RFC 7489 section 6.6.4 sends
+            # the unselected fraction to quarantine rather than to nothing.
+            if policy == "reject":
+                _seven = (
+                    f"reject {pct}% of failing messages and quarantine the rest"
+                    if pct else "quarantine all failing messages"
+                )
+                _nine = "ignore pct and reject all of them"
+            else:
+                _seven = (
+                    f"apply the policy to {pct}% of failing messages and leave "
+                    "the rest to local filtering"
+                    if pct else "enforce on no mail at all"
+                )
+                _nine = "ignore pct and quarantine all of them"
+            details.append({
+                "type": "warning",
+                "text": (
+                    f"pct={pct}: RFC 7489 receivers {_seven}. RFC 9989 receivers "
+                    f"{_nine}, because pct is removed in RFC 9989."
+                ),
+            })
 
         # Append all issues from the audit engine (syntax_errors already merged into issues)
         for issue in raw.get("issues", []):
@@ -1963,7 +2100,8 @@ def transform_dmarc(raw: Dict, tree_walk: Optional[Dict] = None, is_no_mail: boo
                 k, _, v = part.partition("=")
                 _parsed[k.strip().lower()] = v.strip()
         _pol = _parsed.get("p", "").lower()
-        config_warnings = _detect_dangerous_combinations(_parsed, _pol, is_no_mail=is_no_mail)
+        config_warnings = _detect_dangerous_combinations(
+            _parsed, _pol, is_no_mail=is_no_mail, domain=raw.get("domain", ""))
         health = _calculate_dmarcbis_health(_parsed, _pol, config_warnings)
         _domain = raw.get("domain", "")
         migration = _build_migration_path(_parsed, _pol, health["status"], domain=_domain)
@@ -2032,6 +2170,7 @@ def transform_dmarc(raw: Dict, tree_walk: Optional[Dict] = None, is_no_mail: boo
         "pill_label": pill_label,
         "verdict": verdict,
         "record": display_record,
+        "configured": bool(record) or bool(inherited),
         "explanation": explanation,
         "details": details,
         "fix": fix,
@@ -2284,7 +2423,11 @@ def _build_attack_surface(raw: Dict, record: Optional[str], is_no_mail: bool = F
     else:
         gap_note = ""
         if sp == "none" and policy in ("reject", "quarantine"):
-            gap_note = " Your root domain is protected but subdomains are not. Attackers will use subdomains to bypass your policy."
+            gap_note = (
+                " Your root domain is protected but subdomains are not, so mail "
+                f"claiming to be from a subdomain of {domain} is delivered as if "
+                "the policy did not exist."
+            )
         v2 = {
             "name": "Subdomain Spoofing",
             "status": "exposed",
@@ -2474,15 +2617,18 @@ def _build_dmarc_tag_breakdown(record: str, raw: Dict) -> Optional[List[Dict]]:
         present = tag_name in tags
         value = tags.get(tag_name, "")
 
-        entry = _build_tag_entry(tag_name, value, present, tags, policy)
+        entry = _build_tag_entry(tag_name, value, present, tags, policy,
+                                 domain=raw.get("domain", ""))
         if entry:
             breakdown.append(entry)
 
     return breakdown
 
 
-def _build_tag_entry(tag: str, value: str, present: bool, tags: Dict, policy: str) -> Optional[Dict]:
+def _build_tag_entry(tag: str, value: str, present: bool, tags: Dict, policy: str,
+                     domain: str = "") -> Optional[Dict]:
     """Build a single tag entry with explanation, warnings, and RFC 9989 notes."""
+    _dom = domain or "yourdomain.com"
 
     # ── v= ──────────────────────────────────────────────────
     if tag == "v":
@@ -2528,8 +2674,9 @@ def _build_tag_entry(tag: str, value: str, present: bool, tags: Dict, policy: st
                 e["warnings"].append({
                     "level": "warning",
                     "text": (
-                        "Your subdomains have weaker enforcement than your root domain. "
-                        "Attackers will spoof subdomains like mail.yourdomain.com to bypass your policy."
+                        "Your subdomains have weaker enforcement than your root domain, so "
+                        f"mail claiming to be from mail.{_dom} is delivered as if the "
+                        "policy did not exist."
                     ),
                 })
             return e
@@ -2555,7 +2702,7 @@ def _build_tag_entry(tag: str, value: str, present: bool, tags: Dict, policy: st
                     "text": (
                         "Critical gap. Non-existent subdomains have no enforcement while your root "
                         "domain rejects. Attackers can invent subdomains like "
-                        "secure-login.yourdomain.com and spoof mail from them."
+                        f"secure-login.{_dom} and spoof mail from them."
                     ),
                 })
             return e
@@ -2581,7 +2728,7 @@ def _build_tag_entry(tag: str, value: str, present: bool, tags: Dict, policy: st
                     "level": "warning",
                     "text": (
                         f"Attackers can invent non-existent subdomains like "
-                        f"secure-login.yourdomain.com. Without np=, the policy for these is "
+                        f"secure-login.{_dom}. Without np=, the policy for these is "
                         f"{resolved_via}={resolved}. Consider adding np=reject."
                     ),
                 })
@@ -2645,6 +2792,10 @@ def _build_tag_entry(tag: str, value: str, present: bool, tags: Dict, policy: st
                 "0": (
                     "Reports only when BOTH SPF and DKIM fail. You miss most failures. "
                     "Set fo=1 for broader visibility."
+                ) if tags.get("ruf") else (
+                    "Reports only when BOTH SPF and DKIM fail. This has no effect: "
+                    "RFC 9989 section 4.7 requires a ruf= tag for fo to do anything, "
+                    "and this record does not set one."
                 ),
                 "1": "Reports when either mechanism fails. Recommended.",
                 "d": "Reports on DKIM failure regardless of alignment.",
@@ -2884,10 +3035,12 @@ def _entry(tag: str, value, is_default: bool, is_absent: bool,
 # Dangerous Combination Detection (Prompt 2)
 # ============================================================
 
-def _detect_dangerous_combinations(tags: Dict[str, str], policy: str, is_no_mail: bool = False) -> List[Dict]:
+def _detect_dangerous_combinations(tags: Dict[str, str], policy: str, is_no_mail: bool = False,
+                                   domain: str = "") -> List[Dict]:
     """Check for dangerous tag combinations. Returns a list of warnings
     with level ("critical" or "advisory"), title, and text."""
     warnings: List[Dict] = []
+    _dom = domain or "yourdomain.com"
     sp = tags.get("sp")
     np_val = tags.get("np")
     np_present = "np" in tags
@@ -2945,7 +3098,8 @@ def _detect_dangerous_combinations(tags: Dict[str, str], policy: str, is_no_mail
             "title": "Subdomain policy gap",
             "text": (
                 "Subdomain policy gap. Your root domain rejects spoofed mail but subdomains allow "
-                "it through. Attackers will target subdomains like mail.yourdomain.com to bypass your policy."
+                f"it through, so mail claiming to be from mail.{_dom} is delivered as if the "
+                "policy did not exist."
             ),
             "tags": ["sp", "p"],
         })
@@ -2957,7 +3111,7 @@ def _detect_dangerous_combinations(tags: Dict[str, str], policy: str, is_no_mail
             "title": "Non-existent subdomain gap",
             "text": (
                 "Non-existent subdomain gap. Invented subdomains like "
-                "secure-login.yourdomain.com have no enforcement while your root domain rejects."
+                f"secure-login.{_dom} have no enforcement while your root domain rejects."
             ),
             "tags": ["np", "p"],
         })
@@ -2996,8 +3150,8 @@ def _detect_dangerous_combinations(tags: Dict[str, str], policy: str, is_no_mail
             "level": "critical",
             "title": "Contradictory np vs p policy",
             "text": (
-                "Stricter policy on non-existent subdomains than the root domain. This is "
-                "contradictory: attackers will spoof the root domain directly."
+                "np=reject is stricter than p=none, so invented subdomains are protected "
+                "while the root domain is not. The root domain is the easier target."
             ),
             "tags": ["np", "p"],
         })
@@ -3376,15 +3530,12 @@ def _build_why_dmarcbis(tags: Dict[str, str], policy: str, health_status: str, d
     sections.append({
         "title": "Why does this matter?",
         "content": (
-            "Email authentication isn't just a technical checkbox. When your domain can be spoofed, "
-            "attackers can send phishing, malware, and fraudulent messages that appear to come from "
-            "your organization. Recipients, your customers, partners, and employees, receive malicious "
-            "email that carries your name. This damages your domain's sending reputation (causing "
-            "legitimate email to bounce or land in spam), erodes trust with the people you do business "
-            "with, and in the worst case can lead to ransomware, data breaches, or financial fraud "
-            "traced back to your brand. RFC 9989 closes gaps that RFC 7489 left open, especially "
-            "around non-existent subdomain spoofing and inconsistent receiver behavior, making "
-            "enforcement more reliable and complete."
+            "When your domain can be spoofed, someone else can send phishing and fraud that "
+            "appears to come from you. Your customers, partners, and employees see your name "
+            "on it. That costs you twice: the recipients who were fooled, and the sending "
+            "reputation you need for your own mail to reach inboxes. RFC 9989 closes gaps "
+            "RFC 7489 left open, particularly around non-existent subdomains and inconsistent "
+            "receiver behavior."
         ),
     })
 
@@ -3411,6 +3562,7 @@ def _build_migration_path(tags: Dict[str, str], policy: str, health_status: str,
     sp = tags.get("sp")
     np_val = tags.get("np")
     fo = tags.get("fo", "0")
+    has_ruf = bool(tags.get("ruf"))
     deprecated = [t for t in ("pct", "rf", "ri") if t in tags]
 
     # Build the current record for before/after
@@ -3437,8 +3589,12 @@ def _build_migration_path(tags: Dict[str, str], policy: str, health_status: str,
         step_num += 1
         steps.append({
             "step": step_num,
-            "action": "Review aggregate reports for 2-4 weeks",
-            "why": "Identify all legitimate senders and fix their SPF/DKIM alignment before enforcing.",
+            "action": "Review aggregate reports until the sender inventory is stable",
+            "why": (
+                "Identify every legitimate sender and fix their SPF or DKIM alignment "
+                "before enforcing. Move on when a full reporting cycle shows no new "
+                "legitimate sources, not on a date."
+            ),
             "tags_changed": [],
         })
 
@@ -3493,13 +3649,20 @@ def _build_migration_path(tags: Dict[str, str], policy: str, health_status: str,
             "tags_changed": ["sp"],
         })
 
-    # Step: Set fo=1 if needed
-    if fo == "0" or "fo" not in tags:
+    # Step: Set fo=1 if needed. RFC 9989 section 4.7: "This tag's content
+    # MUST be ignored if a ruf tag is not also specified", so this step only
+    # applies when the current record already sets ruf. Without ruf, fo has
+    # no effect regardless of its value.
+    if has_ruf and (fo == "0" or "fo" not in tags):
         step_num += 1
         steps.append({
             "step": step_num,
             "action": "Set fo=1 for full failure visibility",
-            "why": "fo=0 only reports when both SPF and DKIM fail. fo=1 captures all failures.",
+            "why": (
+                "fo=0 reports only when every mechanism fails. fo=1 reports when "
+                "either SPF or DKIM fails. The tag has no effect unless ruf= is "
+                "also set."
+            ),
             "tags_changed": ["fo"],
         })
 
@@ -3529,8 +3692,14 @@ def _build_migration_path(tags: Dict[str, str], policy: str, health_status: str,
             "tags_changed": deprecated,
         })
 
-    # Final target record
-    target = f"v=DMARC1; p=reject; sp=reject; np=reject; fo=1; rua={rua_placeholder}"
+    # Final target record. fo=1 is only meaningful alongside ruf= (RFC 9989
+    # section 4.7); this migration path does not add ruf, so fo=1 is only
+    # included when the current record already has it.
+    _target_parts = ["v=DMARC1", "p=reject", "sp=reject", "np=reject"]
+    if has_ruf:
+        _target_parts.append("fo=1")
+    _target_parts.append(f"rua={rua_placeholder}")
+    target = "; ".join(_target_parts)
 
     return {
         "status": "migration",
@@ -3566,7 +3735,9 @@ def _build_record_builder(
     # ── No existing record ─────────────────────────────────────
     if not has_record:
         safe_domain = domain or "yourdomain.com"
-        rec = f"v=DMARC1; p=none; fo=1; rua=mailto:dmarc@{safe_domain}"
+        # No fo=1 here: RFC 9989 section 4.7 requires a ruf= tag for fo to
+        # have any effect, and this starter record does not add one.
+        rec = f"v=DMARC1; p=none; rua=mailto:dmarc@{safe_domain}"
         return {
             "mode": "first_record",
             "current_record": None,
@@ -3574,9 +3745,6 @@ def _build_record_builder(
             "changes": [{
                 "tag": "p", "action": "added", "value": "none",
                 "reason": "Start with monitoring to review aggregate reports before enforcing.",
-            }, {
-                "tag": "fo", "action": "added", "value": "1",
-                "reason": "Captures all authentication failures for full visibility.",
             }, {
                 "tag": "rua", "action": "added", "value": f"mailto:dmarc@{safe_domain}",
                 "reason": "Aggregate reporting address. Replace with your actual address.",
@@ -3647,16 +3815,20 @@ def _build_record_builder(
             "reason": "Closes non-existent subdomain gap. Matches root policy.",
         })
 
-    # 4. Fix fo
-    cur_fo = rec_tags.get("fo", "")
-    if cur_fo != "1":
-        old_val = cur_fo if cur_fo else "(not set)"
-        rec_tags["fo"] = "1"
-        changes.append({
-            "tag": "fo", "action": "changed" if cur_fo else "added",
-            "old": old_val, "value": "1",
-            "reason": "Captures all authentication failures, not just complete failures.",
-        })
+    # 4. Fix fo. RFC 9989 section 4.7: "This tag's content MUST be ignored
+    # if a ruf tag is not also specified." This builder does not add ruf,
+    # so setting fo=1 only does something when the current record already
+    # has ruf.
+    if rec_tags.get("ruf"):
+        cur_fo = rec_tags.get("fo", "")
+        if cur_fo != "1":
+            old_val = cur_fo if cur_fo else "(not set)"
+            rec_tags["fo"] = "1"
+            changes.append({
+                "tag": "fo", "action": "changed" if cur_fo else "added",
+                "old": old_val, "value": "1",
+                "reason": "Reports when either SPF or DKIM fails, not just when both do.",
+            })
 
     # 5. (removed) psd= is not injected. RFC 9989 section 4.7 makes it
     # OPTIONAL with a default of "u", and psd=n declares this exact name the
@@ -3776,6 +3948,7 @@ def transform_spf(raw: Dict, has_mx: bool = True) -> Dict:
             "pill_label": "Multiple records",
             "verdict": f"{_n} SPF records published (RFC 7208 requires exactly one)",
             "record": None,
+            "configured": True,
             "explanation": (
                 f"This domain publishes <strong>{_n}</strong> separate v=spf1 records. "
                 "<a href=\"https://datatracker.ietf.org/doc/html/rfc7208\" target=\"_blank\" rel=\"noopener\">RFC 7208</a> "
@@ -3897,8 +4070,10 @@ def transform_spf(raw: Dict, has_mx: bool = True) -> Dict:
                 f" <strong>Critical:</strong> This SPF record has a PermError because it requires "
                 f"{lookups} DNS lookups, exceeding the 10-lookup limit "
                 f"(<a href=\"https://datatracker.ietf.org/doc/html/rfc7208#section-4.6.4\" target=\"_blank\" rel=\"noopener\">RFC 7208 Section 4.6.4</a>). "
-                f"Receiving servers treat an SPF PermError as if no SPF record exists, which "
-                f"damages sender reputation. Audit your includes and remove services you no longer use."
+                f"Receivers must return PermError once the limit is exceeded "
+                f"(RFC 7208 section 4.6.4). A PermError is not a pass, so SPF cannot "
+                f"satisfy DMARC alignment for any message from this domain. Audit your "
+                f"includes and remove services you no longer use."
             )
         elif lookups and lookups > 8:
             explanation += (
@@ -4084,6 +4259,7 @@ def transform_spf(raw: Dict, has_mx: bool = True) -> Dict:
         "pill_label": pill_label if not record else None,
         "verdict": verdict,
         "record": record,
+        "configured": bool(record),
         "explanation": explanation,
         "details": details,
         "fix": fix,
@@ -4393,6 +4569,11 @@ def transform_dkim(raw: Dict, domain: str, has_mx: bool = True, non_mail: bool =
 
     found = raw.get("found_selectors", [])
     tested = raw.get("tested_count", 0)
+    # tested_count is 1 whenever the user supplied a selector, and that name
+    # was the one they typed, not a "common" one this audit guessed.
+    _sel_count = f"{tested} selector" + ("" if tested == 1 else "s")
+    _user_supplied = bool(raw.get("selector_queried"))
+    _common = "" if _user_supplied else "common "
     live, revoked = _split_dkim_selectors(found)
 
     if not live:
@@ -4405,6 +4586,7 @@ def transform_dkim(raw: Dict, domain: str, has_mx: bool = True, non_mail: bool =
                 "pill_label": "N/A",
                 "verdict": "Not applicable (non-mail domain)",
                 "record": None,
+                "configured": False,
                 "explanation": (
                     "This domain declares that it does not send email (RFC 7505 null MX "
                     "or a null SPF record). DKIM signing is not applicable."
@@ -4439,6 +4621,7 @@ def transform_dkim(raw: Dict, domain: str, has_mx: bool = True, non_mail: bool =
                 "pill_label": "Not found",
                 "verdict": f"Selector '{selector_not_found}' not found",
                 "record": None,
+                "configured": False,
                 "explanation": (
                     f"No DKIM public key was found at "
                     f"<strong>{_e(selector_not_found)}._domainkey.{_e(domain)}</strong>. "
@@ -4480,6 +4663,7 @@ def transform_dkim(raw: Dict, domain: str, has_mx: bool = True, non_mail: bool =
                 "pill_label": "Retired",
                 "verdict": f"Selector '{_sel}' is published but retired",
                 "record": None,
+                "configured": True,
                 "explanation": (
                     f"<strong>{_e(_sel)}._domainkey.{_e(domain)}</strong> exists and "
                     "publishes an empty <strong>p=</strong>, which per "
@@ -4512,7 +4696,7 @@ def transform_dkim(raw: Dict, domain: str, has_mx: bool = True, non_mail: bool =
             _names = _join_names([s.get("selector", "unknown") for s in revoked])
             _retired_details = _dkim_retired_detail(revoked, BUSINESS_RISK.get("DKIM_REVOKED_KEY"))
             _retired_details.append(
-                {"type": "info", "text": f"Checked {tested} selectors, no live public key found"}
+                {"type": "info", "text": f"Checked {_sel_count}, no live public key found"}
             )
             _retired_details.append({"type": "info", "text": _DKIM_NOT_ENUMERABLE})
             # Surfaced here as well as in the graded outcome. Discovery cut
@@ -4532,6 +4716,7 @@ def transform_dkim(raw: Dict, domain: str, has_mx: bool = True, non_mail: bool =
                     f"{_n} retired selector{_plural} published, no live key found by probing"
                 ),
                 "record": None,
+                "configured": True,
                 "explanation": (
                     f"This domain publishes <strong>{_n}</strong> DKIM selector{_plural} "
                     f"({_e(_names)}) whose <strong>p=</strong> tag is empty. Per "
@@ -4567,10 +4752,11 @@ def transform_dkim(raw: Dict, domain: str, has_mx: bool = True, non_mail: bool =
             {
                 "type": "warning" if discovery_truncated else "info",
                 "text": (
-                    f"Selector discovery did not finish: checked {tested} selectors "
+                    f"Selector discovery did not finish: checked {_sel_count} "
                     "before running out of time"
                 ) if discovery_truncated else (
-                    f"Checked {tested} common selectors, no public key found"
+                    f"Checked {tested} {_common}selector{'' if tested == 1 else 's'}, "
+                    "no public key found"
                 ),
             },
             {"type": "info", "text": _DKIM_NOT_ENUMERABLE},
@@ -4584,8 +4770,8 @@ def transform_dkim(raw: Dict, domain: str, has_mx: bool = True, non_mail: bool =
                 "target=\"_blank\" rel=\"noopener\">RFC 6376</a>) attaches a "
                 "cryptographic signature to each outgoing message, letting receivers "
                 "verify that it was not altered and came from an authorized sender. "
-                f"This audit's selector probe ran out of time after checking {tested} "
-                "selectors, so this is an incomplete search, not a completed one that "
+                f"This audit's selector probe ran out of time after checking {_sel_count}, "
+                "so this is an incomplete search, not a completed one that "
                 "found nothing. A re-run, especially at a quieter time, may reach a "
                 "selector this one did not. Two things settle it directly: enter the "
                 "selector above for a direct lookup, or read the s= value from the "
@@ -4593,13 +4779,21 @@ def transform_dkim(raw: Dict, domain: str, has_mx: bool = True, non_mail: bool =
                 "domain sent."
             )
         else:
+            _looked_up = (
+                "This audit looked up the selector you supplied and found no public "
+                "key at it. "
+            ) if _user_supplied else (
+                f"This audit looked up {tested} common selector "
+                f"name{'' if tested == 1 else 's'} and found no public key at "
+                f"{'it' if tested == 1 else 'any of them'}. "
+            )
             explanation = (
                 "DKIM (<a href=\"https://datatracker.ietf.org/doc/html/rfc6376\" "
                 "target=\"_blank\" rel=\"noopener\">RFC 6376</a>) attaches a "
                 "cryptographic signature to each outgoing message, letting receivers "
                 "verify that it was not altered and came from an authorized sender. "
-                f"This audit looked up {tested} common selector names and found no "
-                "public key at any of them. That is not the same as this domain having "
+                + _looked_up +
+                "That is not the same as this domain having "
                 "no DKIM: the name is chosen by the sending service and cannot be "
                 "enumerated from DNS, so nothing here says whether the domain signs "
                 "its mail. Two things settle it: enter the selector above for a direct "
@@ -4615,6 +4809,7 @@ def transform_dkim(raw: Dict, domain: str, has_mx: bool = True, non_mail: bool =
                 else "DKIM could not be confirmed by probing"
             ),
             "record": None,
+            "configured": False,
             "explanation": explanation,
             "details": _unknown_details,
             "fix": None,
@@ -4714,7 +4909,7 @@ def transform_dkim(raw: Dict, domain: str, has_mx: bool = True, non_mail: bool =
         for sel in live if sel.get("record")
     )
 
-    details.append({"type": "info", "text": f"Tested {tested} selectors"})
+    details.append({"type": "info", "text": f"Tested {_sel_count}"})
 
     if raw.get("timeout_note"):
         details.append({"type": "warning", "text": raw["timeout_note"]})
@@ -4809,6 +5004,7 @@ def transform_dkim(raw: Dict, domain: str, has_mx: bool = True, non_mail: bool =
         "status": status,
         "verdict": verdict,
         "record": _live_records or None,
+        "configured": True,
         "explanation": explanation,
         "details": details,
         "fix": fix,
@@ -5215,12 +5411,54 @@ def transform_mx(raw: Dict) -> Dict:
 # MTA-STS
 # ============================================================
 
+def _malformed_version_tag_card(name: str, raw: Dict, record: str,
+                                consequence: str, fix: str) -> Dict:
+    """Card for a record whose version tag misses, so receivers ignore it.
+
+    Reported as a failure rather than an absence. The operator published
+    something and can see it in their zone, so "no record found" reads as a
+    tool that cannot see their DNS, and they go looking for the wrong problem.
+    Naming the record and the exact reason is the whole value here.
+    """
+    return {
+        "name": name,
+        "status": "fail",
+        "pill_label": "Malformed",
+        "verdict": f"{name} record published but ignored by receivers",
+        "record": record,
+        "configured": True,
+        "explanation": (
+            f"A TXT record is published, but its version tag does not match "
+            f"what the specification requires, so it is discarded before "
+            f"anything else in it is read. {consequence}"
+        ),
+        "details": [_issue_to_detail(i) for i in raw.get("issues", [])],
+        "fix": fix,
+        "fix_records": None,
+    }
+
+
 def transform_mta_sts(raw: Dict, domain: str, has_mx: bool = True, non_mail: bool = False) -> Dict:
     """Only a positive non-mail declaration (RFC 7505 null MX, or a null ``v=spf1 -all`` SPF record) waives this check. Absent MX alone does not: send-only subdomains have no MX and still send real mail."""
     # The lookup never completed, so "not configured" would be a claim about
     # the domain that this audit did not establish.
     if raw.get("status") == "unavailable":
         return _lookup_unavailable_card("MTA-STS", raw, "MTA-STS policy record")
+
+    # A record is published at _mta-sts but its version tag does not conform,
+    # so every sender discards it. Neither of the branches below fits: "no
+    # record found" contradicts what the operator can see in their zone, and
+    # the has-record branch narrates a policy that is not in force.
+    if raw.get("malformed_record"):
+        return _malformed_version_tag_card(
+            "MTA-STS", raw, raw["malformed_record"],
+            "Senders ignore it and deliver without the policy, so the "
+            "downgrade protection MTA-STS exists to provide is not in place.",
+            f"Republish the TXT record at <strong>_mta-sts.{_e(domain)}</strong> "
+            f"starting with exactly <strong>v=STSv1;</strong>, keeping the "
+            f"<strong>id=</strong> tag.",
+        )
+
     raw_status = raw.get("status", "warning")
     status = _map_status(raw_status)
     txt_record = raw.get("txt_record")
@@ -5236,6 +5474,7 @@ def transform_mta_sts(raw: Dict, domain: str, has_mx: bool = True, non_mail: boo
                 "pill_label": "N/A",
                 "verdict": "Not applicable (non-mail domain)",
                 "record": None,
+                "configured": False,
                 "explanation": (
                     "MTA-STS protects inbound email delivery by requiring TLS encryption. "
                     "This domain declares that it does not handle email (RFC 7505 null MX "
@@ -5257,6 +5496,7 @@ def transform_mta_sts(raw: Dict, domain: str, has_mx: bool = True, non_mail: boo
             "pill_label": "Not configured",
             "verdict": "No MTA-STS record found",
             "record": None,
+            "configured": False,
             "explanation": (
                 "While DMARC protects the <em>identity</em> of the sender, "
                 "MTA-STS (<a href=\"https://datatracker.ietf.org/doc/html/rfc8461\" target=\"_blank\" rel=\"noopener\">RFC 8461</a>) "
@@ -5323,6 +5563,7 @@ def transform_mta_sts(raw: Dict, domain: str, has_mx: bool = True, non_mail: boo
         "status": status,
         "verdict": verdict,
         "record": txt_record,
+        "configured": bool(txt_record),
         "explanation": explanation,
         "details": details,
         "fix": fix,
@@ -5389,6 +5630,20 @@ def transform_tls_rpt(raw: Dict, domain: str, has_mx: bool = True, non_mail: boo
     # the domain that this audit did not establish.
     if raw.get("status") == "unavailable":
         return _lookup_unavailable_card("TLS-RPT", raw, "TLS-RPT record")
+
+    # See the same branch in transform_mta_sts. A near miss is neither an
+    # absence nor a working record, and saying it is either one is a false
+    # statement about the domain.
+    if raw.get("malformed_record"):
+        return _malformed_version_tag_card(
+            "TLS-RPT", raw, raw["malformed_record"],
+            "No aggregate reports are sent, and reports that never arrive "
+            "look exactly like having nothing to report.",
+            f"Republish the TXT record at <strong>_smtp._tls.{_e(domain)}</strong> "
+            f"starting with exactly <strong>v=TLSRPTv1;</strong>, keeping the "
+            f"<strong>rua=</strong> tag.",
+        )
+
     status = _map_status(raw.get("status", "warning"))
     record = raw.get("record")
 
@@ -5403,6 +5658,7 @@ def transform_tls_rpt(raw: Dict, domain: str, has_mx: bool = True, non_mail: boo
                 "pill_label": "N/A",
                 "verdict": "Not applicable (non-mail domain)",
                 "record": None,
+                "configured": False,
                 "explanation": (
                     "TLS-RPT reports on TLS encryption failures during inbound email delivery. "
                     "This domain declares that it does not handle email (RFC 7505 null MX "
@@ -5422,6 +5678,7 @@ def transform_tls_rpt(raw: Dict, domain: str, has_mx: bool = True, non_mail: boo
             "pill_label": "Not configured",
             "verdict": "No TLS-RPT record found",
             "record": None,
+            "configured": False,
             "explanation": (
                 "Without TLS-RPT (<a href=\"https://datatracker.ietf.org/doc/html/rfc8460\" target=\"_blank\" rel=\"noopener\">RFC 8460</a>), "
                 "you have no visibility into encryption failures on inbound email delivery. "
@@ -5462,6 +5719,7 @@ def transform_tls_rpt(raw: Dict, domain: str, has_mx: bool = True, non_mail: boo
         "status": status,
         "verdict": verdict,
         "record": record,
+        "configured": bool(record),
         "explanation": explanation,
         "details": details,
         "fix": fix,
@@ -5521,6 +5779,7 @@ def transform_bimi(raw: Dict, domain: str, has_mx: bool = True, non_mail: bool =
                 "verdict": "Not applicable (non-mail domain)",
                 "record": None,
                 "records_found": 0,
+                "configured": False,
                 "explanation": (
                     "BIMI displays a brand logo next to emails in supporting mail clients. "
                     "This domain declares that it does not handle email (RFC 7505 null MX "
@@ -5565,6 +5824,7 @@ def transform_bimi(raw: Dict, domain: str, has_mx: bool = True, non_mail: bool =
             "verdict": "No BIMI record at the default selector",
             "record": None,
             "records_found": 0,
+            "configured": False,
             "explanation": (
                 "BIMI (Brand Indicators for Message Identification) is not a security protocol. "
                 "It is a brand recognition feature that displays your logo next to emails in "
@@ -5646,6 +5906,7 @@ def transform_bimi(raw: Dict, domain: str, has_mx: bool = True, non_mail: bool =
         "verdict": verdict,
         "record": record,
         "records_found": records_found,
+        "configured": bool(record),
         "explanation": explanation,
         "details": details,
         "fix": fix,
@@ -5696,6 +5957,7 @@ def transform_dnssec(raw: Dict, domain: str = "") -> Dict:
             "pill_label": "Bogus",
             "verdict": "DNSSEC validation failure (zone is bogus)",
             "record": None,
+            "configured": True,
             "explanation": (
                 "DNSSEC is configured but its signatures fail to validate. "
                 "Validating resolvers (Cloudflare 1.1.1.1, Quad9 9.9.9.9, "
@@ -5724,6 +5986,7 @@ def transform_dnssec(raw: Dict, domain: str = "") -> Dict:
             "pill_label": "Not enabled",
             "verdict": "DNSSEC not configured",
             "record": None,
+            "configured": False,
             "explanation": (
                 "DNSSEC (<a href=\"https://datatracker.ietf.org/doc/html/rfc4033\" target=\"_blank\" rel=\"noopener\">RFC 4033</a>/4034/4035) cryptographically signs DNS records so that "
                 "resolvers can verify responses have not been tampered with, preventing cache "
@@ -5809,6 +6072,7 @@ def transform_dnssec(raw: Dict, domain: str = "") -> Dict:
         "status": status,
         "verdict": verdict,
         "record": None,
+        "configured": True,
         "explanation": (
             "DNSSEC is enabled. Your DNS records are cryptographically signed per "
             "<a href=\"https://datatracker.ietf.org/doc/html/rfc4033\" target=\"_blank\" rel=\"noopener\">RFC 4033</a>/4034/4035, allowing validating resolvers to confirm that responses "
@@ -5862,6 +6126,7 @@ def transform_caa(raw: Dict, domain: str) -> Dict:
             "pill_label": "Not configured",
             "verdict": "No CAA records found",
             "record": None,
+            "configured": False,
             "explanation": (
                 "CAA records (<a href=\"https://datatracker.ietf.org/doc/html/rfc8659\" target=\"_blank\" rel=\"noopener\">RFC 8659</a>) specify which Certificate Authorities are authorized "
                 "to issue TLS certificates for your domain. Compliant CAs must check CAA records "
@@ -5932,6 +6197,7 @@ def transform_caa(raw: Dict, domain: str) -> Dict:
         "status": status,
         "verdict": verdict,
         "record": record_display,
+        "configured": True,
         "explanation": (
             "CAA records (<a href=\"https://datatracker.ietf.org/doc/html/rfc8659\" target=\"_blank\" rel=\"noopener\">RFC 8659</a>) restrict which Certificate Authorities may issue TLS certificates "
             "for your domain. Compliant CAs check these records before issuance and must not issue "
@@ -5973,6 +6239,7 @@ def transform_dane(raw: Dict, domain: str) -> Dict:
             "pill_label": "N/A",
             "verdict": "No MX hosts to check",
             "record": None,
+            "configured": False,
             "explanation": (
                 "DANE (<a href=\"https://datatracker.ietf.org/doc/html/rfc7672\" target=\"_blank\" rel=\"noopener\">RFC 7672</a>) publishes TLSA records that allow sending servers to verify "
                 "your mail server's TLS certificate directly via DNS, without relying on a CA. "
@@ -6011,6 +6278,7 @@ def transform_dane(raw: Dict, domain: str) -> Dict:
             "pill_label": "Partly checked",
             "verdict": "TLSA records published, DNSSEC state not confirmed",
             "record": None,
+            "configured": True,
             "explanation": (
                 "TLSA records are published for this domain's MX hosts. DANE "
                 "(<a href=\"https://datatracker.ietf.org/doc/html/rfc7672\" target=\"_blank\" rel=\"noopener\">RFC 7672</a>) "
@@ -6059,6 +6327,7 @@ def transform_dane(raw: Dict, domain: str) -> Dict:
                 "status": "warn",
                 "verdict": "TLSA found but DNSSEC unanchored",
                 "record": None,
+                "configured": True,
                 "explanation": (
                     "DANE TLSA records are published for your MX hosts, and DNSSEC keys are "
                     "published for your domain, but no DS record was found at the parent "
@@ -6078,6 +6347,7 @@ def transform_dane(raw: Dict, domain: str) -> Dict:
             "status": "warn",
             "verdict": "TLSA found but DNSSEC missing",
             "record": None,
+            "configured": True,
             "explanation": (
                 "DANE TLSA records are published for your MX hosts, but DNSSEC is not enabled. "
                 "DANE requires DNSSEC (<a href=\"https://datatracker.ietf.org/doc/html/rfc7672\" target=\"_blank\" rel=\"noopener\">RFC 7672</a> Section 2.2). Without it, an attacker can forge "
@@ -6130,6 +6400,7 @@ def transform_dane(raw: Dict, domain: str) -> Dict:
             "status": status,
             "verdict": verdict,
             "record": None,
+            "configured": True,
             "explanation": (
                 "DANE (<a href=\"https://datatracker.ietf.org/doc/html/rfc7672\" target=\"_blank\" rel=\"noopener\">RFC 7672</a>) is configured and backed by DNSSEC. Sending mail servers that "
                 "implement RFC 7672 can verify your mail server's TLS certificate through DNS-based "
@@ -6166,6 +6437,7 @@ def transform_dane(raw: Dict, domain: str) -> Dict:
             "pill_label": "N/A",
             "verdict": "DANE is not available on Google Workspace",
             "record": None,
+            "configured": False,
             "explanation": (
                 "DANE (<a href=\"https://datatracker.ietf.org/doc/html/rfc7672\" "
                 "target=\"_blank\" rel=\"noopener\">RFC 7672</a>) requires a TLSA record "
@@ -6205,6 +6477,7 @@ def transform_dane(raw: Dict, domain: str) -> Dict:
             "pill_label": "Available, not enabled",
             "verdict": "DANE is available through Exchange Online but not enabled",
             "record": None,
+            "configured": False,
             "explanation": (
                 "DANE (<a href=\"https://datatracker.ietf.org/doc/html/rfc7672\" "
                 "target=\"_blank\" rel=\"noopener\">RFC 7672</a>) requires a TLSA record at "
@@ -6270,6 +6543,7 @@ def transform_dane(raw: Dict, domain: str) -> Dict:
         "pill_label": "Not configured",
         "verdict": "No DANE TLSA records",
         "record": None,
+        "configured": False,
         "explanation": (
             "DANE (<a href=\"https://datatracker.ietf.org/doc/html/rfc7672\" target=\"_blank\" rel=\"noopener\">RFC 7672</a>) uses TLSA records to let sending mail servers verify your mail "
             "server's TLS certificate through DNS, without depending on the CA infrastructure. "
@@ -6397,6 +6671,14 @@ def _is_subdomain(domain: str) -> bool:
 
 
 def transform_nameservers(raw: Dict, domain: str = "") -> Dict:
+    # A SERVFAIL, NoNameservers, or a timeout never produced a real answer,
+    # so ns_count staying 0 here is not evidence the domain has no NS
+    # records. This is what 28c644c already fixed for DNSSEC and CAA;
+    # nameservers reached the same failure mode through
+    # _raw_check_nameservers's generic DNSException handler and was missed.
+    if raw.get("lookup_failed"):
+        return _lookup_unavailable_card("Nameservers", raw, "nameserver records")
+
     ns_count = raw.get("ns_count", 0)
     nameservers = raw.get("nameservers", [])
     providers = raw.get("providers", [])
@@ -6684,7 +6966,7 @@ def transform_ct(raw: Dict, domain: str) -> Dict:
     details = []
     details.append({
         "type": "good" if active else "warning",
-        "text": f"{active} active certificates from {len(issuers)} issuer{'s' if len(issuers) != 1 else ''}",
+        "text": f"{active} active cert{'s' if active != 1 else ''} from {len(issuers)} issuer{'s' if len(issuers) != 1 else ''}",
     })
 
     # Issuer breakdown
@@ -6707,9 +6989,14 @@ def transform_ct(raw: Dict, domain: str) -> Dict:
 
     # Expiring
     for exp in expiring[:3]:
+        _days = exp["days_left"]
+        if _days == 0:
+            _when = "Expiring today"
+        else:
+            _when = f"Expiring in {_days} day{'s' if _days != 1 else ''}"
         details.append({
             "type": "warning",
-            "text": f"Expiring in {exp['days_left']} days: {exp['common_name']}",
+            "text": f"{_when}: {exp['common_name']}",
         })
 
     # Recently expired. The CT check has always collected these; nothing

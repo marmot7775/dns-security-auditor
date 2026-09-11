@@ -4,31 +4,31 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>DNS Security Auditor | dns-audit.com</title>
-    <meta name="description" content="DNS and email security audit tool. Checks DMARC, SPF, DKIM, MX, MTA-STS, TLS-RPT, BIMI, DNSSEC, CAA. Reports findings and fixes.">
+    <meta name="description" content="DNS and email security audit. Twelve checks covering DMARC, SPF, DKIM, MX, MTA-STS, TLS-RPT, BIMI, DNSSEC, CAA, DANE, nameservers, and Certificate Transparency, with findings and copy-paste fixes.">
     <meta name="keywords" content="DNS audit, DMARC check, SPF validator, DKIM checker, email security, MTA-STS, BIMI, DNSSEC, domain security">
     <meta name="author" content="Neil Anuskiewicz">
     <meta property="og:type" content="website" />
     <meta property="og:site_name" content="DNS Security Auditor" />
     <meta property="og:url" content="https://dns-audit.com/" />
     <meta property="og:title" content="DNS Security Auditor | dns-audit.com" />
-    <meta property="og:description" content="DNS and email security audit tool. Checks DMARC, SPF, DKIM, MX, MTA-STS, TLS-RPT, BIMI, DNSSEC, CAA. Reports findings and fixes." />
+    <meta property="og:description" content="DNS and email security audit. Twelve checks covering DMARC, SPF, DKIM, MX, MTA-STS, TLS-RPT, BIMI, DNSSEC, CAA, DANE, nameservers, and Certificate Transparency, with findings and copy-paste fixes." />
     <meta property="og:image" content="https://dns-audit.com/static/og-image.png" />
     <meta name="twitter:card" content="summary">
     <meta name="twitter:title" content="DNS Security Auditor | dns-audit.com">
-    <meta name="twitter:description" content="DNS and email security audit tool. Checks DMARC, SPF, DKIM, MX, MTA-STS, TLS-RPT, BIMI, DNSSEC, CAA. Reports findings and fixes.">
+    <meta name="twitter:description" content="DNS and email security audit. Twelve checks covering DMARC, SPF, DKIM, MX, MTA-STS, TLS-RPT, BIMI, DNSSEC, CAA, DANE, nameservers, and Certificate Transparency, with findings and copy-paste fixes.">
     <link rel="canonical" href="https://dns-audit.com/" />
     <link rel="icon" type="image/svg+xml" href="/static/favicon.svg">
     <link rel="apple-touch-icon" sizes="180x180" href="/static/apple-touch-icon.png">
     <link rel="icon" type="image/png" sizes="32x32" href="/static/favicon-32.png">
-    <link rel="stylesheet" href="/static/style.css?v=3aa7dc7">
-    <script src="/static/theme.js?v=3aa7dc7"></script>
+    <link rel="stylesheet" href="/static/style.css?v=178d7fc">
+    <script src="/static/theme.js?v=178d7fc"></script>
     <script type="application/ld+json">
     {
         "@context": "https://schema.org",
         "@type": "WebApplication",
         "name": "DNS Security Auditor",
         "url": "https://dns-audit.com",
-        "description": "Free DNS and email security audit tool checking DMARC, SPF, DKIM, MTA-STS, DNSSEC, DANE, CAA, BIMI, and TLS-RPT with prioritized findings and fixes",
+        "description": "DNS and email security audit. Twelve checks covering DMARC, SPF, DKIM, MX, MTA-STS, TLS-RPT, BIMI, DNSSEC, CAA, DANE, nameservers, and Certificate Transparency, with findings and copy-paste fixes.",
         "applicationCategory": "SecurityApplication",
         "operatingSystem": "Any",
         "offers": {
@@ -48,7 +48,7 @@
                 "name": "What does this DNS security audit check?",
                 "acceptedAnswer": {
                     "@type": "Answer",
-                    "text": "It checks 9 email and DNS security protocols: DMARC, SPF, DKIM, MTA-STS, DNSSEC, DANE, CAA, BIMI, and TLS-RPT, with prioritized findings and fixes for each."
+                    "text": "It runs 12 checks: DMARC, SPF, DKIM, MX, MTA-STS, TLS-RPT, BIMI, DNSSEC, CAA, DANE, nameservers, and Certificate Transparency. Each one reports pass, warning, or fail with the specific finding and a copy-paste fix where one applies."
                 }
             },
             {
@@ -56,7 +56,7 @@
                 "name": "What is RFC 9989, and is it the same thing as DMARCbis?",
                 "acceptedAnswer": {
                     "@type": "Answer",
-                    "text": "RFC 9989 is the core DMARC protocol, published 19 May 2026 on the IETF Standards Track. It does not stand alone: RFC 9990 covers aggregate reporting and RFC 9991 covers failure reporting. All three obsolete RFC 7489, RFC 9989 also obsoletes RFC 9091, and RFC 9991 updates RFC 6591. RFC 9989 introduces the DNS tree walk and the np=, psd=, and t= tags, and removes the pct, rf, and ri tags. DMARCbis was the IETF working group's name for the revision effort, so the two names refer to the same work. Now that it is published, the standard is RFC 9989. This tool assesses your record against it."
+                    "text": "RFC 9989 is the core DMARC protocol, published May 2026 on the IETF Standards Track. It does not stand alone: RFC 9990 covers aggregate reporting and RFC 9991 covers failure reporting. All three obsolete RFC 7489, RFC 9989 also obsoletes RFC 9091, and RFC 9991 updates RFC 6591. RFC 9989 introduces the DNS tree walk and the np=, psd=, and t= tags, and removes the pct, rf, and ri tags. DMARCbis was the IETF working group's name for the revision effort, so the two names refer to the same work. Now that it is published, the standard is RFC 9989. This tool assesses your record against it."
                 }
             },
             {
@@ -97,7 +97,7 @@
             {
                 "@type": "DefinedTerm",
                 "name": "DMARC",
-                "description": "Domain-based Message Authentication, Reporting, and Conformance. A DNS-based email authentication policy protocol defined in RFC 7489."
+                "description": "Domain-based Message Authentication, Reporting, and Conformance. A DNS-based email authentication policy protocol defined in RFC 9989, which obsoletes RFC 7489."
             },
             {
                 "@type": "DefinedTerm",
@@ -119,61 +119,44 @@
     <header class="site-header">
         <div class="container header-inner">
             <a href="/" class="logo">
-                <span class="logo-text">dns<span class="logo-accent">-audit</span>.com</span>
+                <div class="logo-terminal">
+                    <div class="logo-titlebar">
+                        <span class="logo-dot logo-dot-red"></span>
+                        <span class="logo-dot logo-dot-yellow"></span>
+                        <span class="logo-dot logo-dot-green"></span>
+                    </div>
+                    <div class="logo-cmd">
+                        <span class="logo-prompt">$</span> <span class="logo-bin">dns-audit</span> <span class="logo-flag">--dmarc</span>
+                    </div>
+                </div>
+                <span class="logo-text"><span class="logo-accent">dns</span>-audit</span>
             </a>
-            <nav class="site-nav">
-                <a href="/" class="nav-link nav-link-active">Home</a>
-                <a href="/articles/" class="nav-link">Articles</a>
-                <a href="/about" class="nav-link">About</a>
-                <button type="button" class="theme-toggle" id="theme-toggle" aria-label="Switch theme" title="Switch theme">
-                    <svg class="theme-icon-sun" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.93 4.93l1.41 1.41M17.66 17.66l1.41 1.41M2 12h2M20 12h2M6.34 17.66l-1.41 1.41M19.07 4.93l-1.41 1.41"/></svg>
-                    <svg class="theme-icon-moon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3a6 6 0 0 0 9 9 9 9 0 1 1-9-9Z"/></svg>
-                </button>
-            </nav>
+            <div class="header-right">
+                <nav class="site-nav" aria-label="Main navigation">
+                    <a href="/" class="nav-link nav-link-active">Home</a>
+                    <a href="/articles/" class="nav-link">Articles</a>
+                    <a href="/about" class="nav-link">About</a>
+                    <button type="button" class="theme-toggle" id="theme-toggle" aria-label="Switch theme" title="Switch theme">
+                        <svg class="theme-icon-sun" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.93 4.93l1.41 1.41M17.66 17.66l1.41 1.41M2 12h2M20 12h2M6.34 17.66l-1.41 1.41M19.07 4.93l-1.41 1.41"/></svg>
+                        <svg class="theme-icon-moon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3a6 6 0 0 0 9 9 9 9 0 1 1-9-9Z"/></svg>
+                    </button>
+                </nav>
+            </div>
         </div>
     </header>
 
     <main class="container" id="main-content">
         <section class="audit-input-section">
             <div class="audit-input-card">
-                <h1 class="audit-title">DNS &amp; Email Security Audit</h1>
-                <p class="audit-subtitle">Analysis of your email authentication and DNS security configuration. Includes <a href="/articles/dmarcbis" class="audit-subtitle-link">RFC 9989 readiness</a>, DNSSEC validation, and more.</p>
-                <div class="scope-selector" id="scope-selector" role="radiogroup" aria-label="Audit scope selection">
-                    <div class="scope-label">Audit Scope</div>
-                    <div class="scope-options">
-                        <button type="button" class="scope-btn active" data-scope="complete" role="radio" aria-checked="true" tabindex="0" title="All checks: DMARC, SPF, DKIM, MX, MTA-STS, TLS-RPT, BIMI, DNSSEC, CAA, DANE, Nameservers, Certificate Transparency">
-                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" width="15" height="15"><circle cx="12" cy="12" r="10"/><path d="m9 12 2 2 4-4"/></svg>
-                            <span>Complete Audit</span>
-                        </button>
-                        <button type="button" class="scope-btn" data-scope="email_full" role="radio" aria-checked="false" tabindex="-1" title="DMARC, SPF, DKIM, MX, MTA-STS, TLS-RPT, BIMI">
-                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" width="15" height="15"><rect width="20" height="16" x="2" y="4" rx="2"/><path d="m22 7-8.97 5.7a1.94 1.94 0 0 1-2.06 0L2 7"/></svg>
-                            <span>Email Security</span>
-                        </button>
-                        <button type="button" class="scope-btn" data-scope="dmarc" role="radio" aria-checked="false" tabindex="-1" title="DMARC + SPF + DKIM (authentication triad)">
-                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" width="15" height="15"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>
-                            <span>DMARC Check</span>
-                        </button>
-                        <button type="button" class="scope-btn" data-scope="transport" role="radio" aria-checked="false" tabindex="-1" title="MTA-STS, TLS-RPT, MX transport security">
-                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" width="15" height="15"><rect width="18" height="11" x="3" y="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>
-                            <span>Transport Security</span>
-                        </button>
-                        <button type="button" class="scope-btn" data-scope="dns_infra" role="radio" aria-checked="false" tabindex="-1" title="DNSSEC, CAA, Nameservers">
-                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" width="15" height="15"><rect width="18" height="18" x="3" y="3" rx="2" ry="2"/><path d="M3 9h18"/><path d="M3 15h18"/><path d="M9 3v18"/></svg>
-                            <span>DNS Infrastructure</span>
-                        </button>
-                        <button type="button" class="scope-btn" data-scope="security_scan" role="radio" aria-checked="false" tabindex="-1" title="DMARC, SPF, DKIM, DNSSEC - quick security posture">
-                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" width="15" height="15"><path d="M2 12s3-7 10-7 10 7 10 7-3 7-10 7-10-7-10-7Z"/><circle cx="12" cy="12" r="3"/></svg>
-                            <span>Security Scan</span>
-                        </button>
-                    </div>
-                </div>
+                <h1 class="audit-title">Find what is wrong with your domain's email and DNS</h1>
+                <p class="audit-subtitle">Most DNS tools show you your records. This one tells you what is wrong with them, cites the RFC section it checked against, and gives you the corrected record to paste. Includes <a href="/articles/dmarcbis" class="audit-subtitle-link">RFC 9989 readiness</a> and DNSSEC chain validation.</p>
                 <form id="audit-form" class="audit-form" autocomplete="off">
                     <div class="input-row input-unified">
                         <div class="input-wrapper">
                             <svg class="input-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
                                 <circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/>
                             </svg>
-                            <input type="text" id="domain-input" class="domain-input" placeholder="Enter a domain or subdomain" autocomplete="off" autocapitalize="none" autocorrect="off" inputmode="url" spellcheck="false" required aria-label="Domain or subdomain to audit" />
+                            <input type="text" id="domain-input" class="domain-input" placeholder="example.com" autocomplete="off" autocapitalize="none" autocorrect="off" inputmode="url" spellcheck="false" required aria-label="Domain or subdomain to audit" />
                             <button type="submit" id="audit-btn" class="audit-btn">
                                 <span class="btn-text">Run Audit</span>
                                 <span class="btn-loading">
@@ -190,7 +173,37 @@
                         </div>
                     </div>
                 </form>
-                <p class="audit-privacy-note">No account. No cookies. Open source. <a href="/privacy">What gets logged</a>.</p>
+                <div class="scope-selector" id="scope-selector" role="radiogroup" aria-label="Audit scope selection">
+                    <div class="scope-label">Audit Scope</div>
+                    <div class="scope-options">
+                        <button type="button" class="scope-btn active" data-scope="complete" role="radio" aria-checked="true" tabindex="0" title="Recommended for most domains. Every check: DMARC, SPF, DKIM, MX, MTA-STS, TLS-RPT, BIMI, DNSSEC, CAA, DANE, nameservers and Certificate Transparency.">
+                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" width="15" height="15"><circle cx="12" cy="12" r="10"/><path d="m9 12 2 2 4-4"/></svg>
+                            <span>Complete Audit</span>
+                        </button>
+                        <button type="button" class="scope-btn" data-scope="email_full" role="radio" aria-checked="false" tabindex="-1" title="Email only: DMARC, SPF, DKIM, MX, MTA-STS, TLS-RPT and BIMI.">
+                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" width="15" height="15"><rect width="20" height="16" x="2" y="4" rx="2"/><path d="m22 7-8.97 5.7a1.94 1.94 0 0 1-2.06 0L2 7"/></svg>
+                            <span>Email Security</span>
+                        </button>
+                        <button type="button" class="scope-btn" data-scope="dmarc" role="radio" aria-checked="false" tabindex="-1" title="Just the authentication triad: DMARC, SPF and DKIM.">
+                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" width="15" height="15"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>
+                            <span>DMARC Check</span>
+                        </button>
+                        <button type="button" class="scope-btn" data-scope="transport" role="radio" aria-checked="false" tabindex="-1" title="Mail in transit: MTA-STS, TLS-RPT, DANE, and MX.">
+                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" width="15" height="15"><rect width="18" height="11" x="3" y="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>
+                            <span>Transport Security</span>
+                        </button>
+                        <button type="button" class="scope-btn" data-scope="dns_infra" role="radio" aria-checked="false" tabindex="-1" title="The DNS itself: DNSSEC, CAA, DANE, nameservers, and Certificate Transparency.">
+                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" width="15" height="15"><rect width="18" height="18" x="3" y="3" rx="2" ry="2"/><path d="M3 9h18"/><path d="M3 15h18"/><path d="M9 3v18"/></svg>
+                            <span>DNS Infrastructure</span>
+                        </button>
+                        <button type="button" class="scope-btn" data-scope="security_scan" role="radio" aria-checked="false" tabindex="-1" title="Quick posture check: DMARC, SPF, DKIM, DNSSEC, DANE, CAA, MTA-STS, and Certificate Transparency.">
+                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" width="15" height="15"><path d="M2 12s3-7 10-7 10 7 10 7-3 7-10 7-10-7-10-7Z"/><circle cx="12" cy="12" r="3"/></svg>
+                            <span>Security Scan</span>
+                        </button>
+                    </div>
+                    <p class="scope-desc" id="scope-desc" aria-live="polite"></p>
+                </div>
+                <p class="audit-privacy-note">No account. No cookies. Open source.</p>
             </div>
         </section>
 
@@ -276,7 +289,7 @@
                 <div class="anomalies-list" id="anomalies-list"></div>
             </div>
             <div class="results-toolbar">
-                <h2 class="results-label">Findings</h2>
+                <h2 class="results-label">All Checks</h2>
                 <div class="results-toolbar-actions">
                     <button type="button" class="copy-all-btn" id="copy-all-btn" title="Copy all DNS records to clipboard" aria-label="Copy all DNS records to clipboard">
                         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" width="14" height="14">
@@ -301,6 +314,7 @@
                 <h2 class="results-label">Your Email Platform</h2>
                 <div id="provider-intelligence-content"></div>
             </div>
+            <p class="results-contact-note is-hidden" id="results-contact-note"></p>
         </section>
     </main>
 
@@ -327,10 +341,10 @@
                     <span class="footer-dot">&middot;</span>
                     <a href="https://github.com/marmot7775/dns-security-auditor/blob/main/LICENSE" target="_blank" rel="noopener" class="footer-link">MIT License</a>
                 </div>
-                <div class="footer-attribution">Built by Neil Anuskiewicz <a href="https://www.linkedin.com/in/neilanuskiewicz/" target="_blank" rel="noopener" class="footer-linkedin" title="Neil Anuskiewicz on LinkedIn"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" width="15" height="15" fill="currentColor"><path d="M20.447 20.452h-3.554v-5.569c0-1.328-.027-3.037-1.852-3.037-1.853 0-2.136 1.445-2.136 2.939v5.667H9.351V9h3.414v1.561h.046c.477-.9 1.637-1.85 3.37-1.85 3.601 0 4.267 2.37 4.267 5.455v6.286zM5.337 7.433a2.062 2.062 0 01-2.063-2.065 2.064 2.064 0 112.063 2.065zm1.782 13.019H3.555V9h3.564v11.452zM22.225 0H1.771C.792 0 0 .774 0 1.729v20.542C0 23.227.792 24 1.771 24h20.451C23.2 24 24 23.227 24 22.271V1.729C24 .774 23.2 0 22.222 0h.003z"/></svg></a></div>
+                <div class="footer-attribution">Built by Neil Anuskiewicz <a href="mailto:neil@dns-audit.com" class="footer-email">neil@dns-audit.com</a> <a href="https://www.linkedin.com/in/neilanuskiewicz/" target="_blank" rel="noopener" class="footer-linkedin" title="Neil Anuskiewicz on LinkedIn"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" width="15" height="15" fill="currentColor"><path d="M20.447 20.452h-3.554v-5.569c0-1.328-.027-3.037-1.852-3.037-1.853 0-2.136 1.445-2.136 2.939v5.667H9.351V9h3.414v1.561h.046c.477-.9 1.637-1.85 3.37-1.85 3.601 0 4.267 2.37 4.267 5.455v6.286zM5.337 7.433a2.062 2.062 0 01-2.063-2.065 2.064 2.064 0 112.063 2.065zm1.782 13.019H3.555V9h3.564v11.452zM22.225 0H1.771C.792 0 0 .774 0 1.729v20.542C0 23.227.792 24 1.771 24h20.451C23.2 24 24 23.227 24 22.271V1.729C24 .774 23.2 0 22.222 0h.003z"/></svg></a></div>
             </div>
         </div>
     </footer>
-    <script defer src="/static/app.js?v=3aa7dc7"></script>
+    <script defer src="/static/app.js?v=178d7fc"></script>
 </body>
 </html>

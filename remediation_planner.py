@@ -199,9 +199,9 @@ def build_remediation_plan(
         immediate.append({
             "title": "Fix SPF Lookup Limit",
             "description": (
-                f"Your SPF record requires {spf_lookups} DNS lookups, exceeding the "
-                "RFC 7208 limit of 10. Receivers may treat this as a PermError and "
-                "reject or skip SPF evaluation entirely."
+                f"Your SPF record requires {spf_lookups} DNS lookups, past the limit "
+                "of 10 in RFC 7208 section 4.6.4. Receivers must return PermError, so "
+                "SPF cannot pass for any message and cannot satisfy DMARC alignment."
             ),
             "effort": "medium",
             "impact": "high",
@@ -283,8 +283,9 @@ def build_remediation_plan(
         short_term.append({
             "title": "Replace Weak DKIM Keys",
             "description": (
-                "One or more of your DKIM selectors use 1024-bit RSA keys, which no "
-                "longer meet current security recommendations. Rotate to 2048-bit keys."
+                "One or more of your DKIM selectors publish an RSA key shorter than "
+                "2048 bits, below what RFC 8301 recommends. Rotate those selectors "
+                "to a 2048-bit RSA key or an Ed25519 key."
             ),
             "effort": "medium",
             "impact": "high",
@@ -496,9 +497,8 @@ def _has_weak_dkim_keys(found_selectors) -> bool:
         if isinstance(bits, bool) or not isinstance(bits, (int, float)):
             continue
         # 0 means revoked (empty p=) or a key that could not be decoded, not a
-        # short key. The card already reports those as errors, and the step
-        # below claims the selectors "use 1024-bit RSA keys", which would be
-        # untrue for them.
+        # short key. The card already reports those as errors, and calling
+        # them a short RSA key here would be untrue for them.
         if 0 < bits <= 1024:
             return True
     return False

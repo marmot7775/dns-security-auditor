@@ -78,3 +78,65 @@ DOMAIN_PATTERN = re.compile(
 
 # RFC 6376: DKIM selectors are DNS labels -- alphanumeric and hyphens only
 SELECTOR_PATTERN = re.compile(r'^[A-Za-z0-9-]{1,63}$')
+
+# ============================================================
+# Build identity
+# ============================================================
+
+def _read_build_sha() -> str:
+    """Short commit SHA of the running checkout, exposed by /api/health.
+
+    The deploy is a git pull plus a systemctl restart, so the checkout is the
+    only thing that knows which commit is live. Static asset URLs cannot
+    answer it: the cache-busting step rewrites ?v= only when something under
+    static/ changes, so a Python-only commit leaves every asset pinned to an
+    older build and looks identical from outside. That is exactly the case
+    where a skipped restart is invisible.
+
+    Read .git directly instead of shelling out to git. This runs at import in
+    the same process that serves requests, and a subprocess per start buys
+    nothing. BUILD_SHA overrides it for a deploy that ships without a working
+    tree.
+    """
+    override = os.getenv("BUILD_SHA", "").strip()
+    if override:
+        return override[:40]
+
+    git_dir = os.path.join(os.path.dirname(os.path.abspath(__file__)), ".git")
+    try:
+        with open(os.path.join(git_dir, "HEAD"), encoding="utf-8") as fh:
+            head = fh.read().strip()
+    except OSError:
+        return "unknown"
+
+    if not head.startswith("ref:"):
+        # Detached HEAD stores the commit id itself. Hex length is 40 for a
+        # SHA-1 repository and 64 for a SHA-256 one.
+        return head[:7] if re.fullmatch(r"[0-9a-f]{40,64}", head) else "unknown"
+
+    ref = head[4:].strip()
+    if not ref.startswith("refs/") or ".." in ref:
+        return "unknown"
+
+    try:
+        with open(os.path.join(git_dir, *ref.split("/")), encoding="utf-8") as fh:
+            return fh.read().strip()[:7]
+    except OSError:
+        pass
+
+    # A ref that has been packed has no loose file under .git/refs.
+    try:
+        with open(os.path.join(git_dir, "packed-refs"), encoding="utf-8") as fh:
+            for line in fh:
+                if line.startswith(("#", "^")):
+                    continue
+                sha, _, name = line.strip().partition(" ")
+                if name == ref:
+                    return sha[:7]
+    except OSError:
+        pass
+
+    return "unknown"
+
+
+BUILD_SHA = _read_build_sha()

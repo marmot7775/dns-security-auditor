@@ -35,6 +35,17 @@ const loadingSection = document.getElementById('loading-section');
 const resultsSection = document.getElementById('results-section');
 
 // -- Scope selector --
+// The visible line under the buttons and the hover tooltip are the same
+// text, read from the active button's title. A title alone never shows on a
+// touch screen, so a phone visitor had no way to learn what the six scopes
+// meant.
+function syncScopeDesc() {
+    const desc = document.getElementById('scope-desc');
+    const active = document.querySelector('.scope-btn.active');
+    if (desc && active) desc.textContent = active.getAttribute('title') || '';
+}
+syncScopeDesc();
+
 document.querySelectorAll('.scope-btn').forEach(btn => {
     btn.addEventListener('click', () => {
         document.querySelectorAll('.scope-btn').forEach(b => {
@@ -46,6 +57,7 @@ document.querySelectorAll('.scope-btn').forEach(btn => {
         btn.setAttribute('aria-checked', 'true');
         btn.setAttribute('tabindex', '0');
         currentScope = btn.dataset.scope;
+        syncScopeDesc();
     });
 });
 
@@ -67,6 +79,7 @@ document.getElementById('scope-selector').addEventListener('keydown', (e) => {
     btns[next].setAttribute('tabindex', '0');
     btns[next].focus();
     currentScope = btns[next].dataset.scope;
+    syncScopeDesc();
 });
 
 // -- DKIM selector toggle --
@@ -108,6 +121,7 @@ document.addEventListener('DOMContentLoaded', () => {
         document.querySelectorAll('.scope-btn').forEach(b => {
             b.classList.toggle('active', b.dataset.scope === scope);
         });
+        syncScopeDesc();
     }
     if (domain) {
         const normalized = normalizeDomain(domain);
@@ -635,6 +649,9 @@ function renderResults(data) {
     document.getElementById('summary-unavailable').textContent = unavailableCount;
     document.getElementById('summary-unavailable-card')
         .classList.toggle('is-hidden', unavailableCount === 0);
+
+    // Prompt 26: quiet contact note, shown only when there is something to hand off.
+    _renderContactNote(failCount, warnCount);
 
     // Tab title with issue summary
     if (failCount > 0) {
@@ -1495,7 +1512,7 @@ function renderSpecToggle(comparison) {
         futureHtml = `
             <div class="st-future spec-dmarcbis">
                 <div class="st-future-title">This record passes under the obsolete RFC 7489 but has issues under RFC 9989</div>
-                <div class="st-future-subtitle">${comparison.dmarcbis_only_count} problem${comparison.dmarcbis_only_count !== 1 ? 's' : ''} found that only appear under strict RFC 9989 validation. RFC 9989 replaced RFC 7489 in May 2026, so these are problems with the record today, not problems it will have later.</div>
+                <div class="st-future-subtitle">${comparison.dmarcbis_only_count} problem${comparison.dmarcbis_only_count !== 1 ? 's' : ''} found that only appear${comparison.dmarcbis_only_count !== 1 ? '' : 's'} under strict RFC 9989 validation. RFC 9989 replaced RFC 7489 in May 2026, so these are problems with the record today, not problems it will have later.</div>
                 ${itemsHtml}
             </div>`;
     }
@@ -2846,8 +2863,8 @@ function renderDmarcEvaluation(ev) {
         <div class="dmarc-eval de-animated">
             <div class="se-header-row">
                 <div class="se-header">DMARC Evaluation</div>
-                <a class="tw-spec-badge" href="https://datatracker.ietf.org/doc/html/rfc7489"
-                   target="_blank" rel="noopener">rfc7489</a>
+                <a class="tw-spec-badge" href="https://datatracker.ietf.org/doc/html/rfc9989"
+                   target="_blank" rel="noopener">rfc9989</a>
             </div>
             <div class="de-intro">${escapeHtml(ev.explanation)}</div>
             <div class="de-rows">
@@ -2895,8 +2912,8 @@ function renderReportChain(rc) {
         <div class="report-chain rc-animated">
             <div class="se-header-row">
                 <div class="se-header">DMARC Report Delivery Chain</div>
-                <a class="tw-spec-badge" href="https://datatracker.ietf.org/doc/html/rfc7489#section-7.1"
-                   target="_blank" rel="noopener">rfc7489 &sect;7.1</a>
+                <a class="tw-spec-badge" href="https://datatracker.ietf.org/doc/html/rfc9990#section-4"
+                   target="_blank" rel="noopener">rfc9990 &sect;4</a>
             </div>
             <div class="${introClass}">${escapeHtml(introText)}</div>
             <div class="rc-dests">`;
@@ -2974,7 +2991,7 @@ function renderSpfTree(tree) {
                 <div class="st-budget-track">
                     <div class="st-budget-fill ${barClass}" data-fill-width="${pct}%"></div>
                 </div>
-                <div class="st-budget-note">RFC 7208 limits SPF to 10 DNS-querying mechanisms (include, a, mx, redirect, exists). Exceeding this causes a PermError.</div>
+                <div class="st-budget-note">RFC 7208 caps SPF at 10 terms that cause a DNS query: the include, a, mx, ptr, and exists mechanisms, and the redirect modifier. Past the cap, receivers return PermError.</div>
             </div>
             <div class="st-tree-label">Include hierarchy: each include costs 1 lookup plus any nested lookups</div>`;
 
@@ -3196,7 +3213,7 @@ function _initShareDropdown() {
             const checks = d?.checks || [];
             const passCount = checks.filter(c => c.status === 'pass').length;
             const failCount = checks.filter(c => c.status === 'fail').length;
-            const text = `DNS security audit for ${domain}: ${passCount} passing, ${failCount} issues`;
+            const text = `DNS security audit for ${domain}: ${passCount} passing, ${failCount} issue${failCount !== 1 ? 's' : ''}`;
             const url = _getShareUrl();
             window.open('https://twitter.com/intent/tweet?text=' + encodeURIComponent(text) + '&url=' + encodeURIComponent(url), '_blank', 'noopener');
             removeDropdown();
@@ -3729,6 +3746,24 @@ function _renderCacheBadge(data) {
         badge.className = 'cache-status-badge fresh';
         badge.innerHTML = '<span>Fresh result</span>';
         badge.style.display = 'inline-flex';
+    }
+}
+
+// ============================================================
+// Contact note (Prompt 26)
+// ============================================================
+
+function _renderContactNote(failCount, warnCount) {
+    const note = document.getElementById('results-contact-note');
+    if (!note) return;
+    if (failCount > 0 || warnCount > 0) {
+        note.innerHTML = 'Some of these are a five-minute DNS change. Some are not. ' +
+            'If you want a second opinion on which is which, this is what I do for a living. ' +
+            '<a href="mailto:neil@dns-audit.com">neil@dns-audit.com</a>';
+        note.classList.remove('is-hidden');
+    } else {
+        note.innerHTML = '';
+        note.classList.add('is-hidden');
     }
 }
 

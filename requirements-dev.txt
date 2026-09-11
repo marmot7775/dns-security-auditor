@@ -3,6 +3,11 @@
 pytest>=8.0.0
 httpx2>=2.12.0
 
+# PDF text extraction for tests that assert on rendered PDF content rather
+# than the result dict (Doc 27: a card can be correct in the data and wrong
+# in the document, which only reading the rendered text catches).
+pypdf>=5.0.0
+
 # Coverage measurement. Not wired into the default pytest run, so
 # `pytest tests/` behaves exactly as before. Invoke it explicitly:
 #   python3 -m pytest tests/ --cov --cov-report=term-missing

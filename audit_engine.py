@@ -125,7 +125,12 @@ except ImportError:
     tldextract = None
     _tld_extract = None
 from spf_intelligence import smart_dkim_check
-from dns_tools import get_resolver, get_dnssec_resolver
+from dns_tools import (
+    get_resolver,
+    get_dnssec_resolver,
+    is_dmarc_version_tag,
+    version_tag_deviations,
+)
 
 from result_transformer import (
     transform_dmarc,
@@ -290,6 +295,26 @@ SCOPE_CHECKS = {
     "transport":     {"mx", "mta_sts", "tls_rpt", "dane"},
     "dns_infra":     {"dnssec", "caa", "dane", "nameservers", "ct"},
     "security_scan": {"dmarc", "spf", "dkim", "dnssec", "dane", "ct", "caa", "mta_sts"},
+}
+
+# Display name for each scope, matching the button labels in
+# static/index.html's scope selector.
+SCOPE_LABELS = {
+    "complete":      "Complete Audit",
+    "email_full":    "Email Security",
+    "dmarc":         "DMARC Check",
+    "transport":     "Transport Security",
+    "dns_infra":     "DNS Infrastructure",
+    "security_scan": "Security Scan",
+}
+
+# Every check key any scope can run. A literal union, not derived at import
+# time from SCOPE_CHECKS.values(), so the PDF cover's "N of TOTAL checks"
+# line has a fixed denominator that does not shift if a scope's check set
+# changes without a new check being added.
+ALL_SCOPE_CHECK_KEYS = {
+    "dmarc", "spf", "dkim", "mx", "mta_sts", "tls_rpt", "bimi",
+    "dnssec", "caa", "dane", "nameservers", "ct",
 }
 
 # Checks that depend on MX raw results
@@ -512,7 +537,7 @@ def _check_report_authorization(domain: str, raw_dmarc: Dict, tree_walk_result: 
             try:
                 txt_records = _lookup_txt(auth_fqdn, raise_on_failure=True)
                 dest["authorized"] = any(
-                    r.strip().startswith("v=DMARC1") for r in txt_records
+                    is_dmarc_version_tag(r) for r in txt_records
                 )
             except dns.exception.DNSException:
                 # The lookup itself failed (SERVFAIL, REFUSED, timeout).
@@ -692,6 +717,14 @@ def _enrich_dmarc_inheritance(
     if raw_dmarc.get("record"):
         return  # Has its own record, no inheritance needed
 
+    # A malformed record at this exact name is not "nothing published": RFC
+    # 7489 section 6.6.3 inheritance applies when the TXT record set is
+    # empty, not when it exists and fails the version gate. Falling through
+    # to the org domain here would tell the operator their broken record
+    # inherited a policy from a parent it never consulted.
+    if raw_dmarc.get("malformed_record"):
+        return
+
     # A walk that could not read one of its levels cannot say which policy
     # applies: the unread level is exactly where a different one would live.
     # RFC 9989 section 4.10.1 distinguishes "no such record" from "a transient
@@ -736,7 +769,7 @@ def _enrich_dmarc_inheritance(
         raw_dmarc["inheritance_lookup_target"] = f"_dmarc.{org_domain}"
         return
 
-    org_dmarc = [r for r in org_recs if r.strip().startswith("v=DMARC1")]
+    org_dmarc = [r for r in org_recs if is_dmarc_version_tag(r)]
     if len(org_dmarc) != 1:
         return  # No valid record (zero or multiple)
 
@@ -863,6 +896,7 @@ def _raw_check_dmarc(domain: str) -> Dict[str, Any]:
         "syntax_errors": [],
         "recommendations": [],
         "policy_recovery_applied": False,
+        "malformed_record": None,
     }
 
     def _add_issue(severity, issue, plain_english, fix, business_risk_key=None):
@@ -921,12 +955,19 @@ def _raw_check_dmarc(domain: str) -> Dict[str, Any]:
         result["lookup_target"] = dmarc_fqdn
         return result
 
-    # Pre-check: lowercase v=dmarc1 is invalid per RFC 7489 S6.3 (case-sensitive).
-    # Detect BEFORE the strict v=DMARC1 filter so the syntax error is captured
-    # even though the record is excluded from the count.
+    # Pre-check: lowercase v=dmarc1 is invalid per RFC 9989 S5.4, which writes
+    # the version value as %s"DMARC1" and so makes it case sensitive. Detect
+    # BEFORE the strict filter so the syntax error is captured even though the
+    # record is excluded from the count.
+    #
+    # version_tag_deviations returns None for a TXT record that is not a DMARC
+    # record at all, and an empty list for one that conforms. Only a near miss
+    # comes back with reasons, and case is the only one DMARC can have, since
+    # its ABNF already permits *WSP around the equals sign.
     for _r in dmarc_recs:
-        _stripped = _r.strip()
-        if _stripped.lower().startswith("v=dmarc1") and not _stripped.startswith("v=DMARC1"):
+        if version_tag_deviations(
+            _r, "DMARC1", allow_whitespace=True, case_sensitive=True
+        ):
             _add_syntax(
                 "Lowercase v=dmarc1 detected",
                 "Lowercase v=dmarc1 detected. RFC 7489 requires uppercase. "
@@ -934,15 +975,19 @@ def _raw_check_dmarc(domain: str) -> Dict[str, Any]:
                 "Change to v=DMARC1 (uppercase).",
             )
 
-    dmarc_records = [r for r in dmarc_recs if r.strip().startswith("v=DMARC1")]
+    dmarc_records = [r for r in dmarc_recs if is_dmarc_version_tag(r)]
 
     # Note any non-DMARC TXT records at the _dmarc subdomain.
-    # Lowercase v=dmarc1 records are excluded here because the pre-check above
-    # already reports them via a dedicated syntax error.
+    # version_tag_deviations returns None only for a record that is not a
+    # DMARC record under any reading, which is exactly the set meant here. A
+    # near miss such as v=dmarc1 is excluded because the pre-check above
+    # already reports it via a dedicated syntax error, and calling it an
+    # unrelated TXT record would hand the operator a different fix.
     non_dmarc_txt = [
         r for r in dmarc_recs
-        if not r.strip().startswith("v=DMARC1")
-        and not r.strip().lower().startswith("v=dmarc1")
+        if version_tag_deviations(
+            r, "DMARC1", allow_whitespace=True, case_sensitive=True
+        ) is None
     ]
     if non_dmarc_txt:
         result["non_dmarc_txt_count"] = len(non_dmarc_txt)
@@ -972,6 +1017,37 @@ def _raw_check_dmarc(domain: str) -> Dict[str, Any]:
 
     if not dmarc_records:
         result["status"] = "error"
+        # A near miss is not the same as nothing published. Whoever wrote
+        # v=dmarc1 at _dmarc meant to turn DMARC on, and "no record found"
+        # sends them looking for a record that is already there. Mirrors the
+        # malformed_record handling in check_mta_sts/check_tls_rpt. Recomputed
+        # here rather than reusing the pre-check loop above: that loop runs
+        # over every record regardless of whether a valid one also exists, so
+        # capturing malformed_record there would misfire this early-return
+        # path even when dmarc_records is non-empty elsewhere.
+        near_misses = [
+            (r, version_tag_deviations(
+                r, "DMARC1", allow_whitespace=True, case_sensitive=True
+            ))
+            for r in dmarc_recs
+        ]
+        near_misses = [(r, d) for r, d in near_misses if d]
+        if near_misses:
+            record, reasons = near_misses[0]
+            result["malformed_record"] = record
+            _add_issue(
+                "error",
+                "DMARC TXT record is malformed and will be ignored",
+                f"The TXT record at '_dmarc.{domain}' is '{record}', but "
+                + ", and ".join(reasons) + ". RFC 9989 section 4.7 defines the "
+                "version tag value as case sensitive, so receivers discard "
+                "this record and treat the domain as having no DMARC "
+                "protection, exactly as if nothing were published.",
+                "Republish the record starting with exactly 'v=DMARC1;'.",
+                business_risk_key="DMARC_NO_RECORD",
+            )
+            result["ttl"] = _lookup_ttl(dmarc_fqdn, "TXT")
+            return result
         _add_issue(
             "error",
             "No DMARC record found",
@@ -1335,9 +1411,9 @@ def _raw_check_dmarc(domain: str) -> Dict[str, Any]:
                     "record containing p=none was retrieved and "
                     "continue processing. RFC 7489 has no such "
                     "recovery rule; older receivers may instead "
-                    "ignore the record entirely. Interop hazard — "
-                    "fix the value rather than relying on this "
-                    "fallback.",
+                    "ignore the record entirely. This is an interop "
+                    "hazard: fix the value rather than relying on "
+                    "this fallback.",
                     f"Set {rec_tag_name}= to one of: none, quarantine, "
                     f"reject. Do not rely on the RFC 9989 recovery "
                     f"fallback to mask the invalid value.",
@@ -1350,8 +1426,8 @@ def _raw_check_dmarc(domain: str) -> Dict[str, Any]:
                     "p= tag is recoverable only when rua= contains at "
                     "least one syntactically valid mailto: URI. This "
                     "record has neither, so receivers apply no DMARC "
-                    "processing to messages — equivalent to having no "
-                    "DMARC record at all.",
+                    "processing to messages, which leaves the domain as "
+                    "exposed as having no DMARC record at all.",
                     "Add a policy tag. Start with p=none for "
                     "monitoring, and add rua=mailto:dmarc-reports@"
                     "yourdomain.com to receive aggregate reports.",
@@ -3488,6 +3564,12 @@ def _raw_check_nameservers(domain: str) -> Dict[str, Any]:
         result["status"] = "error"
         return result
     except dns.exception.DNSException as e:
+        # SERVFAIL, NoNameservers and a timeout mean the query never
+        # completed, not that the domain has no nameservers. Downstream must
+        # not report this as a missing-NS finding. NXDOMAIN and NoAnswer are
+        # handled above and stay real findings; this is the catch-all for
+        # everything else dnspython raises.
+        result["lookup_failed"] = True
         _add_issue(
             "error",
             f"NS lookup failed: {str(e)[:100]}",
@@ -4364,6 +4446,10 @@ def _probe_subdomain(subdomain: str) -> Dict[str, Any]:
         txt_ans = resolver.resolve(subdomain, "TXT")
         for rdata in txt_ans:
             txt = b"".join(rdata.strings).decode("utf-8", errors="replace")
+            # Case insensitive on purpose. RFC 7208 S12 writes the version
+            # as a plain "v=spf1" literal with no %s prefix, which RFC 7405
+            # S2 makes case insensitive. The DMARC line below looks identical
+            # and is not: RFC 9989 writes %s"DMARC1". Do not unify them.
             if txt.lower().startswith("v=spf1"):
                 result["has_spf"] = True
                 result["spf_record"] = txt
@@ -4378,7 +4464,13 @@ def _probe_subdomain(subdomain: str) -> Dict[str, Any]:
         txt_ans = resolver.resolve(dmarc_name, "TXT")
         for rdata in txt_ans:
             txt = b"".join(rdata.strings).decode("utf-8", errors="replace")
-            if txt.lower().startswith("v=dmarc1"):
+            # Same matcher as the apex path in _raw_check_dmarc. These two
+            # used to disagree: this line lowercased, so it counted a
+            # v=dmarc1 record the apex reports as a syntax error, and it had
+            # no whitespace tolerance, so it missed the v = DMARC1 the apex
+            # accepts. The subdomain answer feeds the spoofable-subdomain
+            # finding, so the two must read a record the same way.
+            if is_dmarc_version_tag(txt):
                 result["has_dmarc"] = True
                 result["dmarc_record"] = txt
                 break
