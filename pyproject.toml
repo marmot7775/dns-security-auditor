@@ -6,3 +6,30 @@ requires-python = ">=3.9"
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
+
+[tool.ruff]
+target-version = "py39"
+
+[tool.ruff.lint]
+# Ruff's default rule selection (E4, E7, E9, F) on purpose. Widening to
+# E,F,W,I reports 382 findings here against 47 for the defaults, and 334
+# of the extra ones are E501, I001, and W293. That volume buries the
+# findings that carry signal, so the defaults stay until the formatting
+# debt is paid down deliberately.
+ignore = [
+    # Late imports are deliberate. 23 of the 24 hits are in
+    # audit_engine.py, where the logging setup precedes
+    # `import dns.resolver`.
+    "E402",
+]
+
+[tool.coverage.run]
+source = ["."]
+omit = [
+    "tests/*",
+    "_starttls_test_server.py",
+]
+
+[tool.coverage.report]
+show_missing = true
+skip_empty = true
